@@ -1,0 +1,18 @@
+# ── data/status.example.json ─────────────────────────────────────────────────
+# Copy this to data/status.json and customize with your own applications.
+# data/status.json is gitignored — your real data stays private.
+{
+  "last_updated": "2026-01-01 00:00",
+  "applications": [
+    {
+      "company": "Example Corp",
+      "role": "Senior Software Engineer",
+      "status": "applied",
+      "next_steps": "Follow up in one week if no response",
+      "contact": "Recruiter Name",
+      "notes": "Referral from former colleague.",
+      "applied_date": "2026-01-01",
+      "last_updated": "2026-01-01"
+    }
+  ]
+}

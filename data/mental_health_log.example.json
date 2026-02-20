@@ -1,0 +1,4 @@
+# ── data/mental_health_log.example.json ──────────────────────────────────────
+# Copy this to data/mental_health_log.json to start logging check-ins.
+# data/mental_health_log.json is gitignored — your real entries stay private.
+{"entries": []}
