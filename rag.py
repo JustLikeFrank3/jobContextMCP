@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 RAG (Retrieval-Augmented Generation) module for job-search-mcp.
-Indexes all resume, prep, and LeetCode materials into ChromaDB
-and provides semantic search via OpenAI embeddings.
+Indexes all resume, prep, and LeetCode materials using OpenAI embeddings
+stored locally as numpy arrays — no external vector DB required.
 """
 
 import hashlib
@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-import chromadb
+import numpy as np
 from openai import OpenAI
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -24,51 +24,38 @@ def _load_config() -> dict:
 
 
 _cfg        = _load_config()
-_CHROMA_DIR = Path(_cfg["data_folder"]) / "chroma"
+_DATA_DIR   = Path(_cfg["data_folder"])
+_INDEX_FILE = _DATA_DIR / "rag_index.json"
+_EMBED_FILE = _DATA_DIR / "rag_embeddings.npy"
 _OPENAI_KEY = _cfg.get("openai_api_key", "")
 
-CATEGORIES = {
-    "resume":        "Resume bullets, achievements, STAR stories, technical skills",
-    "cover_letters": "Cover letters tailored to specific companies and roles",
-    "leetcode":      "Algorithm patterns, code templates, data structures, complexity analysis",
-    "interview_prep":"Company-specific interview prep, behavioral questions, talking points",
-    "reference":     "Reference materials, awards, feedback, template guides",
-}
 
-# ─── CLIENTS ──────────────────────────────────────────────────────────────────
-
-def _chroma_client() -> chromadb.PersistentClient:
-    _CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(path=str(_CHROMA_DIR))
-
+# ─── CLIENT ───────────────────────────────────────────────────────────────────
 
 def _openai_client() -> OpenAI:
-    if not _OPENAI_KEY:
+    key = _load_config().get("openai_api_key", "")
+    if not key:
         raise ValueError(
             "openai_api_key not set in config.json. "
             "Add it to use RAG search."
         )
-    return OpenAI(api_key=_OPENAI_KEY)
+    return OpenAI(api_key=key)
 
 
 # ─── CHUNKING ─────────────────────────────────────────────────────────────────
 
 def _chunk_text(text: str, max_chars: int = 800, overlap: int = 100) -> list[str]:
     """Split text into overlapping chunks, respecting paragraph boundaries."""
-    # First split by double newlines (paragraph boundaries)
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
-
     chunks: list[str] = []
     current = ""
 
     for para in paragraphs:
-        # If a single paragraph exceeds max_chars, split by sentences
         if len(para) > max_chars:
             sentences = re.split(r"(?<=[.!?])\s+", para)
             for sent in sentences:
                 if len(current) + len(sent) > max_chars and current:
                     chunks.append(current.strip())
-                    # Keep overlap from end of last chunk
                     current = current[-overlap:] + " " + sent
                 else:
                     current += " " + sent
@@ -82,14 +69,10 @@ def _chunk_text(text: str, max_chars: int = 800, overlap: int = 100) -> list[str
     if current.strip():
         chunks.append(current.strip())
 
-    return [c for c in chunks if len(c) > 50]  # filter trivial chunks
+    return [c for c in chunks if len(c) > 50]
 
 
-def _doc_id(source: str, index: int) -> str:
-    return hashlib.md5(f"{source}:{index}".encode()).hexdigest()
-
-
-# ─── INDEXING ─────────────────────────────────────────────────────────────────
+# ─── EMBEDDING ────────────────────────────────────────────────────────────────
 
 def _embed(texts: list[str], client: OpenAI) -> list[list[float]]:
     """Embed a batch of texts using text-embedding-3-small."""
@@ -100,133 +83,105 @@ def _embed(texts: list[str], client: OpenAI) -> list[list[float]]:
     return [item.embedding for item in response.data]
 
 
-def _index_files(
-    collection: chromadb.Collection,
-    files: list[Path],
-    category: str,
-    oai: OpenAI,
-    label: str = "",
-) -> int:
-    """Chunk, embed, and upsert a list of files into a collection."""
-    all_docs, all_ids, all_metas = [], [], []
-
-    for fpath in files:
-        try:
-            text = fpath.read_text(encoding="utf-8", errors="ignore").strip()
-        except Exception:
-            continue
-        if not text:
-            continue
-
-        chunks = _chunk_text(text)
-        for i, chunk in enumerate(chunks):
-            all_docs.append(chunk)
-            all_ids.append(_doc_id(str(fpath), i))
-            all_metas.append({
-                "source":   fpath.name,
-                "category": category,
-                "chunk":    i,
-            })
-
-    if not all_docs:
-        return 0
-
-    # Embed in batches of 100 (OpenAI limit)
-    embeddings = []
-    for i in range(0, len(all_docs), 100):
-        batch = all_docs[i:i + 100]
-        embeddings.extend(_embed(batch, oai))
-
-    collection.upsert(
-        ids=all_ids,
-        documents=all_docs,
-        embeddings=embeddings,
-        metadatas=all_metas,
-    )
-
-    print(f"  ✓ {label or category}: {len(files)} files → {len(all_docs)} chunks")
-    return len(all_docs)
-
+# ─── INDEX ────────────────────────────────────────────────────────────────────
 
 def build_index(verbose: bool = True) -> dict[str, int]:
     """
-    Index all job search materials into ChromaDB.
-    Safe to re-run — upserts by content hash so unchanged chunks are skipped.
+    (Re)build the RAG index from all job search materials.
+    Saves embeddings to data/rag_embeddings.npy and metadata to data/rag_index.json.
     Returns chunk counts per category.
     """
-    cfg    = _load_config()
-    oai    = _openai_client()
-    client = _chroma_client()
-
-    collection = client.get_or_create_collection(
-        name="job_search",
-        metadata={"hnsw:space": "cosine"},
-    )
+    cfg     = _load_config()
+    oai     = _openai_client()
 
     resume_folder   = Path(cfg["resume_folder"])
     leetcode_folder = Path(cfg["leetcode_folder"])
-    counts: dict[str, int] = {}
 
-    if verbose:
-        print("Building RAG index...")
+    # Gather all files to index
+    file_groups: list[tuple[list[Path], str]] = []
 
-    # ── Master resume ──────────────────────────────────────────────────────────
+    # Master resume
     master = resume_folder / cfg["master_resume_path"]
     if master.exists():
-        counts["resume"] = _index_files(
-            collection, [master], "resume", oai, "Master resume"
-        )
+        file_groups.append(([master], "resume"))
 
-    # ── All resumes ────────────────────────────────────────────────────────────
+    # All resumes
     optimized_dir = resume_folder / cfg["optimized_resumes_dir"]
     if optimized_dir.exists():
-        resume_files = [
-            f for f in optimized_dir.glob("*.txt")
-            if "MASTER" not in f.name
-        ]
-        counts["resume"] = counts.get("resume", 0) + _index_files(
-            collection, resume_files, "resume", oai, f"Resumes ({len(resume_files)} files)"
-        )
+        file_groups.append(([
+            f for f in optimized_dir.glob("*.txt") if "MASTER" not in f.name
+        ], "resume"))
 
-    # ── Cover letters ──────────────────────────────────────────────────────────
+    # Cover letters
     cl_dir = resume_folder / cfg["cover_letters_dir"]
     if cl_dir.exists():
-        cl_files = list(cl_dir.glob("*.txt"))
-        counts["cover_letters"] = _index_files(
-            collection, cl_files, "cover_letters", oai, f"Cover letters ({len(cl_files)} files)"
-        )
+        file_groups.append((list(cl_dir.glob("*.txt")), "cover_letters"))
 
-    # ── Reference materials ────────────────────────────────────────────────────
+    # Reference materials
     ref_dir = resume_folder / cfg["reference_materials_dir"]
     if ref_dir.exists():
-        ref_files = list(ref_dir.glob("*.txt"))
-        counts["reference"] = _index_files(
-            collection, ref_files, "reference", oai, f"Reference materials ({len(ref_files)} files)"
-        )
+        file_groups.append((list(ref_dir.glob("*.txt")), "reference"))
 
-    # ── Interview prep files (top-level .txt in Resume folder) ────────────────
+    # Interview prep files
     prep_files = [
         f for f in resume_folder.glob("*.txt")
         if any(kw in f.name.lower() for kw in ("prep", "interview", "call", "cheat"))
     ]
-    counts["interview_prep"] = _index_files(
-        collection, prep_files, "interview_prep", oai,
-        f"Interview prep ({len(prep_files)} files)"
-    )
+    file_groups.append((prep_files, "interview_prep"))
 
-    # ── LeetCode cheatsheet + quick reference ─────────────────────────────────
+    # LeetCode
     lc_files = [
         p for name in (cfg["leetcode_cheatsheet_path"], cfg["quick_reference_path"])
         if (p := leetcode_folder / name).exists()
     ]
-    counts["leetcode"] = _index_files(
-        collection, lc_files, "leetcode", oai,
-        f"LeetCode ({len(lc_files)} files)"
-    )
+    file_groups.append((lc_files, "leetcode"))
 
-    total = sum(counts.values())
+    # Build chunks + metadata
+    all_chunks:   list[str]  = []
+    all_metadata: list[dict] = []
+    counts: dict[str, int]   = {}
+
+    for files, category in file_groups:
+        cat_chunks = 0
+        for fpath in files:
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore").strip()
+            except Exception:
+                continue
+            chunks = _chunk_text(text)
+            for chunk in chunks:
+                all_chunks.append(chunk)
+                all_metadata.append({"source": fpath.name, "category": category})
+                cat_chunks += 1
+        if cat_chunks:
+            counts[category] = counts.get(category, 0) + cat_chunks
+            if verbose:
+                print(f"  ✓ {category}: {cat_chunks} chunks")
+
+    if not all_chunks:
+        return {}
+
     if verbose:
-        print(f"\nIndex complete. {total} total chunks across {len(counts)} categories.")
+        print(f"\nEmbedding {len(all_chunks)} chunks...")
+
+    # Embed in batches of 100
+    all_embeddings: list[list[float]] = []
+    for i in range(0, len(all_chunks), 100):
+        batch = all_chunks[i:i + 100]
+        all_embeddings.extend(_embed(batch, oai))
+        if verbose:
+            print(f"  {min(i + 100, len(all_chunks))}/{len(all_chunks)}")
+
+    # Save
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    np.save(str(_EMBED_FILE), np.array(all_embeddings, dtype=np.float32))
+    _INDEX_FILE.write_text(json.dumps({
+        "chunks":   all_chunks,
+        "metadata": all_metadata,
+    }, ensure_ascii=False), encoding="utf-8")
+
+    if verbose:
+        print(f"\n✓ Index saved. {len(all_chunks)} total chunks.")
 
     return counts
 
@@ -242,46 +197,52 @@ def search(
     Semantic search across indexed materials.
     Returns list of {text, source, category, score} dicts.
     """
-    oai    = _openai_client()
-    client = _chroma_client()
+    if not _INDEX_FILE.exists() or not _EMBED_FILE.exists():
+        raise FileNotFoundError(
+            "RAG index not found. Run reindex_materials() first."
+        )
 
-    collection = client.get_or_create_collection(
-        name="job_search",
-        metadata={"hnsw:space": "cosine"},
-    )
+    oai = _openai_client()
 
-    query_embedding = _embed([query], oai)[0]
+    # Load index
+    index_data = json.loads(_INDEX_FILE.read_text(encoding="utf-8"))
+    chunks     = index_data["chunks"]
+    metadata   = index_data["metadata"]
+    embeddings = np.load(str(_EMBED_FILE))  # shape: (N, dim)
 
-    where = {"category": category} if category else None
+    # Filter by category if requested
+    if category:
+        indices = [i for i, m in enumerate(metadata) if m["category"] == category]
+        if not indices:
+            return []
+        embeddings = embeddings[indices]
+        chunks     = [chunks[i]   for i in indices]
+        metadata   = [metadata[i] for i in indices]
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results,
-        where=where,
-        include=["documents", "metadatas", "distances"],
-    )
+    # Embed query
+    q_vec = np.array(_embed([query], oai)[0], dtype=np.float32)
 
-    hits = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0],
-    ):
-        hits.append({
-            "text":     doc,
-            "source":   meta.get("source", "unknown"),
-            "category": meta.get("category", "unknown"),
-            "score":    round(1 - dist, 3),  # cosine similarity
-        })
+    # Cosine similarity
+    norms = np.linalg.norm(embeddings, axis=1) * np.linalg.norm(q_vec)
+    norms = np.where(norms == 0, 1e-9, norms)
+    scores = (embeddings @ q_vec) / norms
 
-    return hits
+    top_indices = np.argsort(scores)[::-1][:n_results]
+
+    return [
+        {
+            "text":     chunks[i],
+            "source":   metadata[i]["source"],
+            "category": metadata[i]["category"],
+            "score":    round(float(scores[i]), 3),
+        }
+        for i in top_indices
+    ]
 
 
 def format_results(hits: list[dict], header: str = "Search Results") -> str:
-    """Format search results for display in MCP tool output."""
     if not hits:
         return "No relevant results found."
-
     lines = [f"═══ {header} ═══", ""]
     for i, hit in enumerate(hits, 1):
         lines.append(f"[{i}] {hit['source']} (score: {hit['score']}, category: {hit['category']})")
