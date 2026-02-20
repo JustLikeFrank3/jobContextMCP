@@ -37,6 +37,8 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `scan_spicam_for_skills()` | Scan a side-project repo for resume-worthy skills |
 | `log_mental_health_checkin(mood, energy, ...)` | Log a mood/energy entry |
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
+| `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
+| `reindex_materials()` | **RAG** — (re)build the semantic search index |
 
 ---
 
@@ -48,7 +50,7 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 git clone https://github.com/YOUR_USERNAME/job-search-mcp
 cd job-search-mcp
 python3 -m venv .venv
-.venv/bin/pip install "mcp[cli]>=1.3.0"
+.venv/bin/pip install "mcp[cli]>=1.3.0" "openai>=1.0.0" "numpy>=1.24.0"
 ```
 
 ### 2. Configure your paths
@@ -124,10 +126,28 @@ To enable the tools in Copilot chat:
 
 Include a `.github/copilot-instructions.md` in your workspace pointing to this MCP server so Copilot knows to call its tools. See `copilot-instructions.example.md` for a starting template.
 
+### 5. (Optional) Enable RAG semantic search
+
+Add your OpenAI API key to `config.json`:
+
+```json
+"openai_api_key": "sk-..."
+```
+
+Then build the index:
+
+```bash
+.venv/bin/python rag.py
+```
+
+This embeds all your materials (~1000–1500 chunks depending on your file count) using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` does fast local cosine similarity — no further API calls until you reindex.
+
+The index files (`data/rag_embeddings.npy`, `data/rag_index.json`) are gitignored.
+
 ---
 
 ## Updating Dependencies
 
 ```bash
-.venv/bin/pip install -U "mcp[cli]"
+.venv/bin/pip install -U "mcp[cli]" "openai" "numpy"
 ```
