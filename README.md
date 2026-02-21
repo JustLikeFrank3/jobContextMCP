@@ -162,16 +162,4 @@ The index files (`data/rag_embeddings.npy`, `data/rag_index.json`) are gitignore
 .venv/bin/pip install -U "mcp[cli]" "openai" "numpy"
 ```
 
----
 
-## A Note on the Name
-
-`JustLikeFrank3` means two things.
-
-I'm the third Frank Vladimir MacBride. My grandfather was the first. He started working at a Ford dealership in Wisconsin in 1930 — sixteen years old, in the teeth of the Depression, making ten cents an hour. By nineteen he was service manager. He kept that for fifty years. Above my home office desk hangs a 1933 photograph of him and his team — three of the four men in clean white service coats. Immaculate, despite the work they did every day. I was told that was intentional: when a customer asked for the manager, the white coat had to be spotless.
-
-I grew up with that photograph. I didn't fully understand it until I was in the workforce myself.
-
-The `JustLikeFrank` part comes from a Less Than Jake song introduced to me by my friend Sean Evans — the most authentically himself person I've ever met. Lust for life, no pretense, no performance. Some people just stick with you.
-
-This repo is dedicated to both of them.
