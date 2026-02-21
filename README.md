@@ -45,6 +45,7 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `get_tone_profile()` | **v3** — retrieve all tone samples before drafting communications |
 | `scan_materials_for_tone(category?)` | **v3** — auto-scan resumes/cover letters/prep files and index new tone samples |
 | `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
+| `draft_outreach_message(contact, company, context, message_type?)` | **v4** — package tone profile, personal context, and writing instructions for AI-drafted outreach (thank-you, follow-up, referral ask, recruiter nudge, cold outreach) |
 
 ---
 
