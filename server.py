@@ -38,6 +38,7 @@ from tools import (
     tone,
     rag,
     star,
+    outreach,
 )
 
 
@@ -95,6 +96,7 @@ context.register(mcp)
 tone.register(mcp)
 rag.register(mcp)
 star.register(mcp)
+outreach.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -129,6 +131,8 @@ search_materials = rag.search_materials
 reindex_materials = rag.reindex_materials
 
 get_star_story_context = star.get_star_story_context
+
+draft_outreach_message = outreach.draft_outreach_message
 
 
 if __name__ == "__main__":
