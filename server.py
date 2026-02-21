@@ -9,6 +9,8 @@ Provides tools for:
   - Interview & LeetCode prep
   - sPiCam project skill scanning
   - Mental health check-in logging
+  - Personal story / context library (v3)
+  - Tone ingestion + voice profile (v3)
 """
 
 import json
@@ -42,8 +44,10 @@ LEETCODE_FOLDER = Path(_cfg["leetcode_folder"])
 SPICAM_FOLDER   = Path(_cfg["spicam_folder"])
 DATA_FOLDER     = Path(_cfg["data_folder"])
 
-STATUS_FILE     = DATA_FOLDER / "status.json"
-HEALTH_LOG_FILE = DATA_FOLDER / "mental_health_log.json"
+STATUS_FILE           = DATA_FOLDER / "status.json"
+HEALTH_LOG_FILE       = DATA_FOLDER / "mental_health_log.json"
+PERSONAL_CONTEXT_FILE = DATA_FOLDER / "personal_context.json"
+TONE_FILE             = DATA_FOLDER / "tone_samples.json"
 
 MASTER_RESUME       = RESUME_FOLDER / _cfg["master_resume_path"]
 LEETCODE_CHEATSHEET = LEETCODE_FOLDER / _cfg["leetcode_cheatsheet_path"]
@@ -624,6 +628,133 @@ def get_mental_health_log(days: int = 14) -> str:
     elif avg >= 7:
         lines.append("✓  Trend: strong energy. Keep the momentum going.")
 
+    return "\n".join(lines)
+
+
+# ─── TOOLS: PERSONAL CONTEXT ────────────────────────────────────────────────
+
+@mcp.tool()
+def log_personal_story(
+    story: str,
+    tags: list[str],
+    people: list[str] = [],
+    title: str = "",
+) -> str:
+    """
+    Log a personal story, memory, or context detail about Frank.
+    These accumulate over time and are retrieved to enrich cover letters,
+    dedications, behavioral answers, and any writing that should sound like Frank.
+
+    tags examples: family | motivation | music | career | friendship | identity | humor
+    people: names of people relevant to the story (e.g. ["Sean Evans", "Grandpa Frank"])
+    title: optional short label for the story (auto-generated from first 60 chars if omitted)
+    """
+    data = _load_json(PERSONAL_CONTEXT_FILE, {"stories": []})
+    entry = {
+        "id": len(data["stories"]) + 1,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "title": title or (story[:60] + ("..." if len(story) > 60 else "")),
+        "story": story,
+        "tags": [t.lower().strip() for t in tags],
+        "people": people,
+    }
+    data["stories"].append(entry)
+    _save_json(PERSONAL_CONTEXT_FILE, data)
+    return f"\u2713 Story logged (#{entry['id']}): {entry['title']}"
+
+
+@mcp.tool()
+def get_personal_context(tag: str = "", person: str = "") -> str:
+    """
+    Retrieve Frank's logged personal stories and context.
+    Filter by tag or person name, or leave both empty to get all stories.
+
+    Use this before generating cover letters, dedications, or any writing
+    that should feel personal rather than generic.
+    """
+    data = _load_json(PERSONAL_CONTEXT_FILE, {"stories": []})
+    stories = data.get("stories", [])
+
+    if tag:
+        stories = [s for s in stories if tag.lower() in s.get("tags", [])]
+    if person:
+        stories = [s for s in stories if any(person.lower() in p.lower() for p in s.get("people", []))]
+
+    if not stories:
+        qualifier = f" for tag '{tag}'" if tag else ""
+        qualifier += f" for person '{person}'" if person else ""
+        return f"No personal stories found{qualifier}."
+
+    lines = [f"\u2550\u2550\u2550 PERSONAL CONTEXT ({len(stories)} stories) \u2550\u2550\u2550", ""]
+    for s in stories:
+        lines.append(f"\u25aa #{s['id']} \u2014 {s['title']}")
+        lines.append(f"  Tags:   {', '.join(s.get('tags', []))}")
+        if s.get("people"):
+            lines.append(f"  People: {', '.join(s['people'])}")
+        lines.append(f"  {s['story']}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+# ─── TOOLS: TONE INGESTION ────────────────────────────────────────────────────
+
+@mcp.tool()
+def log_tone_sample(
+    text: str,
+    source: str,
+    context: str = "",
+) -> str:
+    """
+    Ingest a writing sample to capture Frank's tone and voice.
+    Over time, the AI uses these to write in Frank's style rather than generic AI prose.
+
+    source: where the sample came from
+            e.g. "cover letter Ford", "text to Jessica", "LinkedIn message to Cheyenne"
+    context: optional note about the situation or mood when written
+    """
+    data = _load_json(TONE_FILE, {"samples": []})
+    entry = {
+        "id": len(data["samples"]) + 1,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "source": source,
+        "context": context,
+        "text": text,
+        "word_count": len(text.split()),
+    }
+    data["samples"].append(entry)
+    _save_json(TONE_FILE, data)
+    return f"\u2713 Tone sample logged (#{entry['id']}, {entry['word_count']} words from '{source}')"
+
+
+@mcp.tool()
+def get_tone_profile() -> str:
+    """
+    Returns all ingested tone samples so the AI can write in Frank's voice.
+    Call this before drafting any email, cover letter, LinkedIn message,
+    or other communication that needs to sound like Frank — not like an AI.
+    """
+    data = _load_json(TONE_FILE, {"samples": []})
+    samples = data.get("samples", [])
+
+    if not samples:
+        return (
+            "No tone samples logged yet.\n"
+            "Use log_tone_sample() to ingest writing samples — cover letters, "
+            "messages, anything Frank actually wrote."
+        )
+
+    total_words = sum(s.get("word_count", 0) for s in samples)
+    lines = [
+        f"\u2550\u2550\u2550 TONE PROFILE ({len(samples)} samples, {total_words} total words) \u2550\u2550\u2550",
+        "Use these samples to calibrate Frank's voice before writing anything.",
+        "",
+    ]
+    for s in samples:
+        lines.append(f"\u2500\u2500 Sample #{s['id']} | {s['source']} \u2500\u2500")
+        if s.get("context"):
+            lines.append(f"Context: {s['context']}")
+        lines.append(s["text"])
+        lines.append("")
     return "\n".join(lines)
 
 

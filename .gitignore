@@ -4,6 +4,8 @@ config.json
 # Runtime data — contains private application/health info
 data/status.json
 data/mental_health_log.json
+data/personal_context.json
+data/tone_samples.json
 
 # Python virtual environment
 .venv/

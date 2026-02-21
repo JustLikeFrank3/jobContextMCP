@@ -1,0 +1,12 @@
+{
+  "stories": [
+    {
+      "id": 1,
+      "timestamp": "2026-01-01T00:00:00",
+      "title": "Short label for quick scanning",
+      "story": "The full story text — as much detail as you want. Written in first person. This is what the AI will read to understand you.",
+      "tags": ["family", "motivation", "career"],
+      "people": ["Person Name"]
+    }
+  ]
+}
