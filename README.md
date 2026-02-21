@@ -43,6 +43,8 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
 | `log_tone_sample(text, source, context?)` | **v3** — ingest a writing sample to teach the AI your voice |
 | `get_tone_profile()` | **v3** — retrieve all tone samples before drafting communications |
+| `scan_materials_for_tone(category?)` | **v3** — auto-scan resumes/cover letters/prep files and index new tone samples |
+| `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
 
 ---
 
@@ -86,7 +88,11 @@ Edit `config.json` with the absolute paths to your own folders:
 ```bash
 cp data/status.example.json data/status.json
 cp data/mental_health_log.example.json data/mental_health_log.json
+cp data/personal_context.example.json data/personal_context.json
+cp data/tone_samples.example.json data/tone_samples.json
 ```
+
+> **Note:** If `config.json` is absent (e.g., on a clean clone or in CI), the server automatically falls back to `config.example.json` so imports don't crash. Fill in real paths before running in production.
 
 ### 4. Connect to VS Code
 
@@ -116,7 +122,7 @@ To enable the tools in Copilot chat:
 
 ## Data Privacy
 
-`config.json`, `data/status.json`, and `data/mental_health_log.json` are all gitignored. Your real application data, contact names, and health entries never leave your machine.
+`config.json` and all files under `data/` — including `status.json`, `mental_health_log.json`, `personal_context.json`, and `tone_samples.json` — are gitignored. Your real application data, personal stories, contact names, and health entries never leave your machine.
 
 ---
 
