@@ -1,11 +1,11 @@
 """
 Shared fixtures for job-search-mcp test suite.
 
-Key design: server.py runs _reconfigure(_load_config()) at import time which
-requires a real config.json.  We work around this by:
-  1. Providing a minimal conftest-level config.json before the first import, OR
-  2. Calling server._reconfigure(fake_cfg) in the `isolated_server` fixture to
-     redirect all file-path globals to a pytest tmp_path directory.
+Key design: server.py runs _reconfigure(_load_config()) at import time.
+_load_config() falls back to config.example.json when config.json is missing,
+so a clean checkout can import server without crashing.  All path globals are
+then redirected to a pytest tmp_path via the `isolated_server` fixture, which
+calls server._reconfigure(fake_cfg) before each test.
 
 Each test that touches the filesystem should use the `isolated_server` fixture.
 Tests that only exercise pure logic (tag resolution, metric maps, etc.) can

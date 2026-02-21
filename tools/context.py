@@ -6,9 +6,10 @@ from lib.helpers import _build_story_entry, _filter_stories, _format_story_list
 def log_personal_story(
     story: str,
     tags: list[str],
-    people: list[str] = [],
+    people: list[str] | None = None,
     title: str = "",
 ) -> str:
+    people = people or []
     data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     entry = _build_story_entry(data["stories"], story, tags, people, title)
     data["stories"].append(entry)

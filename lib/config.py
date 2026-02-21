@@ -24,6 +24,9 @@ QUICK_REFERENCE: Path
 def _load_config() -> dict:
     config_path = _HERE / "config.json"
     if not config_path.exists():
+        fallback = _HERE / "config.example.json"
+        if fallback.exists():
+            return json.loads(fallback.read_text(encoding="utf-8"))
         raise FileNotFoundError(
             f"config.json not found at {config_path}\n"
             "Copy config.example.json → config.json and fill in your paths."
