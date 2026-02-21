@@ -1,12 +1,16 @@
 from lib import config
 from lib.io import _load_json, _save_json, _now
+from tools.health import get_daily_checkin_nudge
 
 
 def get_job_hunt_status() -> str:
     data = _load_json(config.STATUS_FILE, {"applications": []})
     apps = data.get("applications", [])
+    nudge = get_daily_checkin_nudge()
+
     if not apps:
-        return "No applications tracked yet. Use update_application() to add one."
+        base = "No applications tracked yet. Use update_application() to add one."
+        return f"{base}\n\n{nudge}" if nudge else base
 
     lines = [
         "═══ JOB HUNT STATUS ═══",
@@ -24,6 +28,10 @@ def get_job_hunt_status() -> str:
         if app.get("notes"):
             lines.append(f"  Notes:        {app['notes']}")
         lines.append("")
+
+    if nudge:
+        lines += ["", nudge]
+
     return "\n".join(lines)
 
 

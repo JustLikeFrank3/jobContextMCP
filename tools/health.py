@@ -5,6 +5,27 @@ from lib.io import _load_json, _save_json
 from lib.helpers import _build_checkin_entry
 
 
+def get_daily_checkin_nudge() -> str:
+    data = _load_json(config.HEALTH_LOG_FILE, {"entries": []})
+    entries = data.get("entries", [])
+    today = datetime.date.today().isoformat()
+
+    if any(e.get("date") == today for e in entries):
+        return ""
+
+    if not entries:
+        return (
+            "⚠ No check-in logged yet today. "
+            "Quick check-in: log_mental_health_checkin(mood='stable', energy=5)"
+        )
+
+    last_date = max((e.get("date", "") for e in entries), default="")
+    return (
+        f"⚠ No check-in logged yet today (last check-in: {last_date or 'unknown'}). "
+        "Quick check-in: log_mental_health_checkin(mood='stable', energy=5)"
+    )
+
+
 def log_mental_health_checkin(
     mood: str,
     energy: int,
