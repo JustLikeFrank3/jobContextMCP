@@ -39,6 +39,12 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
 | `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
 | `reindex_materials()` | **RAG** — (re)build the semantic search index |
+| `log_personal_story(story, tags, people?, title?)` | **v3** — log a personal story or memory for context-rich writing |
+| `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
+| `log_tone_sample(text, source, context?)` | **v3** — ingest a writing sample to teach the AI your voice |
+| `get_tone_profile()` | **v3** — retrieve all tone samples before drafting communications |
+| `scan_materials_for_tone(category?)` | **v3** — auto-scan resumes/cover letters/prep files and index new tone samples |
+| `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
 
 ---
 
@@ -82,7 +88,11 @@ Edit `config.json` with the absolute paths to your own folders:
 ```bash
 cp data/status.example.json data/status.json
 cp data/mental_health_log.example.json data/mental_health_log.json
+cp data/personal_context.example.json data/personal_context.json
+cp data/tone_samples.example.json data/tone_samples.json
 ```
+
+> **Note:** If `config.json` is absent (e.g., on a clean clone or in CI), the server automatically falls back to `config.example.json` so imports don't crash. Fill in real paths before running in production.
 
 ### 4. Connect to VS Code
 
@@ -112,7 +122,7 @@ To enable the tools in Copilot chat:
 
 ## Data Privacy
 
-`config.json`, `data/status.json`, and `data/mental_health_log.json` are all gitignored. Your real application data, contact names, and health entries never leave your machine.
+`config.json` and all files under `data/` — including `status.json`, `mental_health_log.json`, `personal_context.json`, and `tone_samples.json` — are gitignored. Your real application data, personal stories, contact names, and health entries never leave your machine.
 
 ---
 
@@ -151,3 +161,17 @@ The index files (`data/rag_embeddings.npy`, `data/rag_index.json`) are gitignore
 ```bash
 .venv/bin/pip install -U "mcp[cli]" "openai" "numpy"
 ```
+
+---
+
+## A Note on the Name
+
+`JustLikeFrank3` means two things.
+
+I'm the third Frank Vladimir MacBride. My grandfather was the first. He started working at a Ford dealership in Wisconsin in 1930 — sixteen years old, in the teeth of the Depression, making ten cents an hour. By nineteen he was service manager. He kept that for fifty years. Above my home office desk hangs a 1933 photograph of him and his team — three of the four men in clean white service coats. Immaculate, despite the work they did every day. I was told that was intentional: when a customer asked for the manager, the white coat had to be spotless.
+
+I grew up with that photograph. I didn't fully understand it until I was in the workforce myself.
+
+The `JustLikeFrank` part comes from a Less Than Jake song introduced to me by my friend Sean Evans — the most authentically himself person I've ever met. Lust for life, no pretense, no performance. Some people just stick with you.
+
+This repo is dedicated to both of them.

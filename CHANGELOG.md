@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-21
+
+### Added
+- **Modular architecture** — split monolithic `server.py` (1200+ lines) into `lib/` (config, I/O, pure helpers) and `tools/` packages (11 modules), each with a `register(mcp)` pattern; `server.py` is now a thin ~120-line orchestrator
+- `log_personal_story(story, tags, people?, title?)` — log personal STAR stories with tags and optional people/title metadata
+- `get_personal_context(tag?, person?)` — retrieve stories filtered by tag or person
+- `log_tone_sample(text, source, context?)` — ingest a writing sample to teach tone/voice
+- `get_tone_profile()` — retrieve all tone samples for AI drafting context
+- `scan_materials_for_tone(category?)` — auto-scan resumes, cover letters, and prep files to index new tone samples; persists a scan index to avoid re-ingesting unchanged files
+- `get_star_story_context(tag, company?, role_type?)` — retrieve matching STAR stories, derived metric bullets (via tag chains), and company-specific framing hints in one call
+- **Implied daily check-in nudge** — `get_job_hunt_status()` appends a reminder to log a mental health check-in if none exists for today
+- **Test coverage** — 134 tests, 69% total coverage across `server`, `lib`, and `tools`; `pyproject.toml` now tracks all three sources with `fail_under = 50`
+
+### Changed
+- `server.py` re-exports all tool functions + path globals for backward compatibility with existing test fixtures
+- `lib/config._load_config()` now falls back to `config.example.json` when `config.json` is absent — clean clones and CI no longer crash on import
+- `log_personal_story` `people` parameter changed from mutable default `[]` to `None` (normalized inside the function) — fixes classic Python mutable-default-argument bug
+
+### Fixed
+- Resolved all 3 Copilot automated code review suggestions from PR #10: mutable default argument, eager config load in CI, and misleading conftest docstring
+
 ## [0.2.0] - 2026-02-20
 
 ### Added

@@ -1,0 +1,12 @@
+{
+  "samples": [
+    {
+      "id": 1,
+      "timestamp": "2026-01-01T00:00:00",
+      "source": "e.g. cover letter Company, email to recruiter, LinkedIn message",
+      "context": "Optional: situation or mood context when this was written",
+      "text": "The actual text of the writing sample. The more samples, the better the AI can calibrate your voice.",
+      "word_count": 0
+    }
+  ]
+}
