@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "job-search-as": {
+      "type": "stdio",
+      "command": "/Users/fvm3/Projects/job-search-mcp/.venv/bin/python3",
+      "args": ["/Users/fvm3/Projects/job-search-mcp/server.py"],
+      "cwd": "/Users/fvm3/Projects/job-search-mcp"
+    }
+  }
+}
