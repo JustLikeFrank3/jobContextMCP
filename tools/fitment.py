@@ -1,10 +1,10 @@
-from lib.io import _read
+from lib.io import _load_master_context
 from lib import config
 
 
 def assess_job_fitment(company: str, role: str, job_description: str) -> str:
     """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role."""
-    master = _read(config.MASTER_RESUME)
+    master = _load_master_context()
     return (
         f"═══ FITMENT ASSESSMENT ═══\n"
         f"Company: {company}\n"

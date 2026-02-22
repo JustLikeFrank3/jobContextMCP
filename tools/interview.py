@@ -1,5 +1,5 @@
 from lib import config
-from lib.io import _read
+from lib.io import _read, _load_master_context
 
 
 def get_interview_quick_reference() -> str:
@@ -43,7 +43,7 @@ def generate_interview_prep_context(
     job_description: str = "",
 ) -> str:
     """Bundle Frank's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
-    master = _read(config.MASTER_RESUME)
+    master = _load_master_context()
     quick_ref = _read(config.QUICK_REFERENCE)
 
     desc_block = f"\n──── JOB DESCRIPTION ────\n{job_description}" if job_description else ""

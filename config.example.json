@@ -10,5 +10,11 @@
   "optimized_resumes_dir": "01-Current-Optimized",
   "cover_letters_dir": "02-Cover-Letters",
   "reference_materials_dir": "06-Reference-Materials",
+  "resume_template_png": "06-Reference-Materials/resume_template.png",
+  "cover_letter_template_png": "06-Reference-Materials/cover_letter_template.png",
+  "template_format_path": "06-Reference-Materials/Frank MacBride Resume - Template Format.txt",
+  "gm_awards_path": "06-Reference-Materials/GM Recognition Awards.txt",
+  "feedback_received_path": "06-Reference-Materials/Feedback_Received.txt",
+  "skills_shorter_path": "06-Reference-Materials/Skills - 10% Shorter.txt",
   "openai_api_key": "sk-...your-key-here"
 }

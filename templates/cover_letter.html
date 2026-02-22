@@ -70,6 +70,7 @@ html, body {
     font-size: 18pt;
     font-weight: bold;
     line-height: 1.08;
+    color: #6b6b6b;
 }
 
 /* Contact block (bottom of sidebar) */
@@ -134,7 +135,11 @@ html, body {
   <div class="content">
     <div class="letter-body">
       {% for para in paragraphs %}
+      {% if para == para | upper and para | length < 50 %}
+      <p><strong>{{ para }}</strong></p>
+      {% else %}
       <p>{{ para }}</p>
+      {% endif %}
       {% endfor %}
     </div>
   </div>
