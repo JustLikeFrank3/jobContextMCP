@@ -5,14 +5,23 @@
 <style>
 @page {
     size: letter;
-    margin: 0;
+    margin: 0 0 0.52in 0;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 12.5pt;
+        font-weight: bold;
+        color: #000;
+        vertical-align: middle;
+        margin-right: 0.48in;
+    }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
     width: 8.5in;
-    height: 11in;
+    height: 10.48in;
     font-family: 'Courier New', Courier, monospace;
     font-size: 9.2pt;
     color: #000;
@@ -22,13 +31,13 @@ html, body {
 .page {
     display: flex;
     width: 8.5in;
-    height: 11in;
+    height: 10.48in;
 }
 
 /* ── LEFT SIDEBAR ─────────────────────────────── */
 .sidebar {
     width: 2.18in;
-    min-height: 11in;
+    min-height: 10.48in;
     padding: 0.44in 0.22in 0.48in 0.24in;
     display: flex;
     flex-direction: column;

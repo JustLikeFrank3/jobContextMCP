@@ -50,6 +50,15 @@ body {
 
 .header-contact .lbl { font-weight: bold; }
 
+/* ── TAGLINE ──────────────────────────────────── */
+.tagline {
+  font-size: 9pt;
+  font-weight: bold;
+  margin-top: 3px;
+  margin-bottom: 5px;
+  line-height: 1.2;
+}
+
 /* ── SYNOPSIS ─────────────────────────────────── */
 .synopsis {
   font-size: 9pt;
@@ -135,6 +144,7 @@ body {
 
 .edu-school { font-size: 8.4pt; }
 .edu-details { font-size: 8.4pt; }
+.edu-bullet  { font-size: 8.4pt; margin-left: 10px; }
 
 /* ── LEADERSHIP ───────────────────────────────── */
 .leader-item {
@@ -161,6 +171,11 @@ body {
   </div>
 </div>
 
+<!-- TAGLINE -->
+{% if tagline %}
+<div class="tagline">{{ tagline }}</div>
+{% endif %}
+
 <!-- SYNOPSIS -->
 {% if synopsis %}
 <div class="synopsis">{{ synopsis }}</div>
@@ -175,7 +190,7 @@ body {
   {% if section.type == 'skills' %}
   <ul class="skills-list">
     {% for item in section['items'] %}
-    <li><span class="skill-lbl">{{ item.label }}:</span> {{ item.value }}</li>
+    <li>{% if item.label %}<span class="skill-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}</li>
     {% endfor %}
   </ul>
 
@@ -215,7 +230,13 @@ body {
   {% elif section.type == 'education' %}
   <div class="edu-degree">{{ section.degree }}</div>
   <div class="edu-school">{{ section.school }}</div>
-  <div class="edu-details">{{ section.details }}</div>
+  {% for line in section.details %}
+  {% if line.startswith('•') or line.startswith('-') %}
+  <div class="edu-bullet">{{ line }}</div>
+  {% else %}
+  <div class="edu-details">{{ line }}</div>
+  {% endif %}
+  {% endfor %}
 
   {# ── LEADERSHIP ──────────────────────── #}
   {% elif section.type == 'leadership' %}
