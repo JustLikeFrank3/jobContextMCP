@@ -65,7 +65,15 @@ def _is_section_header(line: str) -> bool:
     s = line.strip()
     if not s or _is_bullet(s):
         return False
-    return bool(_SECTION_HEADER_RE.match(s))
+    # Strip a trailing parenthetical note, e.g. "PERSONAL PROJECTS (Post-GM, 2026)" → "PERSONAL PROJECTS"
+    test_s = re.sub(r"\s*\([^)]*\)\s*$", "", s).strip()
+    if not _SECTION_HEADER_RE.match(test_s):
+        return False
+    # Only treat as a section header if it maps to a known section type.
+    # This prevents names ("FRANK VLADMIR MACBRIDE III"), job titles
+    # ("SOFTWARE ENGINEER", "TECHNICAL SPECIALIST"), and other all-caps
+    # lines from being misidentified as section breaks.
+    return _classify_section(test_s) != "text"
 
 
 def _clean_bullet(line: str) -> str:
@@ -84,6 +92,28 @@ def _is_group_label(line: str) -> bool:
         and 3 < len(s) < 55
         and not _YEAR_RE.search(s)
     )
+
+
+def _join_continuations(lines: list[str]) -> list[str]:
+    """Join word-wrapped continuation lines (starting with whitespace) to their parent."""
+    result: list[str] = []
+    for line in lines:
+        if line and line[0] == " " and result:
+            # Append to the last non-blank line in result
+            for i in range(len(result) - 1, -1, -1):
+                if result[i].strip():
+                    result[i] = result[i].rstrip() + " " + line.strip()
+                    break
+            else:
+                result.append(line)
+        else:
+            result.append(line)
+    return result
+
+
+def _strip_separator_lines(lines: list[str]) -> list[str]:
+    """Remove ─────── visual separator lines."""
+    return [l for l in lines if not re.match(r"^\u2500+\s*$", l.strip())]
 
 
 # ── CONTACT EXTRACTION ───────────────────────────────────────────────────
@@ -235,6 +265,11 @@ def _parse_skills_section(lines: list[str]) -> dict:
 
 # ── EXPERIENCE ────────────────────────────────────────────────────────────
 
+def _is_date_part(s: str) -> bool:
+    """True if s looks like a date range — no length limit."""
+    return bool(_YEAR_RE.search(s)) and bool(_DATE_WORD_RE.search(s) or "\u2013" in s or "\u2014" in s or "-" in s)
+
+
 def _finalize_job(job: dict) -> None:
     """Resolve accumulated header_lines into title/company/dates."""
     if job.get("_done"):
@@ -244,17 +279,28 @@ def _finalize_job(job: dict) -> None:
     if not hlines:
         return
 
-    # Single pipe-separated line: "Title | Company | Dates"
+    # Single pipe-separated line
     if len(hlines) == 1 and " | " in hlines[0]:
         parts = [p.strip() for p in hlines[0].split(" | ")]
-        if len(parts) >= 3 and _is_date_line(parts[-1]):
+        last_is_date = _is_date_part(parts[-1])
+        if len(parts) >= 3 and last_is_date:
             job["title"] = parts[0]
             job["company"] = parts[1]
             job["dates"] = parts[-1]
             return
+        if len(parts) == 2 and last_is_date:
+            # "Company | Dates" — title already set by new_job()
+            if not job["company"]:
+                job["company"] = parts[0]
+            if not job["dates"]:
+                job["dates"] = parts[-1]
+            return
         if len(parts) == 2:
-            job["title"] = parts[0]
-            job["company"] = parts[1]
+            # "Title | Level" — treat as extended title if title not yet set
+            if not job["title"]:
+                job["title"] = hlines[0]
+            else:
+                job["company"] = parts[1]
             return
 
     # Multi-line format
@@ -262,6 +308,14 @@ def _finalize_job(job: dict) -> None:
         h = h.strip()
         if not h:
             continue
+        # Handle "Company, Location | Date Range" on a single line
+        if " | " in h and not job["company"]:
+            pipe_parts = [p.strip() for p in h.split(" | ", 1)]
+            if len(pipe_parts) == 2 and _is_date_line(pipe_parts[1]):
+                job["company"] = pipe_parts[0]
+                if not job["dates"]:
+                    job["dates"] = pipe_parts[1]
+                continue
         if (_is_date_line(h) and (_DATE_WORD_RE.search(h) or "–" in h or "-" in h)) and not job["dates"]:
             job["dates"] = h
         elif not job["title"]:
@@ -278,6 +332,7 @@ def _parse_experience_section(lines: list[str]) -> dict:
     cur: dict | None = None
     cur_group: dict | None = None
     had_bullets = False
+    after_blank = False   # set True after a blank line; clears on next non-blank
 
     def flush_group() -> None:
         nonlocal cur_group
@@ -289,7 +344,7 @@ def _parse_experience_section(lines: list[str]) -> dict:
         cur_group = None
 
     def new_job(first_line: str) -> None:
-        nonlocal cur, had_bullets
+        nonlocal cur, had_bullets, after_blank
         flush_group()
         if cur is not None:
             _finalize_job(cur)
@@ -298,29 +353,41 @@ def _parse_experience_section(lines: list[str]) -> dict:
             "groups": [], "bullets": [],
             "_hlines": [first_line], "_done": False,
         }
-        # Fast path: single-line pipe format
         if " | " in first_line:
             parts = [p.strip() for p in first_line.split(" | ")]
-            if len(parts) >= 3 and _is_date_line(parts[-1]):
+            last = parts[-1]
+            if len(parts) >= 3 and _is_date_part(last):
                 c["title"] = parts[0]
-                c["company"] = parts[1]
-                c["dates"] = parts[-1]
+                c["company"] = " | ".join(parts[1:-1])
+                c["dates"] = last
                 c["_hlines"] = []
                 c["_done"] = True
-            elif len(parts) == 2:
-                c["title"] = parts[0]
-                c["company"] = parts[1]
+            elif len(parts) == 2 and _is_date_part(last):
+                c["company"] = parts[0]
+                c["dates"] = last
+                c["_hlines"] = []
+                c["_done"] = True
+            else:
+                # "Title | Level" — company/dates come on the next line(s)
+                c["title"] = first_line
                 c["_hlines"] = []
         cur = c
         had_bullets = False
+        after_blank = False
         jobs.append(cur)
 
     for raw in lines:
         line = raw.strip()
+
+        # ── blank line ────────────────────────────────────────────────────
         if not line:
+            if cur is not None:
+                after_blank = True
             continue
 
+        # ── explicit bullet (•, -, *) ─────────────────────────────────────
         if _is_bullet(line):
+            after_blank = False
             bullet = _clean_bullet(line)
             if cur is None:
                 continue
@@ -331,7 +398,9 @@ def _parse_experience_section(lines: list[str]) -> dict:
             cur_group["bullets"].append(bullet)
             had_bullets = True
 
+        # ── group label ("Cloud & Infrastructure:") ───────────────────────
         elif _is_group_label(line):
+            after_blank = False
             if cur is None:
                 continue
             if not cur.get("_done"):
@@ -340,17 +409,27 @@ def _parse_experience_section(lines: list[str]) -> dict:
             cur_group = {"label": line.rstrip(":"), "bullets": []}
             had_bullets = False
 
-        elif cur is None or had_bullets:
-            # New job entry
+        # ── start a new job? ──────────────────────────────────────────────
+        # No current job yet, OR we just crossed a blank line after content.
+        elif cur is None or after_blank:
             new_job(line)
 
+        # ── accumulate header lines or implicit plain-text bullet ─────────
         else:
-            # Still accumulating header lines for current job
+            after_blank = False
             if not cur.get("_done"):
                 cur["_hlines"].append(line)
-                # Finalize header once we hit a date line
-                if _is_date_line(line) and (_DATE_WORD_RE.search(line) or "–" in line):
+                # Finalize when last pipe-segment looks like a date range
+                check = line.rsplit(" | ", 1)[-1].strip()
+                if _is_date_part(check):
                     _finalize_job(cur)
+            else:
+                # Header is done; plain-text lines without bullet chars are
+                # implicit bullets (common in MCP-saved .txt resumes).
+                if cur_group is None:
+                    cur_group = {"label": "", "bullets": []}
+                cur_group["bullets"].append(line)
+                had_bullets = True
 
     flush_group()
     if cur is not None:
@@ -362,18 +441,37 @@ def _parse_experience_section(lines: list[str]) -> dict:
 # ── EDUCATION ─────────────────────────────────────────────────────────────
 
 def _parse_education_section(lines: list[str]) -> dict:
-    degree = school = details = ""
+    degree = school = details = year = ""
     clean_lines = [l.strip() for l in lines if l.strip()]
     for line in clean_lines:
-        s = line
+        # Handle compact pipe format: "Degree | School | Year" or "Degree | School, City | Year"
+        if " | " in line and not degree:
+            parts = [p.strip() for p in line.split(" | ")]
+            degree = parts[0]
+            if len(parts) >= 3:
+                school = parts[1]
+                year   = parts[2]
+            elif len(parts) == 2:
+                if _YEAR_RE.search(parts[1]):
+                    year = parts[1]
+                else:
+                    school = parts[1]
+            continue
         if not degree:
-            degree = s
+            degree = line
         elif not school:
-            school = s
+            school = line
+        elif not year and _YEAR_RE.search(line) and len(line) < 60:
+            year = line
         elif not details:
-            details = s
+            details = line
         else:
-            details += " | " + s
+            details += " | " + line
+    # Combine year into school display if we have it separately
+    if year and school and year not in school:
+        school = f"{school} | {year}"
+    elif year and not school:
+        school = year
     return {"type": "education", "degree": degree, "school": school, "details": details}
 
 
@@ -426,7 +524,9 @@ def _parse_leadership_section(lines: list[str]) -> dict:
 
 def _classify_section(title: str) -> str:
     t = title.upper()
-    if any(k in t for k in ("SKILL", "PROFICIEN", "TECHNICAL", "TECH STACK")):
+    # Note: do NOT include "TECHNICAL" alone — "TECHNICAL SPECIALIST" is a job
+    # title inside an experience section, not a skills section header.
+    if any(k in t for k in ("SKILL", "PROFICIEN", "TECH STACK")):
         return "skills"
     if "EXPERIENCE" in t or "EMPLOYMENT" in t:
         return "experience"
@@ -434,7 +534,7 @@ def _classify_section(title: str) -> str:
         return "education"
     if "PROJECT" in t:
         return "projects"
-    if "LEADERSHIP" in t or "ADDITIONAL" in t:
+    if "LEADERSHIP" in t or "ADDITIONAL" in t or "ACHIEVEMENT" in t or "CERTIFICATION" in t:
         return "leadership"
     if "SYNOPSIS" in t or "SUMMARY" in t or "OBJECTIVE" in t:
         return "synopsis_section"
@@ -496,6 +596,9 @@ def _parse_resume_txt(text: str) -> dict:
     text = _strip_txt_wrapper(text)
     all_lines = text.splitlines()
     all_lines = _strip_metadata_blocks(all_lines)
+    # Fix fixed-width line wrapping: rejoin continuation lines, then drop separators.
+    all_lines = _join_continuations(all_lines)
+    all_lines = _strip_separator_lines(all_lines)
 
     contact = _extract_contact(all_lines)
     pre_lines, raw_sections = _split_sections(all_lines)
@@ -530,7 +633,7 @@ def _parse_resume_txt(text: str) -> dict:
         sections.append(s)
 
     return {
-        "name": name or "FRANK V. MACBRIDE III",
+        "name": name or "FRANK VLADMIR MACBRIDE III",
         "contact": contact,
         "synopsis": synopsis,
         "sections": sections,
@@ -543,44 +646,51 @@ def _parse_cover_letter_txt(text: str) -> dict:
     text = _strip_txt_wrapper(text)
     lines = text.splitlines()
     lines = _strip_metadata_blocks(lines)
+    # Fix fixed-width line wrapping, then drop visual separator lines.
+    lines = _join_continuations(lines)
+    lines = _strip_separator_lines(lines)
 
     contact = _extract_contact(lines)
 
-    first_nonempty = ""
+    # Name is the very first non-blank, non-contact line.
+    derived_name = "FRANK VLADMIR MACBRIDE III"
     for line in lines:
         s = line.strip()
-        if s:
-            first_nonempty = s
+        if s and "@" not in s and not _PHONE_RE.search(s) and not _LINKEDIN_RE.search(s):
+            derived_name = s
             break
 
-    if (first_nonempty and "@" not in first_nonempty and len(first_nonempty.split()) >= 2
-            and not re.match(r"^(Dear\b|To\s+whom|Hello\b|Hi\b)", first_nonempty, re.I)):
-        derived_name = first_nonempty
-    else:
-        derived_name = "FRANK VLADMIR MACBRIDE III"
-
-    body_start = 0
-    for idx, line in enumerate(lines):
+    # Body starts at the first long line that is not part of the header block.
+    # After joining continuations, header lines (name, contact, company, job title)
+    # are short; genuine body paragraphs are fully-joined and > 60 chars.
+    body_lines: list[str] = []
+    in_body = False
+    header_re = re.compile(r"^(Frank|FRANK|\+1|\d{3}|www\.|linkedin)", re.I)
+    for line in lines:
         s = line.strip()
-        if re.match(r"^(Dear\b|To\s+whom\s+it\s+may\s+concern\b|Hello\b|Hi\b)", s, re.I):
-            body_start = idx
-            break
-    body_lines = lines[body_start:]
+        if not in_body:
+            if (
+                not s
+                or _EMAIL_RE.search(s)
+                or _PHONE_RE.search(s)
+                or _LINKEDIN_RE.search(s)
+                or header_re.match(s)
+                or re.match(r"^(Phone|Email|LinkedIn|Address|Location):", s, re.I)
+            ):
+                continue
+            # First long line = start of letter body
+            if len(s) > 60:
+                in_body = True
+                body_lines.append(line)
+            # Short non-contact lines before that = company name / job title → skip
+        else:
+            body_lines.append(line)
 
-    # Paragraphs: group non-empty lines, split on blank lines
+    # Split body into paragraphs on blank lines.
     paragraphs: list[str] = []
     current: list[str] = []
     for line in body_lines:
         s = line.strip()
-        # Skip pure contact/metadata lines
-        if (
-            _EMAIL_RE.search(s)
-            or _LINKEDIN_RE.search(s)
-            or re.match(r"^(Phone|Email|LinkedIn|Address|Location):", s, re.I)
-            or re.match(r"^-{4,}$", s)
-            or re.match(r"^\[Date\]$", s, re.I)
-        ):
-            continue
         if s:
             current.append(s)
         else:
@@ -590,18 +700,11 @@ def _parse_cover_letter_txt(text: str) -> dict:
     if current:
         paragraphs.append(" ".join(current))
 
-    # Remove any paragraphs that are just the name (header artifact)
-    name_para_re = re.compile(r"^FRANK\s+V(LADMIR|\.)?\s+MACBRIDE", re.I)
-    paragraphs = [p for p in paragraphs if not name_para_re.match(p.strip())]
-
-    # Normalize closing salutation → "Kindest regards," + signature on its own line
-    _CLOSING_RE = re.compile(
-        r"^(Best\s+regards|Kind(?:est)?\s+regards|Sincerely|Regards|Warm\s+regards|Thank\s+you)[,.]?",
-        re.I,
-    )
-    for i in range(len(paragraphs) - 1, -1, -1):
-        if _CLOSING_RE.match(paragraphs[i].strip()):
-            paragraphs = paragraphs[:i] + ["Kindest regards,", "Frank Vladmir MacBride III"]
+    # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
+    sign_re = re.compile(r"^Frank\s+(MacBride|Vladmir|V\.)", re.I)
+    for i in range(len(paragraphs) - 1, max(len(paragraphs) - 5, -1), -1):
+        if sign_re.match(paragraphs[i].strip()):
+            paragraphs[i] = "Frank Vladmir MacBride III"
             break
 
     # Name for sidebar
@@ -665,7 +768,11 @@ def export_resume_pdf(
             return f"Error: file not found — {filename}"
         source = matches[0]
 
-    text = source.read_text(encoding="utf-8")
+    # Try UTF-8 first; fall back to latin-1 for files saved with other encodings
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = source.read_text(encoding="latin-1")
     data = _parse_resume_txt(text)
     data["footer_tag"] = footer_tag.upper() if footer_tag else _derive_footer_tag(source.name)
 
@@ -701,7 +808,11 @@ def export_cover_letter_pdf(
             return f"Error: file not found — {filename}"
         source = matches[0]
 
-    text = source.read_text(encoding="utf-8")
+    # Try UTF-8 first; fall back to latin-1 for files saved with other encodings
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = source.read_text(encoding="latin-1")
     data = _parse_cover_letter_txt(text)
 
     stem = source.stem

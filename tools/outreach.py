@@ -15,6 +15,7 @@ from lib.io import _load_json
 from tools.tone import get_tone_profile
 from tools.context import get_personal_context
 from tools.job_hunt import get_job_hunt_status
+from tools.people import lookup_person_context
 
 
 _MESSAGE_TYPE_INSTRUCTIONS = {
@@ -124,18 +125,22 @@ def draft_outreach_message(
     tone_profile = get_tone_profile()
     personal_ctx = get_personal_context()
     company_status = _get_company_status(company)
+    person_ctx = lookup_person_context(contact)
 
-    return "\n\n".join([
+    sections = [
         "═══ OUTREACH MESSAGE CONTEXT ═══",
-
         f"To:           {contact}",
         f"Company:      {company}",
         f"Message type: {resolved_type}",
         f"Situation:    {context}",
+    ]
 
+    if person_ctx:
+        sections += ["──── KNOWN CONTACT INFO ────", person_ctx]
+
+    sections += [
         "──── WRITING INSTRUCTIONS ────",
         writing_instructions,
-
         "──── FORMATTING RULES ────",
         (
             "- Keep it short. If it can be 3 sentences, don't write 5.\n"
@@ -145,16 +150,12 @@ def draft_outreach_message(
             "- Write like a person, not a cover letter generator.\n"
             "- If email format: provide Subject line + body. If LinkedIn/text: body only."
         ),
-
         "──── APPLICATION STATUS ────",
         company_status,
-
         "──── FRANK'S VOICE (tone profile) ────",
         tone_profile,
-
         "──── PERSONAL CONTEXT (for relevant stories if applicable) ────",
         personal_ctx,
-
         "──── TASK ────",
         (
             f"Using everything above, draft a {resolved_type.replace('_', ' ')} message "
@@ -162,7 +163,9 @@ def draft_outreach_message(
             "no [INSERT NAME], no notes to Frank about what to change. "
             "Just the message."
         ),
-    ])
+    ]
+
+    return "\n\n".join(sections)
 
 
 def register(mcp) -> None:

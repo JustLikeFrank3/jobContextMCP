@@ -46,6 +46,8 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `scan_materials_for_tone(category?)` | **v3** — auto-scan resumes/cover letters/prep files and index new tone samples |
 | `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
 | `draft_outreach_message(contact, company, context, message_type?)` | **v4** — package tone profile, personal context, and writing instructions for AI-drafted outreach (thank-you, follow-up, referral ask, recruiter nudge, cold outreach) |
+| `export_resume_pdf(filename, footer_tag?, output_filename?)` | **v4** — parse a .txt resume and render it to a pixel-perfect PDF matching the Courier New / code-aesthetic Canva template |
+| `export_cover_letter_pdf(filename, output_filename?)` | **v4** — parse a .txt cover letter and render it to PDF with the two-column sidebar layout |
 
 ---
 
