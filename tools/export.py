@@ -112,8 +112,8 @@ def _join_continuations(lines: list[str]) -> list[str]:
 
 
 def _strip_separator_lines(lines: list[str]) -> list[str]:
-    """Remove ─────── visual separator lines."""
-    return [l for l in lines if not re.match(r"^\u2500+\s*$", l.strip())]
+    """Remove visual separator lines (─────── or --- or ***)."""
+    return [l for l in lines if not re.match(r"^[-─*=]{3,}\s*$", l.strip())]
 
 
 # ── CONTACT EXTRACTION ───────────────────────────────────────────────────
@@ -205,9 +205,10 @@ def _split_sections(lines: list[str]) -> tuple[list[str], list[tuple[str, list[s
 
 # ── HEADER PARSING ─────────────────────────────────────────────────────────
 
-def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str]:
-    """Returns (name, synopsis)."""
+def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
+    """Returns (name, tagline, synopsis)."""
     name_lines: list[str] = []
+    tagline: str = ""
     synopsis_lines: list[str] = []
     in_synopsis = False
 
@@ -227,7 +228,11 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str]:
         ):
             continue
         if in_synopsis:
-            synopsis_lines.append(s)
+            # Detect tagline: pipe-separated keyword line (role | skill • skill)
+            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 20:
+                tagline = s
+            else:
+                synopsis_lines.append(s)
         elif not name_lines or (len(s) > 6 and s.isupper() and "," not in s and "@" not in s):
             # FRANK V. MACBRIDE III — is it a name or title?
             if name_lines and re.match(r"^[A-Z ]+$", s) and len(s) > 10:
@@ -239,9 +244,8 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str]:
             synopsis_lines.append(s)
 
     name = " ".join(name_lines).strip().upper()
-    # Remove duplicate words inserted by multi-line names
     synopsis = " ".join(synopsis_lines).strip()
-    return name, synopsis
+    return name, tagline, synopsis
 
 
 # ── SKILLS ────────────────────────────────────────────────────────────────
@@ -254,7 +258,7 @@ def _parse_skills_section(lines: list[str]) -> dict:
             continue
         s = _clean_bullet(s) if _is_bullet(s) else s
         # "Label: value" or "Label (extra): value"
-        m = re.match(r"^([A-Za-z][A-Za-z0-9 &/\(\)_]+?):\s+(.+)$", s)
+        m = re.match(r"^([A-Za-z][A-Za-z0-9 &/\(\)_\-]+?):\s+(.+)$", s)
         if m:
             items.append({"label": m.group(1).strip(), "value": m.group(2).strip()})
         else:
@@ -441,7 +445,8 @@ def _parse_experience_section(lines: list[str]) -> dict:
 # ── EDUCATION ─────────────────────────────────────────────────────────────
 
 def _parse_education_section(lines: list[str]) -> dict:
-    degree = school = details = year = ""
+    degree = school = year = ""
+    detail_lines: list[str] = []
     clean_lines = [l.strip() for l in lines if l.strip()]
     for line in clean_lines:
         # Handle compact pipe format: "Degree | School | Year" or "Degree | School, City | Year"
@@ -463,16 +468,14 @@ def _parse_education_section(lines: list[str]) -> dict:
             school = line
         elif not year and _YEAR_RE.search(line) and len(line) < 60:
             year = line
-        elif not details:
-            details = line
         else:
-            details += " | " + line
+            detail_lines.append(line)
     # Combine year into school display if we have it separately
     if year and school and year not in school:
         school = f"{school} | {year}"
     elif year and not school:
         school = year
-    return {"type": "education", "degree": degree, "school": school, "details": details}
+    return {"type": "education", "degree": degree, "school": school, "details": detail_lines}
 
 
 # ── PROJECTS ──────────────────────────────────────────────────────────────
@@ -602,7 +605,7 @@ def _parse_resume_txt(text: str) -> dict:
 
     contact = _extract_contact(all_lines)
     pre_lines, raw_sections = _split_sections(all_lines)
-    name, synopsis = _parse_header(pre_lines, contact)
+    name, tagline, synopsis = _parse_header(pre_lines, contact)
 
     sections: list[dict] = []
     for title, content_lines in raw_sections:
@@ -635,6 +638,7 @@ def _parse_resume_txt(text: str) -> dict:
     return {
         "name": name or "FRANK VLADMIR MACBRIDE III",
         "contact": contact,
+        "tagline": tagline,
         "synopsis": synopsis,
         "sections": sections,
     }
@@ -678,6 +682,11 @@ def _parse_cover_letter_txt(text: str) -> dict:
                 or re.match(r"^(Phone|Email|LinkedIn|Address|Location):", s, re.I)
             ):
                 continue
+            # "Dear ..." salutation = definitive body start even if short
+            if re.match(r"^Dear\b", s, re.I):
+                in_body = True
+                body_lines.append(line)
+                continue
             # First long line = start of letter body
             if len(s) > 60:
                 in_body = True
@@ -720,6 +729,9 @@ def _parse_cover_letter_txt(text: str) -> dict:
 # ── PDF RENDERING ─────────────────────────────────────────────────────────
 
 def _render_pdf(template_name: str, data: dict, output_path: pathlib.Path) -> None:
+    # Normalize footer_tag: spaces → underscores
+    if "footer_tag" in data:
+        data["footer_tag"] = data["footer_tag"].replace(" ", "_")
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     tmpl = env.get_template(template_name)
     html_str = tmpl.render(**data)
@@ -814,6 +826,7 @@ def export_cover_letter_pdf(
     except UnicodeDecodeError:
         text = source.read_text(encoding="latin-1")
     data = _parse_cover_letter_txt(text)
+    data["footer_tag"] = "SOFTWARE ENGINEER"
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem)
