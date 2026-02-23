@@ -44,7 +44,7 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `get_leetcode_cheatsheet(section?)` | Algorithm patterns — full cheatsheet or by topic |
 | `generate_interview_prep_context(company, role, stage)` | Structured context for AI-generated prep docs |
 | `get_existing_prep_file(company)` | Read any existing prep file for a company |
-| `scan_spicam_for_skills()` | Scan a side-project repo for resume-worthy skills |
+| `scan_project_for_skills()` | Scan a side-project repo for resume-worthy skills |
 | `log_mental_health_checkin(mood, energy, ...)` | Log a mood/energy entry |
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
 | `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
@@ -178,13 +178,13 @@ This server is designed to run inside a multi-root VS Code workspace — one tha
 
 The server can scan any project you're actively building and surface resume bullets you may not have thought to write yet.
 
-**`scan_spicam_for_skills()`** *(v4)* — points at whatever folder is set in `spicam_folder` in your `config.json`, reads the codebase, and returns a list of technologies used, patterns applied, and metrics worth calling out on a resume. The loop closes itself: you build something, the server notices what you used, and shows you what to add to your master resume before the interview.
+**`scan_project_for_skills()`** *(v4)* — points at whatever folder is set in `side_project_folder` in your `config.json`, reads the codebase, and returns a list of technologies used, patterns applied, and metrics worth calling out on a resume. The loop closes itself: you build something, the server notices what you used, and shows you what to add to your master resume before the interview.
 
 Example: built an IoT camera with servo HAT control, Azure Blob Storage, and systemd service management. The scanner caught all three as resume-worthy additions — none of which made it into the original resume draft.
 
 To point it at your own project:
 ```json
-"spicam_folder": "/path/to/your/side-project"
+"side_project_folder": "/path/to/your/side-project"
 ```
 
 The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_session_context()` first. With `mcp.json` auto-starting the server, that instruction is immediately actionable — tools are live before the first message.
@@ -289,7 +289,7 @@ Design goal: a non-technical job seeker can clone the repo, open VS Code, and ha
 
 ## Adapting the Side-Project Scanner
 
-`scan_spicam_for_skills()` scans a project folder for technologies used and suggests new resume bullets. The `spicam_folder` key in `config.json` can point to any side project — rename it to anything meaningful in your fork.
+`scan_project_for_skills()` scans a project folder for technologies used and suggests new resume bullets. Point `side_project_folder` in `config.json` at whatever you're currently building.
 
 ---
 

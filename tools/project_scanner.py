@@ -4,22 +4,22 @@ from pathlib import Path
 from lib import config
 
 
-def scan_spicam_for_skills() -> str:
-    """Scan the RetrosPiCam project directory and detect technologies used (FastAPI, React Native, Azure Blob Storage, Raspberry Pi, etc.). Reports newly detected skills not yet on the master resume so they can be added."""
-    if not config.SPICAM_FOLDER.exists():
-        return f"RetrosPiCam folder not found at: {config.SPICAM_FOLDER}"
+def scan_project_for_skills() -> str:
+    """Scan the configured side-project directory (side_project_folder in config.json) and detect technologies used. Reports newly detected skills not yet on the master resume so they can be added."""
+    if not config.SIDE_PROJECT_FOLDER.exists():
+        return f"Side project folder not found at: {config.SIDE_PROJECT_FOLDER}"
 
     tech_found: set[str] = set()
     file_inventory: list[str] = []
 
     skip_dirs = {".git", "__pycache__", "node_modules", "venv", ".venv", "env", ".expo", "build", "dist"}
 
-    for root, dirs, files in os.walk(config.SPICAM_FOLDER):
+    for root, dirs, files in os.walk(config.SIDE_PROJECT_FOLDER):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
 
         for fname in files:
             fpath = Path(root) / fname
-            rel = str(fpath.relative_to(config.SPICAM_FOLDER))
+            rel = str(fpath.relative_to(config.SIDE_PROJECT_FOLDER))
             ext = fpath.suffix.lower()
             file_inventory.append(rel)
 
@@ -80,7 +80,7 @@ def scan_spicam_for_skills() -> str:
     new_skills = sorted(tech_found - already_on_resume)
 
     lines = [
-        "═══ RETROSPICAM SKILL SCAN ═══",
+        "═══ SIDE PROJECT SKILL SCAN ═══",
         f"Files scanned: {len(file_inventory)}",
         "",
         "── All Technologies Detected ──",
@@ -117,4 +117,4 @@ def scan_spicam_for_skills() -> str:
 
 
 def register(mcp) -> None:
-    mcp.tool()(scan_spicam_for_skills)
+    mcp.tool()(scan_project_for_skills)
