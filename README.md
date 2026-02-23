@@ -163,18 +163,29 @@ This embeds all your materials using `text-embedding-3-small`. Cost is typically
 
 ---
 
-## Workspace Structure (Personal Reference)
+## Workspace Structure
 
-This server runs across a multi-root VS Code workspace:
+This server is designed to run inside a multi-root VS Code workspace — one that includes your resume folder, side projects, and interview prep alongside the server itself. Copilot needs direct access to all of it to be useful.
 
 | Folder | Purpose |
 |--------|---------|
 | `job-search-mcp/` | This repo — MCP server source, templates, data files |
 | `Resume 2025/` | All resumes, cover letters, PDFs, prep docs, reference materials |
 | `LeetCodePractice/` | LeetCode solutions, cheatsheets, daily review guides |
-| `LiveVoxWeb/` | React 19 + TypeScript side project (2.8ms web latency demo) |
-| `LiveVoxNative/` | React Native + Swift/Kotlin side project (12.7ms iPhone latency) |
-| `RetrosPiCam/` | Python/FastAPI + React Native IoT camera (Raspberry Pi, Azure Blob) |
+| Side projects | Source code for things you built during the job search — see below |
+
+### Why side projects are in the workspace
+
+The server can scan any project you're actively building and surface resume bullets you may not have thought to write yet.
+
+**`scan_spicam_for_skills()`** *(v4)* — points at whatever folder is set in `spicam_folder` in your `config.json`, reads the codebase, and returns a list of technologies used, patterns applied, and metrics worth calling out on a resume. The loop closes itself: you build something, the server notices what you used, and shows you what to add to your master resume before the interview.
+
+Example: built an IoT camera with servo HAT control, Azure Blob Storage, and systemd service management. The scanner caught all three as resume-worthy additions — none of which made it into the original resume draft.
+
+To point it at your own project:
+```json
+"spicam_folder": "/path/to/your/side-project"
+```
 
 The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_session_context()` first. With `mcp.json` auto-starting the server, that instruction is immediately actionable — tools are live before the first message.
 
@@ -182,7 +193,7 @@ Data files the server reads at runtime (all resolved relative to `resume_folder`
 - `01-Current-Optimized/` — master source resume + all customized versions
 - `02-Cover-Letters/` — cover letter `.txt` files
 - `03-Resume-PDFs/` — exported PDFs land here
-- `06-Reference-Materials/` — template format, GM awards, peer feedback, skills variants
+- `06-Reference-Materials/` — resume template, award citations, peer feedback, skills variants
 
 ---
 
