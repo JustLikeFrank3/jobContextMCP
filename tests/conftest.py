@@ -48,7 +48,7 @@ def isolated_server(tmp_path: Path):
         data/               ← STATUS_FILE, HEALTH_LOG_FILE, etc.
         resumes/            ← RESUME_FOLDER / master resume stub
         leetcode/           ← LEETCODE_FOLDER / cheatsheet / quick-ref stubs
-        spicam/             ← SPICAM_FOLDER stub
+        side_project/       ← SIDE_PROJECT_FOLDER stub
 
     Yields the tmp_path root.  After the test, globals are restored to their
     original production values so other tests are unaffected.
@@ -56,7 +56,7 @@ def isolated_server(tmp_path: Path):
     data_dir  = tmp_path / "data"
     res_dir   = tmp_path / "resumes"
     lc_dir    = tmp_path / "leetcode"
-    sc_dir    = tmp_path / "spicam"
+    sc_dir    = tmp_path / "side_project"
     for d in (data_dir, res_dir, lc_dir, sc_dir):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -76,7 +76,7 @@ def isolated_server(tmp_path: Path):
     fake_cfg = {
         "resume_folder":              str(res_dir),
         "leetcode_folder":            str(lc_dir),
-        "spicam_folder":              str(sc_dir),
+        "side_project_folder":         str(sc_dir),
         "data_folder":                str(data_dir),
         "master_resume_path":         "master_resume.txt",
         "leetcode_cheatsheet_path":   "cheatsheet.md",
@@ -93,7 +93,7 @@ def isolated_server(tmp_path: Path):
     original_cfg = {
         "resume_folder":              str(srv.RESUME_FOLDER),
         "leetcode_folder":            str(srv.LEETCODE_FOLDER),
-        "spicam_folder":              str(srv.SPICAM_FOLDER),
+        "side_project_folder":         str(srv.SIDE_PROJECT_FOLDER),
         "data_folder":                str(srv.DATA_FOLDER),
         "master_resume_path":         srv.MASTER_RESUME.name,
         "leetcode_cheatsheet_path":   srv.LEETCODE_CHEATSHEET.name,

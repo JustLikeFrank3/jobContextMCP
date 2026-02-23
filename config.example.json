@@ -1,7 +1,7 @@
 {
   "resume_folder": "/path/to/your/Resume Folder",
   "leetcode_folder": "/path/to/your/LeetCodePractice",
-  "spicam_folder": "/path/to/your/side-project",
+  "side_project_folder": "/path/to/your/side-project",
   "data_folder": "/path/to/job-search-mcp/data",
 
   "master_resume_path": "01-Current-Optimized/YourName Resume - MASTER SOURCE.txt",
