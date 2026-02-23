@@ -16,7 +16,6 @@ Model used: config.json `openai_model` key (default: gpt-4o-mini).
 
 import re
 import textwrap
-from pathlib import Path
 
 from lib import config
 from lib.io import _load_master_context

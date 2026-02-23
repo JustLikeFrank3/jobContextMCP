@@ -164,25 +164,38 @@ def _strip_metadata_blocks(lines: list[str]) -> list[str]:
     """Remove ---- ... ---- blocks that contain 'APPLICATION MATERIALS'."""
     result = []
     in_block = False
+    is_metadata_block = False
     dash_re = re.compile(r"^-{5,}")
     pending: list[str] = []
 
     for line in lines:
-        if dash_re.match(line.strip()):
+        stripped = line.strip()
+        if dash_re.match(stripped):
             if in_block:
+                # Closing dashes — keep block unless it was a metadata block
+                pending.append(line)
+                if not is_metadata_block:
+                    result.extend(pending)
                 in_block = False
+                is_metadata_block = False
                 pending = []
             else:
-                pending = []
+                # Opening dashes for a new block
                 in_block = True
+                is_metadata_block = False
+                pending = [line]
         elif in_block:
             if "APPLICATION MATERIALS" in line.upper():
-                # confirmed metadata block — discard until closing dashes
-                pending = []
+                # Confirmed metadata block — discard its contents
+                is_metadata_block = True
                 continue
             pending.append(line)
         else:
             result.append(line)
+
+    # File ended inside a non-metadata block without closing dashes — preserve it
+    if in_block and not is_metadata_block and pending:
+        result.extend(pending)
 
     return result
 
@@ -698,7 +711,9 @@ def _parse_cover_letter_txt(text: str) -> dict:
     # are short; genuine body paragraphs are fully-joined and > 60 chars.
     body_lines: list[str] = []
     in_body = False
-    header_re = re.compile(r"^(Frank|FRANK|\+1|\d{3}|www\.|linkedin)", re.I)
+    _contact_first = (config._cfg.get("contact", {}).get("name", "") or "").split()
+    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "Frank"
+    header_re = re.compile(rf"^({_first_name_pat}|\+1|\d{{3}}|www\.|linkedin)", re.I)
     for line in lines:
         s = line.strip()
         if not in_body:
@@ -739,11 +754,14 @@ def _parse_cover_letter_txt(text: str) -> dict:
         paragraphs.append(" ".join(current))
 
     # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
-    sign_re = re.compile(r"^Frank\s+(MacBride|Vladmir|V\.)", re.I)
-    for i in range(len(paragraphs) - 1, max(len(paragraphs) - 5, -1), -1):
-        if sign_re.match(paragraphs[i].strip()):
-            paragraphs[i] = "Frank Vladmir MacBride III"
-            break
+    _full_name = config._cfg.get("contact", {}).get("name", "") or ""
+    if _full_name:
+        _sign_first = re.escape(_full_name.split()[0])
+        sign_re = re.compile(rf"^{_sign_first}\s+\S", re.I)
+        for i in range(len(paragraphs) - 1, max(len(paragraphs) - 5, -1), -1):
+            if sign_re.match(paragraphs[i].strip()):
+                paragraphs[i] = _full_name
+                break
 
     # Name for sidebar
     name_parts = _parse_name_parts(derived_name)
