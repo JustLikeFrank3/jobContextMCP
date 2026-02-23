@@ -32,54 +32,93 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 
 ```mermaid
 graph TB
-    subgraph ws["VS Code Workspace"]
-        ai["GitHub Copilot / AI Assistant"]
+    AI["GitHub Copilot / AI Assistant"]
+
+    AI -->|MCP protocol| SERVER
+
+    subgraph SERVER["job-search-mcp  —  FastMCP server"]
+        direction TB
+
+        subgraph CTX["Context & Identity"]
+            T1["get_session_context()"]
+            T2["read_master_resume()"]
+            T3["get_personal_context()"]
+            T4["get_tone_profile() · log_tone_sample()"]
+            T5["get_star_story_context()"]
+        end
+
+        subgraph PIPELINE["Application Pipeline"]
+            T6["get_job_hunt_status() · update_application()"]
+            T7["assess_job_fitment() · get_customization_strategy()"]
+            T8["generate_resume() · generate_cover_letter()"]
+            T9["save_resume_txt() · save_cover_letter_txt()"]
+            T10["export_resume_pdf() · export_cover_letter_pdf()"]
+        end
+
+        subgraph INTERVIEW["Interview Prep"]
+            T11["get_interview_quick_reference()"]
+            T12["get_leetcode_cheatsheet()"]
+            T13["generate_interview_prep_context()"]
+        end
+
+        subgraph NETWORK["Outreach & People"]
+            T14["draft_outreach_message()"]
+            T15["log_person() · get_people()"]
+        end
+
+        subgraph UTIL["Utilities"]
+            T16["scan_project_for_skills()"]
+            T17["search_materials() · reindex_materials()"]
+            T18["log_mental_health_checkin() · get_mental_health_log()"]
+        end
     end
 
-    subgraph mcp["job-search-mcp (MCP Server)"]
-        session["get_session_context()"]
-        tools["33 Tools"]
+    subgraph FILES["Your Files  —  local, gitignored"]
+        F1["Master resume .txt\nSTAR stories · tone samples\npipeline · contacts · health log"]
+        F2["Generated resumes + cover letters .txt\nExported PDFs"]
+        F3["LeetCode folder\nSide project folder"]
     end
 
-    subgraph data["Your Data (local, gitignored)"]
-        resume["Resume Folder\nresumes · cover letters · PDFs"]
-        json["data/\npipeline · tone · stories · health · people"]
-        leet["LeetCode Folder\ncheatsheets · solutions"]
-        proj["Side Project\nscanner target"]
-    end
-
-    ai -->|"MCP tool calls"| tools
-    tools -->|"context + results"| ai
-    session --> resume
-    session --> json
-    tools --> resume
-    tools --> json
-    tools --> leet
-    tools --> proj
+    CTX --> F1
+    PIPELINE --> F1
+    PIPELINE --> F2
+    INTERVIEW --> F3
+    UTIL --> F3
+    UTIL --> F1
 ```
 
-### Session Flow
+### End-to-End: Job Description → Submitted Application
 
 ```mermaid
 sequenceDiagram
-    participant U as You
-    participant AI as Copilot
+    participant You
+    participant Copilot
     participant MCP as MCP Server
-    participant D as Your Data
+    participant Files as Your Files
 
-    U->>AI: Start session
-    AI->>MCP: get_session_context()
-    MCP->>D: Read resume + tone profile + pipeline + STAR stories
-    D-->>MCP: Full context bundle
-    MCP-->>AI: Master resume · tone · pipeline · stories
-    AI-->>U: Ready — fully contextualized
+    You->>Copilot: Session opens
+    Copilot->>MCP: get_session_context()
+    MCP->>Files: master resume + awards + peer feedback
+    MCP->>Files: tone samples (voice calibration)
+    MCP->>Files: STAR stories + personal context
+    MCP->>Files: live pipeline + contacts
+    MCP-->>Copilot: Full context bundle (~70KB)
+    Note over Copilot: Fully contextualized — no re-explaining
 
-    U->>AI: "Generate resume for Stripe SWE"
-    AI->>MCP: generate_resume(company, role, jd)
-    MCP->>D: Load master resume + customization strategy
-    MCP->>D: Save .txt + export PDF
-    MCP-->>AI: Saved to 01-Current-Optimized/
-    AI-->>U: Resume + PDF ready
+    You->>Copilot: Paste job description
+    Copilot->>MCP: assess_job_fitment(company, role, jd)
+    MCP-->>Copilot: Fitment score + gaps + emphasis strategy
+    Copilot->>MCP: generate_resume(company, role, jd)
+    MCP->>Files: Read master resume + customization strategy
+    MCP->>Files: Write tailored resume .txt
+    MCP->>Files: Parse .txt → render WeasyPrint PDF
+    MCP-->>Copilot: resume saved + PDF exported
+    Copilot->>MCP: generate_cover_letter(company, role, jd)
+    MCP->>Files: Write cover letter .txt (≤325 words enforced)
+    MCP->>Files: Parse .txt → render two-column sidebar PDF
+    MCP-->>Copilot: cover letter saved + PDF exported
+    Copilot->>MCP: update_application(company, role, "applied")
+    Note over You,Files: Resume PDF + Cover Letter PDF ready to submit
 ```
 
 ---
