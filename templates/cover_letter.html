@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+@page {
+    size: letter;
+    margin: 0 0 0.52in 0;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 12.5pt;
+        font-weight: bold;
+        color: #000;
+        vertical-align: middle;
+        margin-right: 0.48in;
+    }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 8.5in;
+    height: 10.48in;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9.2pt;
+    color: #000;
+    background: #fff;
+}
+
+.page {
+    display: flex;
+    width: 8.5in;
+    height: 10.48in;
+}
+
+/* ── LEFT SIDEBAR ─────────────────────────────── */
+.sidebar {
+    width: 2.18in;
+    min-height: 10.48in;
+    padding: 0.44in 0.22in 0.48in 0.24in;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Name block */
+.sidebar-name { flex: 1; }
+
+.name-open {
+    font-size: 18pt;
+    font-weight: bold;
+    line-height: 1.08;
+    color: #6b6b6b;
+}
+
+.name-first {
+    font-size: 18pt;
+    font-weight: bold;
+    line-height: 1.08;
+    letter-spacing: 0.01em;
+    color: #6b6b6b;
+}
+
+.name-last {
+    font-size: 18pt;
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: 0.01em;
+}
+
+.name-suffix {
+    font-size: 18pt;
+    font-weight: bold;
+    line-height: 1.08;
+    color: #6b6b6b;
+}
+
+.name-close {
+    font-size: 18pt;
+    font-weight: bold;
+    line-height: 1.08;
+    color: #6b6b6b;
+}
+
+/* Contact block (bottom of sidebar) */
+.sidebar-contact {
+    font-size: 7.6pt;
+    line-height: 1.42;
+    word-break: break-word;
+}
+
+.sidebar-contact .lbl { font-weight: bold; }
+
+/* ── RIGHT CONTENT ────────────────────────────── */
+.content {
+    flex: 1;
+    padding: 0.44in 0.46in 0.46in 0.26in;
+    font-size: 9.2pt;
+    line-height: 1.46;
+    border-left: 0.8px solid #bbb;
+}
+
+.letter-body p {
+    margin-bottom: 10pt;
+}
+
+.letter-body p:last-child {
+    margin-bottom: 0;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-name">
+      <div class="name-open">&lt;{{ name_line1 }}</div>
+      {% if name_line2 %}
+      <div class="name-first">{{ name_line2 }}</div>
+      {% endif %}
+      <div class="name-last">{{ name_last }}</div>
+      {% if name_suffix %}
+      <div class="name-suffix">{{ name_suffix }}</div>
+      {% endif %}
+      <div class="name-close">&gt;</div>
+    </div>
+    <div class="sidebar-contact">
+      {% if contact.address %}
+      <div><span class="lbl">address:</span></div>
+      <div>{{ contact.address }}</div>
+      {% if contact.city_state %}<div>{{ contact.city_state }}</div>{% endif %}
+      {% endif %}
+      <div><span class="lbl">email:</span></div>
+      <div>{{ contact.email }}</div>
+      <div><span class="lbl">phone:</span></div>
+      <div>{{ contact.phone }}</div>
+      <div><span class="lbl">LinkedIn:</span></div>
+      <div>{{ contact.linkedin }}</div>
+    </div>
+  </div>
+
+  <!-- RIGHT CONTENT -->
+  <div class="content">
+    <div class="letter-body">
+      {% for para in paragraphs %}
+      {% if para == para | upper and para | length < 50 %}
+      <p><strong>{{ para }}</strong></p>
+      {% else %}
+      <p>{{ para }}</p>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+@page {
+    size: letter;
+  margin: 0.42in 0.48in 0.52in 0.48in;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+    font-size: 12.5pt;
+        font-weight: bold;
+        color: #000;
+        vertical-align: middle;
+    }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Courier New', Courier, monospace;
+  font-size: 9.2pt;
+    color: #000;
+    background: #fff;
+  line-height: 1.3;
+}
+
+/* ── HEADER ──────────────────────────────────── */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 5px;
+}
+
+.header-name {
+  font-size: 17.8pt;
+    font-weight: bold;
+    line-height: 1.08;
+    letter-spacing: 0.01em;
+}
+
+.header-contact {
+    text-align: left;
+  font-size: 8.4pt;
+    padding-top: 3px;
+    white-space: nowrap;
+}
+
+.header-contact .lbl { font-weight: bold; }
+
+/* ── TAGLINE ──────────────────────────────────── */
+.tagline {
+  font-size: 9pt;
+  font-weight: bold;
+  margin-top: 3px;
+  margin-bottom: 5px;
+  line-height: 1.2;
+}
+
+/* ── SYNOPSIS ─────────────────────────────────── */
+.synopsis {
+  font-size: 9pt;
+  margin-bottom: 7px;
+  line-height: 1.3;
+}
+
+/* ── SECTION ──────────────────────────────────── */
+.section {
+  margin-bottom: 5px;
+}
+
+.section-title {
+  font-size: 11.2pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-bottom: 1.2px solid #000;
+    padding-bottom: 1px;
+  margin-bottom: 4px;
+    letter-spacing: 0.04em;
+  break-after: avoid;
+}
+
+/* ── SKILLS ───────────────────────────────────── */
+.skills-list { list-style: none; padding: 0; }
+
+.skills-list > li {
+  font-size: 8.8pt;
+  line-height: 1.28;
+  padding: 0.6px 0;
+    padding-left: 10px;
+    text-indent: -10px;
+}
+
+.skills-list > li::before { content: "\2022  "; }
+
+.skill-lbl { font-weight: bold; }
+
+/* ── EXPERIENCE ───────────────────────────────── */
+.job {
+  margin-bottom: 5px;
+  break-inside: avoid;
+}
+
+.job-title  { font-weight: bold; font-size: 9pt; }
+.job-company { font-weight: bold; font-size: 9pt; }
+.job-dates  { font-size: 8.4pt; margin-bottom: 1px; }
+
+.group-lbl {
+    font-weight: bold;
+  font-size: 8.4pt;
+    margin-top: 2px;
+    margin-bottom: 0px;
+}
+
+.bullets { list-style: none; padding: 0; margin: 1px 0 1px 10px; }
+
+.bullets > li {
+  font-size: 8.6pt;
+  line-height: 1.27;
+  padding: 0.6px 0;
+    padding-left: 10px;
+    text-indent: -10px;
+}
+
+.bullets > li::before { content: "\2022  "; }
+
+/* ── PROJECTS ─────────────────────────────────── */
+.proj-name {
+    font-weight: bold;
+  font-size: 8.8pt;
+    margin-bottom: 1px;
+}
+
+.proj { margin-bottom: 4px; }
+
+/* ── EDUCATION ────────────────────────────────── */
+.edu-degree {
+    font-weight: bold;
+    text-decoration: underline;
+  font-size: 8.8pt;
+}
+
+.edu-school { font-size: 8.4pt; }
+.edu-details { font-size: 8.4pt; }
+.edu-bullet  { font-size: 8.4pt; margin-left: 10px; }
+
+/* ── LEADERSHIP ───────────────────────────────── */
+.leader-item {
+  font-size: 8.6pt;
+  line-height: 1.28;
+  padding: 0.6px 0;
+}
+
+.leader-lbl { font-weight: bold; }
+
+/* ── FOOTER TAG ───────────────────────────────── */
+/* rendered via @page @bottom-right content injection */
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-name">&lt;{{ name }}&gt;</div>
+  <div class="header-contact">
+    <span class="lbl">phone:</span> {{ contact.phone }}<br>
+    <span class="lbl">email:</span> {{ contact.email }}<br>
+    <span class="lbl">LinkedIn:</span> {{ contact.linkedin }}
+  </div>
+</div>
+
+<!-- TAGLINE -->
+{% if tagline %}
+<div class="tagline">{{ tagline }}</div>
+{% endif %}
+
+<!-- SYNOPSIS -->
+{% if synopsis %}
+<div class="synopsis">{{ synopsis }}</div>
+{% endif %}
+
+<!-- SECTIONS -->
+{% for section in sections %}
+<div class="section">
+  <div class="section-title">{{ section.title }}</div>
+
+  {# ── SKILLS ──────────────────────────── #}
+  {% if section.type == 'skills' %}
+  <ul class="skills-list">
+    {% for item in section['items'] %}
+    <li>{% if item.label %}<span class="skill-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}</li>
+    {% endfor %}
+  </ul>
+
+  {# ── EXPERIENCE ──────────────────────── #}
+  {% elif section.type == 'experience' %}
+  {% for job in section.jobs %}
+  <div class="job">
+    <div class="job-title">{{ job.title }}</div>
+    <div class="job-company">{{ job.company }}</div>
+    <div class="job-dates">{{ job.dates }}</div>
+    {% for grp in job.groups %}
+      <div class="group-lbl">{{ grp.label }}</div>
+      <ul class="bullets">
+        {% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+    {% endfor %}
+    {% if job.bullets %}
+    <ul class="bullets">
+      {% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ── PROJECTS ────────────────────────── #}
+  {% elif section.type == 'projects' %}
+  {% for proj in section.projects %}
+  <div class="proj">
+    <div class="proj-name">{{ proj.name }}</div>
+    <ul class="bullets">
+      {% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+
+  {# ── EDUCATION ───────────────────────── #}
+  {% elif section.type == 'education' %}
+  <div class="edu-degree">{{ section.degree }}</div>
+  <div class="edu-school">{{ section.school }}</div>
+  {% for line in section.details %}
+  {% if line.startswith('•') or line.startswith('-') %}
+  <div class="edu-bullet">{{ line }}</div>
+  {% else %}
+  <div class="edu-details">{{ line }}</div>
+  {% endif %}
+  {% endfor %}
+
+  {# ── LEADERSHIP ──────────────────────── #}
+  {% elif section.type == 'leadership' %}
+  {% for item in section['items'] %}
+  <div class="leader-item">
+    {% if item.label %}<span class="leader-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}
+  </div>
+  {% endfor %}
+
+  {# ── FALLBACK ────────────────────────── #}
+  {% else %}
+  {% for line in section.lines %}
+  <div style="font-size:8pt;line-height:1.35;padding:0.5px 0;">{{ line }}</div>
+  {% endfor %}
+  {% endif %}
+
+</div>
+{% endfor %}
+
+</body>
+</html>
