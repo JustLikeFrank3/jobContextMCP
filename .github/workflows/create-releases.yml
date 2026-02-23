@@ -2,6 +2,9 @@ name: Create Official Releases
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
