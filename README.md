@@ -99,6 +99,8 @@ Edit `config.json` with your absolute paths and contact info:
 ```json
 {
   "resume_folder": "/path/to/your/Resume Folder",
+  "leetcode_folder": "/path/to/your/LeetCodePractice",
+  "side_project_folder": "/path/to/your/side-project",
   "data_folder": "/path/to/job-search-mcp/data",
   "master_resume_path": "01-Current-Optimized/Your Name Resume - MASTER SOURCE.txt",
   "optimized_resumes_dir": "01-Current-Optimized",
@@ -296,24 +298,6 @@ Design goal: a non-technical job seeker can clone the repo, open VS Code, and ha
 ## Copilot Instructions Template
 
 Include a `.github/copilot-instructions.md` in your workspace pointing to this MCP server so Copilot knows to call its tools. See `copilot-instructions.example.md` for a starting template.
-
-### 5. (Optional) Enable RAG semantic search
-
-Add your OpenAI API key to `config.json`:
-
-```json
-"openai_api_key": "sk-..."
-```
-
-Then build the index:
-
-```bash
-.venv/bin/python rag.py
-```
-
-This embeds all your materials (~1000–1500 chunks depending on your file count) using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` does fast local cosine similarity — no further API calls until you reindex.
-
-The index files (`data/rag_embeddings.npy`, `data/rag_index.json`) are gitignored.
 
 ---
 
