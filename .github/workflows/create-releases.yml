@@ -1,0 +1,88 @@
+name: Create Official Releases
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  create-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create v3 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create v3 tag at the merge commit for PR #10 (modular architecture + context tools)
+          if ! gh release view v3 > /dev/null 2>&1; then
+            gh release create v3 \
+              --target 4ba95ad2e52d872df336070f2eb1b344183bfe61 \
+              --title "v3: Modular Architecture + Context Tools" \
+              --notes "## What's New in v3 (0.3.0)
+
+### Added
+- **Modular architecture** — split monolithic \`server.py\` (1200+ lines) into \`lib/\` (config, I/O, pure helpers) and \`tools/\` packages (11 modules), each with a \`register(mcp)\` pattern; \`server.py\` is now a thin ~120-line orchestrator
+- \`log_personal_story(story, tags, people?, title?)\` — log personal STAR stories with tags and optional people/title metadata
+- \`get_personal_context(tag?, person?)\` — retrieve stories filtered by tag or person
+- \`log_tone_sample(text, source, context?)\` — ingest a writing sample to teach tone/voice
+- \`get_tone_profile()\` — retrieve all tone samples for AI drafting context
+- \`scan_materials_for_tone(category?)\` — auto-scan resumes, cover letters, and prep files to index new tone samples; persists a scan index to avoid re-ingesting unchanged files
+- \`get_star_story_context(tag, company?, role_type?)\` — retrieve matching STAR stories, derived metric bullets (via tag chains), and company-specific framing hints in one call
+- **Implied daily check-in nudge** — \`get_job_hunt_status()\` appends a reminder to log a mental health check-in if none exists for today
+- **Test coverage** — 134 tests, 69% total coverage across \`server\`, \`lib\`, and \`tools\`; \`pyproject.toml\` now tracks all three sources with \`fail_under = 50\`
+
+### Changed
+- \`server.py\` re-exports all tool functions + path globals for backward compatibility with existing test fixtures
+- \`lib/config._load_config()\` now falls back to \`config.example.json\` when \`config.json\` is absent — clean clones and CI no longer crash on import
+- \`log_personal_story\` \`people\` parameter changed from mutable default \`[]\` to \`None\` (normalized inside the function) — fixes classic Python mutable-default-argument bug
+
+### Fixed
+- Resolved all 3 Copilot automated code review suggestions from PR #10: mutable default argument, eager config load in CI, and misleading conftest docstring"
+          else
+            echo "Release v3 already exists, skipping."
+          fi
+
+      - name: Create v4 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create v4 tag at the latest main HEAD (PDF export, outreach drafting, generate tools, project scanner rename)
+          if ! gh release view v4 > /dev/null 2>&1; then
+            gh release create v4 \
+              --target 87d86ea05dc119b41dbfdd67fc0d7f2f7e5684ae \
+              --title "v4: PDF Export, Outreach Drafting & AI Generation" \
+              --notes "## What's New in v4 (0.4.0 – 0.4.6)
+
+### Added (0.4.0)
+- \`draft_outreach_message(contact, company, context, message_type?)\` — packages tone profile, personal context, application status, and message-type-specific writing instructions so the AI can draft ready-to-send outreach in your voice; supports \`linkedin_followup\`, \`thank_you\`, \`referral_ask\`, \`recruiter_nudge\`, and \`cold_outreach\`
+- \`export_resume_pdf(filename, footer_tag?, output_filename?)\` — parses a \`.txt\` resume and renders a pixel-perfect PDF matching the Courier New / code-aesthetic template
+- \`export_cover_letter_pdf(filename, output_filename?)\` — parses a \`.txt\` cover letter and renders a PDF with the two-column sidebar layout; PDFs land in \`03-Resume-PDFs/\`
+- \`tools/outreach.py\` and \`tools/export.py\` modules added
+- **System dep:** \`pango\` (Homebrew) required by WeasyPrint on macOS (\`brew install pango\`)
+
+### Added (0.4.3)
+- \`tools/people.py\` — \`log_person()\` contact/relationship tracking tool for recruiters, hiring managers, referrals, and connections
+- \`tools/session.py\` — \`get_session_context()\` single-call session startup: returns master resume (with awards + feedback), tone profile, personal stories, and live job hunt status in one shot
+
+### Added (0.4.4)
+- \`.vscode/mcp.json\` committed to repo — server now auto-starts when the workspace opens in VS Code
+- \`config.json\` \`contact\` block (\`name\`, \`phone\`, \`email\`, \`linkedin\`, \`address\`, \`city_state\`, \`location\`) — moves all PII out of source and into the gitignored config file
+
+### Added (0.4.5)
+- \`generate_resume(company, role, job_description)\` and \`generate_cover_letter(company, role, job_description)\` — end-to-end generation tools; if \`openai_api_key\` is in config, calls OpenAI API and auto-saves + exports PDF; otherwise returns a full context package for Copilot to handle
+
+### Changed (0.4.6)
+- \`scan_spicam_for_skills()\` renamed to \`scan_project_for_skills()\` — generic name makes the intent clear for any user
+- \`spicam_folder\` config key renamed to \`side_project_folder\`"
+          else
+            echo "Release v4 already exists, skipping."
+          fi
