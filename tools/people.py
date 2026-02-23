@@ -60,6 +60,9 @@ def log_person(
     Returns:
         Confirmation string with the person's name and assigned ID.
     """
+    _VALID_STATUSES = ("none", "drafted", "sent", "responded")
+    if outreach_status not in _VALID_STATUSES:
+        return f"✗ Invalid outreach_status '{outreach_status}'. Must be one of: {', '.join(_VALID_STATUSES)}"
     tags = tags or []
     data = _load_json(config.PEOPLE_FILE, {"people": []})
     people = data.setdefault("people", [])
