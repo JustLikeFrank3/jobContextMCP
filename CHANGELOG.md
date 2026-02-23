@@ -9,6 +9,16 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+## [0.4.6] - 2026-02-22
+
+### Changed
+- `scan_spicam_for_skills()` renamed to `scan_project_for_skills()` — tool was named after a personal project; generic name makes the intent clear for any user
+- `tools/spicam.py` → `tools/project_scanner.py`
+- `spicam_folder` config key → `side_project_folder` in `config.json`, `config.example.json`, and `lib/config.py`
+- `SPICAM_FOLDER` → `SIDE_PROJECT_FOLDER` throughout `lib/config.py` and `server.py`
+- Scanner output header updated: "RETROSPICAM SKILL SCAN" → "SIDE PROJECT SKILL SCAN"
+- `copilot-instructions.example.md` and all workspace `.github/copilot-instructions.md` files updated to new tool name
+
 ## [0.4.5] - 2026-02-22
 
 ### Added
