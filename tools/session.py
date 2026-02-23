@@ -7,6 +7,7 @@ get_session_context()
     No exceptions. This is the entire point of the system.
 """
 
+from lib import config
 from lib.io import _load_master_context
 from tools.tone import get_tone_profile
 from tools.context import get_personal_context
@@ -25,9 +26,10 @@ def get_session_context() -> str:
 
     This exists so Frank never has to recontextualize. Honor that.
     """
+    _display_name = config._cfg.get("contact", {}).get("name", "User")
     sections = [
         "═" * 60,
-        "SESSION CONTEXT — Frank Vladmir MacBride III",
+        f"SESSION CONTEXT — {_display_name}",
         "═" * 60,
         "",
         "── 1. MASTER RESUME ──────────────────────────────────────",
