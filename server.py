@@ -7,7 +7,7 @@ Provides tools for:
   - Resume / cover letter context generation
   - Job fitment assessment
   - Interview & LeetCode prep
-  - sPiCam project skill scanning
+  - Side project skill scanning
   - Mental health check-in logging
   - Personal story / context library (v3)
   - Tone ingestion + voice profile (v3)
@@ -33,7 +33,7 @@ from tools import (
     resume,
     fitment,
     interview,
-    spicam,
+    project_scanner,
     health,
     context,
     tone,
@@ -48,7 +48,7 @@ from tools import (
 
 def _sync_config_exports() -> None:
     global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SPICAM_FOLDER, DATA_FOLDER
+    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDER, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
@@ -58,7 +58,7 @@ def _sync_config_exports() -> None:
 
     RESUME_FOLDER = config.RESUME_FOLDER
     LEETCODE_FOLDER = config.LEETCODE_FOLDER
-    SPICAM_FOLDER = config.SPICAM_FOLDER
+    SIDE_PROJECT_FOLDER = config.SIDE_PROJECT_FOLDER
     DATA_FOLDER = config.DATA_FOLDER
 
     STATUS_FILE = config.STATUS_FILE
@@ -105,7 +105,7 @@ job_hunt.register(mcp)
 resume.register(mcp)
 fitment.register(mcp)
 interview.register(mcp)
-spicam.register(mcp)
+project_scanner.register(mcp)
 health.register(mcp)
 context.register(mcp)
 tone.register(mcp)
@@ -133,7 +133,7 @@ get_leetcode_cheatsheet = interview.get_leetcode_cheatsheet
 generate_interview_prep_context = interview.generate_interview_prep_context
 get_existing_prep_file = interview.get_existing_prep_file
 
-scan_spicam_for_skills = spicam.scan_spicam_for_skills
+scan_project_for_skills = project_scanner.scan_project_for_skills
 
 log_mental_health_checkin = health.log_mental_health_checkin
 get_mental_health_log = health.get_mental_health_log

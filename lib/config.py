@@ -7,7 +7,7 @@ _cfg: dict
 
 RESUME_FOLDER: Path
 LEETCODE_FOLDER: Path
-SPICAM_FOLDER: Path
+SIDE_PROJECT_FOLDER: Path
 DATA_FOLDER: Path
 
 STATUS_FILE: Path
@@ -44,7 +44,7 @@ def _load_config() -> dict:
 
 def _reconfigure(cfg: dict) -> None:
     global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SPICAM_FOLDER, DATA_FOLDER
+    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDER, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
@@ -54,7 +54,7 @@ def _reconfigure(cfg: dict) -> None:
 
     RESUME_FOLDER = Path(cfg["resume_folder"])
     LEETCODE_FOLDER = Path(cfg["leetcode_folder"])
-    SPICAM_FOLDER = Path(cfg["spicam_folder"])
+    SIDE_PROJECT_FOLDER = Path(cfg["side_project_folder"])
     DATA_FOLDER = Path(cfg["data_folder"])
 
     STATUS_FILE = DATA_FOLDER / "status.json"

@@ -63,7 +63,7 @@ Always prefer MCP tools over reading files manually.
 - `get_mental_health_log(days)` — recent check-in history
 
 **Side Project**
-- `scan_spicam_for_skills()` — scan side project for new resume-worthy skills
+- `scan_project_for_skills()` — scan side project for new resume-worthy skills
 
 ---
 
