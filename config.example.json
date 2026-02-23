@@ -16,5 +16,17 @@
   "gm_awards_path": "06-Reference-Materials/GM Recognition Awards.txt",
   "feedback_received_path": "06-Reference-Materials/Feedback_Received.txt",
   "skills_shorter_path": "06-Reference-Materials/Skills - 10% Shorter.txt",
-  "openai_api_key": "sk-...your-key-here"
+  "openai_api_key": "sk-...your-key-here",
+  "openai_model": "gpt-4o-mini",
+
+  "_comment_contact": "Contact info for cover letter PDF sidebar. Lives here (gitignored) so it never appears in source code.",
+  "contact": {
+    "name": "YOUR FULL NAME",
+    "phone": "555-867-5309",
+    "email": "you@example.com",
+    "linkedin": "www.linkedin.com/in/yourhandle",
+    "address": "123 Your Street",
+    "city_state": "Your City, ST 00000",
+    "location": "Your City, ST"
+  }
 }

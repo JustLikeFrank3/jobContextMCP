@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Planned — v0.5
+- **`setup_workspace()` workspace generation tool**: conversational, chat-driven workspace bootstrapper;
+  checks for required directories and data files, prompts for missing paths, creates folders and starter
+  files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
+
+## [0.4.5] - 2026-02-22
+
+### Added
+- `tools/generate.py` — new `generate_resume(company, role, job_description)` and `generate_cover_letter(company, role, job_description)` tools
+  - If `openai_api_key` is configured in `config.json`: calls OpenAI API (model: `openai_model`, default `gpt-4o-mini`), auto-saves `.txt` via `save_resume_txt` / `save_cover_letter_txt`, and auto-exports PDF; returns finished PDF path + token/cost summary
+  - If no API key: returns a fully-structured context package (master resume + tone profile + fitment strategy + exact format spec) for Copilot / Claude to handle the writing step
+  - `_infer_role_type()` maps job title keywords to customization strategy types automatically
+  - `_RESUME_FORMAT_SPEC` and `_COVER_LETTER_FORMAT_SPEC` document all PDF parser constraints in one place; referenced from README
+  - Temperature: 0.3 (resume), 0.4 (cover letter) for consistent structured output
+  - Cost estimate returned in tool output: based on gpt-4o-mini pricing ($0.15/$0.60 per 1M in/out)
+- `config.example.json`: `openai_model` key added (default `gpt-4o-mini`); documents `openai_api_key` pairing
+- `server.py`: `generate` module imported, registered, and `generate_resume` / `generate_cover_letter` exposed as module-level aliases
+- README: **AI Resume & Cover Letter Generation** section added documenting both modes, cost, and all system constraints for resume and cover letter format
+
+## [0.4.4] - 2026-02-22
+
+### Added
+- `.vscode/mcp.json` committed to repo — server now auto-starts when the workspace opens in VS Code; no manual "Start" click required
+- Identical `mcp.json` placed in `Resume 2025/.vscode/` so the server auto-starts from the Resume workspace window as well
+- README: new **Workspace Structure** section documenting the full multi-root layout (job-search-mcp, Resume 2025, LeetCodePractice, LiveVoxWeb, LiveVoxNative, RetrosPiCam) and the role of each folder at runtime
+- README: **Connect to VS Code** section rewritten to reflect auto-start behavior and multi-root `mcp.json` placement strategy
+- README: **Demo** section added with links to demo `.txt` source files so new users can preview the PDF output without using real resume data
+- LeetCodePractice `copilot-instructions.md`: removed outdated 5-step manual "click Start" instructions now that auto-start is in place
+- `config.json` now requires a `contact` block (`name`, `phone`, `email`, `linkedin`, `address`, `city_state`, `location`) — moves all PII out of source and into the gitignored config file; `config.example.json` updated with placeholder values
+- Demo files added for README screenshots: `01-Current-Optimized/Nobody MacFakename Resume - Demo Software Engineer.txt` and `02-Cover-Letters/Nobody MacFakename Cover Letter - Demo Software Engineer.txt` — fully fake contact info, safe to commit
+
+### Fixed
+- `tools/export.py` — `_CONTACT_DEFAULTS` hardcoded dict removed; replaced with `_get_contact_defaults()` reading from `config._cfg["contact"]` so no PII lives in source code
+- `tools/export.py` `_extract_contact` — added labeled-field parsing for `address:`, `city_state:`, and `location:` lines so demo/custom txt files can supply their own contact info without falling through to config defaults
+- `tools/export.py` `_parse_resume_txt` — added `_OPENING_TAG_RE` to strip `<NAME>` wrapper tags before parsing; extracts `tag_name` from the opening tag as a name fallback; name resolution order: explicit header line → tag name → `config.contact.name`
+- Demo txt `Nobody MacFakename Resume` — missing explicit name line after `<NOBODY MACFAKENAME>` wrapper caused the headline to be parsed as the name; added `NOBODY MACFAKENAME` as first content line so the header renders correctly
+- `tools/export.py` `_parse_skills_section` — hyphen missing from character class caused `Event-Driven & Messaging` to lose its label and render as `: Event-Driven...`; added `-` to `[A-Za-z0-9 &/\(\)_\-]`
+- `tools/export.py` `_parse_education_section` — `details` was a single `" | "`-joined string; changed to `list[str]` so each coursework line renders as a separate indented bullet in the PDF
+- `tools/export.py` `_strip_separator_lines` — only matched Unicode `─────` box-drawing chars; updated to `[-─*=]{3,}` so ASCII `---` separators are also stripped before body parsing
+- `tools/export.py` `_parse_cover_letter_txt` — `Dear Hiring Manager,` (< 60 chars) was being dropped as header noise before the body-start trigger; `Dear...` lines now unconditionally trigger body start regardless of length
+- `tools/export.py` `_render_pdf` — `footer_tag` values with spaces were not normalized; now auto-replaces spaces with underscores so the closing bracket always renders as `</SOFTWARE_ENGINEER>`
+- `tools/export.py` `export_cover_letter_pdf` — now passes `footer_tag="SOFTWARE_ENGINEER"` explicitly so all cover letter PDFs get the correct footer tag
+- `templates/resume.html` — `.tagline` CSS + `{% if tagline %}` block added; `.skill-lbl` now only renders when `item.label` is non-empty (prevents phantom colons for unlabeled skill groups); education `details` iterates a list with per-line `.edu-bullet` indentation
+- `templates/cover_letter.html` — all heights changed from `11in` to `10.48in` to prevent overflow; `@page` margin set to `0 0 0.52in 0`; `@bottom-right` gets `margin-right: 0.48in` for proper inset tag positioning
+
 ## [0.4.3] - 2026-02-22
 
 ### Added

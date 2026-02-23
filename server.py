@@ -42,6 +42,7 @@ from tools import (
     outreach,
     export,
     people,
+    generate,
 )
 
 
@@ -112,6 +113,7 @@ rag.register(mcp)
 star.register(mcp)
 outreach.register(mcp)
 export.register(mcp)
+generate.register(mcp)
 people.register(mcp)
 
 
@@ -152,6 +154,9 @@ draft_outreach_message = outreach.draft_outreach_message
 
 export_resume_pdf = export.export_resume_pdf
 export_cover_letter_pdf = export.export_cover_letter_pdf
+
+generate_resume = generate.generate_resume
+generate_cover_letter = generate.generate_cover_letter
 
 log_person = people.log_person
 get_people = people.get_people

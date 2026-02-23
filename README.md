@@ -48,6 +48,8 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 | `draft_outreach_message(contact, company, context, message_type?)` | **v4** — package tone profile, personal context, and writing instructions for AI-drafted outreach (thank-you, follow-up, referral ask, recruiter nudge, cold outreach) |
 | `export_resume_pdf(filename, footer_tag?, output_filename?)` | **v4** — parse a .txt resume and render it to a pixel-perfect PDF matching the Courier New / code-aesthetic Canva template |
 | `export_cover_letter_pdf(filename, output_filename?)` | **v4** — parse a .txt cover letter and render it to PDF with the two-column sidebar layout |
+| `generate_resume(company, role, job_description, output_filename?)` | **v4.1** — generate a tailored resume via OpenAI API (if key configured), auto-save .txt, and export PDF; falls back to context package for Copilot if no key |
+| `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate a tailored cover letter via OpenAI API, auto-save .txt, and export PDF; same fallback behavior |
 
 ---
 
@@ -99,33 +101,143 @@ cp data/tone_samples.example.json data/tone_samples.json
 
 ### 4. Connect to VS Code
 
-Create or update `.vscode/mcp.json` in your workspace:
+`.vscode/mcp.json` is already committed to this repo pointing to `.venv/bin/python3` and `server.py`. Once the `.venv` exists (step 1) and you open this folder in VS Code, the server starts automatically — no clicking required.
+
+If you need to adapt paths for your own setup, edit `.vscode/mcp.json`:
 
 ```json
 {
   "servers": {
-    "job-search-assistant": {
+    "job-search-as": {
       "type": "stdio",
-      "command": "/absolute/path/to/job-search-mcp/.venv/bin/python",
-      "args": ["/absolute/path/to/job-search-mcp/server.py"]
+      "command": "/absolute/path/to/job-search-mcp/.venv/bin/python3",
+      "args": ["/absolute/path/to/job-search-mcp/server.py"],
+      "cwd": "/absolute/path/to/job-search-mcp"
     }
   }
 }
 ```
 
-Then **Cmd+Shift+P → Developer: Reload Window**.
+Then **Cmd+Shift+P → Developer: Reload Window** to pick up changes.
 
-To enable the tools in Copilot chat:
-1. Open a Copilot Chat panel (the chat sidebar, not inline chat)
-2. Click the **Tools** icon (looks like a wrench/plug) at the bottom of the chat input
-3. Find **job-search-assistant** in the list and toggle it on
-4. Tools will now be available in every new chat in this workspace
+> **Multi-root workspaces:** Drop the same `mcp.json` into `.vscode/` inside any workspace root folder — VS Code will auto-start from whichever it finds. For this setup, an identical `mcp.json` lives in both `job-search-mcp/.vscode/` and `Resume 2025/.vscode/` so the server starts reliably from either window.
+
+---
+
+## Workspace Structure (Personal Reference)
+
+This server runs across a multi-root VS Code workspace:
+
+| Folder | Purpose |
+|--------|---------|
+| `job-search-mcp/` | This repo — MCP server source, templates, data files |
+| `Resume 2025/` | All resumes, cover letters, PDFs, prep docs, reference materials |
+| `LeetCodePractice/` | LeetCode solutions, cheatsheets, daily review guides |
+| `LiveVoxWeb/` | React 19 + TypeScript side project (2.8ms web latency demo) |
+| `LiveVoxNative/` | React Native + Swift/Kotlin side project (12.7ms iPhone latency) |
+| `RetrosPiCam/` | Python/FastAPI + React Native IoT camera (Raspberry Pi, Azure Blob) |
+
+The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_session_context()` first. With `mcp.json` auto-starting the server, that instruction is immediately actionable — tools are live before the first message.
+
+Data files the server reads at runtime (all resolved relative to `resume_folder` in `config.json`):
+- `01-Current-Optimized/` — master source resume + all customized versions
+- `02-Cover-Letters/` — cover letter `.txt` files
+- `03-Resume-PDFs/` — exported PDFs land here
+- `06-Reference-Materials/` — template format, GM awards, peer feedback, skills variants
+
+---
+
+## AI Resume & Cover Letter Generation
+
+`generate_resume()` and `generate_cover_letter()` are end-to-end tools: one call produces a
+saved `.txt` + exported PDF. They load the master resume, tone profile, and job-fitment
+strategy automatically — no manual context assembly needed.
+
+### With OpenAI key (fully automated)
+Add `openai_api_key` (and optionally `openai_model`) to `config.json`:
+
+```json
+"openai_api_key": "sk-...",
+"openai_model": "gpt-4o-mini"
+```
+
+Then call from within Copilot:
+
+```
+generate_resume("Stripe", "Senior Software Engineer", "<paste JD>")
+generate_cover_letter("Stripe", "Senior Software Engineer", "<paste JD>")
+```
+
+Generates content, saves `.txt`, and exports PDF in one shot.
+Cost: ~$0.002 per document at `gpt-4o-mini` pricing.
+
+### Without OpenAI key (Copilot-assisted)
+If no key is configured, each tool returns a full context package — master resume, tone
+profile, customization strategy, and format instructions — and Copilot writes the content
+itself, then calls `save_resume_txt` / `export_resume_pdf`.
+
+### System constraints (enforced in the prompt)
+
+**Resume**
+- All metrics and achievements must come verbatim from your master resume — no invention.
+- Section headers must be ALL CAPS: `PROFESSIONAL EXPERIENCE`, `CORE TECHNICAL SKILLS`, `EDUCATION`, `LEADERSHIP & COMMUNITY`.
+- Job header format: `Title | Company, Location | Month YYYY - Month YYYY` (three pipe-delimited parts).
+- Bullets must use `•` (Unicode U+2022) — not `-` or `*`.
+- Contact block uses labeled fields: `phone:`, `email:`, `linkedin:` (lowercase, colon suffix).
+- Target length: 650–800 words (one tight page in Courier New 9.2pt).
+
+**Cover letter**
+- Hard max: **325 words** in the letter body.
+- Exactly **4 paragraphs** — Para 1: hook + role + company; Para 2: technical achievement + metric; Para 3: second differentiator; Para 4: short closer (1–2 sentences).
+- No date, no address block, no Re: line, no company name in the body.
+- Salutation: `Dear Hiring Manager,` — no variations.
+- No bullets, no bold, no headers inside the body — prose only.
+
+> These constraints are baked into the prompts. Deviations cause PDF rendering errors because the
+> templates have fixed dimensions. If you add your own generation logic, copy the format specs
+> from `tools/generate.py` (`_RESUME_FORMAT_SPEC`, `_COVER_LETTER_FORMAT_SPEC`).
+
+---
+
+## PDF Template Demo
+
+The repo ships two fake-identity demo files for previewing the PDF output:
+
+| File | Description |
+|------|-------------|
+| `01-Current-Optimized/Nobody MacFakename Resume - Demo Software Engineer.txt` | Full resume in plain `.txt` format — fake name, fake company, fake metrics |
+| `02-Cover-Letters/Nobody MacFakename Cover Letter - Demo Software Engineer.txt` | Matching cover letter with fake contact info |
+
+To generate the PDFs locally after setup:
+
+```python
+from tools.export import export_resume_pdf, export_cover_letter_pdf
+export_resume_pdf("Nobody MacFakename Resume - Demo Software Engineer.txt")
+export_cover_letter_pdf("Nobody MacFakename Cover Letter - Demo Software Engineer.txt")
+```
+
+PDFs land in `03-Resume-PDFs/` inside your `resume_folder`.
 
 ---
 
 ## Data Privacy
 
 `config.json` and all files under `data/` — including `status.json`, `mental_health_log.json`, `personal_context.json`, and `tone_samples.json` — are gitignored. Your real application data, personal stories, contact names, and health entries never leave your machine.
+
+---
+
+## Roadmap
+
+### Workspace Generation Tool *(planned — v0.5)*
+A `setup_workspace()` tool that bootstraps a complete job search workspace from scratch via conversational prompts:
+
+- On first run, checks for all required directories and data files.
+- Prompts conversationally for missing paths ("Where should resume files go?"), creates folders and starter files with sensible defaults.
+- Populates initial data: contacts, tone samples, job pipeline, personal stories — all via chat, no manual JSON editing.
+- Self-healing: if a folder or file is later deleted, detects and recreates on next run.
+- Target: zero manual config-file editing for onboarding.
+
+Design goal: a non-technical job seeker can clone the repo, open VS Code, and have a fully-configured workspace in under 5 minutes through chat alone.
 
 ---
 

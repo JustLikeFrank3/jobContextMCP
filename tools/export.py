@@ -22,14 +22,18 @@ from lib import config
 
 TEMPLATES_DIR = pathlib.Path(__file__).parent.parent / "templates"
 
-_CONTACT_DEFAULTS = {
-    "phone": "305-490-1262",
-    "email": "frankvmacbride@gmail.com",
-    "linkedin": "www.linkedin.com/in/frankvmacbride",
-    "location": "Atlanta, GA",
-    "address": "4784 Jamerson Forest Cir",
-    "city_state": "Marietta, GA 30066",
-}
+def _get_contact_defaults() -> dict:
+    """Read contact defaults from config.json 'contact' block. Falls back to empty strings.
+    config.json is gitignored — put your real contact info there, not in source."""
+    c = config._cfg.get("contact", {})
+    return {
+        "phone": c.get("phone", ""),
+        "email": c.get("email", ""),
+        "linkedin": c.get("linkedin", ""),
+        "location": c.get("location", ""),
+        "address": c.get("address", ""),
+        "city_state": c.get("city_state", ""),
+    }
 
 # ── HELPERS ──────────────────────────────────────────────────────────────
 
@@ -111,6 +115,10 @@ def _join_continuations(lines: list[str]) -> list[str]:
     return result
 
 
+_CLOSING_TAG_RE = re.compile(r"^</[A-Z0-9 _\-]+>\s*$")
+_OPENING_TAG_RE = re.compile(r"^<[A-Z][A-Z0-9 _\-]*>\s*$")
+
+
 def _strip_separator_lines(lines: list[str]) -> list[str]:
     """Remove visual separator lines (─────── or --- or ***)."""
     return [l for l in lines if not re.match(r"^[-─*=]{3,}\s*$", l.strip())]
@@ -119,22 +127,33 @@ def _strip_separator_lines(lines: list[str]) -> list[str]:
 # ── CONTACT EXTRACTION ───────────────────────────────────────────────────
 
 def _extract_contact(lines: list[str]) -> dict:
-    contact = dict(_CONTACT_DEFAULTS)
+    contact = _get_contact_defaults()
     for line in lines:
-        m = _PHONE_RE.search(line)
+        s = line.strip()
+        m = _PHONE_RE.search(s)
         if m and not contact.get("_phone_found"):
             digits = re.sub(r"\D", "", m.group(0))
             if len(digits) >= 10:
                 contact["phone"] = m.group(0).strip().lstrip("+").strip()
                 contact["_phone_found"] = True
-        m = _EMAIL_RE.search(line)
+        m = _EMAIL_RE.search(s)
         if m:
             contact["email"] = m.group(0).strip()
-        m = _LINKEDIN_RE.search(line)
+        m = _LINKEDIN_RE.search(s)
         if m:
             val = m.group(0)
             val = re.sub(r"^https?://", "", val)
             contact["linkedin"] = val
+        # Labeled address fields: "address: 123 Main St" / "city_state: Atlanta, GA"
+        ma = re.match(r"^address:\s*(.+)", s, re.I)
+        if ma:
+            contact["address"] = ma.group(1).strip()
+        mc = re.match(r"^city[_\s]?state:\s*(.+)", s, re.I)
+        if mc:
+            contact["city_state"] = mc.group(1).strip()
+        ml = re.match(r"^location:\s*(.+)", s, re.I)
+        if ml:
+            contact["location"] = ml.group(1).strip()
     contact.pop("_phone_found", None)
     return contact
 
@@ -599,6 +618,15 @@ def _parse_resume_txt(text: str) -> dict:
     text = _strip_txt_wrapper(text)
     all_lines = text.splitlines()
     all_lines = _strip_metadata_blocks(all_lines)
+    # Extract name from opening <NAME> wrapper tag before stripping it.
+    tag_name = ""
+    for l in all_lines:
+        m = re.match(r"^<([A-Z][A-Z0-9 _\-]*)>\s*$", l.strip())
+        if m:
+            tag_name = m.group(1).strip()
+            break
+    # Strip both opening <NAME> and closing </NAME> wrapper tags.
+    all_lines = [l for l in all_lines if not _CLOSING_TAG_RE.match(l.strip()) and not _OPENING_TAG_RE.match(l.strip())]
     # Fix fixed-width line wrapping: rejoin continuation lines, then drop separators.
     all_lines = _join_continuations(all_lines)
     all_lines = _strip_separator_lines(all_lines)
@@ -636,7 +664,7 @@ def _parse_resume_txt(text: str) -> dict:
         sections.append(s)
 
     return {
-        "name": name or "FRANK VLADMIR MACBRIDE III",
+        "name": name or tag_name or config._cfg.get("contact", {}).get("name", ""),
         "contact": contact,
         "tagline": tagline,
         "synopsis": synopsis,
@@ -657,7 +685,8 @@ def _parse_cover_letter_txt(text: str) -> dict:
     contact = _extract_contact(lines)
 
     # Name is the very first non-blank, non-contact line.
-    derived_name = "FRANK VLADMIR MACBRIDE III"
+    # Fall back to config-driven default (set "name" in config.json "contact" block).
+    derived_name = config._cfg.get("contact", {}).get("name", "")
     for line in lines:
         s = line.strip()
         if s and "@" not in s and not _PHONE_RE.search(s) and not _LINKEDIN_RE.search(s):
