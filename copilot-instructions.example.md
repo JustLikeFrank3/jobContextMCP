@@ -18,7 +18,7 @@ Key tools available:
 - `assess_job_fitment(company, role, jd)` — fitment analysis context
 - `generate_interview_prep_context(company, role, stage)` — structured prep context
 - `get_leetcode_cheatsheet(section)` — algorithm patterns reference
-- `scan_spicam_for_skills()` — auto-scan side project for new resume skills
+- `scan_project_for_skills()` — auto-scan side project for new resume skills
 - `log_mental_health_checkin(mood, energy)` — mood/energy logging
 - `get_mental_health_log()` — recent check-in history
 - `list_existing_materials(company)` — list resumes/cover letters
