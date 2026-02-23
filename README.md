@@ -5,20 +5,51 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 ## Architecture
 
 ```mermaid
-graph LR
-  A["System Overview"]
-  B["Tool Categories"]
-  C["Data Flow Resume Generation"]
-  D["Workspace Structure Flow"]
-  E["Personal Context & Tone System"]
-  F["RAG Search Architecture"]
-  A --> B
-  A --> C
-  B --> D
-  C --> E
-  D --> F
+flowchart TD;
+    A[User] -->|request| B[AI Assistant];
+    B -->|call| C[Tool API];
+    C -->|response| B;
+    B -->|response| A;
+```
+
+```mermaid
+flowchart TD;
+    A[Frontend] --> B[Backend];
+    B --> C[Database];
+    C --> D[External APIs];
+```
+
+```mermaid
+flowchart LR;
+    A[User Input] --> B[Resume Parser];
+    B --> C[Context Storage];
+    D[Resume] --> B;
+    C --> E[AI Assistant];
+```
+
+```mermaid
+flowchart TD;
+    A[Workspace] --> B[Projects];
+    B --> C[Tools];
+    C --> D[Files];
+```
+
+```mermaid
+flowchart TD;
+    A[User Preferences] --> B[Contextual Model];
+    B --> C[Tone Adjustments];
+```
+
+```mermaid
+flowchart TD;
+    A[User Query] --> B[Retrieve Context];
+    B --> C[AI Assistant];
+    D[External Sources] --> B;
+    C --> E[Output];
 ```
 
 ## Tools
 
-Tools overview and descriptions...
+Here is a list of tools available in the MCP. 
+
+... (rest of README content)
