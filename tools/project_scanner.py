@@ -2,6 +2,33 @@ import os
 from pathlib import Path
 
 from lib import config
+from lib.io import _load_master_context
+
+# Maps each detected tech label to keywords that would appear in the master resume (lowercase).
+# Any match → already on resume. Defaults to lowercased tech name if not listed.
+_TECH_KEYWORDS: dict[str, list[str]] = {
+    "Python":                       ["python"],
+    "FastAPI":                       ["fastapi"],
+    "Pydantic":                      ["pydantic"],
+    "Azure Blob Storage":            ["azure blob"],
+    "Python async/await":            ["async/await", "async def"],
+    "WebSockets":                    ["websocket"],
+    "pytest":                        ["pytest"],
+    "systemd / Linux services":      ["systemd"],
+    "Raspberry Pi GPIO":             ["gpio"],
+    "Servo / Adafruit HAT":          ["servo"],
+    "HTTP Range requests":           ["range request", "http range"],
+    "JWT authentication":            ["jwt"],
+    "Docker":                        ["docker"],
+    "Automated retention policies":  ["retention"],
+    "TypeScript/JavaScript":         ["typescript"],
+    "React Native":                  ["react native"],
+    "Expo":                          ["expo"],
+    "iOS TestFlight deployment":     ["testflight"],
+    "Swift / iOS":                   ["swift"],
+    "Docker Compose":                ["docker compose"],
+    "Terraform IaC":                 ["terraform"],
+}
 
 
 def scan_project_for_skills() -> str:
@@ -73,10 +100,13 @@ def scan_project_for_skills() -> str:
             elif ext in (".tf", ".tfvars"):
                 tech_found.add("Terraform IaC")
 
-    already_on_resume = {
-        "Python", "FastAPI", "Azure Blob Storage", "React Native", "Pydantic",
-        "iOS TestFlight deployment", "HTTP Range requests",
-    }
+    resume_text = _load_master_context().lower()
+
+    def _on_resume(tech: str) -> bool:
+        keywords = _TECH_KEYWORDS.get(tech, [tech.lower()])
+        return any(kw in resume_text for kw in keywords)
+
+    already_on_resume = {t for t in tech_found if _on_resume(t)}
     new_skills = sorted(tech_found - already_on_resume)
 
     lines = [
