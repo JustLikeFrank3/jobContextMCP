@@ -15,10 +15,18 @@ HEALTH_LOG_FILE: Path
 PERSONAL_CONTEXT_FILE: Path
 TONE_FILE: Path
 SCAN_INDEX_FILE: Path
+PEOPLE_FILE: Path
 
 MASTER_RESUME: Path
 LEETCODE_CHEATSHEET: Path
 QUICK_REFERENCE: Path
+
+RESUME_TEMPLATE_PNG: Path
+COVER_LETTER_TEMPLATE_PNG: Path
+TEMPLATE_FORMAT: Path
+GM_AWARDS: Path
+FEEDBACK_RECEIVED: Path
+SKILLS_SHORTER: Path
 
 
 def _load_config() -> dict:
@@ -37,8 +45,10 @@ def _load_config() -> dict:
 def _reconfigure(cfg: dict) -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SPICAM_FOLDER, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
+    global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
+    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
 
     _cfg = dict(cfg)
 
@@ -52,10 +62,18 @@ def _reconfigure(cfg: dict) -> None:
     PERSONAL_CONTEXT_FILE = DATA_FOLDER / "personal_context.json"
     TONE_FILE = DATA_FOLDER / "tone_samples.json"
     SCAN_INDEX_FILE = DATA_FOLDER / "scan_index.json"
+    PEOPLE_FILE = DATA_FOLDER / "people.json"
 
     MASTER_RESUME = RESUME_FOLDER / cfg["master_resume_path"]
     LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg["leetcode_cheatsheet_path"]
     QUICK_REFERENCE = LEETCODE_FOLDER / cfg["quick_reference_path"]
+
+    RESUME_TEMPLATE_PNG = RESUME_FOLDER / cfg["resume_template_png"]
+    COVER_LETTER_TEMPLATE_PNG = RESUME_FOLDER / cfg["cover_letter_template_png"]
+    TEMPLATE_FORMAT = RESUME_FOLDER / cfg["template_format_path"]
+    GM_AWARDS = RESUME_FOLDER / cfg["gm_awards_path"]
+    FEEDBACK_RECEIVED = RESUME_FOLDER / cfg["feedback_received_path"]
+    SKILLS_SHORTER = RESUME_FOLDER / cfg["skills_shorter_path"]
 
 
 _reconfigure(_load_config())

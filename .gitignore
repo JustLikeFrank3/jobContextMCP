@@ -6,6 +6,7 @@ data/status.json
 data/mental_health_log.json
 data/personal_context.json
 data/tone_samples.json
+data/people.json
 
 # Python virtual environment
 .venv/

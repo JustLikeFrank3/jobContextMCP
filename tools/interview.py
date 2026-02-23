@@ -1,12 +1,14 @@
 from lib import config
-from lib.io import _read
+from lib.io import _read, _load_master_context
 
 
 def get_interview_quick_reference() -> str:
+    """Return the full interview day quick reference: algorithm pattern cheat sheets, system design 5-step framework, testing talking points, and pre-interview checklist."""
     return _read(config.QUICK_REFERENCE)
 
 
 def get_leetcode_cheatsheet(section: str = "") -> str:
+    """Return the LeetCode algorithm cheatsheet. Pass a section name (e.g. 'trees', 'graphs', 'dynamic programming') to get just that section, or leave blank for the full 1400-line reference."""
     content = _read(config.LEETCODE_CHEATSHEET)
     if not section:
         return content
@@ -40,7 +42,8 @@ def generate_interview_prep_context(
     stage: str = "phone_screen",
     job_description: str = "",
 ) -> str:
-    master = _read(config.MASTER_RESUME)
+    """Bundle Frank's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
+    master = _load_master_context()
     quick_ref = _read(config.QUICK_REFERENCE)
 
     desc_block = f"\n──── JOB DESCRIPTION ────\n{job_description}" if job_description else ""
@@ -64,6 +67,7 @@ def generate_interview_prep_context(
 
 
 def get_existing_prep_file(company: str) -> str:
+    """Find and return all existing interview prep files for a given company — searches across both the Resume 2025 and LeetCode folders for files containing the company name and prep/interview/call/assessment keywords."""
     matches = sorted(
         f
         for f in config.RESUME_FOLDER.rglob("*")

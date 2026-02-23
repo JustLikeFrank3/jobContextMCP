@@ -11,8 +11,8 @@ Provides tools for:
   - Mental health check-in logging
   - Personal story / context library (v3)
   - Tone ingestion + voice profile (v3)
+  - PDF export for resumes and cover letters (v4)
 """
-
 from mcp.server.fastmcp import FastMCP
 
 from lib import config
@@ -28,6 +28,7 @@ from lib.helpers import (
 )
 
 from tools import (
+    session,
     job_hunt,
     resume,
     fitment,
@@ -38,14 +39,20 @@ from tools import (
     tone,
     rag,
     star,
+    outreach,
+    export,
+    people,
+    generate,
 )
 
 
 def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SPICAM_FOLDER, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
+    global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
+    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
 
     _cfg = config._cfg
 
@@ -59,10 +66,18 @@ def _sync_config_exports() -> None:
     PERSONAL_CONTEXT_FILE = config.PERSONAL_CONTEXT_FILE
     TONE_FILE = config.TONE_FILE
     SCAN_INDEX_FILE = config.SCAN_INDEX_FILE
+    PEOPLE_FILE = config.PEOPLE_FILE
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
     QUICK_REFERENCE = config.QUICK_REFERENCE
+
+    RESUME_TEMPLATE_PNG = config.RESUME_TEMPLATE_PNG
+    COVER_LETTER_TEMPLATE_PNG = config.COVER_LETTER_TEMPLATE_PNG
+    TEMPLATE_FORMAT = config.TEMPLATE_FORMAT
+    GM_AWARDS = config.GM_AWARDS
+    FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
+    SKILLS_SHORTER = config.SKILLS_SHORTER
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -85,6 +100,7 @@ mcp = FastMCP(
 )
 
 
+session.register(mcp)  # MUST be first — session startup tool
 job_hunt.register(mcp)
 resume.register(mcp)
 fitment.register(mcp)
@@ -95,6 +111,10 @@ context.register(mcp)
 tone.register(mcp)
 rag.register(mcp)
 star.register(mcp)
+outreach.register(mcp)
+export.register(mcp)
+generate.register(mcp)
+people.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -129,6 +149,17 @@ search_materials = rag.search_materials
 reindex_materials = rag.reindex_materials
 
 get_star_story_context = star.get_star_story_context
+
+draft_outreach_message = outreach.draft_outreach_message
+
+export_resume_pdf = export.export_resume_pdf
+export_cover_letter_pdf = export.export_cover_letter_pdf
+
+generate_resume = generate.generate_resume
+generate_cover_letter = generate.generate_cover_letter
+
+log_person = people.log_person
+get_people = people.get_people
 
 
 if __name__ == "__main__":
