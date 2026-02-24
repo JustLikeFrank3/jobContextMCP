@@ -1,4 +1,6 @@
-![JobContextMCP](docs/branding/banner/jobcontextmcp-readme.png)
+<p align="center">
+  <img src="docs/branding/banner/jobcontextmcp-readme.svg" alt="JobContextMCP" width="860"/>
+</p>
 
 # JobContextMCP
 
