@@ -1,5 +1,5 @@
 """
-Shared fixtures for job-search-mcp test suite.
+Shared fixtures for JobContextMCP test suite.
 
 Key design: server.py runs _reconfigure(_load_config()) at import time.
 _load_config() falls back to config.example.json when config.json is missing,

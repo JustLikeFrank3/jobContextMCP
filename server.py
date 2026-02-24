@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-Job Search MCP Server for Frank MacBride
------------------------------------------
-Provides tools for:
-  - Job hunt status tracking
-  - Resume / cover letter context generation
-  - Job fitment assessment
-  - Interview & LeetCode prep
+JobContextMCP Server
+--------------------
+Model Context Protocol server providing persistent job-search memory
+for GitHub Copilot and other MCP-compatible AI assistants.
+
+Tools provided:
+  - Session context (resume, pipeline, tone, stories in one call)
+  - Job hunt status tracking and pipeline management
+  - Resume / cover letter context generation and PDF export
+  - Job fitment assessment and customization strategy
+  - Interview prep, STAR stories, and LeetCode cheatsheet
   - Side project skill scanning
   - Mental health check-in logging
   - Personal story / context library (v3)
   - Tone ingestion + voice profile (v3)
-  - PDF export for resumes and cover letters (v4)
+  - Outreach drafting and contacts management (v4)
+  - LinkedIn post tracking with engagement metrics (v4.8)
 """
 from mcp.server.fastmcp import FastMCP
 
