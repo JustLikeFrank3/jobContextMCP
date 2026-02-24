@@ -9,6 +9,32 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+## [0.4.7] - 2026-02-23
+
+### Added
+- `save_interview_prep(company, content, filename?)` — saves generated interview prep documents to
+  the LeetCode folder as `.md` files; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; strips
+  trailing whitespace per line; overwrites existing files so AI-generated prep can be iteratively
+  improved without manual file management
+- **Follow-up reminder system** — `get_job_hunt_status()` now parses `next_steps` fields for
+  date references (`Feb 24`, `~Feb 25`, etc.) and surfaces a `⚠ FOLLOW-UP ACTIONS DUE` section
+  for any application whose follow-up date is today or past; dates are compared against today's
+  date with automatic year rollover for months already passed
+- **`git pull` before skill scan** — `scan_project_for_skills()` now runs `git -C <side_project_folder> pull`
+  before scanning so stale local checkouts don't produce outdated or missing resume bullets; pull
+  status shown in scan output; timeouts and errors are caught gracefully and reported without
+  interrupting the scan
+
+### Fixed
+- `get_existing_prep_file()` — was only searching `RESUME_FOLDER`; now searches both
+  `RESUME_FOLDER` and `LEETCODE_FOLDER` (matching the documented behavior in the tool description);
+  deduplicates results by path so the same file is never shown twice
+
+### Tests
+- 19 new tests: `TestSaveInterviewPrep` (8 cases), `TestFollowUpReminders` (10 cases),
+  `test_get_existing_prep_file_finds_md_in_leetcode_folder`, `test_get_existing_prep_file_finds_in_both_folders`
+- Total: 153 tests (up from 134)
+
 ## [0.4.6] - 2026-02-22
 
 ### Changed

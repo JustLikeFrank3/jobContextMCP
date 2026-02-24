@@ -1,8 +1,30 @@
 import os
+import subprocess
 from pathlib import Path
 
 from lib import config
 from lib.io import _load_master_context
+
+
+def _git_pull_project() -> str:
+    """Attempt git pull on SIDE_PROJECT_FOLDER. Returns a one-line status string."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(config.SIDE_PROJECT_FOLDER), "pull"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode == 0:
+            return output or "Already up to date."
+        return f"warning: {output}"
+    except subprocess.TimeoutExpired:
+        return "skipped: git pull timed out (>20s)"
+    except FileNotFoundError:
+        return "skipped: git not found in PATH"
+    except Exception as e:
+        return f"skipped: {e}"
 
 # Maps each detected tech label to keywords that would appear in the master resume (lowercase).
 # Any match → already on resume. Defaults to lowercased tech name if not listed.
@@ -32,9 +54,11 @@ _TECH_KEYWORDS: dict[str, list[str]] = {
 
 
 def scan_project_for_skills() -> str:
-    """Scan the configured side-project directory (side_project_folder in config.json) and detect technologies used. Reports newly detected skills not yet on the master resume so they can be added."""
+    """Scan the configured side-project directory (side_project_folder in config.json) and detect technologies used. Pulls latest changes from git before scanning. Reports newly detected skills not yet on the master resume so they can be added."""
     if not config.SIDE_PROJECT_FOLDER.exists():
         return f"Side project folder not found at: {config.SIDE_PROJECT_FOLDER}"
+
+    pull_status = _git_pull_project()
 
     tech_found: set[str] = set()
     file_inventory: list[str] = []
@@ -111,6 +135,7 @@ def scan_project_for_skills() -> str:
 
     lines = [
         "═══ SIDE PROJECT SKILL SCAN ═══",
+        f"git pull: {pull_status}",
         f"Files scanned: {len(file_inventory)}",
         "",
         "── All Technologies Detected ──",

@@ -132,6 +132,7 @@ get_interview_quick_reference = interview.get_interview_quick_reference
 get_leetcode_cheatsheet = interview.get_leetcode_cheatsheet
 generate_interview_prep_context = interview.generate_interview_prep_context
 get_existing_prep_file = interview.get_existing_prep_file
+save_interview_prep = interview.save_interview_prep
 
 scan_project_for_skills = project_scanner.scan_project_for_skills
 
