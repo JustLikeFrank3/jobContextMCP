@@ -234,7 +234,7 @@ def get_linkedin_posts(
         hl = hashtag.lower().lstrip("#")
         filtered = [p for p in filtered if hl in [h.lower() for h in p.get("hashtags", [])]]
     if min_reactions:
-        filtered = [p for p in filtered if (p.get("metrics") or {}).get("reactions") or 0 >= min_reactions]
+        filtered = [p for p in filtered if ((p.get("metrics") or {}).get("reactions") or 0) >= min_reactions]
 
     if not filtered:
         return "No posts match the given filters."
@@ -254,7 +254,8 @@ def get_linkedin_posts(
     for p in sorted(filtered, key=lambda x: x.get("posted_date", ""), reverse=True):
         m = p.get("metrics") or {}
         ah = p.get("audience_highlights") or {}
-        lines.append(f"── #{p['id']} | {p.get('posted_date', 'unknown date')} | {p.get('title', p.get('source', ''))} ──")
+        label = p.get("title") or p.get("source", "")
+        lines.append(f"── #{p['id']} | {p.get('posted_date', 'unknown date')} | {label} ──")
         if p.get("url"):
             lines.append(f"URL: {p['url']}")
         if p.get("context"):

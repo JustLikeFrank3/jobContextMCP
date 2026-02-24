@@ -9,6 +9,25 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+## [0.4.9] - 2026-02-24
+
+### Changed
+- **Rebrand**: project renamed from `job-search-mcp` to `JobContextMCP`
+  - FastMCP server key changed from `job-search-as` to `jobContextMCP`; MCP tool prefix is now `mcp_jobContextMCP_`
+  - `.vscode/mcp.json` server key updated
+  - README: title, banner (`docs/branding/banner/jobcontextmcp-readme.png`), Mermaid diagram label, clone URL, and setup snippet all updated
+  - `copilot-instructions.example.md` and `.github/copilot-instructions.md` headers updated
+  - Workspace `copilot-instructions.md` files (Resume 2025, LeetCodePractice) updated to new `jobContextMCP/` path
+  - `JobSearch.code-workspace` folder path updated to `Projects/jobContextMCP`
+
+### Fixed
+- `requirements.txt` was missing `jinja2` and `weasyprint` — both required at runtime (PDF export); any fresh clone would fail to start without these
+- Added `requirements-dev.txt` (`-r requirements.txt` + `pytest`, `pytest-cov`, `anyio`) so new contributors get the full dev environment in one command
+
+### Added
+- Branding assets committed to `docs/branding/`: logo SVG/PNG (light + dark), README banner SVG/PNG, favicons (16×16, 32×32)
+- v5 strategy docs committed to `docs/jobContextMCP-FullDocs/`: roadmap, monetization strategy, backlog, marketing plan, branding guidelines
+
 ## [0.4.8] - 2026-02-24
 
 ### Added
