@@ -6,11 +6,11 @@ from lib import config
 from lib.io import _load_master_context
 
 
-def _git_pull_project() -> str:
-    """Attempt git pull on SIDE_PROJECT_FOLDER. Returns a one-line status string."""
+def _git_pull(folder: Path) -> str:
+    """Attempt git pull on a project folder. Returns a one-line status string."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(config.SIDE_PROJECT_FOLDER), "pull"],
+            ["git", "-C", str(folder), "pull"],
             capture_output=True,
             text=True,
             timeout=20,
@@ -50,29 +50,26 @@ _TECH_KEYWORDS: dict[str, list[str]] = {
     "Swift / iOS":                   ["swift"],
     "Docker Compose":                ["docker compose"],
     "Terraform IaC":                 ["terraform"],
+    "Model Context Protocol (MCP)":  ["model context protocol", "mcp server", "fastmcp"],
+    "FastMCP":                       ["fastmcp"],
+    "WeasyPrint / PDF generation":   ["weasyprint"],
+    "RAG / semantic search":         ["rag", "faiss", "sentence_transformers", "text-embedding"],
 }
 
 
-def scan_project_for_skills() -> str:
-    """Scan the configured side-project directory (side_project_folder in config.json) and detect technologies used. Pulls latest changes from git before scanning. Reports newly detected skills not yet on the master resume so they can be added."""
-    if not config.SIDE_PROJECT_FOLDER.exists():
-        return f"Side project folder not found at: {config.SIDE_PROJECT_FOLDER}"
-
-    pull_status = _git_pull_project()
-
+def _scan_folder(folder: Path) -> tuple[set[str], int]:
+    """Scan a single project folder and return (tech_found, file_count)."""
     tech_found: set[str] = set()
-    file_inventory: list[str] = []
-
+    file_count = 0
     skip_dirs = {".git", "__pycache__", "node_modules", "venv", ".venv", "env", ".expo", "build", "dist"}
 
-    for root, dirs, files in os.walk(config.SIDE_PROJECT_FOLDER):
+    for root, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
 
         for fname in files:
             fpath = Path(root) / fname
-            rel = str(fpath.relative_to(config.SIDE_PROJECT_FOLDER))
             ext = fpath.suffix.lower()
-            file_inventory.append(rel)
+            file_count += 1
 
             try:
                 text = fpath.read_text(encoding="utf-8", errors="ignore").lower()
@@ -91,7 +88,7 @@ def scan_project_for_skills() -> str:
                     tech_found.add("Python async/await")
                 if "websocket" in text:
                     tech_found.add("WebSockets")
-                if "pytest" in text:
+                if "pytest" in text or "conftest" in fname:
                     tech_found.add("pytest")
                 if "systemd" in text:
                     tech_found.add("systemd / Linux services")
@@ -107,6 +104,13 @@ def scan_project_for_skills() -> str:
                     tech_found.add("Docker")
                 if "retention" in text:
                     tech_found.add("Automated retention policies")
+                if "fastmcp" in text or "mcp.tool" in text:
+                    tech_found.add("Model Context Protocol (MCP)")
+                    tech_found.add("FastMCP")
+                if "weasyprint" in text:
+                    tech_found.add("WeasyPrint / PDF generation")
+                if "faiss" in text or "sentence_transformers" in text or "text-embedding" in text:
+                    tech_found.add("RAG / semantic search")
             elif ext in (".ts", ".tsx", ".js", ".jsx"):
                 tech_found.add("TypeScript/JavaScript")
                 if "react-native" in text or "react native" in text:
@@ -124,49 +128,78 @@ def scan_project_for_skills() -> str:
             elif ext in (".tf", ".tfvars"):
                 tech_found.add("Terraform IaC")
 
+    return tech_found, file_count
+
+
+def scan_project_for_skills() -> str:
+    """Scan all configured side-project directories (side_project_folders in config.json) and detect technologies used. Pulls latest changes from git before scanning each. Reports newly detected skills not yet on the master resume so they can be added."""
+    folders = config.SIDE_PROJECT_FOLDERS
+    if not folders:
+        return "No side project folders configured. Add 'side_project_folders' (array) to config.json."
+
+    missing = [str(f) for f in folders if not f.exists()]
+    if missing:
+        return "Side project folder(s) not found:\n" + "\n".join(f"  {m}" for m in missing)
+
+    all_tech: set[str] = set()
+    per_project: list[tuple[str, set[str], int, str]] = []  # (name, tech, file_count, pull_status)
+
+    for folder in folders:
+        pull_status = _git_pull(folder)
+        tech, file_count = _scan_folder(folder)
+        all_tech |= tech
+        per_project.append((folder.name, tech, file_count, pull_status))
+
     resume_text = _load_master_context().lower()
 
     def _on_resume(tech: str) -> bool:
         keywords = _TECH_KEYWORDS.get(tech, [tech.lower()])
         return any(kw in resume_text for kw in keywords)
 
-    already_on_resume = {t for t in tech_found if _on_resume(t)}
-    new_skills = sorted(tech_found - already_on_resume)
+    already_on_resume = {t for t in all_tech if _on_resume(t)}
+    new_skills = sorted(all_tech - already_on_resume)
 
-    lines = [
-        "═══ SIDE PROJECT SKILL SCAN ═══",
-        f"git pull: {pull_status}",
-        f"Files scanned: {len(file_inventory)}",
-        "",
-        "── All Technologies Detected ──",
-    ]
-    for t in sorted(tech_found):
-        marker = "  ✓" if t in already_on_resume else "  ★ NEW"
-        lines.append(f"{marker}  {t}")
+    lines = ["═══ SIDE PROJECT SKILL SCAN ═══", ""]
 
-    lines += ["", "── New Skills Not Yet on Master Resume ──"]
+    for name, tech, file_count, pull_status in per_project:
+        lines.append(f"── {name} ({file_count} files, git pull: {pull_status}) ──")
+        for t in sorted(tech):
+            marker = "  ✓" if t in already_on_resume else "  ★ NEW"
+            lines.append(f"{marker}  {t}")
+        lines.append("")
+
+    lines += ["── New Skills Not Yet on Master Resume (across all projects) ──"]
     lines += [f"  • {s}" for s in new_skills] or ["  (none — master resume is up to date)"]
 
     lines += [
         "",
         "── Suggested Resume Bullets ──",
-        "  • Built production IoT camera system integrating Raspberry Pi hardware, "
-        "    servo HAT, Python/FastAPI backend, and React Native mobile app",
     ]
-    if "Pydantic" in tech_found:
+
+    if "Raspberry Pi GPIO" in all_tech:
+        lines.append("  • Built production IoT camera system integrating Raspberry Pi hardware, "
+                     "servo HAT, Python/FastAPI backend, and React Native mobile app")
+    if "Pydantic" in all_tech:
         lines.append("  • Designed type-safe API layer with FastAPI + Pydantic models")
-    if "Python async/await" in tech_found:
+    if "Python async/await" in all_tech:
         lines.append("  • Implemented async Python services for concurrent hardware + network I/O")
-    if "Azure Blob Storage" in tech_found:
+    if "Azure Blob Storage" in all_tech:
         lines.append("  • Integrated Azure Blob Storage with automated 7-day retention management")
-    if "HTTP Range requests" in tech_found:
+    if "HTTP Range requests" in all_tech:
         lines.append("  • Enabled on-demand video streaming via HTTP Range request support")
-    if "systemd / Linux services" in tech_found:
+    if "systemd / Linux services" in all_tech:
         lines.append("  • Configured systemd service for reliable auto-start on embedded Linux")
-    if "WebSockets" in tech_found:
+    if "WebSockets" in all_tech:
         lines.append("  • Delivered real-time camera stream via WebSocket connections")
-    if "JWT authentication" in tech_found:
+    if "JWT authentication" in all_tech:
         lines.append("  • Secured API endpoints with JWT bearer-token authentication")
+    if "Model Context Protocol (MCP)" in all_tech:
+        lines.append("  • Built production MCP server enabling persistent AI context across job search sessions "
+                     "via FastMCP (Python) with 30+ tools, RAG semantic search, and PDF generation")
+    if "WeasyPrint / PDF generation" in all_tech:
+        lines.append("  • Implemented PDF generation pipeline from plain .txt via WeasyPrint HTML/CSS templates")
+    if "RAG / semantic search" in all_tech:
+        lines.append("  • Built RAG semantic search layer over resume materials using text embeddings")
 
     return "\n".join(lines)
 

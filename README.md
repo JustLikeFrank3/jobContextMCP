@@ -203,7 +203,10 @@ Edit `config.json` with your absolute paths and contact info:
 {
   "resume_folder": "/path/to/your/Resume Folder",
   "leetcode_folder": "/path/to/your/LeetCodePractice",
-  "side_project_folder": "/path/to/your/side-project",
+  "side_project_folders": [
+    "/path/to/your/primary-side-project",
+    "/path/to/another-project"
+  ],
   "data_folder": "/path/to/jobContextMCP/data",
   "master_resume_path": "01-Current-Optimized/Your Name Resume - MASTER SOURCE.txt",
   "optimized_resumes_dir": "01-Current-Optimized",
@@ -283,13 +286,16 @@ This server is designed to run inside a multi-root VS Code workspace — one tha
 
 The server can scan any project you're actively building and surface resume bullets you may not have thought to write yet.
 
-**`scan_project_for_skills()`** *(v4)* — points at whatever folder is set in `side_project_folder` in your `config.json`, reads the codebase, and returns a list of technologies used, patterns applied, and metrics worth calling out on a resume. The loop closes itself: you build something, the server notices what you used, and shows you what to add to your master resume before the interview.
+**`scan_project_for_skills()`** *(v4)* — iterates over all folders listed in `side_project_folders` in your `config.json`, reads each codebase, and returns a per-project breakdown of technologies used, patterns applied, and metrics worth calling out on a resume. The loop closes itself: you build something, the server notices what you used, and shows you what to add to your master resume before the interview.
 
 Example: built an IoT camera with servo HAT control, Azure Blob Storage, and systemd service management. The scanner caught all three as resume-worthy additions — none of which made it into the original resume draft.
 
-To point it at your own project:
+To add a new project:
 ```json
-"side_project_folder": "/path/to/your/side-project"
+"side_project_folders": [
+  "/path/to/your/primary-project",
+  "/path/to/another-project"
+]
 ```
 
 The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_session_context()` first. With `mcp.json` auto-starting the server, that instruction is immediately actionable — tools are live before the first message.

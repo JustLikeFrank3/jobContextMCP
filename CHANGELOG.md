@@ -9,6 +9,18 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+## [0.4.9.1] - 2026-02-24
+
+### Changed
+- **`scan_project_for_skills()` — multi-project support**: `side_project_folder` (single string) replaced by `side_project_folders` (array) in `config.json` and `config.example.json`; backward-compatible — single string still accepted
+  - `config.py`: `SIDE_PROJECT_FOLDER` global replaced by `SIDE_PROJECT_FOLDERS: list[Path]`
+  - `project_scanner.py`: rewritten to iterate over all configured folders; git pull and file scan run per-project; output shows per-project tech breakdown; new tech detected: `Model Context Protocol (MCP)`, `FastMCP`, `WeasyPrint / PDF generation`, `RAG / semantic search`
+  - `server.py` and `tests/conftest.py` updated to `SIDE_PROJECT_FOLDERS`
+  - README: config snippet and Workspace Structure section updated; `scan_project_for_skills()` description updated
+
+### Added
+- **Ingestion guide in README** — new "The System Is Only As Good As What You Feed It" section explaining that `get_session_context()` alone is insufficient; documents all five ingestion steps: `scan_materials_for_tone()`, `log_personal_story()`, peer feedback ingestion via `log_tone_sample()`, `reindex_materials()` after new files, and `scan_project_for_skills()` after sprints
+
 ## [0.4.9] - 2026-02-24
 
 ### Changed
