@@ -1,4 +1,4 @@
-# job-search-mcp — Developer Instructions
+# JobContextMCP — Developer Instructions
 
 This is a Python MCP (Model Context Protocol) server built with [FastMCP](https://github.com/jlowin/fastmcp).
 It gives AI assistants (GitHub Copilot, Claude, etc.) persistent, structured memory of a job search.

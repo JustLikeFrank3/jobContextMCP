@@ -1,6 +1,6 @@
 {
   "servers": {
-    "job-search-as": {
+    "jobContextMCP": {
       "type": "stdio",
       "command": ".venv/bin/python3",
       "args": ["server.py"],

@@ -7,7 +7,7 @@ This workspace contains:
 3. **[SideProject]/** - Side project (optional — used for skill scanning)
 
 ## MCP SERVER
-A custom MCP server lives at `/path/to/job-search-mcp/server.py`.
+A custom MCP server lives at `/path/to/jobContextMCP/server.py`.
 It is configured in `.vscode/mcp.json` and auto-connects to every session.
 **Always prefer using MCP tools over re-reading files manually.**
 

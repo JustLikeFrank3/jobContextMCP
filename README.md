@@ -1,4 +1,6 @@
-# job-search-mcp
+![JobContextMCP](docs/branding/banner/jobcontextmcp-readme.png)
+
+# JobContextMCP
 
 A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives GitHub Copilot and other MCP-compatible AI assistants persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, or interview prep from scratch.
 
@@ -36,7 +38,7 @@ graph TB
 
     AI -->|MCP protocol| SERVER
 
-    subgraph SERVER["job-search-mcp  —  FastMCP server"]
+    subgraph SERVER["JobContextMCP  —  FastMCP server"]
         direction TB
 
         subgraph CTX["Context & Identity"]
@@ -64,6 +66,7 @@ graph TB
         subgraph NETWORK["Outreach & People"]
             T14["draft_outreach_message()"]
             T15["log_person() · get_people()"]
+            T19["log_linkedin_post() · update_post_metrics() · get_linkedin_posts()"]
         end
 
         subgraph UTIL["Utilities"]
@@ -155,6 +158,9 @@ sequenceDiagram
 | `export_cover_letter_pdf(filename, output_filename?)` | **v4** — parse a .txt cover letter and render it to PDF with two-column sidebar |
 | `generate_resume(company, role, job_description, output_filename?)` | **v4.1** — generate tailored resume via OpenAI API (or context package for Copilot), auto-save + export PDF |
 | `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate tailored cover letter, auto-save + export PDF |
+| `log_linkedin_post(text, source, context?, posted_date?, url?, hashtags?, links?, title?)` | **v4.8** — store a LinkedIn post with metadata; auto-ingests as tone sample by default |
+| `update_post_metrics(post_id?, source?, impressions?, reactions?, ...)` | **v4.8** — update engagement metrics and audience demographics on a stored post |
+| `get_linkedin_posts(source?, hashtag?, min_reactions?, include_text?)` | **v4.8** — retrieve posts with filterable aggregate metrics summary |
 
 ---
 
@@ -163,8 +169,8 @@ sequenceDiagram
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/job-search-mcp
-cd job-search-mcp
+git clone https://github.com/YOUR_USERNAME/jobContextMCP
+cd jobContextMCP
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
@@ -196,7 +202,7 @@ Edit `config.json` with your absolute paths and contact info:
   "resume_folder": "/path/to/your/Resume Folder",
   "leetcode_folder": "/path/to/your/LeetCodePractice",
   "side_project_folder": "/path/to/your/side-project",
-  "data_folder": "/path/to/job-search-mcp/data",
+  "data_folder": "/path/to/jobContextMCP/data",
   "master_resume_path": "01-Current-Optimized/Your Name Resume - MASTER SOURCE.txt",
   "optimized_resumes_dir": "01-Current-Optimized",
   "cover_letters_dir": "02-Cover-Letters",
@@ -234,11 +240,11 @@ If you need to adapt the paths for your machine, edit `.vscode/mcp.json`:
 ```json
 {
   "servers": {
-    "job-search-as": {
+    "jobContextMCP": {
       "type": "stdio",
       "command": "/absolute/path/to/.venv/bin/python3",
       "args": ["/absolute/path/to/server.py"],
-      "cwd": "/absolute/path/to/job-search-mcp"
+      "cwd": "/absolute/path/to/jobContextMCP"
     }
   }
 }
@@ -266,7 +272,7 @@ This server is designed to run inside a multi-root VS Code workspace — one tha
 
 | Folder | Purpose |
 |--------|---------|
-| `job-search-mcp/` | This repo — MCP server source, templates, data files |
+| `jobContextMCP/` | This repo — MCP server source, templates, data files |
 | `Resume 2025/` | All resumes, cover letters, PDFs, prep docs, reference materials |
 | `LeetCodePractice/` | LeetCode solutions, cheatsheets, daily review guides |
 | Side projects | Source code for things you built during the job search — see below |

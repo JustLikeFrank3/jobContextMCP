@@ -43,13 +43,14 @@ from tools import (
     export,
     people,
     generate,
+    posts,
 )
 
 
 def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDER, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -67,6 +68,7 @@ def _sync_config_exports() -> None:
     TONE_FILE = config.TONE_FILE
     SCAN_INDEX_FILE = config.SCAN_INDEX_FILE
     PEOPLE_FILE = config.PEOPLE_FILE
+    LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
@@ -89,7 +91,7 @@ _sync_config_exports()
 
 
 mcp = FastMCP(
-    "job-search-as",
+    "jobContextMCP",
     instructions=(
         "You are Frank MacBride's personal job search assistant. "
         "You have direct filesystem access to his resume materials, job hunt status, "
@@ -115,6 +117,7 @@ outreach.register(mcp)
 export.register(mcp)
 generate.register(mcp)
 people.register(mcp)
+posts.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -161,6 +164,10 @@ generate_cover_letter = generate.generate_cover_letter
 
 log_person = people.log_person
 get_people = people.get_people
+
+log_linkedin_post = posts.log_linkedin_post
+update_post_metrics = posts.update_post_metrics
+get_linkedin_posts = posts.get_linkedin_posts
 
 
 if __name__ == "__main__":
