@@ -302,6 +302,67 @@ Data files the server reads at runtime (all resolved relative to `resume_folder`
 
 ---
 
+## The System Is Only As Good As What You Feed It
+
+`get_session_context()` loads four things every session: your master resume, your tone profile, your personal context library, and your live pipeline. That's it. It does **not** read individual resumes or cover letters — so anything meaningful that lives only in those files is invisible to the AI until you explicitly extract and log it.
+
+**This is the most common reason the AI produces generic output.** The RAG index can reach your cover letters and resumes via `search_materials()`, but that's reactive — it only surfaces content when the AI knows to ask for it. The personal context library and tone profile are active — they load automatically and inform every draft, every fitment, every outreach message.
+
+### What to ingest before you rely on the system
+
+**1. Scan your existing cover letters and resumes for tone samples**
+
+If you've written previous cover letters, run:
+
+```
+scan_materials_for_tone(category="cover_letters", limit=100)
+scan_materials_for_tone(category="resumes", limit=100)
+```
+
+This indexes your existing writing so the AI can mirror your voice. Do this once after setup, then again whenever you add a batch of new materials.
+
+**2. Log personal stories explicitly**
+
+Cover letters accumulate stories that were written in context and then forgotten — family history, non-linear career paths, motivating experiences, the reason you care about a specific company. These don't index themselves into the personal context library. Read through your best cover letters and call `log_personal_story()` for anything worth keeping. Same goes for non-digital sources: going-away cards, award citations, performance reviews, peer feedback forms.
+
+```
+log_personal_story(
+    story="Full narrative in your own words...",
+    tags=["family", "engineering_philosophy", "ford"],
+    title="Short memorable title"
+)
+```
+
+**3. Ingest peer feedback and recognition awards**
+
+Formal feedback cycles and recognition awards contain peer-sourced, manager-attributed language that is more credible in interviews than anything you write about yourself. Log quotes verbatim with their source and date. Useful tags: `peer_feedback`, `manager_recognition`, `attribution`.
+
+**4. Rebuild the RAG index after adding new files**
+
+Whenever you add new resumes, cover letters, or reference materials to your resume folder, run:
+
+```
+reindex_materials()
+```
+
+The RAG index is not updated automatically. If you skip this, `search_materials()` won't know about anything added since the last index build.
+
+**5. Scan your side project after any sprint**
+
+```
+scan_project_for_skills()
+```
+
+Skills picked up during the job search (new frameworks, cloud services, languages) won't appear on your resume until you run this and manually add the suggested bullets to your master resume.
+
+### The ingestion loop
+
+The goal is a library where the AI can answer "what's the most honest, specific, human thing Frank can say about X?" without you having to re-explain it. Stories, quotes, tone examples, and peer feedback are the raw material. The more you put in, the less generic the output.
+
+When in doubt: if something made you proud, surprised a colleague, landed in a card, or earned a recognition — log it.
+
+---
+
 ## AI Resume & Cover Letter Generation
 
 `generate_resume()` and `generate_cover_letter()` are end-to-end tools: one call produces a
