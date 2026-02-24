@@ -10,6 +10,9 @@ data/people.json
 data/linkedin_posts.json
 data/scan_index.json
 
+# Personal utility scripts (may contain real stories, paths, or data)
+_log_stories.py
+
 # Python virtual environment
 .venv/
 __pycache__/
