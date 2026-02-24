@@ -1,0 +1,21 @@
+{
+  "posts": [
+    {
+      "id": 1,
+      "timestamp": "2026-02-24T00:00:00",
+      "posted_date": "2026-02-24",
+      "source": "linkedin_post_example_project",
+      "text": "Example post text describing a side project or professional update.",
+      "url": "https://lnkd.in/example",
+      "hashtags": ["SoftwareEngineering", "Python", "OpenSource"],
+      "context": "Announcement post for an example project. Used as a tone sample for outreach.",
+      "metrics": {
+        "likes": 0,
+        "comments": 0,
+        "reposts": 0,
+        "impressions": null,
+        "last_checked": null
+      }
+    }
+  ]
+}

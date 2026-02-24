@@ -9,6 +9,18 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+## [0.4.8] - 2026-02-24
+
+### Added
+- `tools/posts.py` — new LinkedIn post tracking module with three tools:
+  - `log_linkedin_post(text, source, context?, posted_date?, url?, hashtags?, links?, title?, auto_log_tone?)` — add or update a post record; optionally auto-ingests full post text as a tone sample (default: True) so public writing voice calibrates outreach and cover letter drafts
+  - `update_post_metrics(post_id?, source?, impressions?, members_reached?, reactions?, comments?, reposts?, saves?, link_clicks?, profile_views_from_post?, followers_gained?, audience_highlights?)` — patch engagement numbers and audience demographics by post ID or source slug; only provided fields are updated
+  - `get_linkedin_posts(source?, hashtag?, min_reactions?, include_text?)` — filterable summary with aggregate stats across all posts
+- `data/linkedin_posts.json` — post store with full metrics schema (impressions, reach, reactions, comments, reposts, saves, link clicks, profile views, followers gained, audience demographics); pre-loaded with 7 posts dating back to January 2022
+- `data/linkedin_posts.example.json` — sanitized example for new users
+- `lib/config.py` — `LINKEDIN_POSTS_FILE` path global added
+- `server.py` — `posts` module imported, registered, and `log_linkedin_post` / `update_post_metrics` / `get_linkedin_posts` exposed as module-level aliases
+
 ## [0.4.7] - 2026-02-23
 
 ### Added
