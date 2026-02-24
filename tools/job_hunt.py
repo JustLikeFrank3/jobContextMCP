@@ -1,6 +1,54 @@
+import re
+from datetime import date
+
 from lib import config
 from lib.io import _load_json, _save_json, _now
 from tools.health import get_daily_checkin_nudge
+
+_MONTH_MAP = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_DATE_RE = re.compile(
+    r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*~?\s*(\d{1,2})\b',
+    re.IGNORECASE,
+)
+
+
+def _extract_followup_date(text: str) -> date | None:
+    """Parse the first recognisable month+day from a next_steps string."""
+    m = _DATE_RE.search(text)
+    if not m:
+        return None
+    month = _MONTH_MAP.get(m.group(1).lower()[:3])
+    if month is None:
+        return None
+    day = int(m.group(2))
+    today = date.today()
+    year = today.year
+    # If the parsed month is already past this year, assume next year
+    if month < today.month:
+        year += 1
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _check_overdue_followups(apps: list) -> list[str]:
+    """Return reminder lines for any application whose next_steps mentions a date <= today."""
+    today = date.today()
+    reminders = []
+    for app in apps:
+        next_steps = app.get("next_steps", "")
+        if not next_steps:
+            continue
+        due = _extract_followup_date(next_steps)
+        if due and due <= today:
+            label = "TODAY" if due == today else f"OVERDUE since {due.strftime('%b %d')}"
+            summary = next_steps[:120].rstrip(".")
+            reminders.append(f"  [{label}] {app['company']} — {app['role']}: {summary}")
+    return reminders
 
 
 def get_job_hunt_status() -> str:
@@ -29,6 +77,10 @@ def get_job_hunt_status() -> str:
         if app.get("notes"):
             lines.append(f"  Notes:        {app['notes']}")
         lines.append("")
+
+    overdue = _check_overdue_followups(apps)
+    if overdue:
+        lines += ["⚠ FOLLOW-UP ACTIONS DUE:"] + overdue + [""]
 
     if nudge:
         lines += ["", nudge]
