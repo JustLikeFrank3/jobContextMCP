@@ -76,7 +76,7 @@ def isolated_server(tmp_path: Path):
     fake_cfg = {
         "resume_folder":              str(res_dir),
         "leetcode_folder":            str(lc_dir),
-        "side_project_folder":         str(sc_dir),
+        "side_project_folders":        [str(sc_dir)],
         "data_folder":                str(data_dir),
         "master_resume_path":         "master_resume.txt",
         "leetcode_cheatsheet_path":   "cheatsheet.md",
@@ -93,7 +93,7 @@ def isolated_server(tmp_path: Path):
     original_cfg = {
         "resume_folder":              str(srv.RESUME_FOLDER),
         "leetcode_folder":            str(srv.LEETCODE_FOLDER),
-        "side_project_folder":         str(srv.SIDE_PROJECT_FOLDER),
+        "side_project_folders":        [str(f) for f in srv.SIDE_PROJECT_FOLDERS],
         "data_folder":                str(srv.DATA_FOLDER),
         "master_resume_path":         srv.MASTER_RESUME.name,
         "leetcode_cheatsheet_path":   srv.LEETCODE_CHEATSHEET.name,

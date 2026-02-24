@@ -18,6 +18,11 @@ __pycache__/
 data/rag_embeddings.npy
 data/rag_index.json
 
+# Shareable/joke exports — not for repo
+docs/branding/banner/jobcontextmcp-share.jpg
+docs/branding/banner/jobcontextmcp-wingdings.jpg
+docs/branding/banner/jobcontextmcp-wingdings.svg
+
 # macOS
 .DS_Store
 
