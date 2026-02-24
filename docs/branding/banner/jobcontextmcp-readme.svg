@@ -1,1 +1,47 @@
-<svg><!-- banner placeholder --></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 180">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f1b2d"/>
+      <stop offset="100%" stop-color="#1e2d3d"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="860" height="180" fill="url(#bg)" rx="14"/>
+
+  <!-- Icon: nested svg keeps clipPath in local 0-100 coords -->
+  <svg x="18" y="15" width="150" height="150" viewBox="0 0 100 100" overflow="visible">
+    <defs>
+      <clipPath id="s-lens">
+        <circle cx="42" cy="42" r="30"/>
+      </clipPath>
+    </defs>
+    <line x1="64" y1="64" x2="88" y2="88" stroke="#3FA8A8" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="42" cy="42" r="30" fill="#0f1b2d"/>
+    <g clip-path="url(#s-lens)">
+      <!-- 00100100 binary, 4x2 grid centered at (42,42), pitch 11, cell 9x9 -->
+      <!-- Row 0 (y=32): 0 0 1 0 -->
+      <rect x="21" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+      <rect x="32" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+      <rect x="43" y="32" width="9" height="9" fill="#3FA8A8" rx="1.5"/>
+      <rect x="54" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+      <!-- Row 1 (y=43): 0 1 0 0 -->
+      <rect x="21" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+      <rect x="32" y="43" width="9" height="9" fill="#3FA8A8" rx="1.5"/>
+      <rect x="43" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+      <rect x="54" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
+    </g>
+    <circle cx="42" cy="42" r="30" fill="none" stroke="#EDEDED" stroke-width="6"/>
+  </svg>
+
+  <!-- Wordmark -->
+  <text x="195" y="79" dominant-baseline="middle"
+    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+    font-weight="700" font-size="68" letter-spacing="-1"
+  ><tspan fill="#EDEDED">JobContext</tspan><tspan fill="#3FA8A8">MCP</tspan></text>
+  <!-- Subtitle -->
+  <text x="196" y="122" dominant-baseline="middle"
+    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+    font-weight="400" font-size="21" fill="#7a9ab8" letter-spacing="0.5"
+  >An AI Persistent Job Search Assistant</text>
+</svg>
