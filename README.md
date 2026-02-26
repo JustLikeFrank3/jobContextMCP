@@ -198,7 +198,11 @@ Your Resume Folder/
 ├── 01-Current-Optimized/     ← .txt resumes go here
 ├── 02-Cover-Letters/         ← .txt cover letters go here
 ├── 03-Resume-PDFs/           ← exported PDFs land here (auto-created)
-└── 06-Reference-Materials/   ← master resume, awards, feedback, skills
+├── 04-Performance-Reviews/   ← past reviews, peer feedback, awards
+├── 05-Archived-Versions/     ← older resume drafts
+├── 06-Reference-Materials/   ← master resume, awards, feedback, skills
+├── 07-Job-Assessments/       ← fitment analyses, take-home notes
+└── 08-Interview-Prep-Docs/   ← company-specific interview prep files
 ```
 
 Place your master resume `.txt` file in `01-Current-Optimized/`.
