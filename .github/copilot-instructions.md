@@ -18,8 +18,8 @@ lib/
   helpers.py       — Pure logic helpers (story builders, filters, formatters)
 tools/
   session.py       — get_session_context
-  job_hunt.py      — get_job_hunt_status, update_application
-  resume.py        — list/read/save resume and cover letter files
+  job_hunt.py      — get_job_hunt_status, update_application, log_application_event
+  resume.py        — list/read/save resume and cover letter files, resume_diff
   fitment.py       — assess_job_fitment, get_customization_strategy
   interview.py     — get_interview_quick_reference, get_leetcode_cheatsheet
   export.py        — export_resume_pdf, export_cover_letter_pdf (WeasyPrint)
@@ -29,8 +29,12 @@ tools/
   tone.py          — log_tone_sample, get_tone_profile, scan_materials_for_tone
   star.py          — get_star_story_context
   rag.py           — search_materials, reindex_materials (RAG/semantic search)
-  outreach.py      — draft_outreach_message
+  outreach.py      — draft_outreach_message, review_message
   people.py        — log_person, get_people
+  posts.py         — log_linkedin_post, update_post_metrics, get_linkedin_posts
+  rejections.py    — log_rejection, get_rejections
+  digest.py        — get_daily_digest, weekly_summary
+  compensation.py  — update_compensation, get_compensation_comparison
   project_scanner.py — scan_project_for_skills
 templates/         — WeasyPrint HTML/CSS templates for PDF rendering
 data/              — Runtime JSON data files (gitignored; see *.example.json)
@@ -49,6 +53,7 @@ cp data/status.example.json data/status.json
 cp data/mental_health_log.example.json data/mental_health_log.json
 cp data/personal_context.example.json data/personal_context.json
 cp data/tone_samples.example.json data/tone_samples.json
+cp data/rejections.example.json data/rejections.json
 ```
 
 `config.json` and all `data/*.json` files are gitignored — never commit real user data.

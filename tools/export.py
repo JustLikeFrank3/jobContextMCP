@@ -507,7 +507,17 @@ def _parse_education_section(lines: list[str]) -> dict:
         school = f"{school} | {year}"
     elif year and not school:
         school = year
-    return {"type": "education", "degree": degree, "school": school, "details": detail_lines}
+    # Separate out any "Relevant Coursework:" line
+    coursework = ""
+    filtered_details: list[str] = []
+    for dl in detail_lines:
+        m = re.match(r"^[Rr]elevant\s+[Cc]oursework[:\s]+(.+)", dl)
+        if m:
+            coursework = m.group(1).strip()
+        else:
+            filtered_details.append(dl)
+    return {"type": "education", "degree": degree, "school": school,
+            "details": filtered_details, "coursework": coursework}
 
 
 # ── PROJECTS ──────────────────────────────────────────────────────────────
@@ -546,13 +556,25 @@ def _parse_leadership_section(lines: list[str]) -> dict:
         if not line:
             continue
         line = _clean_bullet(line) if _is_bullet(line) else line
-        # "Bold Label: rest of text"
-        m = re.match(r"^([A-Z][A-Za-z0-9 \(\)&]+?):\s+(.+)$", line)
+        # "Bold Label: rest of text" — match any uppercase-starting label up to the first colon
+        m = re.match(r"^([A-Z][^:\n]{3,60}):\s+(.+)$", line)
         if m:
             items.append({"label": m.group(1).strip(), "value": m.group(2).strip()})
         else:
             items.append({"label": "", "value": line})
     return {"type": "leadership", "items": items}
+
+
+# ── ACHIEVEMENTS (NOTABLE METRICS & ACHIEVEMENTS) ────────────────────────
+
+def _parse_achievements_section(lines: list[str]) -> dict:
+    items: list[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        items.append(_clean_bullet(line) if _is_bullet(line) else line)
+    return {"type": "achievements", "items": items}
 
 
 # ── SECTION TYPE ROUTER ────────────────────────────────────────────────────
@@ -569,6 +591,8 @@ def _classify_section(title: str) -> str:
         return "education"
     if "PROJECT" in t:
         return "projects"
+    if "METRIC" in t or "NOTABLE" in t:
+        return "achievements"
     if "LEADERSHIP" in t or "ADDITIONAL" in t or "ACHIEVEMENT" in t or "CERTIFICATION" in t:
         return "leadership"
     if "SYNOPSIS" in t or "SUMMARY" in t or "OBJECTIVE" in t:
@@ -667,6 +691,8 @@ def _parse_resume_txt(text: str) -> dict:
             s = _parse_education_section(content_lines)
         elif kind == "projects":
             s = _parse_projects_section(content_lines)
+        elif kind == "achievements":
+            s = _parse_achievements_section(content_lines)
         elif kind == "leadership":
             s = _parse_leadership_section(content_lines)
         else:

@@ -14,6 +14,13 @@ It is configured in `.vscode/mcp.json` and auto-connects to every session.
 Key tools available:
 - `get_job_hunt_status()` — current application pipeline
 - `update_application()` — update application status/notes
+- `log_application_event(company, role, event_type)` — append events to an application (phone screen, offer, note, etc.)
+- `log_rejection(company, role, stage)` — log a rejection; enables pattern analysis
+- `get_rejections()` — retrieve rejections with stage breakdown and bottleneck flags
+- `get_daily_digest()` — morning briefing: overdue actions, stale apps, recent rejections, 3 priorities
+- `weekly_summary()` — 7-day aggregate with mental health trend
+- `update_compensation(company, role, base, equity_total, bonus_target_pct)` — attach comp data to an application
+- `get_compensation_comparison()` — side-by-side comp table sorted by total comp
 - `read_master_resume()` — full master resume with all metrics
 - `assess_job_fitment(company, role, jd)` — fitment analysis context
 - `generate_interview_prep_context(company, role, stage)` — structured prep context
@@ -22,6 +29,8 @@ Key tools available:
 - `log_mental_health_checkin(mood, energy)` — mood/energy logging
 - `get_mental_health_log()` — recent check-in history
 - `list_existing_materials(company)` — list resumes/cover letters
+- `resume_diff(file_a, file_b)` — diff two resume versions
+- `review_message(text)` — tone review: flags corporate phrases, desperation, hedging
 - `get_existing_prep_file(company)` — read existing interview prep file
 
 ## BACKGROUND

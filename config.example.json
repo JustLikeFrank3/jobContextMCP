@@ -7,6 +7,8 @@
   ],
   "data_folder": "/path/to/job-search-mcp/data",
 
+  "job_assessments_dir": "07-Job-Assessments",
+  "interview_prep_docs_dir": "08-Interview-Prep-Docs",
   "master_resume_path": "01-Current-Optimized/YourName Resume - MASTER SOURCE.txt",
   "leetcode_cheatsheet_path": "GM_Interview_Cheatsheet.md",
   "quick_reference_path": "INTERVIEW_DAY_QUICK_REFERENCE.md",

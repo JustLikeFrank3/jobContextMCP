@@ -68,7 +68,7 @@ def generate_interview_prep_context(
 
 def get_existing_prep_file(company: str) -> str:
     """Find and return all existing interview prep files for a given company — searches across both the Resume 2025 and LeetCode folders for files containing the company name and prep/interview/call/assessment keywords."""
-    search_roots = [config.RESUME_FOLDER, config.LEETCODE_FOLDER]
+    search_roots = [config.RESUME_FOLDER, config.LEETCODE_FOLDER, config.INTERVIEW_PREP_FOLDER]
     seen: set = set()
     matches = []
     for root in search_roots:
@@ -94,7 +94,7 @@ def get_existing_prep_file(company: str) -> str:
 
 
 def save_interview_prep(company: str, content: str, filename: str = "") -> str:
-    """Save a generated interview prep document to the LeetCode folder as a .md file. Filename defaults to {COMPANY}_INTERVIEW_PREP.md. Always use this tool instead of creating files directly."""
+    """Save a generated interview prep document to the 08-Interview-Prep-Docs folder as a .md file. Filename defaults to {COMPANY}_INTERVIEW_PREP.md. Always use this tool instead of creating files directly."""
     if not filename:
         slug = company.upper().replace(" ", "_").replace("-", "_")
         filename = f"{slug}_INTERVIEW_PREP.md"
@@ -104,9 +104,11 @@ def save_interview_prep(company: str, content: str, filename: str = "") -> str:
     # Strip trailing whitespace per line; preserve intentional blank lines
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    target = config.LEETCODE_FOLDER / filename
-    target.write_text(cleaned, encoding="utf-8")
-    return f"✓ Saved interview prep: {target.name}"
+    target = config.INTERVIEW_PREP_FOLDER
+    target.mkdir(parents=True, exist_ok=True)
+    dest = target / filename
+    dest.write_text(cleaned, encoding="utf-8")
+    return f"✓ Saved interview prep: {dest.name}"
 
 
 def register(mcp) -> None:

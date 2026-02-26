@@ -100,12 +100,12 @@ body {
 /* ── EXPERIENCE ───────────────────────────────── */
 .job {
   margin-bottom: 5px;
-  break-inside: avoid;
+  break-inside: auto;
 }
 
 .job-title  { font-weight: bold; font-size: 9pt; }
 .job-company { font-weight: bold; font-size: 9pt; }
-.job-dates  { font-size: 8.4pt; margin-bottom: 1px; }
+.job-dates  { font-size: 8.4pt; font-weight: bold; margin-bottom: 1px; break-after: avoid; }
 
 .group-lbl {
     font-weight: bold;
@@ -145,6 +145,11 @@ body {
 .edu-school { font-size: 8.4pt; }
 .edu-details { font-size: 8.4pt; }
 .edu-bullet  { font-size: 8.4pt; margin-left: 10px; }
+.edu-coursework {
+  font-size: 8.4pt;
+  margin-top: 4px;
+}
+.edu-coursework-lbl { font-weight: bold; }
 
 /* ── LEADERSHIP ───────────────────────────────── */
 .leader-item {
@@ -183,7 +188,7 @@ body {
 
 <!-- SECTIONS -->
 {% for section in sections %}
-<div class="section">
+<div class="section"{% if section.type == 'experience' %} style="break-before: page;"{% endif %}>
   <div class="section-title">{{ section.title }}</div>
 
   {# ── SKILLS ──────────────────────────── #}
@@ -237,7 +242,14 @@ body {
   <div class="edu-details">{{ line }}</div>
   {% endif %}
   {% endfor %}
-
+  {% if section.coursework %}
+  <div class="edu-coursework"><span class="edu-coursework-lbl">Relevant Coursework:</span> {{ section.coursework }}</div>
+  {% endif %}
+  {# ── ACHIEVEMENTS ─────────────────────────── #}
+  {% elif section.type == 'achievements' %}
+  <ul class="bullets">
+    {% for item in section['items'] %}<li>{{ item }}</li>{% endfor %}
+  </ul>
   {# ── LEADERSHIP ──────────────────────── #}
   {% elif section.type == 'leadership' %}
   {% for item in section['items'] %}

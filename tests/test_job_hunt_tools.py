@@ -39,7 +39,18 @@ class TestJobHuntStatus:
         apps = data["applications"]
         assert len(apps) == 1
         assert apps[0]["status"] == "waiting"
-        assert apps[0]["notes"] == "v2"
+        # Notes are now APPENDED, not replaced — both notes should be present
+        assert "v1" in apps[0]["notes"]
+        assert "v2" in apps[0]["notes"]
+
+    def test_update_empty_notes_preserves_existing(self, isolated_server):
+        """Passing notes='' (default) must not overwrite existing notes."""
+        srv.update_application("Ford", "Software Engineer", "applied", notes="important context")
+        srv.update_application("Ford", "Software Engineer", "waiting")  # notes="" default
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        apps = data["applications"]
+        assert apps[0]["notes"] == "important context"
 
     def test_company_fallback_updates_when_role_differs(self, isolated_server):
         srv.update_application("Airbnb", "SE I", "applied")

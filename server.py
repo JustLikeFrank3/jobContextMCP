@@ -49,16 +49,20 @@ from tools import (
     people,
     generate,
     posts,
+    rejections,
+    digest,
+    compensation,
 )
 
 
 def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
+    global INTERVIEW_PREP_FOLDER
 
     _cfg = config._cfg
 
@@ -74,6 +78,7 @@ def _sync_config_exports() -> None:
     SCAN_INDEX_FILE = config.SCAN_INDEX_FILE
     PEOPLE_FILE = config.PEOPLE_FILE
     LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
+    REJECTIONS_FILE = config.REJECTIONS_FILE
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
@@ -85,6 +90,7 @@ def _sync_config_exports() -> None:
     GM_AWARDS = config.GM_AWARDS
     FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
     SKILLS_SHORTER = config.SKILLS_SHORTER
+    INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -123,6 +129,9 @@ export.register(mcp)
 generate.register(mcp)
 people.register(mcp)
 posts.register(mcp)
+rejections.register(mcp)
+digest.register(mcp)
+compensation.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -173,6 +182,19 @@ get_people = people.get_people
 log_linkedin_post = posts.log_linkedin_post
 update_post_metrics = posts.update_post_metrics
 get_linkedin_posts = posts.get_linkedin_posts
+
+log_rejection = rejections.log_rejection
+get_rejections = rejections.get_rejections
+
+get_daily_digest = digest.get_daily_digest
+weekly_summary = digest.weekly_summary
+
+update_compensation = compensation.update_compensation
+get_compensation_comparison = compensation.get_compensation_comparison
+
+log_application_event = job_hunt.log_application_event
+review_message = outreach.review_message
+resume_diff = resume.resume_diff
 
 
 if __name__ == "__main__":

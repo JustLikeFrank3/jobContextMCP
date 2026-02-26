@@ -53,9 +53,11 @@ graph TB
 
         subgraph PIPELINE["Application Pipeline"]
             T6["get_job_hunt_status() · update_application()"]
+            T6b["log_application_event() · log_rejection() · get_rejections()"]
+            T6c["update_compensation() · get_compensation_comparison()"]
             T7["assess_job_fitment() · get_customization_strategy()"]
             T8["generate_resume() · generate_cover_letter()"]
-            T9["save_resume_txt() · save_cover_letter_txt()"]
+            T9["save_resume_txt() · save_cover_letter_txt() · resume_diff()"]
             T10["export_resume_pdf() · export_cover_letter_pdf()"]
         end
 
@@ -66,13 +68,14 @@ graph TB
         end
 
         subgraph NETWORK["Outreach & People"]
-            T14["draft_outreach_message()"]
+            T14["draft_outreach_message() · review_message()"]
             T15["log_person() · get_people()"]
             T19["log_linkedin_post() · update_post_metrics() · get_linkedin_posts()"]
         end
 
         subgraph UTIL["Utilities"]
             T16["scan_project_for_skills()"]
+            T16b["get_daily_digest() · weekly_summary()"]
             T17["search_materials() · reindex_materials()"]
             T18["log_mental_health_checkin() · get_mental_health_log()"]
         end
@@ -163,6 +166,15 @@ sequenceDiagram
 | `log_linkedin_post(text, source, context?, posted_date?, url?, hashtags?, links?, title?)` | **v4.8** — store a LinkedIn post with metadata; auto-ingests as tone sample by default |
 | `update_post_metrics(post_id?, source?, impressions?, reactions?, ...)` | **v4.8** — update engagement metrics and audience demographics on a stored post |
 | `get_linkedin_posts(source?, hashtag?, min_reactions?, include_text?)` | **v4.8** — retrieve posts with filterable aggregate metrics summary |
+| `log_rejection(company, role, stage, reason?, notes?, date?)` | **v5** — log a rejection; stored in `data/rejections.json` for pattern analysis |
+| `get_rejections(company?, stage?, since?, include_pattern_analysis?)` | **v5** — retrieve rejections with optional filters and stage/reason pattern breakdown |
+| `log_application_event(company, role, event_type, notes?)` | **v5** — append an event to an application's immutable event log (phone screen, offer, note, etc.) |
+| `get_daily_digest()` | **v5** — morning briefing: overdue follow-ups, stale apps, recent rejections, drafted-not-sent messages, 3 focus priorities |
+| `weekly_summary()` | **v5** — 7-day aggregate: new apps, rejections by stage, contacts added, mental health trend |
+| `update_compensation(company, role, base?, equity_total?, bonus_target_pct?, level?, ...)` | **v5** — attach comp data (base/equity/bonus) to a tracked application; computes total comp estimate |
+| `get_compensation_comparison()` | **v5** — side-by-side comp table for all applications with comp data, sorted by total comp |
+| `resume_diff(file_a, file_b)` | **v5** — unified diff between two resume `.txt` files with added/removed line summary |
+| `review_message(text)` | **v5** — tone review for outreach drafts: flags corporate phrases, desperation signals, hedging, weak openers, missing CTAs |
 
 ---
 
@@ -234,6 +246,7 @@ cp data/status.example.json data/status.json
 cp data/mental_health_log.example.json data/mental_health_log.json
 cp data/personal_context.example.json data/personal_context.json
 cp data/tone_samples.example.json data/tone_samples.json
+cp data/rejections.example.json data/rejections.json
 ```
 
 ### 5. Connect to VS Code
@@ -440,7 +453,7 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 
 ## Data Privacy
 
-`config.json` and all files under `data/` — including `status.json`, `mental_health_log.json`, `personal_context.json`, and `tone_samples.json` — are gitignored. Your real application data, personal stories, contact names, and health entries never leave your machine.
+`config.json` and all files under `data/` — including `status.json`, `mental_health_log.json`, `personal_context.json`, `tone_samples.json`, `rejections.json`, `people.json`, and `linkedin_posts.json` — are gitignored. Your real application data, personal stories, contact names, rejection history, and health entries never leave your machine.
 
 ---
 

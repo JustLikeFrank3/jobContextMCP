@@ -129,6 +129,19 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     ]
     file_groups.append((prep_files, "interview_prep"))
 
+    # Job assessments (fitment analysis, notes on specific roles)
+    assessments_dir = resume_folder / "07-Job-Assessments"
+    if assessments_dir.exists():
+        assessment_files = list(assessments_dir.glob("*.txt")) + list(assessments_dir.glob("*.md"))
+        file_groups.append((assessment_files, "job_assessments"))
+    # Also pick up any assessment .txt files dropped in the resume root
+    root_assessment_files = [
+        f for f in resume_folder.glob("*.txt")
+        if any(kw in f.name.lower() for kw in ("assessment", "fitment"))
+    ]
+    if root_assessment_files:
+        file_groups.append((root_assessment_files, "job_assessments"))
+
     # LeetCode
     lc_files = [
         p for name in (cfg["leetcode_cheatsheet_path"], cfg["quick_reference_path"])

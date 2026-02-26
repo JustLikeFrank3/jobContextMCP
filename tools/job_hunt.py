@@ -113,14 +113,20 @@ def update_application(
         existing = next((a for a in apps if a["company"].lower() == company.lower()), None)
 
     if existing:
-        existing.update(
-            role=role,
-            status=status,
-            next_steps=next_steps,
-            contact=contact,
-            notes=notes,
-            last_updated=_now(),
-        )
+        existing["role"] = role
+        existing["status"] = status
+        if next_steps:
+            existing["next_steps"] = next_steps
+        if contact:
+            existing["contact"] = contact
+        # Append to notes instead of clobbering — prefix new note with timestamp
+        if notes:
+            old_notes = existing.get("notes", "")
+            if old_notes:
+                existing["notes"] = f"{old_notes}\n[{_now()}] {notes}"
+            else:
+                existing["notes"] = notes
+        existing["last_updated"] = _now()
         action = "Updated"
     else:
         apps.append(
@@ -131,6 +137,7 @@ def update_application(
                 next_steps=next_steps,
                 contact=contact,
                 notes=notes,
+                events=[],
                 applied_date=_now(),
                 last_updated=_now(),
             )
@@ -142,6 +149,60 @@ def update_application(
     return f"✓ {action}: {company} — {role} ({status})"
 
 
+def log_application_event(
+    company: str,
+    role: str,
+    event_type: str,
+    notes: str = "",
+) -> str:
+    """
+    Append an event to a tracked application's event log.
+
+    Use this to record milestones without overwriting existing data.
+    The event log is append-only — nothing is ever removed or replaced.
+
+    Args:
+        company:    Company name (must match an existing application).
+        role:       Role title (used to disambiguate if multiple roles at same company).
+        event_type: One of: 'applied', 'phone_screen', 'technical_screen', 'take_home',
+                    'onsite', 'offer', 'rejected', 'withdrew', 'follow_up', 'note',
+                    'referral_submitted', 'recruiter_contact', 'hiring_manager_contact'.
+        notes:      Free-form detail about what happened.
+
+    Returns:
+        Confirmation string with the appended event.
+    """
+    data = _load_json(config.STATUS_FILE, {"applications": []})
+    apps: list = data.setdefault("applications", [])
+
+    existing = next(
+        (a for a in apps if a["company"].lower() == company.lower()
+         and a["role"].lower() == role.lower()),
+        None,
+    )
+    if existing is None:
+        existing = next((a for a in apps if a["company"].lower() == company.lower()), None)
+
+    if existing is None:
+        return (
+            f"No application found for {company}. "
+            "Use update_application() to add it first."
+        )
+
+    event = {
+        "type": event_type.strip().lower(),
+        "notes": notes.strip(),
+        "date": _now(),
+    }
+    existing.setdefault("events", []).append(event)
+    existing["last_updated"] = _now()
+    data["last_updated"] = _now()
+    _save_json(config.STATUS_FILE, data)
+
+    return f"✓ Event logged: {company} — {role} [{event_type}] {notes[:80] if notes else ''}"
+
+
 def register(mcp) -> None:
     mcp.tool()(get_job_hunt_status)
     mcp.tool()(update_application)
+    mcp.tool()(log_application_event)
