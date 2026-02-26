@@ -9,6 +9,7 @@ data/tone_samples.json
 data/people.json
 data/linkedin_posts.json
 data/scan_index.json
+data/rejections.json
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
