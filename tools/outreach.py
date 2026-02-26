@@ -168,5 +168,150 @@ def draft_outreach_message(
     return "\n\n".join(sections)
 
 
+_CORPORATE_PHRASES = [
+    "i hope this message finds you",
+    "i wanted to reach out",
+    "i am excited to",
+    "i am passionate about",
+    "i trust this email finds",
+    "please do not hesitate",
+    "as per my previous",
+    "i am reaching out because",
+    "synergy",
+    "leverage",
+    "circle back",
+    "touch base",
+    "moving forward",
+    "at the end of the day",
+    "going forward",
+    "per our conversation",
+]
+
+_DESPERATION_SIGNALS = [
+    "really need",
+    "desperately",
+    "any opportunity",
+    "would love any",
+    "even if it's",
+    "willing to do anything",
+    "i'll take whatever",
+    "please consider",
+    "i beg",
+    "i just want a chance",
+    "just give me",
+]
+
+_HEDGING_WORDS = [
+    "sort of",
+    "kind of",
+    "maybe",
+    "i think possibly",
+    "i guess",
+    "hopefully",
+    "if that's okay",
+    "i'm sorry to bother",
+    "sorry for",
+    "apologies for reaching",
+]
+
+
+def review_message(text: str) -> str:
+    """
+    Review an outreach message draft for tone, sentiment, and length issues.
+
+    Checks for:
+    - Corporate / AI-generated stiffness phrases
+    - Desperation signals (red flags that undermine negotiating position)
+    - Hedging language (undermines confidence)
+    - Length (ideal: under 100 words for LinkedIn; under 200 for email)
+    - Opener quality (first sentence is the make-or-break)
+
+    Args:
+        text: The message text to review.
+
+    Returns:
+        Structured review with flagged issues and recommendations.
+    """
+    lower = text.lower()
+    word_count = len(text.split())
+    sentences = [s.strip() for s in text.replace("\n", " ").split(".") if s.strip()]
+    opener = sentences[0] if sentences else ""
+
+    flags: list[str] = []
+    warnings: list[str] = []
+
+    # Corporate / stiff phrases
+    found_corporate = [p for p in _CORPORATE_PHRASES if p in lower]
+    if found_corporate:
+        for p in found_corporate:
+            flags.append(f"🔴  Corporate phrase: '{p}' — cut or rewrite naturally")
+
+    # Desperation signals
+    found_desperation = [p for p in _DESPERATION_SIGNALS if p in lower]
+    if found_desperation:
+        for p in found_desperation:
+            flags.append(f"🔴  Desperation signal: '{p}' — this weakens your position")
+
+    # Hedging
+    found_hedging = [p for p in _HEDGING_WORDS if p in lower]
+    if found_hedging:
+        for p in found_hedging:
+            flags.append(f"🟡  Hedging language: '{p}' — consider cutting")
+
+    # Length
+    if word_count > 200:
+        warnings.append(f"🟡  Length: {word_count} words — email should be under 200; LinkedIn under 100")
+    elif word_count > 100:
+        warnings.append(f"ℹ   Length: {word_count} words — acceptable for email, long for LinkedIn")
+    else:
+        warnings.append(f"✓   Length: {word_count} words — good")
+
+    # Opener check
+    opener_lower = opener.lower()
+    bad_openers = [
+        "i hope", "my name is", "i am writing", "i wanted", "i am reaching",
+        "i trust", "i'm excited", "i am excited",
+    ]
+    if any(opener_lower.startswith(b) for b in bad_openers):
+        flags.append(f"🔴  Weak opener: '{opener[:80]}' — start with something specific or valuable")
+
+    # Starts with 'I'
+    if text.strip().startswith("I ") and not any(
+        text.strip().startswith(f"I {w}") for w in ["built", "led", "shipped", "drove", "created", "launched", "spoke"]
+    ):
+        warnings.append("🟡  First word is 'I' — consider restructuring to lead with value or context")
+
+    # Closing
+    if not any(w in lower for w in ["?", "call", "chat", "connect", "open", "available", "thoughts"]):
+        warnings.append("🟡  No clear call to action or question — add one")
+
+    # Build output
+    lines = [
+        "═══ MESSAGE REVIEW ═══",
+        f"Word count: {word_count}",
+        "",
+    ]
+
+    if not flags and not [w for w in warnings if not w.startswith("✓")]:
+        lines.append("✅  No major issues found. Message looks clean.")
+    else:
+        if flags:
+            lines.append("ISSUES (fix before sending):")
+            lines.extend(flags)
+            lines.append("")
+        if warnings:
+            lines.append("NOTES:")
+            lines.extend(warnings)
+            lines.append("")
+
+    lines += [
+        "──── ORIGINAL TEXT ────",
+        text,
+    ]
+
+    return "\n".join(lines)
+
+
 def register(mcp) -> None:
     mcp.tool()(draft_outreach_message)
+    mcp.tool()(review_message)

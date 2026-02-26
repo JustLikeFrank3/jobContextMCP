@@ -101,41 +101,41 @@ class TestInterviewTools:
 
 
 class TestSaveInterviewPrep:
-    def test_saves_to_leetcode_folder_default_filename(self, isolated_server):
+    def test_saves_to_interview_prep_folder_default_filename(self, isolated_server):
         result = srv.save_interview_prep("FanDuel", "# FanDuel Prep\nBe ready.")
         assert "FANDUEL_INTERVIEW_PREP.md" in result
-        saved = srv.LEETCODE_FOLDER / "FANDUEL_INTERVIEW_PREP.md"
+        saved = srv.INTERVIEW_PREP_FOLDER / "FANDUEL_INTERVIEW_PREP.md"
         assert saved.exists()
         assert "# FanDuel Prep" in saved.read_text(encoding="utf-8")
 
     def test_saves_with_custom_filename(self, isolated_server):
         result = srv.save_interview_prep("Airbnb", "Airbnb content", filename="Airbnb_HM_Prep")
         assert "Airbnb_HM_Prep.md" in result
-        saved = srv.LEETCODE_FOLDER / "Airbnb_HM_Prep.md"
+        saved = srv.INTERVIEW_PREP_FOLDER / "Airbnb_HM_Prep.md"
         assert saved.exists()
 
     def test_appends_md_extension_if_missing(self, isolated_server):
         srv.save_interview_prep("Ford", "Ford content", filename="FORD_PREP")
-        assert (srv.LEETCODE_FOLDER / "FORD_PREP.md").exists()
+        assert (srv.INTERVIEW_PREP_FOLDER / "FORD_PREP.md").exists()
 
     def test_does_not_double_extension_if_present(self, isolated_server):
         srv.save_interview_prep("GM", "GM content", filename="GM_PREP.md")
-        assert (srv.LEETCODE_FOLDER / "GM_PREP.md").exists()
-        assert not (srv.LEETCODE_FOLDER / "GM_PREP.md.md").exists()
+        assert (srv.INTERVIEW_PREP_FOLDER / "GM_PREP.md").exists()
+        assert not (srv.INTERVIEW_PREP_FOLDER / "GM_PREP.md.md").exists()
 
     def test_strips_trailing_whitespace(self, isolated_server):
         srv.save_interview_prep("Reddit", "line one   \nline two  \n", filename="REDDIT_PREP.md")
-        content = (srv.LEETCODE_FOLDER / "REDDIT_PREP.md").read_text(encoding="utf-8")
+        content = (srv.INTERVIEW_PREP_FOLDER / "REDDIT_PREP.md").read_text(encoding="utf-8")
         for line in content.splitlines():
             assert line == line.rstrip()
 
     def test_slug_handles_spaces_and_hyphens(self, isolated_server):
         srv.save_interview_prep("Mercedes-Benz", "content")
-        assert (srv.LEETCODE_FOLDER / "MERCEDES_BENZ_INTERVIEW_PREP.md").exists()
+        assert (srv.INTERVIEW_PREP_FOLDER / "MERCEDES_BENZ_INTERVIEW_PREP.md").exists()
 
     def test_overwrite_existing_file(self, isolated_server):
         srv.save_interview_prep("Netflix", "v1", filename="NETFLIX_PREP.md")
         srv.save_interview_prep("Netflix", "v2 updated", filename="NETFLIX_PREP.md")
-        content = (srv.LEETCODE_FOLDER / "NETFLIX_PREP.md").read_text(encoding="utf-8")
+        content = (srv.INTERVIEW_PREP_FOLDER / "NETFLIX_PREP.md").read_text(encoding="utf-8")
         assert "v2 updated" in content
         assert "v1" not in content

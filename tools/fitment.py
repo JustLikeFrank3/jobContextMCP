@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from lib.io import _load_master_context
 from lib import config
 
@@ -55,6 +57,23 @@ def get_customization_strategy(role_type: str) -> str:
     return f"Unknown role type: '{role_type}'\nAvailable options: {', '.join(strategies)}"
 
 
+def save_job_assessment(company: str, content: str, filename: str = "") -> str:
+    """Save a generated job fitment assessment to the 07-Job-Assessments folder as a .md file. Filename defaults to {Company} - Fitment Assessment.md. Always use this tool to save assessments instead of creating files directly."""
+    if not filename:
+        slug = company.strip().replace("/", "-")
+        filename = f"{slug} - Fitment Assessment.md"
+    if not filename.endswith(".md"):
+        filename += ".md"
+
+    cleaned = "\n".join(line.rstrip() for line in content.splitlines())
+
+    target = config.JOB_ASSESSMENTS_FOLDER / filename
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(cleaned, encoding="utf-8")
+    return f"\u2713 Saved job assessment: {target.name}"
+
+
 def register(mcp) -> None:
     mcp.tool()(assess_job_fitment)
     mcp.tool()(get_customization_strategy)
+    mcp.tool()(save_job_assessment)

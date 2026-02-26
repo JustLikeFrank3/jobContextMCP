@@ -9,6 +9,33 @@ All notable changes to this project will be documented in this file.
   checks for required directories and data files, prompts for missing paths, creates folders and starter
   files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
 
+### Planned — future
+- **`run_hbdi_assessment()` cognitive style profiler**: guided question set mapped to the four Herrmann Whole Brain Model quadrants (A: Analytical, B: Organized, C: Interpersonal, D: Imaginative); scores responses, logs resulting profile to personal context, surfaces quadrant-aware framing advice during interview prep — e.g. leading with data for A-dominant interviewers, or grounding vision in process for B-dominant panels
+
+## [0.5.0] - 2026-02-25
+
+### Added — v4 feature sprint (all issues closed)
+
+- **`log_rejection(company, role, stage, reason?, notes?, date?)`** — structured rejection tracker; persists to `data/rejections.json`; auto-assigns sequential IDs
+- **`get_rejections(company?, stage?, since?, include_pattern_analysis?)`** — retrieves rejections with optional filters; includes pattern analysis (stage breakdown, multi-rejection companies, reason frequency, early-funnel bottleneck flag) when ≥2 results
+- **`log_application_event(company, role, event_type, notes?)`** — append-only event log per application; events stored under `applications[].events` array in `status.json`; types: `applied`, `phone_screen`, `technical_screen`, `take_home`, `onsite`, `offer`, `rejected`, `withdrew`, `follow_up`, `note`, `referral_submitted`, `recruiter_contact`, `hiring_manager_contact`
+- **`get_daily_digest()`** — morning briefing: pipeline snapshot, overdue/due-today follow-ups, stale applications (7+ days), recent rejections (past 7 days), drafted-but-unsent contact messages, 3 auto-generated focus priorities, health nudge
+- **`weekly_summary()`** — 7-day aggregate: new/updated apps, rejection count with stage breakdown, contacts added, mental health trend (avg energy, mood distribution, productive days)
+- **`update_compensation(company, role, base?, equity_total?, equity_vest_years?, bonus_target_pct?, level?, location?, remote?, notes?)`** — adds/updates comp block on a tracked application; computes annual equity + bonus amount + total comp estimate
+- **`get_compensation_comparison()`** — side-by-side compensation table for all apps with comp data; sorted descending by total comp estimate; highlights best offer
+- **`resume_diff(file_a, file_b)`** — human-readable unified diff between two resume `.txt` files from `01-Current-Optimized/`; supports `ref:filename` prefix to resolve against `06-Reference-Materials/`; shows added/removed line counts in summary header
+- **`review_message(text)`** — tone/sentiment review for outreach drafts; detects corporate stiffness phrases, desperation signals, hedging language, weak openers, missing calls to action; flags issues with emoji indicators; appends original text for reference
+
+### Fixed
+
+- **`update_application()` notes clobbering bug** (issue #2) — passing `notes=""` (default) no longer overwrites existing notes; non-empty `notes` parameter now appends with `[timestamp]` prefix instead of replacing
+- New applications created by `update_application()` now include an empty `events: []` list for `log_application_event()` compatibility
+
+### Tests
+
+- **201 → 234 tests** — 33 new tests covering all v4 tools in `tests/test_v4_features.py`
+- Updated `test_job_hunt_tools.py`: replaced clobber-notes test with append-behavior test; added `test_update_empty_notes_preserves_existing`
+
 ## [0.4.9.1] - 2026-02-24
 
 ### Changed

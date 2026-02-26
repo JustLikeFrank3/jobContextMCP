@@ -4,6 +4,7 @@ from lib import config
 from lib.io import _read, _load_master_context
 
 
+
 # ── HELPERS ───────────────────────────────────────────────────────────────
 
 def _unwrap(content: str) -> str:
@@ -136,6 +137,65 @@ def save_cover_letter_txt(filename: str, content: str) -> str:
     return f"✓ Cover letter saved: {path}"
 
 
+def resume_diff(file_a: str, file_b: str) -> str:
+    """
+    Generate a human-readable diff between two resume .txt files.
+
+    Both filenames are resolved against 01-Current-Optimized/. If a full path
+    or alternate folder is needed, prefix with 'ref:' to resolve against
+    06-Reference-Materials/ instead (e.g. 'ref:Frank MacBride Resume - Consolidated.txt').
+
+    Args:
+        file_a: First resume filename (the 'before' / baseline version).
+        file_b: Second resume filename (the 'after' / new version).
+
+    Returns:
+        Unified diff with a plain-English summary of added/removed/changed sections.
+    """
+    import difflib
+
+    def _resolve(name: str) -> Path:
+        if name.startswith("ref:"):
+            return config.RESUME_FOLDER / config._cfg.get("reference_materials_dir", "06-Reference-Materials") / name[4:]
+        return config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized") / name
+
+    path_a = _resolve(file_a)
+    path_b = _resolve(file_b)
+
+    for p, label in ((path_a, file_a), (path_b, file_b)):
+        if not p.exists():
+            return f"File not found: {label}\nUse list_existing_materials() to discover available resumes."
+
+    lines_a = path_a.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines_b = path_b.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    diff = list(
+        difflib.unified_diff(
+            lines_a,
+            lines_b,
+            fromfile=file_a,
+            tofile=file_b,
+            lineterm="",
+        )
+    )
+
+    if not diff:
+        return f"No differences found between {file_a} and {file_b}."
+
+    added   = sum(1 for l in diff if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
+
+    summary = [
+        f"═══ RESUME DIFF ═══",
+        f"  From: {file_a}",
+        f"  To:   {file_b}",
+        f"  +{added} lines added  /  -{removed} lines removed",
+        "",
+    ]
+
+    return "\n".join(summary) + "\n".join(diff[:400])  # cap at 400 lines for readability
+
+
 def register(mcp) -> None:
     mcp.tool()(read_master_resume)
     mcp.tool()(list_existing_materials)
@@ -143,3 +203,4 @@ def register(mcp) -> None:
     mcp.tool()(read_reference_file)
     mcp.tool()(save_resume_txt)
     mcp.tool()(save_cover_letter_txt)
+    mcp.tool()(resume_diff)
