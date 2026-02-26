@@ -92,3 +92,35 @@ jobs:
           else
             echo "Release v4 already exists, skipping."
           fi
+      - name: Create v5 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view v5 > /dev/null 2>&1; then
+            cat > /tmp/v5_notes.md << 'NOTES'
+          ## What's New in v5 (0.5.0 – 0.5.1)
+
+          ### Added (0.5.0)
+          - `log_rejection(company, role, stage, contact?, req_number?, notes?)` / `get_rejections(stage?, company?)` — structured rejection tracker with pattern analysis across pipeline stages
+          - `log_application_event(company, event, notes?)` — append-only event log per application; preserves full history without overwriting
+          - `get_daily_digest()` — morning briefing: overdue follow-ups, stale applications, recent rejections, and 3 priorities for the day
+          - `weekly_summary()` — 7-day aggregate across pipeline activity, rejections, and health trend
+          - `update_compensation(company, role, base, equity, bonus, notes?)` / `get_compensation_comparison()` — side-by-side comp table for all tracked applications sorted by total estimated comp
+          - `resume_diff(file_a, file_b)` — unified diff between any two saved resume versions
+          - `review_message(text)` — tone checker for outreach drafts; flags corporate stiffness, desperation signals, hedging language, and length issues before you send
+          - `tools/rejections.py`, `tools/digest.py`, `tools/compensation.py` modules added
+          - `data/rejections.example.json` added to repo
+
+          ### Fixed (0.5.1)
+          - `data/rejections.json` added to `.gitignore` — was missing from the private data files block
+          - README warning added: all five data files must exist or the server silently fails to start with no useful error from VS Code
+          - README warning added: do not use VS Code "Add MCP Server" UI flow — writes a broken global `mcp.json` entry (`python` instead of `python3`, no `cwd`) that silently conflicts with workspace config causing intermittent tool failures
+          - Resume folder structure in README expanded from 4 to all 8 directories with descriptions
+          NOTES
+            gh release create v5 \
+              --target 30c87a397bae0a0887dba3ad9e00b8e0d736a1ca \
+              --title "v5: Rejection Tracking, Daily Digest & Comp Comparison" \
+              --notes-file /tmp/v5_notes.md
+          else
+            echo "Release v5 already exists, skipping."
+          fi
