@@ -4,13 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Planned — v0.5
+### Planned — v0.6
 - **`setup_workspace()` workspace generation tool**: conversational, chat-driven workspace bootstrapper;
   checks for required directories and data files, prompts for missing paths, creates folders and starter
-  files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding
+  files with sensible defaults, self-heals on subsequent runs; no manual JSON editing required for onboarding —
+  eliminates the manual `cp` steps, config JSON editing, and VS Code UI pitfalls documented in v0.5.1
+- **`run_hbdi_assessment()` cognitive style profiler**: guided question set mapped to the four Herrmann Whole Brain
+  Model quadrants (A: Analytical, B: Organized, C: Interpersonal, D: Imaginative); scores responses, logs resulting
+  profile to personal context, surfaces quadrant-aware framing advice during interview prep — e.g. leading with data
+  for A-dominant interviewers, or grounding vision in process for B-dominant panels
 
-### Planned — future
-- **`run_hbdi_assessment()` cognitive style profiler**: guided question set mapped to the four Herrmann Whole Brain Model quadrants (A: Analytical, B: Organized, C: Interpersonal, D: Imaginative); scores responses, logs resulting profile to personal context, surfaces quadrant-aware framing advice during interview prep — e.g. leading with data for A-dominant interviewers, or grounding vision in process for B-dominant panels
+## [0.5.1] - 2026-02-26
+
+### Fixed
+- **`data/rejections.json` missing from `.gitignore`** — file introduced in v0.5.0 was not gitignored; added alongside all other private data files
+- **Silent startup failure on missing data files** — server would crash on startup with no useful error if any required data file was absent (symptom: VS Code reports "tool not contributed"); README step 4 now includes an explicit warning with all required files listed
+- **VS Code "Add MCP Server" UI conflict** — using the VS Code UI to register the server writes a broken global `mcp.json` entry (`python` instead of `python3`, no `cwd`) that silently conflicts with the workspace config causing intermittent tool failures; README step 5 now warns against this flow and documents the fix (remove the duplicate `jobContextMCP` entry from `~/Library/Application Support/Code/User/mcp.json`)
 
 ## [0.5.0] - 2026-02-25
 
