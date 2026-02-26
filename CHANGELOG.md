@@ -13,6 +13,14 @@ All notable changes to this project will be documented in this file.
   Model quadrants (A: Analytical, B: Organized, C: Interpersonal, D: Imaginative); scores responses, logs resulting
   profile to personal context, surfaces quadrant-aware framing advice during interview prep — e.g. leading with data
   for A-dominant interviewers, or grounding vision in process for B-dominant panels
+- **`get_github_stats()` repo traffic sync**: hits the GitHub API to pull clone counts, unique visitors, stars, and
+  views for configured repos; surfaces in daily digest when numbers change; eliminates hardcoded stats in profile READMEs
+- **`get_upcoming_interviews()` interview countdown**: cross-references application events with scheduled dates;
+  returns days-until, prep checklist status, and a readiness score per upcoming interview; surfaces in daily digest
+- **`get_referral_chains()` referral graph**: lightweight relationship graph over existing contacts data; surfaces
+  connected threads (e.g. Cheyenne → FanDuel, Pat → camera feature) so warm paths don't get lost in a flat contact list
+- **`draft_reply()` reply drafter**: context-aware follow-up reply tool; takes prior thread text + intent and generates
+  a response in Frank's voice — distinct from `draft_outreach_message()` which handles cold/first contact only
 
 ## [0.5.1] - 2026-02-26
 
