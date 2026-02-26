@@ -249,6 +249,8 @@ cp data/tone_samples.example.json data/tone_samples.json
 cp data/rejections.example.json data/rejections.json
 ```
 
+> ⚠️ **All five files must exist.** The server silently fails to start if any data file is missing — VS Code will report "tool not contributed" with no further explanation. If tools stop working after a pull, check that all five files are present.
+
 ### 5. Connect to VS Code
 
 `.vscode/mcp.json` is committed to this repo. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no clicking required.
@@ -269,6 +271,8 @@ If you need to adapt the paths for your machine, edit `.vscode/mcp.json`:
 ```
 
 Then **Cmd+Shift+P → Developer: Reload Window**.
+
+> ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If you're experiencing flaky tools, check your global `mcp.json` and remove any duplicate `jobContextMCP` entry from it.
 
 > **Multi-root workspaces:** Drop the same `mcp.json` into `.vscode/` inside any other workspace root (e.g. your Resume folder) and VS Code will auto-start from either window.
 
