@@ -124,13 +124,13 @@ FULL NAME
 ```
 
 ### Critical rules — NON-NEGOTIABLE
-1. MAX 325 WORDS in the letter body (everything from "Dear..." through the sign-off name).
+1. MAX 400 WORDS in the letter body (everything from "Dear..." through the sign-off name).
    Count your words. If over, cut.
 2. Exactly 4 body paragraphs — no more, no less:
-   • Para 1 (50–70 words): Hook + role name + why this specific company.
-   • Para 2 (80–100 words): Most relevant technical achievement with a real metric.
-   • Para 3 (70–90 words): Second differentiator — leadership, AI innovation, or domain fit.
-   • Para 4 (20–30 words): Short closer — reaffirm interest, invite next step.
+   • Para 1 (60–80 words): Hook + role name + why this specific company.
+   • Para 2 (100–130 words): Most relevant technical achievement with a real metric.
+   • Para 3 (90–115 words): Second differentiator — leadership, AI innovation, or domain fit.
+   • Para 4 (25–40 words): Short closer — reaffirm interest, invite next step.
 3. NO date, NO company address, NO "Re:" line, NO address block in the body.
 4. Start with the salutation: `Dear Hiring Manager,` (period, not comma, if you prefer formality).
 5. NO bold, NO bullet points, NO headers inside the letter body — prose only.
@@ -345,7 +345,7 @@ def generate_cover_letter(
     write the content.
 
     Hard constraints enforced in the prompt (the PDF template is fixed-size):
-    - MAX 325 words in the letter body.
+    - MAX 400 words in the letter body.
     - Exactly 4 paragraphs.
     - No date, no address block, no company name, no Re: line.
     - No bullets, no bold, no headers — prose only.

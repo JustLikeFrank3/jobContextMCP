@@ -128,7 +128,7 @@ sequenceDiagram
     MCP->>Files: Parse .txt → render WeasyPrint PDF
     MCP-->>Copilot: resume saved + PDF exported
     Copilot->>MCP: generate_cover_letter(company, role, jd)
-    MCP->>Files: Write cover letter .txt (≤325 words enforced)
+    MCP->>Files: Write cover letter .txt (≤400 words enforced)
     MCP->>Files: Parse .txt → render two-column sidebar PDF
     MCP-->>Copilot: cover letter saved + PDF exported
     Copilot->>MCP: update_application(company, role, "applied")
@@ -506,7 +506,7 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 - Target length: 650–800 words (one tight page in Courier New 9.2pt).
 
 **Cover letter**
-- Hard max: **325 words** in the letter body.
+- Hard max: **400 words** in the letter body.
 - Exactly **4 paragraphs** — Para 1: hook + role + company; Para 2: technical achievement + metric; Para 3: second differentiator; Para 4: short closer (1–2 sentences).
 - No date, no address block, no Re: line, no company name in the body.
 - Salutation: `Dear Hiring Manager,` — no variations.
