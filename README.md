@@ -154,6 +154,7 @@ sequenceDiagram
 | `reindex_materials()` | **RAG** — (re)build the semantic search index |
 | `log_personal_story(story, tags, people?, title?)` | **v3** — log a personal story or memory for context-rich writing |
 | `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
+| `ingest_anecdote(story, tags, title?, people?, tone_sample?)` | **v5.2** — single-call bundler: logs to personal context, optionally ingests as tone sample (≥40 words), and reports STAR tag matches |
 | `log_tone_sample(text, source, context?)` | **v3** — ingest a writing sample to teach the AI your voice |
 | `get_tone_profile()` | **v3** — retrieve all tone samples before drafting communications |
 | `scan_materials_for_tone(category?)` | **v3** — auto-scan resumes/cover letters/prep files and index new tone samples |

@@ -4,12 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added — v0.5.2
-- **`ingest_anecdote(story, tags, title?, people?, tone_sample?)`** — intent-level bundler that routes a story or anecdote to all relevant stores in one call:
-  writes to `personal_context.json` (always), ingests into `tone_samples.json` (if `tone_sample=True` and ≥40 words), and detects STAR interview tags so the caller knows the story will surface in `get_star_story_context()` queries.
-  Replaces the pattern of calling `log_personal_story` + `log_tone_sample` manually.
-  8 new tests — 234 → 242 passing.
-
 ### Planned — v0.6
 - **`setup_workspace()` workspace generation tool**: conversational, chat-driven workspace bootstrapper;
   checks for required directories and data files, prompts for missing paths, creates folders and starter
@@ -27,6 +21,12 @@ All notable changes to this project will be documented in this file.
   connected threads (e.g. Cheyenne → FanDuel, Pat → camera feature) so warm paths don't get lost in a flat contact list
 - **`draft_reply()` reply drafter**: context-aware follow-up reply tool; takes prior thread text + intent and generates
   a response in Frank's voice — distinct from `draft_outreach_message()` which handles cold/first contact only
+
+## [0.5.2] - 2026-02-26
+
+### Added
+- **`ingest_anecdote(story, tags, title?, people?, tone_sample?)`** — intent-level bundler that routes a story or anecdote to all relevant stores in one call: writes to `personal_context.json` (always), ingests into `tone_samples.json` (if `tone_sample=True` and ≥40 words), and detects STAR interview tags so the caller knows the story will surface in `get_star_story_context()` queries. Replaces the pattern of calling `log_personal_story` + `log_tone_sample` manually.
+- 8 new tests in `tests/test_ingest.py` — 234 → 242 passing.
 
 ## [0.5.1] - 2026-02-26
 
