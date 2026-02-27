@@ -52,6 +52,7 @@ from tools import (
     rejections,
     digest,
     compensation,
+    ingest,
 )
 
 
@@ -132,6 +133,7 @@ posts.register(mcp)
 rejections.register(mcp)
 digest.register(mcp)
 compensation.register(mcp)
+ingest.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
