@@ -25,6 +25,35 @@ from tools.fitment import get_customization_strategy
 from tools.resume import save_resume_txt, save_cover_letter_txt
 
 
+# ── RAG HELPER ─────────────────────────────────────────────────────────────────
+
+def _rag_context(query: str, categories: list[str], n_per_category: int = 3) -> str:
+    """
+    Pull the top-n RAG chunks per category for a given query.
+    Returns a formatted string, or empty string if index not built / key missing.
+    """
+    try:
+        from rag import search
+    except ImportError:
+        return ""
+
+    sections: list[str] = []
+    for cat in categories:
+        try:
+            hits = search(query, category=cat, n_results=n_per_category)
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
+        if not hits:
+            continue
+        label = cat.replace("_", " ").title()
+        snippets = "\n\n---\n\n".join(h["text"] for h in hits)
+        sections.append(f"[{label}]\n{snippets}")
+
+    return "\n\n".join(sections)
+
+
 # ── FORMAT SPECIFICATIONS ──────────────────────────────────────────────────────
 
 _RESUME_FORMAT_SPEC = """
@@ -221,9 +250,11 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     master = _load_master_context()
     tone = get_tone_profile()
     strategy = get_customization_strategy(_infer_role_type(role))
+    rag_query = f"{role} {company} software engineer achievements metrics"
     stories = get_personal_context(
         query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include specific metrics, project names, people involved, and outcomes."
     )
+    rag = _rag_context(rag_query, ["resume", "reference"], n_per_category=3)
     return "\n\n".join([
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
@@ -231,6 +262,7 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         f"PERSONAL STORIES & CONTEXT (use these specific examples — they are richer than the master resume):\n{stories}",
+        *([ f"REFERENCE EXAMPLES FROM PAST RESUMES (mirror strong bullet phrasing and metrics structure from these):\n{rag}" ] if rag else []),
         f"TONE PROFILE (write in this voice):\n{tone}",
         _RESUME_FORMAT_SPEC,
         "Now write the resume. Output the raw .txt content only.",
@@ -240,15 +272,18 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
 def _build_cover_letter_user_message(company: str, role: str, job_description: str) -> str:
     master = _load_master_context()
     tone = get_tone_profile()
+    rag_query = f"{role} {company} cover letter"
     stories = get_personal_context(
         query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include specific metrics, project names, people involved, and outcomes."
     )
+    rag = _rag_context(rag_query, ["cover_letters", "job_assessments"], n_per_category=2)
     return "\n\n".join([
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         f"PERSONAL STORIES & CONTEXT (prioritise these over generic resume bullets — use specific details, names, and moments from here in Para 2 and Para 3):\n{stories}",
+        *([ f"REFERENCE EXAMPLES FROM PAST COVER LETTERS & ASSESSMENTS (use the phrasing style and fitment signals from these — do NOT copy verbatim):\n{rag}" ] if rag else []),
         f"TONE PROFILE (write in this voice):\n{tone}",
         _COVER_LETTER_FORMAT_SPEC,
         "Now write the cover letter. Output the raw .txt content only. Count words before finishing.",
