@@ -4,7 +4,7 @@
 
 # JobContextMCP
 
-A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives GitHub Copilot and other MCP-compatible AI assistants persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, or interview prep from scratch.
+A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, and other MCP-compatible AI assistants persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, or interview prep from scratch.
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
@@ -36,7 +36,7 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 
 ```mermaid
 graph TB
-    AI["GitHub Copilot / AI Assistant"]
+    AI["GitHub Copilot / Claude / Cursor / Windsurf / Zed"]
 
     AI -->|MCP protocol| SERVER
 
@@ -78,6 +78,12 @@ graph TB
             T16b["get_daily_digest() · weekly_summary()"]
             T17["search_materials() · reindex_materials()"]
             T18["log_mental_health_checkin() · get_mental_health_log()"]
+        end
+
+        subgraph SETUP["Setup & Identity"]
+            T20["check_workspace()"]
+            T21["setup_workspace(name, email, ...)"]
+            T22["run_hbdi_assessment() · get_hbdi_profile()"]
         end
     end
 
@@ -176,6 +182,10 @@ sequenceDiagram
 | `get_compensation_comparison()` | **v5** — side-by-side comp table for all applications with comp data, sorted by total comp |
 | `resume_diff(file_a, file_b)` | **v5** — unified diff between two resume `.txt` files with added/removed line summary |
 | `review_message(text)` | **v5** — tone review for outreach drafts: flags corporate phrases, desperation signals, hedging, weak openers, missing CTAs |
+| `check_workspace()` | **v0.6** — diagnostic scan: reports present/missing `config.json`, data files, workspace directories, master resume word count, and OpenAI key status |
+| `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, all 7 data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
+| `run_hbdi_assessment(q1_no_spec_project, q2_critical_feedback, q3_tedious_finish, q4_senior_disagreement, score_a, score_b, score_c, score_d)` | **v0.6** — HBDI cognitive style profiler: scores A/B/C/D quadrants, generates interview framing advice calibrated to your primary style, saves profile to personal context |
+| `get_hbdi_profile()` | **v0.6** — retrieve stored HBDI profile with quadrant synthesis and interview framing advice |
 
 ---
 
@@ -190,106 +200,171 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-### 2. Create your resume folder structure
+---
 
-Create a folder anywhere on your machine (iCloud, Dropbox, local — your choice) with this layout:
+### 2. Connect to your AI client
 
-```
-Your Resume Folder/
-├── 01-Current-Optimized/     ← .txt resumes go here
-├── 02-Cover-Letters/         ← .txt cover letters go here
-├── 03-Resume-PDFs/           ← exported PDFs land here (auto-created)
-├── 04-Performance-Reviews/   ← past reviews, peer feedback, awards
-├── 05-Archived-Versions/     ← older resume drafts
-├── 06-Reference-Materials/   ← master resume, awards, feedback, skills
-├── 07-Job-Assessments/       ← fitment analyses, take-home notes
-└── 08-Interview-Prep-Docs/   ← company-specific interview prep files
-```
+The server speaks [stdio MCP](https://modelcontextprotocol.io/docs/concepts/transports) — it works with any compatible client. Pick yours:
 
-Place your master resume `.txt` file in `01-Current-Optimized/`.
+#### VS Code + GitHub Copilot *(recommended — zero extra config)*
 
-### 3. Configure paths
+`.vscode/mcp.json` is already committed and uses `${workspaceFolder}` relative paths. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no extra configuration needed.
 
-```bash
-cp config.example.json config.json
-```
+> ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If tools behave flakily, open that global file and remove any duplicate `jobContextMCP` entry.
 
-Edit `config.json` with your absolute paths and contact info:
+> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+
+#### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
-  "resume_folder": "/path/to/your/Resume Folder",
-  "leetcode_folder": "/path/to/your/LeetCodePractice",
-  "side_project_folders": [
-    "/path/to/your/primary-side-project",
-    "/path/to/another-project"
-  ],
-  "data_folder": "/path/to/jobContextMCP/data",
-  "master_resume_path": "01-Current-Optimized/Your Name Resume - MASTER SOURCE.txt",
-  "optimized_resumes_dir": "01-Current-Optimized",
-  "cover_letters_dir": "02-Cover-Letters",
-  "reference_materials_dir": "06-Reference-Materials",
-  "openai_api_key": "sk-...",
-  "openai_model": "gpt-4o-mini",
-  "contact": {
-    "name": "YOUR FULL NAME",
-    "phone": "555-867-5309",
-    "email": "you@example.com",
-    "linkedin": "www.linkedin.com/in/yourhandle",
-    "address": "123 Your Street",
-    "city_state": "Your City, ST 00000"
-  }
-}
-```
-
-> `config.json` is gitignored — your real paths, contact info, and API key never leave your machine.
-
-### 4. Initialize data files
-
-```bash
-cp data/status.example.json data/status.json
-cp data/mental_health_log.example.json data/mental_health_log.json
-cp data/personal_context.example.json data/personal_context.json
-cp data/tone_samples.example.json data/tone_samples.json
-cp data/rejections.example.json data/rejections.json
-```
-
-> ⚠️ **All five files must exist.** The server silently fails to start if any data file is missing — VS Code will report "tool not contributed" with no further explanation. If tools stop working after a pull, check that all five files are present.
-
-### 5. Connect to VS Code
-
-`.vscode/mcp.json` is committed to this repo. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no clicking required.
-
-If you need to adapt the paths for your machine, edit `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
+  "mcpServers": {
     "jobContextMCP": {
-      "type": "stdio",
-      "command": "/absolute/path/to/.venv/bin/python3",
-      "args": ["/absolute/path/to/server.py"],
+      "command": "/absolute/path/to/jobContextMCP/.venv/bin/python3",
+      "args": ["/absolute/path/to/jobContextMCP/server.py"],
       "cwd": "/absolute/path/to/jobContextMCP"
     }
   }
 }
 ```
 
-Then **Cmd+Shift+P → Developer: Reload Window**.
+Restart Claude Desktop after saving.
 
-> ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If you're experiencing flaky tools, check your global `mcp.json` and remove any duplicate `jobContextMCP` entry from it.
+#### Cursor
 
-> **Multi-root workspaces:** Drop the same `mcp.json` into `.vscode/` inside any other workspace root (e.g. your Resume folder) and VS Code will auto-start from either window.
+Add to `.cursor/mcp.json` in this folder (project-scoped) or via **Settings → MCP** (global):
 
-### 6. (Optional) Enable AI generation and RAG search
+```json
+{
+  "mcpServers": {
+    "jobContextMCP": {
+      "command": "/absolute/path/to/.venv/bin/python3",
+      "args": ["server.py"],
+      "cwd": "/absolute/path/to/jobContextMCP"
+    }
+  }
+}
+```
 
-Add your OpenAI API key to `config.json` (already shown in step 3). Then build the RAG index:
+Cursor also reads `.cursorrules` — use `copilot-instructions.example.md` as a starting template.
+
+#### Windsurf
+
+Edit `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "jobContextMCP": {
+      "command": "/absolute/path/to/.venv/bin/python3",
+      "args": ["server.py"],
+      "cwd": "/absolute/path/to/jobContextMCP"
+    }
+  }
+}
+```
+
+Windsurf also reads `.windsurfrules` — same `copilot-instructions.example.md` template applies.
+
+#### Zed
+
+Add to `~/.config/zed/settings.json` under `"context_servers"`:
+
+```json
+{
+  "context_servers": {
+    "jobContextMCP": {
+      "command": {
+        "path": "/absolute/path/to/.venv/bin/python3",
+        "args": ["server.py"],
+        "env": {}
+      },
+      "settings": {}
+    }
+  }
+}
+```
+
+---
+
+### 3. First-session setup via chat
+
+Once the server is running, open a chat with your AI assistant and call:
+
+```
+check_workspace()
+```
+
+This scans for `config.json`, all data files, workspace directories, and reports exactly what needs to be created. On a fresh clone you'll see everything listed as missing.
+
+Then run `setup_workspace()` with your details:
+
+```
+setup_workspace(
+  name="Your Name",
+  email="you@example.com",
+  phone="555-867-5309",
+  linkedin="www.linkedin.com/in/yourhandle",
+  city_state="Your City, ST 00000",
+  location="Your Metro Area, ST",
+  master_resume_content="<paste your full resume text here>",
+  leet_language="Python"
+)
+```
+
+This single call:
+- Creates `config.json` with your contact info and OpenAI key slot
+- Initializes all 7 data files (`status.json`, `personal_context.json`, `tone_samples.json`, `rejections.json`, `mental_health_log.json`, `linkedin_posts.json`, `people.json`)
+- Creates all 8 resume subdirectories (`01-Current-Optimized` through `08-Interview-Prep-Docs`) inside `workspace/resumes/`
+- Saves your master resume `.txt` and creates a LeetCode practice scaffold in `workspace/leetcode/`
+
+`setup_workspace()` is idempotent — safe to re-run if you add new fields or need to recreate a deleted file.
+
+> `config.json` and all files under `data/` are gitignored — your contact info, API key, pipeline data, and personal stories never leave your machine.
+
+---
+
+### 4. (Optional) Run your HBDI cognitive-style assessment
+
+HBDI (Herrmann Brain Dominance Instrument) is a cognitive style profiler built into the server. It saves your primary quadrant profile to `personal_context.json` and generates interview framing advice calibrated to how you naturally think and communicate.
+
+```
+run_hbdi_assessment(
+  q1_no_spec_project="<one paragraph: how you'd approach a new project with no spec>",
+  q2_critical_feedback="<one paragraph: how you respond to critical feedback>",
+  q3_tedious_finish="<one paragraph: how you handle finishing tedious work>",
+  q4_senior_disagreement="<one paragraph: how you handle disagreeing with a senior engineer>",
+  score_a=3,   # Analytical / logical  (1–4)
+  score_b=2,   # Sequential / detail   (1–4)
+  score_c=3,   # Interpersonal         (1–4)
+  score_d=4    # Creative / big-picture (1–4)
+)
+```
+
+Run `get_hbdi_profile()` any time to retrieve the synthesized report and framing advice.
+
+---
+
+### 5. (Optional) Enable AI generation and RAG search
+
+Add your OpenAI API key to `config.json` (created by `setup_workspace()`):
+
+```json
+"openai_api_key": "sk-...",
+"openai_model": "gpt-4o-mini"
+```
+
+Then build the RAG index:
 
 ```bash
 .venv/bin/python rag.py
 ```
 
 This embeds all your materials using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` runs locally with no further API calls.
+
+
 
 ---
 
@@ -468,16 +543,19 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 
 ## Roadmap
 
-### Workspace Generation Tool *(planned — v0.5)*
-A `setup_workspace()` tool that bootstraps a complete job search workspace from scratch via conversational prompts:
+### v0.6 *(shipped)*
 
-- On first run, checks for all required directories and data files.
-- Prompts conversationally for missing paths ("Where should resume files go?"), creates folders and starter files with sensible defaults.
-- Populates initial data: contacts, tone samples, job pipeline, personal stories — all via chat, no manual JSON editing.
-- Self-healing: if a folder or file is later deleted, detects and recreates on next run.
-- Target: zero manual config-file editing for onboarding.
+- **`setup_workspace()`** — conversational bootstrapper: creates `config.json`, all 7 data files, `workspace/resumes/` subdirectories `01–08`, and a LeetCode scaffold from a single chat; zero manual JSON editing
+- **`check_workspace()`** — diagnostic scan: reports what's present, missing, or misconfigured; run any time files go missing
+- **`run_hbdi_assessment()`** — HBDI cognitive style profiler: saves primary/secondary quadrant profile + interview framing advice to personal context
+- **`get_hbdi_profile()`** — retrieve stored HBDI profile with quadrant synthesis
 
-Design goal: a non-technical job seeker can clone the repo, open VS Code, and have a fully-configured workspace in under 5 minutes through chat alone.
+### Planned — v0.7
+
+- `get_github_stats(username)` — pull public commit/repo activity to surface in resume bullets and cover letter talking points
+- `get_upcoming_interviews(days?)` — filter pipeline to applications with scheduled interviews in the next N days
+- `get_referral_chains(company)` — surface contacts who could refer you at a target company
+- `draft_reply(company, role, message_type)` — draft a follow-up, thank-you, or counter-offer reply using stored application context and tone profile
 
 ---
 

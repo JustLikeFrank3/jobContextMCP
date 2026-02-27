@@ -54,6 +54,7 @@ from tools import (
     digest,
     compensation,
     ingest,
+    hbdi,
 )
 
 
@@ -135,6 +136,7 @@ rejections.register(mcp)
 digest.register(mcp)
 compensation.register(mcp)
 ingest.register(mcp)
+hbdi.register(mcp)
 setup.register(mcp)
 
 
@@ -200,6 +202,9 @@ log_application_event = job_hunt.log_application_event
 review_message = outreach.review_message
 resume_diff = resume.resume_diff
 ingest_anecdote = ingest.ingest_anecdote
+
+run_hbdi_assessment = hbdi.run_hbdi_assessment
+get_hbdi_profile = hbdi.get_hbdi_profile
 
 check_workspace = setup.check_workspace
 setup_workspace = setup.setup_workspace
