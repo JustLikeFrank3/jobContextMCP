@@ -23,6 +23,7 @@ from tools.tone import get_tone_profile
 from tools.context import get_personal_context
 from tools.fitment import get_customization_strategy
 from tools.resume import save_resume_txt, save_cover_letter_txt
+from tools.hbdi import get_hbdi_profile
 
 
 # ── RAG HELPER ─────────────────────────────────────────────────────────────────
@@ -161,7 +162,9 @@ FULL NAME
      Open with a specific claim, insight, or framing — NOT "I am excited/eager to apply".
      Lead with what you bring or why this role specifically, then name the role.
    • Para 2 (100–130 words): Most relevant technical achievement with a real metric.
-   • Para 3 (90–115 words): Second differentiator — leadership, AI innovation, or domain fit.
+   • Para 3 (90–115 words): Second differentiator — leadership, AI innovation, domain fit,
+     OR a highly relevant side project / personal initiative. If the candidate has built
+     something independently that directly relates to the role, use it here.
    • Para 4 (25–40 words): Short closer — reaffirm interest, invite next step.
 3. NO date, NO company address, NO "Re:" line, NO address block in the body.
 4. Start with the salutation: `Dear Hiring Manager,` (period, not comma, if you prefer formality).
@@ -261,6 +264,7 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
 def _build_resume_user_message(company: str, role: str, job_description: str) -> str:
     master = _load_master_context()
     tone = get_tone_profile()
+    hbdi = get_hbdi_profile()
     strategy = get_customization_strategy(_infer_role_type(role))
     rag_query = f"{role} {company} software engineer achievements metrics"
     stories = get_personal_context(
@@ -275,6 +279,7 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         f"PERSONAL STORIES & CONTEXT (use these specific examples — they are richer than the master resume):\n{stories}",
         *([ f"REFERENCE EXAMPLES FROM PAST RESUMES (mirror strong bullet phrasing and metrics structure from these):\n{rag}" ] if rag else []),
+        f"HBDI COGNITIVE PROFILE (use this for bullet framing — lead with concrete outcome, then the insight or method that drove it):\n{hbdi}",
         f"TONE PROFILE (write in this voice):\n{tone}",
         _RESUME_FORMAT_SPEC,
         "Now write the resume. Output the raw .txt content only.",
@@ -284,9 +289,10 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
 def _build_cover_letter_user_message(company: str, role: str, job_description: str) -> str:
     master = _load_master_context()
     tone = get_tone_profile()
+    hbdi = get_hbdi_profile()
     rag_query = f"{role} {company} cover letter"
     stories = get_personal_context(
-        query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include specific metrics, project names, people involved, and outcomes."
+        query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include GM work experience, specific metrics, project names, and any side projects or personal initiatives he has built — especially AI agents, MCP servers, or developer tools."
     )
     rag = _rag_context(rag_query, ["cover_letters", "job_assessments"], n_per_category=2)
     return "\n\n".join([
@@ -296,6 +302,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         f"PERSONAL STORIES & CONTEXT (prioritise these over generic resume bullets — use specific details, names, and moments from here in Para 2 and Para 3):\n{stories}",
         *([ f"REFERENCE EXAMPLES FROM PAST COVER LETTERS & ASSESSMENTS (use the phrasing style and fitment signals from these — do NOT copy verbatim):\n{rag}" ] if rag else []),
+        f"HBDI COGNITIVE PROFILE (use this to shape HOW the story is told — Frank leads with vision then grounds in data; anchor openers in a concrete outcome first; framing advice for this specific reader type is included):\n{hbdi}",
         f"TONE PROFILE (write in this voice):\n{tone}",
         _COVER_LETTER_FORMAT_SPEC,
         "Now write the cover letter. Output the raw .txt content only. Count words before finishing.",
