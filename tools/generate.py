@@ -165,7 +165,10 @@ FULL NAME
    • Para 3 (90–115 words): Second differentiator — leadership, AI innovation, domain fit,
      OR a highly relevant side project / personal initiative. If the candidate has built
      something independently that directly relates to the role, use it here.
-   • Para 4 (25–40 words): Short closer — reaffirm interest, invite next step.
+   • Para 4 (25–40 words): Short closer — direct, human, no performance. One sentence that
+     reaffirms genuine interest and opens the door, without sycophancy or filler. Sound like
+     a person, not a form letter. NEVER use "eager", "excited", "thrilled", or "look forward
+     to the opportunity to contribute to [company]'s innovative projects".
 3. NO date, NO company address, NO "Re:" line, NO address block in the body.
 4. Start with the salutation: `Dear Hiring Manager,` (period, not comma, if you prefer formality).
 5. NO bold, NO bullet points, NO headers inside the letter body — prose only.
