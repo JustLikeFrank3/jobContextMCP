@@ -55,14 +55,13 @@ from tools import (
     compensation,
     ingest,
     hbdi,
-    beta,
 )
 
 
 def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, BETA_TESTERS_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -83,7 +82,6 @@ def _sync_config_exports() -> None:
     PEOPLE_FILE = config.PEOPLE_FILE
     LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
     REJECTIONS_FILE = config.REJECTIONS_FILE
-    BETA_TESTERS_FILE = config.BETA_TESTERS_FILE
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
@@ -140,7 +138,6 @@ compensation.register(mcp)
 ingest.register(mcp)
 hbdi.register(mcp)
 setup.register(mcp)
-beta.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -211,10 +208,6 @@ get_hbdi_profile = hbdi.get_hbdi_profile
 
 check_workspace = setup.check_workspace
 setup_workspace = setup.setup_workspace
-
-log_beta_tester = beta.log_beta_tester
-update_beta_tester = beta.update_beta_tester
-get_beta_testers = beta.get_beta_testers
 
 
 if __name__ == "__main__":
