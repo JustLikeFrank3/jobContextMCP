@@ -48,6 +48,7 @@ from tools import (
     export,
     people,
     generate,
+    setup,
     posts,
     rejections,
     digest,
@@ -134,6 +135,7 @@ rejections.register(mcp)
 digest.register(mcp)
 compensation.register(mcp)
 ingest.register(mcp)
+setup.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -197,6 +199,10 @@ get_compensation_comparison = compensation.get_compensation_comparison
 log_application_event = job_hunt.log_application_event
 review_message = outreach.review_message
 resume_diff = resume.resume_diff
+ingest_anecdote = ingest.ingest_anecdote
+
+check_workspace = setup.check_workspace
+setup_workspace = setup.setup_workspace
 
 
 if __name__ == "__main__":

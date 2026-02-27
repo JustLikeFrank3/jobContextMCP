@@ -29,6 +29,9 @@ docs/branding/banner/jobcontextmcp-share.jpg
 docs/branding/banner/jobcontextmcp-wingdings.jpg
 docs/branding/banner/jobcontextmcp-wingdings.svg
 
+# Generated workspace (created by setup_workspace(); contains user data)
+workspace/
+
 # macOS
 .DS_Store
 
