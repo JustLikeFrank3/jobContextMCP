@@ -23,6 +23,9 @@
   "skills_shorter_path": "06-Reference-Materials/Skills - 10% Shorter.txt",
   "openai_api_key": "sk-...your-key-here",
   "openai_model": "gpt-4o-mini",
+  "honcho_api_key": "",
+  "honcho_workspace_id": "jobcontextmcp",
+  "honcho_peer_id": "frank",
 
   "_comment_contact": "Contact info for cover letter PDF sidebar. Lives here (gitignored) so it never appears in source code.",
   "contact": {
