@@ -767,11 +767,22 @@ def _parse_cover_letter_txt(text: str) -> dict:
 
     # Split body into paragraphs on blank lines.
     paragraphs: list[str] = []
+    _CLOSING_RE = re.compile(
+        r"^(Sincerely|Regards|Best regards|Warm regards|Respectfully)[,.]?\s*$", re.I
+    )
     current: list[str] = []
     for line in body_lines:
         s = line.strip()
         if s:
-            current.append(s)
+            if _CLOSING_RE.match(s):
+                # Flush the preceding paragraph, then give "Sincerely," its own paragraph
+                # so the name that follows lands as a separate paragraph.
+                if current:
+                    paragraphs.append(" ".join(current))
+                    current = []
+                paragraphs.append(s)
+            else:
+                current.append(s)
         else:
             if current:
                 paragraphs.append(" ".join(current))
