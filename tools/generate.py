@@ -20,6 +20,7 @@ import textwrap
 from lib import config
 from lib.io import _load_master_context
 from tools.tone import get_tone_profile
+from tools.context import get_personal_context
 from tools.fitment import get_customization_strategy
 from tools.resume import save_resume_txt, save_cover_letter_txt
 
@@ -163,6 +164,11 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
 
     Write in the candidate's voice as defined by their tone profile. Be specific,
     metric-driven, and direct. Never be generic or sycophantic.
+
+    You will receive a PERSONAL STORIES & CONTEXT block. This is the most important
+    input. Para 2 and Para 3 MUST draw from specific moments, names, projects, or
+    outcomes described there — not from generic resume language. If a story mentions
+    a real person, a specific project name, or a concrete outcome, use it.
 """)
 
 
@@ -215,12 +221,16 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     master = _load_master_context()
     tone = get_tone_profile()
     strategy = get_customization_strategy(_infer_role_type(role))
+    stories = get_personal_context(
+        query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include specific metrics, project names, people involved, and outcomes."
+    )
     return "\n\n".join([
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        f"PERSONAL STORIES & CONTEXT (use these specific examples — they are richer than the master resume):\n{stories}",
         f"TONE PROFILE (write in this voice):\n{tone}",
         _RESUME_FORMAT_SPEC,
         "Now write the resume. Output the raw .txt content only.",
@@ -230,11 +240,15 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
 def _build_cover_letter_user_message(company: str, role: str, job_description: str) -> str:
     master = _load_master_context()
     tone = get_tone_profile()
+    stories = get_personal_context(
+        query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include specific metrics, project names, people involved, and outcomes."
+    )
     return "\n\n".join([
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        f"PERSONAL STORIES & CONTEXT (prioritise these over generic resume bullets — use specific details, names, and moments from here in Para 2 and Para 3):\n{stories}",
         f"TONE PROFILE (write in this voice):\n{tone}",
         _COVER_LETTER_FORMAT_SPEC,
         "Now write the cover letter. Output the raw .txt content only. Count words before finishing.",

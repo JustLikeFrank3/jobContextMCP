@@ -31,22 +31,26 @@ def log_personal_story(
     return f"✓ Story logged (#{entry['id']}): {entry['title']}"
 
 
-def get_personal_context(tag: str = "", person: str = "") -> str:
+def get_personal_context(tag: str = "", person: str = "", query: str = "") -> str:
     """Retrieve stored personal stories, optionally filtered by tag or person's name.
+    Pass a freeform `query` to ask Honcho a targeted question (overrides tag/person).
     When Honcho is configured, returns an AI-synthesised view of the relevant stories.
     Falls back to the full JSON list if Honcho is unavailable."""
 
     # Honcho path — synthesised, reranked response
     if honcho_client.is_available():
-        parts = ["Retrieve and summarise the most relevant personal career stories"]
-        if tag:
-            parts.append(f"related to '{tag}'")
-        if person:
-            parts.append(f"involving '{person}'")
-        if not tag and not person:
-            parts.append("across all topics")
-        query = " ".join(parts) + ". Include key outcomes and skills demonstrated."
-        result = honcho_client.query_context(query)
+        if query:
+            honcho_query = query
+        else:
+            parts = ["Retrieve and summarise the most relevant personal career stories"]
+            if tag:
+                parts.append(f"related to '{tag}'")
+            if person:
+                parts.append(f"involving '{person}'")
+            if not tag and not person:
+                parts.append("across all topics")
+            honcho_query = " ".join(parts) + ". Include specific project names, metrics, and outcomes."
+        result = honcho_client.query_context(honcho_query)
         if result:
             return result
 
