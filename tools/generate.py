@@ -158,6 +158,8 @@ FULL NAME
    Count your words. If over, cut.
 2. Exactly 4 body paragraphs — no more, no less:
    • Para 1 (60–80 words): Hook + role name + why this specific company.
+     Open with a specific claim, insight, or framing — NOT "I am excited/eager to apply".
+     Lead with what you bring or why this role specifically, then name the role.
    • Para 2 (100–130 words): Most relevant technical achievement with a real metric.
    • Para 3 (90–115 words): Second differentiator — leadership, AI innovation, or domain fit.
    • Para 4 (25–40 words): Short closer — reaffirm interest, invite next step.
@@ -193,6 +195,16 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
 
     Write in the candidate's voice as defined by their tone profile. Be specific,
     metric-driven, and direct. Never be generic or sycophantic.
+
+    FORBIDDEN openers — never start the letter with any of these:
+    - "I am excited to apply"
+    - "I am eager to apply"
+    - "I am writing to apply"
+    - "I am thrilled"
+    - "I am pleased"
+    - "I have always admired"
+    The first sentence must hook with a specific claim, achievement, or framing — not
+    an announcement that you're applying. The reader already knows that.
 
     You will receive a PERSONAL STORIES & CONTEXT block. This is the most important
     input. Para 2 and Para 3 MUST draw from specific moments, names, projects, or
