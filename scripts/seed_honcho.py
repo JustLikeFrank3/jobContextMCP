@@ -4,15 +4,15 @@ One-time seed import: reads all stories, tone samples, people, performance
 reviews, and reference materials and writes them into Honcho.
 
 Sessions populated:
-    personal-context  — data/personal_context.json + 04-Performance-Reviews/ + 06-Reference-Materials/
+    personal-context  — data/personal_context.json + 04-Performance-Reviews/ + 06-Reference-Materials/ + HBDI profile
     tone-samples      — data/tone_samples.json
     people            — data/people.json
 
 Run once after setting honcho_api_key in config.json:
 
-    .venv/bin/python3 scripts/seed_honcho.py [--section stories|tone|people|reviews|reference]
+    .venv/bin/python3 scripts/seed_honcho.py [--section stories|tone|people|reviews|reference|hbdi]
 
-Omitting --section seeds all five. Safe to re-run — messages are additive.
+Omitting --section seeds all six. Safe to re-run — messages are additive.
 """
 import sys
 import argparse
@@ -199,10 +199,30 @@ def seed_reference() -> tuple[int, int]:
     return ok, fail
 
 
+def seed_hbdi() -> tuple[int, int]:
+    """Seed the HBDI cognitive profile into the personal-context session."""
+    try:
+        from tools.hbdi import get_hbdi_profile
+        profile = get_hbdi_profile()
+    except Exception as e:
+        print(f"  Could not load HBDI profile: {e}")
+        return 0, 1
+    if not profile or "No HBDI" in profile:
+        print("  No HBDI profile found — run run_hbdi_assessment() first.")
+        return 0, 0
+    content = "[HBDI Cognitive Profile]\n\n" + profile
+    meta = {"source": "hbdi", "tags": ["hbdi", "cognitive_style", "interview_framing", "behavioral"]}
+    if honcho_client.add_story(content, metadata=meta):
+        print("  ✓ HBDI cognitive profile seeded")
+        return 1, 0
+    print("  ✗ HBDI seed failed")
+    return 0, 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Honcho from local JSON data files.")
-    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference"], default=None,
-                        help="Seed only this section (default: all five)")
+    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference", "hbdi"], default=None,
+                        help="Seed only this section (default: all six)")
     args = parser.parse_args()
 
     if not honcho_client.is_available():
@@ -212,7 +232,7 @@ def main() -> None:
     print(f"Honcho workspace: '{config.HONCHO_WORKSPACE_ID}', peer: '{config.HONCHO_PEER_ID}'\n")
 
     total_ok = total_fail = 0
-    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference"]
+    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference", "hbdi"]
 
     for section in sections:
         if section == "stories":
@@ -230,6 +250,9 @@ def main() -> None:
         elif section == "reference":
             print("── Reference materials ──")
             ok, fail = seed_reference()
+        elif section == "hbdi":
+            print("── HBDI cognitive profile ──")
+            ok, fail = seed_hbdi()
         total_ok += ok
         total_fail += fail
         print()
