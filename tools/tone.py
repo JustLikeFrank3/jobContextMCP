@@ -1,6 +1,6 @@
 import datetime
 
-from lib import config
+from lib import config, honcho_client
 from lib.io import _read, _load_json, _save_json
 from lib.helpers import _build_tone_sample_entry, _scan_dirs
 
@@ -15,11 +15,22 @@ def log_tone_sample(
     entry = _build_tone_sample_entry(data["samples"], text, source, context)
     data["samples"].append(entry)
     _save_json(config.TONE_FILE, data)
+
+    # Mirror to Honcho tone-samples session
+    honcho_content = f"[Tone Sample #{entry['id']}] source={source}\n"
+    if context:
+        honcho_content += f"context={context}\n"
+    honcho_content += f"\n{text}"
+    honcho_client.add_tone_sample(
+        honcho_content,
+        metadata={"id": entry["id"], "source": source, "context": context, "word_count": entry["word_count"]},
+    )
+
     return f"✓ Tone sample logged (#{entry['id']}, {entry['word_count']} words from '{source}')"
 
 
 def get_tone_profile() -> str:
-    """Return all logged tone samples so the AI can calibrate Frank's writing voice before drafting cover letters, outreach messages, or other materials."""
+    """Return Frank's writing voice profile. When Honcho is configured, returns an AI-synthesised description of his tone and style. Falls back to the full sample dump if Honcho is unavailable."""
     data = _load_json(config.TONE_FILE, {"samples": []})
     samples = data.get("samples", [])
 
@@ -30,6 +41,21 @@ def get_tone_profile() -> str:
             "messages, anything Frank actually wrote."
         )
 
+    # Honcho path — synthesised voice description
+    if honcho_client.is_available():
+        query = (
+            "Based on Frank's tone samples, describe his writing voice and style in detail. "
+            "What makes it distinctive? What patterns, rhythms, word choices, or structural "
+            "habits appear consistently? What should be preserved when drafting cover letters, "
+            "outreach messages, or LinkedIn posts on his behalf?"
+        )
+        result = honcho_client.query_context(query)
+        if result:
+            total_words = sum(s.get("word_count", 0) for s in samples)
+            header = f"═══ TONE PROFILE (Honcho synthesis — {len(samples)} samples, {total_words} words) ═══\n"
+            return header + result
+
+    # JSON fallback — raw sample dump
     total_words = sum(s.get("word_count", 0) for s in samples)
     lines = [
         f"═══ TONE PROFILE ({len(samples)} samples, {total_words} total words) ═══",

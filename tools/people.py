@@ -9,7 +9,7 @@ Tools:
   get_people   — retrieve/search the people database
 """
 
-from lib import config
+from lib import config, honcho_client
 from lib.io import _load_json, _save_json, _now
 from tools.tone import log_tone_sample as _log_tone_sample
 
@@ -24,6 +24,28 @@ def _find_person(people: list[dict], name: str) -> dict | None:
     """Case-insensitive name match."""
     nl = name.strip().lower()
     return next((p for p in people if p.get("name", "").lower() == nl), None)
+
+
+def _sync_person_to_honcho(person: dict) -> None:
+    """Write/update a person record in the Honcho people session."""
+    if not honcho_client.is_available():
+        return
+    content = (
+        f"[Contact #{person['id']}] {person['name']}\n"
+        f"Relationship: {person.get('relationship', '')}\n"
+        f"Company: {person.get('company', '')}\n"
+        f"Background: {person.get('context', '')}\n"
+    )
+    if person.get("tags"):
+        content += f"Tags: {', '.join(person['tags'])}\n"
+    if person.get("notes"):
+        content += f"Notes: {person['notes']}\n"
+    if person.get("outreach_status") and person["outreach_status"] != "none":
+        content += f"Outreach status: {person['outreach_status']}\n"
+    honcho_client.add_person(
+        content,
+        metadata={"id": person["id"], "name": person["name"], "company": person.get("company", "")},
+    )
 
 
 def log_person(
@@ -95,6 +117,7 @@ def log_person(
             )
             tone_note = " Tone sample auto-logged."
 
+        _sync_person_to_honcho(existing)
         return f"✓ Updated existing person #{existing['id']}: {existing['name']} ({existing['company']}){tone_note}"
 
     entry = {
@@ -122,6 +145,7 @@ def log_person(
         )
         tone_note = " Tone sample auto-logged."
 
+    _sync_person_to_honcho(entry)
     return f"✓ Person logged (#{entry['id']}): {entry['name']} — {entry['relationship']} at {entry['company']}{tone_note}"
 
 
@@ -134,6 +158,8 @@ def get_people(
     """
     Retrieve people from the contacts database, optionally filtered by name,
     company, tag, or outreach status. Returns all people if no filters given.
+    When searching by name only, returns an AI-synthesised relationship summary
+    if Honcho is available.
     """
     data = _load_json(config.PEOPLE_FILE, {"people": []})
     people = data.get("people", [])
@@ -150,6 +176,19 @@ def get_people(
     if not people:
         return "No people found matching those filters."
 
+    # For a single-name lookup with no other filters, use Honcho synthesis
+    if name and not company and not tag and not outreach_status and len(people) == 1:
+        if honcho_client.is_available():
+            query = (
+                f"What do I know about {people[0]['name']}? "
+                "Summarise our relationship, their background, any relevant context "
+                "for outreach or conversation, and any notes from prior interactions."
+            )
+            result = honcho_client.query_context(query)
+            if result:
+                return f"═══ {people[0]['name'].upper()} (Honcho synthesis) ═══\n\n{result}"
+
+    # JSON structured output for multi-result or filtered queries
     lines = [f"═══ PEOPLE DATABASE ({len(people)} result{'s' if len(people) != 1 else ''}) ═══", ""]
     for p in people:
         lines.append(f"#{p['id']} — {p['name']}")
@@ -172,6 +211,17 @@ def get_people(
 
 def lookup_person_context(name: str) -> str:
     """Internal helper — returns a compact person summary for injection into other tool contexts."""
+    # Try Honcho first for richer synthesis
+    if honcho_client.is_available():
+        query = (
+            f"Give a brief, factual summary of {name}: who they are, how Frank knows them, "
+            "their current role, and anything relevant for a job search interaction."
+        )
+        result = honcho_client.query_context(query)
+        if result:
+            return result
+
+    # JSON fallback
     data = _load_json(config.PEOPLE_FILE, {"people": []})
     person = _find_person(data.get("people", []), name)
     if not person:
