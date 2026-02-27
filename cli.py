@@ -6,19 +6,23 @@ Invoke any registered MCP tool directly from the terminal without needing
 an AI client — useful for development, debugging, and scripted updates.
 
 Usage:
-    .venv/bin/python3 cli.py <tool_name> [json_kwargs]
+    .venv/bin/python3 cli.py <tool_name> [json_kwargs | @file.json | @-]
 
 Examples:
-    .venv/bin/python3 cli.py log_person '{"name":"Hawk","relationship":"beta tester","company":"unknown","context":"Friend of Brian, job searching."}'
+    .venv/bin/python3 cli.py log_person '{"name":"Hawk","relationship":"beta tester"}'
+    .venv/bin/python3 cli.py log_person @/tmp/hawk.json
+    .venv/bin/python3 cli.py log_person @-          # reads JSON from stdin
+    cat hawk.json | .venv/bin/python3 cli.py log_person @-
     .venv/bin/python3 cli.py update_post_metrics '{"post_id":10,"impressions":163,"reactions":4}'
-    .venv/bin/python3 cli.py update_application '{"company":"Airbnb","role":"Software Engineer, Listings Platform","status":"phone screen complete"}'
     .venv/bin/python3 cli.py get_job_hunt_status
     .venv/bin/python3 cli.py --list
 
 Notes:
     - json_kwargs is optional for no-argument tools
-    - Use single quotes around the JSON string in zsh/bash to avoid shell escaping issues
-    - String values with apostrophes inside JSON should use unicode escape: \\u0027
+    - Use @filename to read JSON from a file — avoids all shell quoting issues
+    - Use @- to read JSON from stdin (pipe-friendly)
+    - Use single quotes around inline JSON in zsh/bash
+    - String values with apostrophes inside inline JSON should use unicode escape: \\u0027
 """
 
 import sys
@@ -105,14 +109,27 @@ def main() -> None:
 
     fn = tools[tool_name]
 
-    # Parse kwargs
+    # Parse kwargs — supports inline JSON, @filename, or @- for stdin
     kwargs: dict = {}
     if len(args) > 1:
+        raw = args[1]
         try:
-            kwargs = json.loads(args[1])
+            if raw.startswith("@"):
+                source = raw[1:]
+                if source == "-":
+                    json_text = sys.stdin.read()
+                else:
+                    from pathlib import Path
+                    json_text = Path(source).read_text(encoding="utf-8")
+                kwargs = json.loads(json_text)
+            else:
+                kwargs = json.loads(raw)
         except json.JSONDecodeError as e:
             print(f"\nError: invalid JSON kwargs — {e}")
-            print(f"Received: {args[1]!r}")
+            print(f"Received: {raw!r}")
+            sys.exit(1)
+        except FileNotFoundError:
+            print(f"\nError: JSON file not found: {raw[1:]}")
             sys.exit(1)
 
     # Call tool
