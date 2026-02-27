@@ -1,0 +1,20 @@
+{
+  "testers": [
+    {
+      "id": 1,
+      "name": "Example Tester",
+      "contact": "example@email.com",
+      "source": "linkedin",
+      "signed_up": "2026-02-27",
+      "status": "active",
+      "os": "macOS",
+      "ai_client": "GitHub Copilot",
+      "setup_completed": false,
+      "hbdi_completed": false,
+      "bugs": [],
+      "feedback": [],
+      "notes": "",
+      "last_updated": "2026-02-27T00:00:00"
+    }
+  ]
+}
