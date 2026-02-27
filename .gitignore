@@ -14,6 +14,11 @@ data/rejections.json
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
 
+# Internal dev/ops files — not relevant to end users
+CODEX_BUG_REPORT.md
+CODEX_REFACTOR_TASK.md
+debug_parser.py
+
 # Python virtual environment
 .venv/
 __pycache__/
