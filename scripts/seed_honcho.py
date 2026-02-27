@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-One-time seed import: reads all stories, tone samples, and people from the
-data/ JSON files and writes them into their respective Honcho sessions.
+One-time seed import: reads all stories, tone samples, people, performance
+reviews, and reference materials and writes them into Honcho.
 
 Sessions populated:
-    personal-context  — data/personal_context.json
+    personal-context  — data/personal_context.json + 04-Performance-Reviews/ + 06-Reference-Materials/
     tone-samples      — data/tone_samples.json
     people            — data/people.json
 
 Run once after setting honcho_api_key in config.json:
 
-    .venv/bin/python3 scripts/seed_honcho.py [--section stories|tone|people]
+    .venv/bin/python3 scripts/seed_honcho.py [--section stories|tone|people|reviews|reference]
 
-Omitting --section seeds all three. Safe to re-run — stories are additive.
+Omitting --section seeds all five. Safe to re-run — messages are additive.
 """
 import sys
 import argparse
@@ -95,10 +95,114 @@ def seed_people() -> tuple[int, int]:
     return ok, fail
 
 
+# Reference: which files in 06-Reference-Materials are worth seeding
+_REFERENCE_FILES = [
+    "GM Recognition Awards - Frank MacBride.txt",
+    "Feedback_Received.txt",
+    "Frank MacBride Talent Card.txt",
+    "Pre-Engineering Background - Hospitality and Management History.txt",
+    "Ford Cloud Developer Summary (300 chars).txt",
+]
+
+
+def seed_reviews() -> tuple[int, int]:
+    """Seed all performance review .txt files as stories in the personal-context session.
+    Files larger than 6000 chars are split into chunks."""
+    reviews_dir = config.RESUME_FOLDER / "04-Performance-Reviews"
+    if not reviews_dir.exists():
+        print(f"  Directory not found: {reviews_dir}")
+        return 0, 0
+    files = sorted(reviews_dir.glob("*.txt"))
+    if not files:
+        print("  No review files found.")
+        return 0, 0
+    ok = fail = 0
+    import re as _re
+    for fpath in files:
+        text = fpath.read_text(encoding="utf-8", errors="ignore").strip()
+        if not text:
+            continue
+        chunks: list[str] = []
+        if len(text) <= 6000:
+            chunks = [text]
+        else:
+            paragraphs = [p.strip() for p in _re.split(r"\n{2,}", text) if p.strip()]
+            current = ""
+            for para in paragraphs:
+                if len(current) + len(para) + 2 > 6000 and current:
+                    chunks.append(current.strip())
+                    current = para
+                else:
+                    current = (current + "\n\n" + para).strip()
+            if current:
+                chunks.append(current)
+
+        meta = {"source": "performance_review", "file": fpath.name,
+                "tags": ["performance_review", "manager_feedback", "gm"]}
+        for i, chunk in enumerate(chunks, 1):
+            part_label = f"{fpath.stem} (part {i}/{len(chunks)})" if len(chunks) > 1 else fpath.stem
+            content = f"[Performance Review] {part_label}\n\n{chunk}"
+            if honcho_client.add_story(content, metadata=meta):
+                print(f"  ✓ {fpath.name}" + (f" [{i}/{len(chunks)}]" if len(chunks) > 1 else ""))
+                ok += 1
+            else:
+                print(f"  ✗ {fpath.name} [{i}] — FAILED")
+                fail += 1
+    return ok, fail
+
+
+def seed_reference() -> tuple[int, int]:
+    """Seed selected reference material files as stories in the personal-context session.
+    Files larger than 6000 chars are split into chunks to stay within Honcho message limits."""
+    ref_dir = config.RESUME_FOLDER / "06-Reference-Materials"
+    if not ref_dir.exists():
+        print(f"  Directory not found: {ref_dir}")
+        return 0, 0
+    ok = fail = 0
+    for fname in _REFERENCE_FILES:
+        fpath = ref_dir / fname
+        if not fpath.exists():
+            print(f"  ! {fname} not found, skipping")
+            continue
+        text = fpath.read_text(encoding="utf-8", errors="ignore").strip()
+        if not text:
+            continue
+        # Split into ~6000-char chunks at paragraph boundaries if needed
+        chunks: list[str] = []
+        if len(text) <= 6000:
+            chunks = [text]
+        else:
+            import re as _re
+            paragraphs = [p.strip() for p in _re.split(r"\n{2,}", text) if p.strip()]
+            current = ""
+            for para in paragraphs:
+                if len(current) + len(para) + 2 > 6000 and current:
+                    chunks.append(current.strip())
+                    current = para
+                else:
+                    current = (current + "\n\n" + para).strip()
+            if current:
+                chunks.append(current)
+
+        label = fpath.stem
+        meta = {"source": "reference_material", "file": fname,
+                "tags": ["reference", "awards", "feedback", "gm"]}
+        for i, chunk in enumerate(chunks, 1):
+            part_label = f"{label} (part {i}/{len(chunks)})" if len(chunks) > 1 else label
+            content = f"[Reference Material] {part_label}\n\n{chunk}"
+            if honcho_client.add_story(content, metadata=meta):
+                print(f"  ✓ {fname}" + (f" [{i}/{len(chunks)}]" if len(chunks) > 1 else ""))
+                ok += 1
+            else:
+                print(f"  ✗ {fname} [{i}/{len(chunks)}] — FAILED")
+                fail += 1
+    return ok, fail
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Honcho from local JSON data files.")
-    parser.add_argument("--section", choices=["stories", "tone", "people"], default=None,
-                        help="Seed only this section (default: all)")
+    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference"], default=None,
+                        help="Seed only this section (default: all five)")
     args = parser.parse_args()
 
     if not honcho_client.is_available():
@@ -108,18 +212,24 @@ def main() -> None:
     print(f"Honcho workspace: '{config.HONCHO_WORKSPACE_ID}', peer: '{config.HONCHO_PEER_ID}'\n")
 
     total_ok = total_fail = 0
-    sections = [args.section] if args.section else ["stories", "tone", "people"]
+    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference"]
 
     for section in sections:
         if section == "stories":
-            print(f"── Personal context stories ──")
+            print("── Personal context stories ──")
             ok, fail = seed_stories()
         elif section == "tone":
-            print(f"── Tone samples ──")
+            print("── Tone samples ──")
             ok, fail = seed_tone()
         elif section == "people":
-            print(f"── People / contacts ──")
+            print("── People / contacts ──")
             ok, fail = seed_people()
+        elif section == "reviews":
+            print("── Performance reviews ──")
+            ok, fail = seed_reviews()
+        elif section == "reference":
+            print("── Reference materials ──")
+            ok, fail = seed_reference()
         total_ok += ok
         total_fail += fail
         print()
