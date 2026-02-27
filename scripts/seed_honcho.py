@@ -219,10 +219,55 @@ def seed_hbdi() -> tuple[int, int]:
     return 0, 1
 
 
+def seed_posts() -> tuple[int, int]:
+    """Seed LinkedIn posts into the tone-samples session to capture Frank's public voice.
+    Uses full post text where available, falls back to context summary."""
+    data = _load_json(config.LINKEDIN_POSTS_FILE, {"posts": []})
+    posts = data.get("posts", [])
+    if not posts:
+        print("  No LinkedIn posts found.")
+        return 0, 0
+    ok = fail = 0
+    for p in posts:
+        title = p.get("title", "(untitled)")
+        date = p.get("posted_date", "")
+        body = p.get("text") or p.get("context", "")
+        if not body:
+            print(f"  ! #{p['id']}: {title[:50]} — no text or context, skipping")
+            continue
+        metrics = p.get("metrics", {})
+        m_parts = []
+        if metrics.get("impressions"):
+            m_parts.append(f"impressions={metrics['impressions']}")
+        if metrics.get("reactions"):
+            m_parts.append(f"reactions={metrics['reactions']}")
+        if metrics.get("link_clicks"):
+            m_parts.append(f"link_clicks={metrics['link_clicks']}")
+        content = f"[LinkedIn Post #{p['id']}] {title} ({date})"
+        if m_parts:
+            content += f" | {', '.join(m_parts)}"
+        content += f"\n\n{body}"
+        meta = {
+            "id": p["id"],
+            "source": p.get("source", ""),
+            "title": title,
+            "posted_date": date,
+            "impressions": metrics.get("impressions", 0),
+            "tags": ["linkedin_post", "public_writing", "voice"],
+        }
+        if honcho_client.add_tone_sample(content, metadata=meta):
+            print(f"  ✓ #{p['id']}: {title[:60]}")
+            ok += 1
+        else:
+            print(f"  ✗ #{p['id']}: {title[:60]} — FAILED")
+            fail += 1
+    return ok, fail
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Honcho from local JSON data files.")
-    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference", "hbdi"], default=None,
-                        help="Seed only this section (default: all six)")
+    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference", "hbdi", "posts"], default=None,
+                        help="Seed only this section (default: all seven)")
     args = parser.parse_args()
 
     if not honcho_client.is_available():
@@ -232,7 +277,7 @@ def main() -> None:
     print(f"Honcho workspace: '{config.HONCHO_WORKSPACE_ID}', peer: '{config.HONCHO_PEER_ID}'\n")
 
     total_ok = total_fail = 0
-    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference", "hbdi"]
+    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference", "hbdi", "posts"]
 
     for section in sections:
         if section == "stories":
@@ -253,6 +298,9 @@ def main() -> None:
         elif section == "hbdi":
             print("── HBDI cognitive profile ──")
             ok, fail = seed_hbdi()
+        elif section == "posts":
+            print("── LinkedIn posts ──")
+            ok, fail = seed_posts()
         total_ok += ok
         total_fail += fail
         print()
