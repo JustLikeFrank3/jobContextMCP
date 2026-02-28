@@ -2,9 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2026-02-27
+## [0.6.0] - 2026-02-28
 
 ### Added
+- **Docker support** — multi-stage `Dockerfile` (`python:3.12-slim` / Debian trixie), `docker-compose.yml` with volume mounts for `config.json`, `data/`, `RESUME_PATH`, and `LEETCODE_PATH`; `MCP_TRANSPORT` env var switches the server between `stdio` (default), `sse`, and `streamable-http`; `MCP_HOST` and `MCP_PORT` configurable for SSE/HTTP deployments. Single-command startup: `docker compose up`.
+- **`tools.json`** — static 52-tool manifest for Docker MCP Registry CI compliance; auto-introspected from FastMCP at registration time so CI doesn't need a live server.
+- **MIT LICENSE** — required for Docker MCP Registry submission.
+- **`cli.py` `@file` / `@-` stdin support** — JSON args can now be passed as `@/path/to/args.json` or piped via stdin (`echo '{}' | python3 cli.py tool @-`); improves scripted workflows and CI integration.
+- **`save_job_assessment` `source` parameter** — optional subfolder organiser; assessments saved to `07-Job-Assessments/<source>/` when provided, keeping the directory clean across multiple intake flows.
+- **Cover letter assessment strategy injection** — `generate_cover_letter()` now scans `07-Job-Assessments/` for a matching assessment file and extracts the `## Cover Letter Strategy` section, injecting it as a mandatory override block in the GPT-4o prompt; ensures company-specific positioning is always respected.
 - **`setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)`** — conversational workspace bootstrapper; creates `config.json`, all 7 data files, resume folders `01–08`, and a LeetCode workspace scaffolded for the user's preferred language (java / python / javascript / typescript / cpp). Idempotent — skips everything that already exists. User can drag their existing resume into the chat and pass the text as `master_resume_content`. After one call, `get_session_context()` and `generate_resume()` are fully operational.
 - **`check_workspace()`** — read-only diagnostic scan; reports present/missing config, data files, resume subdirs, master resume word count, OpenAI key status, and LeetCode language. Safe to call at any time. Directs user to `setup_workspace()` with the minimum required parameters if anything is missing.
 - **`run_hbdi_assessment(q1, q2, q3, q4, score_a, score_b, score_c, score_d, notes?)`** — HBDI (Herrmann Whole Brain Model) cognitive style profiler; takes answers to 4 guided questions + quadrant scores (A/B/C/D, 1–4); synthesizes dominant/secondary/weaponized quadrant patterns; generates interview framing advice calibrated to the primary quadrant (e.g. flip order for A-dominant interviewers, name B gap with tooling strategy); persists profile to `personal_context.json` under `hbdi_profile` key.
