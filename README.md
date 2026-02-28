@@ -198,7 +198,7 @@ Pick **one** of the two approaches below. Docker is recommended for sharing with
 #### Option A — Local Python
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/jobContextMCP
+git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
@@ -209,7 +209,7 @@ python3 -m venv .venv
 > Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2).
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/jobContextMCP
+git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
 
 # 1. Create your config (edit paths + API key)
@@ -235,6 +235,43 @@ The image is ~600 MB (Debian slim + WeasyPrint runtime). It only needs to be reb
 | `/leetcode` | Your LeetCode folder (optional) | `LEETCODE_PATH` in `.env` |
 
 > `config.json`, `.env`, and all files under `data/` are gitignored — your API key and personal data never leave your machine.
+
+#### Testing the Docker build in isolation
+
+To validate the image before wiring it to a client, clone into a fresh directory and run a quick smoke test:
+
+```bash
+# Clone into a clean test directory
+git clone https://github.com/JustLikeFrank3/jobContextMCP jobContextMCP-docker-test
+cd jobContextMCP-docker-test
+
+# Config and env
+cp docker.config.example.json config.json
+# Edit config.json:
+#   "resume_folder"  → absolute path to your resumes (will mount as /workspace)
+#   "data_folder"    → leave as "/app/data" (data/ is bind-mounted inside the container)
+#   "openai_api_key" → your key
+cp .env.example .env
+# Edit .env → set RESUME_PATH to the same resume folder path
+
+# Build
+docker compose build
+
+# Smoke test — send an initialize request over stdio and confirm the server responds
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}' \
+  | docker compose run --rm -T jobcontextmcp
+# Expected: a JSON response with "result" → {"protocolVersion":...,"capabilities":...}
+
+# Optional: test SSE mode
+MCP_TRANSPORT=sse docker compose up -d
+curl -s --no-buffer http://localhost:8000/sse   # should stream event: endpoint
+docker compose down
+```
+
+Common build failure causes:
+- `config.json` missing or has placeholder paths → edit before building
+- `RESUME_PATH` in `.env` points to a non-existent directory → create it or point to an existing folder
+- WeasyPrint system deps — handled inside the image; no local install needed
 
 ---
 
