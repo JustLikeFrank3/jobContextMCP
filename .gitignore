@@ -2,14 +2,8 @@
 config.json
 
 # Runtime data — contains private application/health info
-data/status.json
-data/mental_health_log.json
-data/personal_context.json
-data/tone_samples.json
-data/people.json
-data/linkedin_posts.json
-data/scan_index.json
-data/rejections.json
+/data/*.json
+!/data/*.example.json
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
