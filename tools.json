@@ -1,0 +1,1256 @@
+[
+  {
+    "name": "get_session_context",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "get_job_hunt_status",
+    "description": "Return the current job application pipeline: all tracked companies, roles, statuses, next steps, and contacts. Also nudges a daily mental health check-in if none has been logged today.",
+    "arguments": []
+  },
+  {
+    "name": "update_application",
+    "description": "Add or update a job application in the pipeline tracker. Pass company, role, and current status (e.g. 'applied', 'phone screen', 'offer'). Optionally include next_steps, contact name, and free-form notes.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "next_steps",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "contact",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_application_event",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "event_type",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "read_master_resume",
+    "description": "Read Frank's master source resume \u2014 the single source of truth containing all metrics, achievements, projects, and context notes. Always read this before generating any resume or cover letter.",
+    "arguments": []
+  },
+  {
+    "name": "list_existing_materials",
+    "description": "List all existing resume and cover letter files. Optionally filter by company name to see materials for a specific target company.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "read_existing_resume",
+    "description": "Read the full text of an existing resume from 01-Current-Optimized/. Use list_existing_materials() to find available filenames.",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "read_reference_file",
+    "description": "Read a file from 06-Reference-Materials/ (e.g. template format, consolidated resume, skills variants, GM feedback). Pass the filename only \u2014 use list_existing_materials() to discover what's available.",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "save_resume_txt",
+    "description": "",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "save_cover_letter_txt",
+    "description": "",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "resume_diff",
+    "description": "",
+    "arguments": [
+      {
+        "name": "file_a",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "file_b",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "assess_job_fitment",
+    "description": "Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "job_description",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "get_customization_strategy",
+    "description": "Return a resume customization strategy for a given role type. Valid values: testing, cloud, data_engineering, backend, fullstack, ai_innovation, iot. Advises which skills and stories to lead with.",
+    "arguments": [
+      {
+        "name": "role_type",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "save_job_assessment",
+    "description": "Save a generated job fitment assessment to the 07-Job-Assessments folder as a .md file.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "source",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_interview_quick_reference",
+    "description": "Return the full interview day quick reference: algorithm pattern cheat sheets, system design 5-step framework, testing talking points, and pre-interview checklist.",
+    "arguments": []
+  },
+  {
+    "name": "get_leetcode_cheatsheet",
+    "description": "Return the LeetCode algorithm cheatsheet. Pass a section name (e.g. 'trees', 'graphs', 'dynamic programming') to get just that section, or leave blank for the full 1400-line reference.",
+    "arguments": [
+      {
+        "name": "section",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "generate_interview_prep_context",
+    "description": "Bundle Frank's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "stage",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "job_description",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_existing_prep_file",
+    "description": "Find and return all existing interview prep files for a given company \u2014 searches across both the Resume 2025 and LeetCode folders for files containing the company name and prep/interview/call/assessment keywords.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "save_interview_prep",
+    "description": "Save a generated interview prep document to the 08-Interview-Prep-Docs folder as a .md file. Filename defaults to {COMPANY}_INTERVIEW_PREP.md. Always use this tool instead of creating files directly.",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "scan_project_for_skills",
+    "description": "Scan all configured side-project directories (side_project_folders in config.json) and detect technologies used. Pulls latest changes from git before scanning each. Reports newly detected skills not yet on the master resume so they can be added.",
+    "arguments": []
+  },
+  {
+    "name": "log_mental_health_checkin",
+    "description": "Log a mental health check-in with mood label (e.g. 'good', 'anxious', 'hyperfocus', 'depressed'), energy level 1-10, optional notes, and whether the day felt productive. Returns a saved confirmation with personalized guidance based on the entry.",
+    "arguments": [
+      {
+        "name": "mood",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "energy",
+        "type": "integer",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "productive",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_mental_health_log",
+    "description": "Return recent mental health check-in history. Defaults to the last 14 days. Useful for tracking mood/energy trends during the job search.",
+    "arguments": [
+      {
+        "name": "days",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_personal_story",
+    "description": "Save a personal STAR story to the context library. Tag it with relevant skills or themes (e.g. ['cloud_migration', 'leadership']). Optionally include people involved and a short title. Retrieved later via get_star_story_context().",
+    "arguments": [
+      {
+        "name": "story",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "people",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_personal_context",
+    "description": "Retrieve stored personal stories, optionally filtered by tag or person's name. Returns all stories if no filters provided.",
+    "arguments": [
+      {
+        "name": "tag",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "person",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_tone_sample",
+    "description": "Ingest a writing sample to build Frank's tone/voice profile. Pass the text, a source label (e.g. 'cover_letter_fanduel'), and optional context describing the situation. Used to calibrate the AI before drafting new materials.",
+    "arguments": [
+      {
+        "name": "text",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "source",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_tone_profile",
+    "description": "Return all logged tone samples so the AI can calibrate Frank's writing voice before drafting cover letters, outreach messages, or other materials.",
+    "arguments": []
+  },
+  {
+    "name": "scan_materials_for_tone",
+    "description": "Auto-scan resume materials and ingest new files as tone samples. category can be 'cover_letters', 'resumes', or 'all'. Skips already-indexed files unless force=True. Optionally filter by company name.",
+    "arguments": [
+      {
+        "name": "category",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "search_materials",
+    "description": "Semantic search across all job search materials (resumes, cover letters, interview prep, LeetCode notes, reference files). Optionally filter by category. Requires OpenAI API key and a built index \u2014 run reindex_materials() first if needed.",
+    "arguments": [
+      {
+        "name": "query",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "category",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "reindex_materials",
+    "description": "Rebuild the semantic search index over all job search materials. Run this after adding new resumes, cover letters, or prep files. Requires an OpenAI API key set in config.json.",
+    "arguments": []
+  },
+  {
+    "name": "get_star_story_context",
+    "description": "Retrieve STAR stories matching a tag (e.g. 'ai_adoption', 'cloud_migration', 'testing', 'leadership'). Optionally filter by company or role_type for targeted framing. Returns primary stories, related stories from connected tags, derived metric bullets, and company-specific framing hints.",
+    "arguments": [
+      {
+        "name": "tag",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "role_type",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "draft_outreach_message",
+    "description": "",
+    "arguments": [
+      {
+        "name": "contact",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "message_type",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "review_message",
+    "description": "",
+    "arguments": [
+      {
+        "name": "text",
+        "type": "string",
+        "desc": "",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "export_resume_pdf",
+    "description": "",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "footer_tag",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "output_filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "export_cover_letter_pdf",
+    "description": "",
+    "arguments": [
+      {
+        "name": "filename",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "output_filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "generate_resume",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "job_description",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "output_filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "generate_cover_letter",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "job_description",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "output_filename",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_person",
+    "description": "",
+    "arguments": [
+      {
+        "name": "name",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "relationship",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "tags",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "contact_info",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "outreach_status",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "sent_message",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_people",
+    "description": "",
+    "arguments": [
+      {
+        "name": "name",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "tag",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "outreach_status",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_linkedin_post",
+    "description": "",
+    "arguments": [
+      {
+        "name": "text",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "source",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "posted_date",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "url",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "hashtags",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "links",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "auto_log_tone",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "update_post_metrics",
+    "description": "",
+    "arguments": [
+      {
+        "name": "post_id",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "source",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "impressions",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "members_reached",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "reactions",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "comments",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "reposts",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "saves",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "link_clicks",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "profile_views_from_post",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "followers_gained",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "audience_highlights",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_linkedin_posts",
+    "description": "",
+    "arguments": [
+      {
+        "name": "source",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "hashtag",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "min_reactions",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "include_text",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "log_rejection",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "stage",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "date",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_rejections",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "stage",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "since",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "include_pattern_analysis",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_daily_digest",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "weekly_summary",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "update_compensation",
+    "description": "",
+    "arguments": [
+      {
+        "name": "company",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "base",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "equity_total",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "equity_vest_years",
+        "type": "integer",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "bonus_target_pct",
+        "type": "number",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "level",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "location",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "remote",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_compensation_comparison",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "ingest_anecdote",
+    "description": "",
+    "arguments": [
+      {
+        "name": "story",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "people",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "tone_sample",
+        "type": "boolean",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "run_hbdi_assessment",
+    "description": "",
+    "arguments": [
+      {
+        "name": "q1_no_spec_project",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "q2_critical_feedback",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "q3_tedious_finish",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "q4_senior_disagreement",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "score_a",
+        "type": "integer",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "score_b",
+        "type": "integer",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "score_c",
+        "type": "integer",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "score_d",
+        "type": "integer",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "notes",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "get_hbdi_profile",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "check_workspace",
+    "description": "",
+    "arguments": []
+  },
+  {
+    "name": "setup_workspace",
+    "description": "",
+    "arguments": [
+      {
+        "name": "name",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "email",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "phone",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "linkedin",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "city_state",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "master_resume_content",
+        "type": "string",
+        "desc": "",
+        "required": true
+      },
+      {
+        "name": "address",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "openai_api_key",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "leetcode_language",
+        "type": "string",
+        "desc": "",
+        "required": false
+      },
+      {
+        "name": "side_project_folders",
+        "type": "string",
+        "desc": "",
+        "required": false
+      }
+    ]
+  }
+]

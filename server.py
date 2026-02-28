@@ -211,4 +211,14 @@ setup_workspace = setup.setup_workspace
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import os
+
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    if transport in ("sse", "streamable-http"):
+        mcp.run(
+            transport=transport,
+            host=os.getenv("MCP_HOST", "0.0.0.0"),
+            port=int(os.getenv("MCP_PORT", "8000")),
+        )
+    else:
+        mcp.run()
