@@ -216,6 +216,10 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
     input. Para 2 and Para 3 MUST draw from specific moments, names, projects, or
     outcomes described there — not from generic resume language. If a story mentions
     a real person, a specific project name, or a concrete outcome, use it.
+
+    If a COVER LETTER STRATEGY block is present in the user message, it is a
+    human-written, role-specific directive. Follow it paragraph by paragraph.
+    It takes precedence over your own judgment about structure or content.
 """)
 
 
@@ -234,7 +238,50 @@ def _openai_client():
 
 
 def _model() -> str:
-    return config._cfg.get("openai_model", "gpt-4o-mini")
+    return config._cfg.get("openai_model", "gpt-4o")
+
+
+def _load_assessment_strategy(company: str, role: str) -> str:
+    """
+    Scan 07-Job-Assessments/ for a .md file matching company + role.
+    Extract the '## Cover Letter Strategy' section if present.
+    Returns the strategy text, or empty string if not found.
+    """
+    assessments_dir = config.RESUME_FOLDER / "07-Job-Assessments"
+    if not assessments_dir.exists():
+        return ""
+
+    company_lower = company.lower()
+    # Key words from role, ignoring short stop words
+    role_words = [w for w in re.sub(r"[^a-z0-9 ]", "", role.lower()).split() if len(w) > 3]
+
+    best_file = None
+    best_score = 0
+    for fpath in assessments_dir.rglob("*.md"):
+        name = fpath.stem.lower()
+        score = 0
+        if company_lower in name or any(w in name for w in company_lower.split()):
+            score += 2
+        score += sum(1 for w in role_words if w in name)
+        if score > best_score:
+            best_score = score
+            best_file = fpath
+
+    if best_file is None or best_score < 2:
+        return ""
+
+    text = best_file.read_text(encoding="utf-8", errors="ignore")
+    # Extract the Cover Letter Strategy section
+    import re as _re
+    match = _re.search(
+        r"##\s+Cover Letter Strategy\s*\n(.*?)(?=\n##\s|\Z)",
+        text,
+        _re.DOTALL | _re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    strategy = match.group(1).strip()
+    return f"[Assessment file: {best_file.name}]\n\n{strategy}"
 
 
 def _infer_role_type(role: str) -> str:
@@ -293,6 +340,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     master = _load_master_context()
     tone = get_tone_profile()
     hbdi = get_hbdi_profile()
+    assessment_strategy = _load_assessment_strategy(company, role)
     rag_query = f"{role} {company} cover letter"
     stories = get_personal_context(
         query=f"What are Frank's most relevant career stories, projects, and achievements for a '{role}' role at {company}? Include GM work experience, specific metrics, project names, and any side projects or personal initiatives he has built — especially AI agents, MCP servers, or developer tools."
@@ -302,6 +350,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
+        *([ f"COVER LETTER STRATEGY — FOLLOW THIS EXACTLY:\nA job-specific strategy has been written for this role. The paragraph order, framing, and content signals below OVERRIDE generic cover letter patterns. Execute this strategy precisely.\n\n{assessment_strategy}" ] if assessment_strategy else []),
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         f"PERSONAL STORIES & CONTEXT (prioritise these over generic resume bullets — use specific details, names, and moments from here in Para 2 and Para 3):\n{stories}",
         *([ f"REFERENCE EXAMPLES FROM PAST COVER LETTERS & ASSESSMENTS (use the phrasing style and fitment signals from these — do NOT copy verbatim):\n{rag}" ] if rag else []),
@@ -388,8 +437,8 @@ def generate_resume(
     usage = response.usage
     cost_note = ""
     if usage:
-        # gpt-4o-mini: $0.15/1M input, $0.60/1M output (as of 2025)
-        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
+        # gpt-4o: $2.50/1M input, $10.00/1M output (as of 2026)
+        est = (usage.prompt_tokens * 2.50 + usage.completion_tokens * 10.00) / 1_000_000
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
     return "\n".join([
@@ -456,7 +505,8 @@ def generate_cover_letter(
     usage = response.usage
     cost_note = ""
     if usage:
-        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
+        # gpt-4o: $2.50/1M input, $10.00/1M output (as of 2026)
+        est = (usage.prompt_tokens * 2.50 + usage.completion_tokens * 10.00) / 1_000_000
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
     return "\n".join([
