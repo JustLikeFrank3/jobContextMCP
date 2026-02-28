@@ -1,0 +1,47 @@
+# ── jobContextMCP — Docker Compose ───────────────────────────────────────────
+#
+# Copy .env.example → .env and fill in your paths / secrets before running.
+#
+# Stdio mode (Claude Desktop invokes the container directly):
+#   docker compose run --rm jobcontextmcp
+#
+# SSE mode (network-accessible, e.g. for remote clients):
+#   MCP_TRANSPORT=sse docker compose up
+# then connect to: http://localhost:8000/sse
+
+services:
+  jobcontextmcp:
+    build: .
+    image: jobcontextmcp:latest
+    container_name: jobcontextmcp
+
+    # ── Secrets / model config ──────────────────────────────────────────────
+    environment:
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PORT: ${MCP_PORT:-8000}
+
+    # ── Volumes ─────────────────────────────────────────────────────────────
+    volumes:
+      # config.json must exist locally (copy docker.config.example.json → config.json)
+      - ./config.json:/app/config.json:ro
+
+      # data/ lives inside the repo — persisted via bind mount so changes survive
+      - ./data:/app/data:rw
+
+      # Your resume workspace folder → /workspace inside container
+      # Set RESUME_PATH in .env  (e.g. RESUME_PATH=/Users/you/resumes)
+      - ${RESUME_PATH:-./workspace}:/workspace:rw
+
+      # LeetCode practice folder (optional; comment out if unused)
+      - ${LEETCODE_PATH:-/dev/null}:/leetcode:ro
+
+    # ── Ports (SSE / streamable-http only) ──────────────────────────────────
+    ports:
+      - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
+
+    # Keep stdin open for stdio transport
+    stdin_open: true
+    tty: false
+
+    restart: unless-stopped
