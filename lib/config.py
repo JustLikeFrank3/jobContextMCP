@@ -80,15 +80,15 @@ def _reconfigure(cfg: dict) -> None:
     INTERVIEW_PREP_FOLDER = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
 
     MASTER_RESUME = RESUME_FOLDER / cfg["master_resume_path"]
-    LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg["leetcode_cheatsheet_path"]
-    QUICK_REFERENCE = LEETCODE_FOLDER / cfg["quick_reference_path"]
+    LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg.get("leetcode_cheatsheet_path", "Algorithm_Cheatsheet.md")
+    QUICK_REFERENCE = LEETCODE_FOLDER / cfg.get("quick_reference_path", "Interview_Quick_Reference.md")
 
-    RESUME_TEMPLATE_PNG = RESUME_FOLDER / cfg["resume_template_png"]
-    COVER_LETTER_TEMPLATE_PNG = RESUME_FOLDER / cfg["cover_letter_template_png"]
-    TEMPLATE_FORMAT = RESUME_FOLDER / cfg["template_format_path"]
-    GM_AWARDS = RESUME_FOLDER / cfg["gm_awards_path"]
-    FEEDBACK_RECEIVED = RESUME_FOLDER / cfg["feedback_received_path"]
-    SKILLS_SHORTER = RESUME_FOLDER / cfg["skills_shorter_path"]
+    RESUME_TEMPLATE_PNG = RESUME_FOLDER / cfg.get("resume_template_png", "06-Reference-Materials/resume_template.png")
+    COVER_LETTER_TEMPLATE_PNG = RESUME_FOLDER / cfg.get("cover_letter_template_png", "06-Reference-Materials/cover_letter_template.png")
+    TEMPLATE_FORMAT = RESUME_FOLDER / cfg.get("template_format_path", "06-Reference-Materials/Template Format.txt")
+    GM_AWARDS = RESUME_FOLDER / cfg.get("gm_awards_path", "06-Reference-Materials/Awards.txt")
+    FEEDBACK_RECEIVED = RESUME_FOLDER / cfg.get("feedback_received_path", "06-Reference-Materials/Feedback.txt")
+    SKILLS_SHORTER = RESUME_FOLDER / cfg.get("skills_shorter_path", "06-Reference-Materials/Skills Shorter.txt")
 
 
 _reconfigure(_load_config())

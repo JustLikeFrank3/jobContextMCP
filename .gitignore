@@ -1,18 +1,20 @@
 # User-specific configuration (contains your private paths)
 config.json
 
+# Docker environment file (contains API keys and local paths)
+.env
+
 # Runtime data — contains private application/health info
-data/status.json
-data/mental_health_log.json
-data/personal_context.json
-data/tone_samples.json
-data/people.json
-data/linkedin_posts.json
-data/scan_index.json
-data/rejections.json
+/data/*.json
+!/data/*.example.json
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
+
+# Internal dev/ops files — not relevant to end users
+CODEX_BUG_REPORT.md
+CODEX_REFACTOR_TASK.md
+debug_parser.py
 
 # Python virtual environment
 .venv/
@@ -29,8 +31,14 @@ docs/branding/banner/jobcontextmcp-share.jpg
 docs/branding/banner/jobcontextmcp-wingdings.jpg
 docs/branding/banner/jobcontextmcp-wingdings.svg
 
+# Generated workspace (created by setup_workspace(); contains user data)
+workspace/
+
 # macOS
 .DS_Store
 
 # VS Code user settings
 .vscode/settings.json
+
+docs/jobContextMCP-FullDocs/
+docs/jobContextMCP-FullDocs/02_monetization_strategy.md

@@ -36,6 +36,7 @@ tools/
   digest.py        — get_daily_digest, weekly_summary
   compensation.py  — update_compensation, get_compensation_comparison
   project_scanner.py — scan_project_for_skills
+  setup.py           — check_workspace, setup_workspace (v6 bootstrapper)
 templates/         — WeasyPrint HTML/CSS templates for PDF rendering
 data/              — Runtime JSON data files (gitignored; see *.example.json)
 tests/             — pytest test suite
@@ -48,15 +49,21 @@ tests/             — pytest test suite
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp config.example.json config.json      # edit paths as needed
-cp data/status.example.json data/status.json
-cp data/mental_health_log.example.json data/mental_health_log.json
-cp data/personal_context.example.json data/personal_context.json
-cp data/tone_samples.example.json data/tone_samples.json
-cp data/rejections.example.json data/rejections.json
 ```
 
-`config.json` and all `data/*.json` files are gitignored — never commit real user data.
+Then open the folder in VS Code. The MCP server auto-starts via `.vscode/mcp.json`.
+
+**For end-users (job seekers):** call `check_workspace()` in chat, then `setup_workspace()` with your details.
+The tool creates `config.json`, all data files, and the full folder structure in one shot — no manual `cp` needed.
+
+**For contributors:** if you need a manual config for testing:
+```bash
+cp config.example.json config.json
+cp data/status.example.json data/status.json
+# etc. — but prefer setup_workspace() for a real workspace
+```
+
+`config.json`, all `data/*.json`, and `workspace/` are gitignored — never commit real user data.
 
 ---
 
