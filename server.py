@@ -48,11 +48,13 @@ from tools import (
     export,
     people,
     generate,
+    setup,
     posts,
     rejections,
     digest,
     compensation,
     ingest,
+    hbdi,
 )
 
 
@@ -134,6 +136,8 @@ rejections.register(mcp)
 digest.register(mcp)
 compensation.register(mcp)
 ingest.register(mcp)
+hbdi.register(mcp)
+setup.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -197,7 +201,24 @@ get_compensation_comparison = compensation.get_compensation_comparison
 log_application_event = job_hunt.log_application_event
 review_message = outreach.review_message
 resume_diff = resume.resume_diff
+ingest_anecdote = ingest.ingest_anecdote
+
+run_hbdi_assessment = hbdi.run_hbdi_assessment
+get_hbdi_profile = hbdi.get_hbdi_profile
+
+check_workspace = setup.check_workspace
+setup_workspace = setup.setup_workspace
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import os
+
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    if transport in ("sse", "streamable-http"):
+        mcp.run(
+            transport=transport,
+            host=os.getenv("MCP_HOST", "0.0.0.0"),
+            port=int(os.getenv("MCP_PORT", "8000")),
+        )
+    else:
+        mcp.run()

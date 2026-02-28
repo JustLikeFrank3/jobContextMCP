@@ -57,8 +57,14 @@ def get_customization_strategy(role_type: str) -> str:
     return f"Unknown role type: '{role_type}'\nAvailable options: {', '.join(strategies)}"
 
 
-def save_job_assessment(company: str, content: str, filename: str = "") -> str:
-    """Save a generated job fitment assessment to the 07-Job-Assessments folder as a .md file. Filename defaults to {Company} - Fitment Assessment.md. Always use this tool to save assessments instead of creating files directly."""
+def save_job_assessment(company: str, content: str, filename: str = "", source: str = "") -> str:
+    """Save a generated job fitment assessment to the 07-Job-Assessments folder as a .md file.
+
+    If `source` is provided (e.g. 'Miguel Referral', 'AirBnb', 'Cold Apply'), the file is
+    saved into a subfolder of that name under 07-Job-Assessments/ for organisation.
+    Filename defaults to {Company} - Fitment Assessment.md.
+    Always use this tool to save assessments instead of creating files directly.
+    """
     if not filename:
         slug = company.strip().replace("/", "-")
         filename = f"{slug} - Fitment Assessment.md"
@@ -67,10 +73,18 @@ def save_job_assessment(company: str, content: str, filename: str = "") -> str:
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    target = config.JOB_ASSESSMENTS_FOLDER / filename
+    folder = config.JOB_ASSESSMENTS_FOLDER
+    if source:
+        # Sanitise source into a safe folder name
+        safe_source = source.strip().replace("/", "-").replace("\\", "-")
+        folder = folder / safe_source
+
+    target = folder / filename
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(cleaned, encoding="utf-8")
-    return f"\u2713 Saved job assessment: {target.name}"
+
+    relative = target.relative_to(config.JOB_ASSESSMENTS_FOLDER)
+    return f"\u2713 Saved job assessment: {relative}"
 
 
 def register(mcp) -> None:

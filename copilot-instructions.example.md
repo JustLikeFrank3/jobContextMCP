@@ -1,5 +1,14 @@
 # [Your Name] - Job Search & Interview Prep Workspace
 
+## ⚡ SESSION STARTUP
+**Every session, before anything else:**
+1. Call `get_session_context()` — loads resume, pipeline, tone profile, and personal stories in one shot.
+2. If tools are unavailable or context is empty, call `check_workspace()` first.
+   - If workspace is not configured, call `setup_workspace()` to create everything from scratch.
+   - After setup, call `get_session_context()` to begin.
+
+---
+
 ## WORKSPACE OVERVIEW
 This workspace contains:
 1. **LeetCodePractice/** - Coding interview preparation
@@ -12,6 +21,8 @@ It is configured in `.vscode/mcp.json` and auto-connects to every session.
 **Always prefer using MCP tools over re-reading files manually.**
 
 Key tools available:
+- `check_workspace()` — scan for missing config/data/folders; safe to call any time, makes no changes
+- `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` — bootstrap everything from scratch; drag resume into chat and pass as master_resume_content; idempotent
 - `get_job_hunt_status()` — current application pipeline
 - `update_application()` — update application status/notes
 - `log_application_event(company, role, event_type)` — append events to an application (phone screen, offer, note, etc.)
@@ -74,9 +85,12 @@ Key tools available:
 3. Prepare top STAR stories
 
 ## QUICK RECOVERY INSTRUCTIONS
-If context is lost:
-1. Call `get_job_hunt_status()` — live pipeline
-2. Call `read_master_resume()` — full background
-3. Check most recent files in resume folder
-4. Ask: "What are we working on?" and "What's your energy like today?"
-5. Call `get_mental_health_log()` if needed
+If context is lost mid-session:
+1. Call `get_session_context()` — restores everything
+2. Call `get_job_hunt_status()` — live pipeline only
+3. Ask: "What are we working on?" and "What's your energy like today?"
+4. Call `get_mental_health_log()` if relevant
+
+If tools are missing or workspace is broken:
+1. Call `check_workspace()` — diagnoses what's missing
+2. Call `setup_workspace()` — rebuilds missing files (safe to re-run, skips existing)

@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Local config (mounted as volume at runtime)
+config.json
+.env
+
+# Personal data (mounted as volume at runtime)
+data/*.json
+workspace/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Tests (not needed in image)
+tests/
+
+# Docs / branding
+docs/
+
+# Temp / debug files
+*.log
+/tmp/
+debug_parser.py
+CODEX_BUG_REPORT.md
+CODEX_REFACTOR_TASK.md
+
+# RAG embeddings
+data/rag_embeddings.npy
+data/rag_index.json
