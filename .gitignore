@@ -10,6 +10,8 @@ data/people.json
 data/linkedin_posts.json
 data/scan_index.json
 data/rejections.json
+data/beta_testers.json
+data/contact_log.json
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
@@ -42,3 +44,6 @@ workspace/
 
 # VS Code user settings
 .vscode/settings.json
+
+# Documents
+docs/jobContextMCP-FullDocs
