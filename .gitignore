@@ -36,3 +36,6 @@ workspace/
 
 # VS Code user settings
 .vscode/settings.json
+
+docs/jobContextMCP-FullDocs/
+docs/jobContextMCP-FullDocs/02_monetization_strategy.md
