@@ -1,6 +1,9 @@
 # User-specific configuration (contains your private paths)
 config.json
 
+# Docker environment file (contains API keys and local paths)
+.env
+
 # Runtime data — contains private application/health info
 /data/*.json
 !/data/*.example.json
