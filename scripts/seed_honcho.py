@@ -102,6 +102,7 @@ _REFERENCE_FILES = [
     "Frank MacBride Talent Card.txt",
     "Pre-Engineering Background - Hospitality and Management History.txt",
     "Ford Cloud Developer Summary (300 chars).txt",
+    "Frank MacBride Resume - Consolidated.txt",
 ]
 
 
@@ -219,6 +220,35 @@ def seed_hbdi() -> tuple[int, int]:
     return 0, 1
 
 
+def seed_slack_outreach() -> tuple[int, int]:
+    """Seed GM internal Slack outreach messages as tone samples.
+    These capture Frank's internal workplace voice — different register from LinkedIn."""
+    ref_dir = config.RESUME_FOLDER / "06-Reference-Materials"
+    slack_files = [
+        "GM Internal Slack Outreach Messages.txt",
+        "GM Energy Slack Outreach Messages - Draft.txt",
+    ]
+    ok = fail = 0
+    for fname in slack_files:
+        fpath = ref_dir / fname
+        if not fpath.exists():
+            print(f"  ! {fname} not found, skipping")
+            continue
+        text = fpath.read_text(encoding="utf-8", errors="ignore").strip()
+        if not text:
+            continue
+        content = f"[Slack Outreach — {fpath.stem}]\n\n{text}"
+        meta = {"source": "slack_outreach", "file": fname,
+                "tags": ["slack", "internal", "outreach", "gm", "tone"]}
+        if honcho_client.add_tone_sample(content, metadata=meta):
+            print(f"  ✓ {fname}")
+            ok += 1
+        else:
+            print(f"  ✗ {fname} — FAILED")
+            fail += 1
+    return ok, fail
+
+
 def seed_posts() -> tuple[int, int]:
     """Seed LinkedIn posts into the tone-samples session to capture Frank's public voice.
     Uses full post text where available, falls back to context summary."""
@@ -266,8 +296,8 @@ def seed_posts() -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Honcho from local JSON data files.")
-    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference", "hbdi", "posts"], default=None,
-                        help="Seed only this section (default: all seven)")
+    parser.add_argument("--section", choices=["stories", "tone", "people", "reviews", "reference", "hbdi", "posts", "slack"], default=None,
+                        help="Seed only this section (default: all eight)")
     args = parser.parse_args()
 
     if not honcho_client.is_available():
@@ -277,7 +307,7 @@ def main() -> None:
     print(f"Honcho workspace: '{config.HONCHO_WORKSPACE_ID}', peer: '{config.HONCHO_PEER_ID}'\n")
 
     total_ok = total_fail = 0
-    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference", "hbdi", "posts"]
+    sections = [args.section] if args.section else ["stories", "tone", "people", "reviews", "reference", "hbdi", "posts", "slack"]
 
     for section in sections:
         if section == "stories":
@@ -301,6 +331,9 @@ def main() -> None:
         elif section == "posts":
             print("── LinkedIn posts ──")
             ok, fail = seed_posts()
+        elif section == "slack":
+            print("── GM Slack outreach ──")
+            ok, fail = seed_slack_outreach()
         total_ok += ok
         total_fail += fail
         print()
