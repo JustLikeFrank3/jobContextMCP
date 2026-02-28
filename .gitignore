@@ -30,6 +30,11 @@ docs/branding/banner/jobcontextmcp-share.jpg
 docs/branding/banner/jobcontextmcp-wingdings.jpg
 docs/branding/banner/jobcontextmcp-wingdings.svg
 
+# Sensitive docs (monetization, marketing, synopses)
+docs/jobContextMCP-FullDocs/02b_monetization_strategy_marketing_partner.md
+docs/jobContextMCP-FullDocs/02b_monetization_strategy_marketing_partner.pdf
+docs/jobContextMCP-FullDocs/02c_synopsis_for_shannon.md
+
 # Generated workspace (created by setup_workspace(); contains user data)
 workspace/
 
