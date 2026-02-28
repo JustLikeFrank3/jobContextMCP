@@ -577,4 +577,27 @@ Include a `.github/copilot-instructions.md` in your workspace pointing to this M
 .venv/bin/pip install -U "mcp[cli]" "openai" "numpy"
 ```
 
+## Data Files & Setup
+
+All runtime data files are stored in the `data/` directory. Your real data files (e.g., `status.json`, `people.json`, etc.) are gitignored for privacy. Example files are provided for each data type:
+
+- `status.example.json`
+- `tone_samples.example.json`
+- `personal_context.example.json`
+- `rejections.example.json`
+- `mental_health_log.example.json`
+- `linkedin_posts.example.json`
+- `people.example.json`
+- `rag_index.example.json`
+- `scan_index.example.json`
+
+**Setup:**
+1. Copy each `*.example.json` file to its corresponding real data file (e.g., `cp data/people.example.json data/people.json`).
+2. Edit the real data files with your own information.
+3. All real data files are gitignored and will not be committed.
+
+**Note:**
+- The server and tools will not function correctly without these data files present.
+- Example files provide the required structure and sample entries for each data type.
+
 
