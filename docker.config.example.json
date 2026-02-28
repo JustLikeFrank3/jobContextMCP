@@ -1,0 +1,45 @@
+{
+  "_comment": "Docker-specific config. Paths here refer to CONTAINER-INTERNAL paths set by the Dockerfile volumes.",
+  "_comment_resume_folder": "Mount your local resumes dir to /workspace via RESUME_PATH in .env",
+  "resume_folder": "/workspace",
+
+  "_comment_leetcode": "Mount your local LeetCode dir to /leetcode via LEETCODE_PATH in .env",
+  "leetcode_folder": "/leetcode",
+
+  "_comment_side_projects": "Add volume mounts in docker-compose.yml for each project, then list paths here",
+  "side_project_folders": [
+    "/projects/jobcontextmcp"
+  ],
+
+  "_comment_data": "data/ lives inside the container at /app/data (bind-mounted from ./data)",
+  "data_folder": "/app/data",
+
+  "job_assessments_dir": "07-Job-Assessments",
+  "interview_prep_docs_dir": "08-Interview-Prep-Docs",
+  "master_resume_path": "01-Current-Optimized/YourName Resume - MASTER SOURCE.txt",
+  "leetcode_cheatsheet_path": "GM_Interview_Cheatsheet.md",
+  "quick_reference_path": "INTERVIEW_DAY_QUICK_REFERENCE.md",
+  "optimized_resumes_dir": "01-Current-Optimized",
+  "cover_letters_dir": "02-Cover-Letters",
+  "reference_materials_dir": "06-Reference-Materials",
+  "resume_template_png": "06-Reference-Materials/resume_template.png",
+  "cover_letter_template_png": "06-Reference-Materials/cover_letter_template.png",
+  "template_format_path": "06-Reference-Materials/Frank MacBride Resume - Template Format.txt",
+  "gm_awards_path": "06-Reference-Materials/GM Recognition Awards.txt",
+  "feedback_received_path": "06-Reference-Materials/Feedback_Received.txt",
+  "skills_shorter_path": "06-Reference-Materials/Skills - 10% Shorter.txt",
+
+  "openai_api_key": "sk-...your-key-here",
+  "openai_model": "gpt-4o",
+
+  "_comment_contact": "Contact info for cover letter PDF sidebar.",
+  "contact": {
+    "name": "YOUR FULL NAME",
+    "phone": "555-867-5309",
+    "email": "you@example.com",
+    "linkedin": "www.linkedin.com/in/yourhandle",
+    "address": "123 Your Street",
+    "city_state": "Your City, ST 00000",
+    "location": "Your City, ST"
+  }
+}
