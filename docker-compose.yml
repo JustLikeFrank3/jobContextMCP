@@ -12,7 +12,7 @@
 services:
   jobcontextmcp:
     build: .
-    image: jobcontextmcp:latest
+    image: justlikefrank3/jobcontextmcp:latest
     container_name: jobcontextmcp
 
     # ── Secrets / model config ──────────────────────────────────────────────
