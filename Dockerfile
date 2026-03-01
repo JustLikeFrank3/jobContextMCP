@@ -51,4 +51,12 @@ ENV MCP_TRANSPORT=stdio
 ENV MCP_HOST=0.0.0.0
 ENV MCP_PORT=8000
 
+# ── OCI image labels ──────────────────────────────────────────────────────────
+LABEL org.opencontainers.image.title="jobContextMCP"
+LABEL org.opencontainers.image.description="AI-powered job search context MCP server. Manage resumes, cover letters, applications, interview prep, and long-term career memory with RAG and Claude."
+LABEL org.opencontainers.image.url="https://github.com/JustLikeFrank3/jobContextMCP"
+LABEL org.opencontainers.image.source="https://github.com/JustLikeFrank3/jobContextMCP"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.version="0.6.0"
+
 CMD ["python", "server.py"]
