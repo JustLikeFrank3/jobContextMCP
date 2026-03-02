@@ -3,8 +3,8 @@ Session startup tool — v1
 
 get_session_context()
     Returns master resume + tone profile + personal context + job hunt status
-    in a single call. MUST be the first tool called in every session.
-    No exceptions. This is the entire point of the system.
+    + people/networking log in a single call. MUST be the first tool called
+    in every session. No exceptions. This is the entire point of the system.
 """
 
 from lib import config
@@ -12,6 +12,7 @@ from lib.io import _load_master_context
 from tools.tone import get_tone_profile
 from tools.context import get_personal_context
 from tools.job_hunt import get_job_hunt_status
+from tools.people import get_people
 
 
 def get_session_context() -> str:
@@ -23,6 +24,7 @@ def get_session_context() -> str:
       2. Tone profile — Frank's voice. Do not write a single word for him without this.
       3. Personal stories and context — family, identity, motivation
       4. Live job hunt pipeline — current applications and next steps
+      5. People & networking log — every contact, referral, and relationship
 
     This exists so Frank never has to recontextualize. Honor that.
     """
@@ -47,6 +49,10 @@ def get_session_context() -> str:
         "── 4. JOB HUNT STATUS ────────────────────────────────────",
         "",
         get_job_hunt_status(),
+        "",
+        "── 5. PEOPLE & NETWORKING ────────────────────────────────",
+        "",
+        get_people(),
         "",
         "═" * 60,
         "You are now fully contextualized. Proceed.",
