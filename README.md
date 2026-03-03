@@ -8,6 +8,8 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 52 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+
 ---
 
 ## Output
@@ -128,7 +130,7 @@ sequenceDiagram
     MCP->>Files: Parse .txt → render WeasyPrint PDF
     MCP-->>Copilot: resume saved + PDF exported
     Copilot->>MCP: generate_cover_letter(company, role, jd)
-    MCP->>Files: Write cover letter .txt (≤325 words enforced)
+    MCP->>Files: Write cover letter .txt (≤400 words enforced)
     MCP->>Files: Parse .txt → render two-column sidebar PDF
     MCP-->>Copilot: cover letter saved + PDF exported
     Copilot->>MCP: update_application(company, role, "applied")
@@ -275,11 +277,31 @@ Common build failure causes:
 
 ---
 
-### 2. Connect to your AI client
+### 2. Choose your client
 
-The server speaks [stdio MCP](https://modelcontextprotocol.io/docs/concepts/transports) — it works with any compatible client. Pick yours:
+The server speaks MCP — it works with any compatible client. You don't need an AI client to use it. Pick yours:
 
-#### VS Code + GitHub Copilot *(recommended — zero extra config)*
+#### Terminal (no AI client required)
+
+`cli.py` is a first-class client. Invoke any of the 52 tools directly:
+
+```bash
+# List all tools
+.venv/bin/python3 cli.py --list
+
+# Call a tool
+.venv/bin/python3 cli.py get_job_hunt_status
+.venv/bin/python3 cli.py log_application_event '{"company": "Acme", "role": "SWE", "event_type": "phone_screen"}'
+
+# Read args from a file (v0.6+)
+.venv/bin/python3 cli.py add_person @/path/to/args.json
+```
+
+This means automation scripts, cron jobs, and CI pipelines can consume the same tools as any AI client — deterministic, observable, no agent required.
+
+#### AI clients
+
+##### VS Code + GitHub Copilot *(recommended — zero extra config)*
 
 `.vscode/mcp.json` is already committed and uses `${workspaceFolder}` relative paths. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no extra configuration needed.
 
@@ -287,7 +309,7 @@ The server speaks [stdio MCP](https://modelcontextprotocol.io/docs/concepts/tran
 
 > **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
 
-#### Claude Desktop
+##### Claude Desktop
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -305,7 +327,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 
 Restart Claude Desktop after saving.
 
-#### Cursor
+##### Cursor
 
 Add to `.cursor/mcp.json` in this folder (project-scoped) or via **Settings → MCP** (global):
 
