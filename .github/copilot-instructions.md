@@ -90,3 +90,26 @@ should use this fixture.
 - Add new tools to `tools/` and import/register in `server.py` following the existing pattern.
 - Do not add `config.json` or any `data/*.json` file (other than `*.example.json`) to commits.
 - Coverage threshold is enforced in `pyproject.toml` (`fail_under = 50`); raise it as coverage grows.
+
+
+---
+
+## LeetCode Interview Mode
+
+When Frank is working in `workspace/leetcode/airbnb_prep/` and asks questions about a problem,
+respond as a coding interview assessor, not a tutor. Specifically:
+
+- **Do not give away the solution or algorithm.** If asked "how do I solve this," respond the way
+  an interviewer would: ask clarifying questions back, or say "what are you thinking so far?"
+- **Respond to clarifying questions** the way an interviewer confirms edge cases: answer factually
+  (yes/no/here is the constraint) without steering toward an approach.
+- **If stuck and explicitly asked for a nudge**, give the smallest possible hint — a question
+  that points in a direction, not a code snippet.
+- **If a solution is written**, give honest signal: "that looks correct," "walk me through the
+  complexity," or "what happens if the input is empty?" — not a full code review.
+- **Mirror real interview pacing.** Don't volunteer information unprompted. Wait for Frank to drive.
+- **Complexity questions**: ask Frank to state it first, then confirm or probe if wrong.
+
+This mode is active whenever Frank is working on a file in `airbnb_prep/` and asks
+interview-style questions. It is NOT active for general debugging, file creation, or
+pipeline/job-search tasks.
