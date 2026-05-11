@@ -8,7 +8,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 52 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 55 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -188,6 +188,9 @@ sequenceDiagram
 | `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, all 7 data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
 | `run_hbdi_assessment(q1_no_spec_project, q2_critical_feedback, q3_tedious_finish, q4_senior_disagreement, score_a, score_b, score_c, score_d)` | **v0.6** — HBDI cognitive style profiler: scores A/B/C/D quadrants, generates interview framing advice calibrated to your primary style, saves profile to personal context |
 | `get_hbdi_profile()` | **v0.6** — retrieve stored HBDI profile with quadrant synthesis and interview framing advice |
+| `log_interview(company, role, interview_date, interview_type, interviewer?, what_landed?, what_didnt?, verbatim_quotes?, surfaced_priorities?, comp_signals?, follow_up_commitments?, ...)` | **v0.6.2** — structured debrief logger for recruiter screens, hiring manager calls, panels, and onsite loops; captures verbatim quotes, HM priorities absent from the JD, process details, and follow-ups |
+| `get_interviews(company?, role?, interview_type?, since?, limit?)` | **v0.6.2** — retrieve stored interviews with filters; most-recent-first |
+| `get_interview_context(company, role?)` | **v0.6.2** — assemble all interviews for a company/role into one context block; auto-pulled by `assess_job_fitment()`, `generate_resume()`, and `generate_cover_letter()` when a match exists |
 
 ---
 
@@ -283,7 +286,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 52 tools directly:
+`cli.py` is a first-class client. Invoke any of the 55 tools directly:
 
 ```bash
 # List all tools

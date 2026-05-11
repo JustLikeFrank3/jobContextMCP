@@ -1,18 +1,56 @@
+import textwrap
 from pathlib import Path
 
 from lib.io import _load_master_context
 from lib import config
+from tools.interviews import get_interview_context
+
+_ASSESSMENT_SYSTEM = textwrap.dedent("""\
+    You are a brutally honest senior engineering hiring advisor. Your job is to
+    assess how well a candidate's background matches a specific job description
+    and produce a concise, actionable fitment report.
+
+    Output a structured assessment with exactly these sections:
+
+    ## FITMENT SCORE
+    X/10 — one sentence explaining the score.
+
+    ## STRONG MATCHES
+    Bullet list of 4-6 specific qualifications or experiences that directly map
+    to stated requirements. Be concrete — cite actual resume items vs JD items.
+
+    ## GAPS / RISKS
+    Bullet list of real gaps or risks. Be honest. If there are none, say so.
+    Do not invent gaps, but do not soften real ones.
+
+    ## KEY ANGLES TO EMPHASIZE
+    3-4 bullets on what to lead with in a resume, cover letter, or interview for
+    THIS specific role and company. Concrete and tactical.
+
+    ## COMP ASSESSMENT
+    One paragraph on whether the posted comp range matches the candidate's level
+    and market value. Include any negotiation notes.
+
+    ## RECOMMENDATION
+    One sentence: Apply aggressively / Apply with caveats / Do not apply.
+    Follow with 2-3 sentences of reasoning.
+
+    Be direct. No filler. No hedge language. If the fit is weak, say so.
+""")
 
 
 def assess_job_fitment(company: str, role: str, job_description: str) -> str:
     """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role."""
     master = _load_master_context()
+    interview_block = get_interview_context(company=company, role=role)
+    interview_section = f"\n\n{interview_block}" if interview_block else ""
     return (
         f"═══ FITMENT ASSESSMENT ═══\n"
         f"Company: {company}\n"
         f"Role:    {role}\n\n"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
         f"──── FRANK'S MASTER RESUME ────\n{master}"
+        f"{interview_section}"
     )
 
 
@@ -87,7 +125,71 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     return f"\u2713 Saved job assessment: {relative}"
 
 
+def run_job_assessment(company: str, role: str, job_description: str, auto_save: bool = True) -> str:
+    """
+    Run a real LLM-powered fitment assessment for a job posting.
+
+    Unlike assess_job_fitment (which is a context packer), this tool actually calls
+    the OpenAI API and returns a structured analysis: fitment score, strong matches,
+    gaps, key angles to emphasize, comp assessment, and recommendation.
+
+    If auto_save=True (default), saves the result to 07-Job-Assessments automatically.
+    """
+    try:
+        from openai import OpenAI  # type: ignore
+    except ImportError:
+        return "✗ openai package not installed. Run: pip install openai"
+
+    key = config._cfg.get("openai_api_key", "")
+    if not key or key.startswith("sk-..."):
+        # Fallback: return context package for manual analysis
+        return assess_job_fitment(company, role, job_description)
+
+    client = OpenAI(api_key=key)
+    model = config._cfg.get("openai_model", "gpt-4o-mini")
+
+    master = _load_master_context()
+    candidate_name = config._cfg.get("name", "the candidate")
+    user_msg = "\n\n".join([
+        f"CANDIDATE: {candidate_name}",
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION:\n{job_description}",
+        f"MASTER RESUME / FULL CAREER CONTEXT:\n{master}",
+        "Now produce the fitment assessment.",
+    ])
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _ASSESSMENT_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.2,
+            max_tokens=1200,
+        )
+        content = response.choices[0].message.content or ""
+    except Exception as exc:
+        return f"✗ OpenAI API error: {exc}"
+
+    usage = response.usage
+    cost_note = ""
+    if usage:
+        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
+        cost_note = f"  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}\n"
+
+    if auto_save:
+        slug = f"{company} {role} - Fitment Assessment.md".replace("/", "-")
+        save_result = save_job_assessment(company, content, slug, source="run_job_assessment")
+    else:
+        save_result = "(not saved — pass auto_save=True to persist)"
+
+    return f"✓ Assessment complete for {role} @ {company}\n{cost_note}  {save_result}\n\n{content}"
+
+
 def register(mcp) -> None:
     mcp.tool()(assess_job_fitment)
+    mcp.tool()(run_job_assessment)
     mcp.tool()(get_customization_strategy)
     mcp.tool()(save_job_assessment)

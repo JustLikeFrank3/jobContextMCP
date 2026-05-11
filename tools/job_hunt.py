@@ -24,11 +24,7 @@ def _extract_followup_date(text: str) -> date | None:
     if month is None:
         return None
     day = int(m.group(2))
-    today = date.today()
-    year = today.year
-    # If the parsed month is already past this year, assume next year
-    if month < today.month:
-        year += 1
+    year = date.today().year
     try:
         return date(year, month, day)
     except ValueError:

@@ -30,6 +30,7 @@ def _get_contact_defaults() -> dict:
         "phone": c.get("phone", ""),
         "email": c.get("email", ""),
         "linkedin": c.get("linkedin", ""),
+        "github": c.get("github", ""),
         "location": c.get("location", ""),
         "address": c.get("address", ""),
         "city_state": c.get("city_state", ""),
@@ -154,6 +155,9 @@ def _extract_contact(lines: list[str]) -> dict:
         ml = re.match(r"^location:\s*(.+)", s, re.I)
         if ml:
             contact["location"] = ml.group(1).strip()
+        mg = re.match(r"^github:\s*(.+)", s, re.I)
+        if mg:
+            contact["github"] = mg.group(1).strip()
     contact.pop("_phone_found", None)
     return contact
 
@@ -257,6 +261,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
             or _LINKEDIN_RE.search(s)
             or s.startswith("---")
             or re.match(r"^[A-Z][a-z]+:", s)  # "Phone:", "Email:", etc.
+            or re.match(r"^(phone|email|linkedin|github|address|location|city[_\s]?state)\s*:", s, re.I)
         ):
             continue
         if in_synopsis:
@@ -273,7 +278,11 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
             else:
                 name_lines.append(s)
         else:
-            synopsis_lines.append(s)
+            # Detect tagline even before the blank line separator (line 2 position)
+            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 20:
+                tagline = s
+            else:
+                synopsis_lines.append(s)
 
     name = " ".join(name_lines).strip().upper()
     synopsis = " ".join(synopsis_lines).strip()
@@ -556,12 +565,15 @@ def _parse_leadership_section(lines: list[str]) -> dict:
         if not line:
             continue
         line = _clean_bullet(line) if _is_bullet(line) else line
-        # "Bold Label: rest of text" — match any uppercase-starting label up to the first colon
-        m = re.match(r"^([A-Z][^:\n]{3,60}):\s+(.+)$", line)
-        if m:
-            items.append({"label": m.group(1).strip(), "value": m.group(2).strip()})
-        else:
-            items.append({"label": "", "value": line})
+        # Support pipe-separated entries on one line (e.g. "Title A: desc | Title B: desc")
+        parts = [p.strip() for p in line.split(" | ")]
+        for part in parts:
+            # "Bold Label: rest of text" — match any uppercase-starting label up to the first colon
+            m = re.match(r"^([A-Z][^:\n]{3,60}):\s+(.+)$", part)
+            if m:
+                items.append({"label": m.group(1).strip(), "value": m.group(2).strip()})
+            else:
+                items.append({"label": "", "value": part})
     return {"type": "leadership", "items": items}
 
 
@@ -677,9 +689,10 @@ def _parse_resume_txt(text: str) -> dict:
         kind = _classify_section(title)
 
         if kind == "synopsis_section":
-            # Append to synopsis if we didn't find one in the header
+            # Always prefer the explicit SYNOPSIS section content over anything
+            # that may have been incorrectly parsed into synopsis from pre_lines
             extra = " ".join(l.strip() for l in content_lines if l.strip())
-            if not synopsis:
+            if extra:
                 synopsis = extra
             continue
 
@@ -757,6 +770,11 @@ def _parse_cover_letter_txt(text: str) -> dict:
                 in_body = True
                 body_lines.append(line)
                 continue
+            # Short greeting ending in comma ("Shylah," / "Hi Shylah," / "To the hiring team,")
+            if re.match(r'^[A-Za-z][^@\d]{0,50},$', s):
+                in_body = True
+                body_lines.append(line)
+                continue
             # First long line = start of letter body
             if len(s) > 60:
                 in_body = True
@@ -778,6 +796,23 @@ def _parse_cover_letter_txt(text: str) -> dict:
                 current = []
     if current:
         paragraphs.append(" ".join(current))
+
+    # Split a closing like "Kindest Regards, Frank Vladmir MacBride III" that got
+    # merged into one paragraph because there was no blank line between the salutation
+    # and the signature in the .txt output.
+    _closing_res = [
+        re.compile(r"^(Kindest Regards,)\s+(.+)$", re.I),
+        re.compile(r"^(Sincerely,)\s+(.+)$", re.I),
+        re.compile(r"^(Best Regards,)\s+(.+)$", re.I),
+        re.compile(r"^(Best,)\s+(.+)$", re.I),
+    ]
+    for i, para in enumerate(paragraphs):
+        for cr in _closing_res:
+            m = cr.match(para.strip())
+            if m:
+                paragraphs[i] = m.group(1)
+                paragraphs.insert(i + 1, m.group(2))
+                break
 
     # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
     _full_name = config._cfg.get("contact", {}).get("name", "") or ""

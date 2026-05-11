@@ -38,6 +38,7 @@ from tools import (
     resume,
     fitment,
     interview,
+    interviews,
     project_scanner,
     health,
     context,
@@ -61,7 +62,7 @@ from tools import (
 def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -82,6 +83,7 @@ def _sync_config_exports() -> None:
     PEOPLE_FILE = config.PEOPLE_FILE
     LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
     REJECTIONS_FILE = config.REJECTIONS_FILE
+    INTERVIEWS_FILE = config.INTERVIEWS_FILE
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
@@ -121,6 +123,7 @@ job_hunt.register(mcp)
 resume.register(mcp)
 fitment.register(mcp)
 interview.register(mcp)
+interviews.register(mcp)
 project_scanner.register(mcp)
 health.register(mcp)
 context.register(mcp)
@@ -156,6 +159,10 @@ get_leetcode_cheatsheet = interview.get_leetcode_cheatsheet
 generate_interview_prep_context = interview.generate_interview_prep_context
 get_existing_prep_file = interview.get_existing_prep_file
 save_interview_prep = interview.save_interview_prep
+
+log_interview = interviews.log_interview
+get_interviews = interviews.get_interviews
+get_interview_context = interviews.get_interview_context
 
 scan_project_for_skills = project_scanner.scan_project_for_skills
 

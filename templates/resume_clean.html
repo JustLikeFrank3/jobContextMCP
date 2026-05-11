@@ -5,25 +5,17 @@
 <style>
 @page {
     size: letter;
-  margin: 0.35in 0.40in 0.38in 0.40in;
-    @bottom-right {
-        content: "</{{ footer_tag }}>";
-        font-family: 'Courier New', Courier, monospace;
-    font-size: 12.5pt;
-        font-weight: bold;
-        color: #000;
-        vertical-align: middle;
-    }
+    margin: 0.45in 0.50in 0.45in 0.50in;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: 'Courier New', Courier, monospace;
-  font-size: 9pt;
-    color: #000;
+    font-family: Calibri, 'Gill Sans', 'Trebuchet MS', Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #111;
     background: #fff;
-  line-height: 1.2;
+    line-height: 1.25;
 }
 
 /* ── HEADER ──────────────────────────────────── */
@@ -31,11 +23,11 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
 }
 
 .header-name {
-  font-size: 17.8pt;
+    font-size: 18pt;
     font-weight: bold;
     line-height: 1.08;
     letter-spacing: 0.01em;
@@ -43,62 +35,61 @@ body {
 
 .header-contact {
     text-align: left;
-  font-size: 8.4pt;
-    padding-top: 3px;
+    font-size: 8.8pt;
+    padding-top: 4px;
     white-space: nowrap;
 }
 
 .header-contact .lbl { font-weight: bold; }
 
-/* ── HEADER LEFT COL ─────────────────────────── */
 .header-left {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 /* ── TAGLINE ──────────────────────────────────── */
 .tagline {
-  font-size: 10pt;
-  font-weight: bold;
-  margin-top: 2px;
-  margin-bottom: 0;
-  line-height: 1.2;
+    font-size: 9.5pt;
+    font-weight: bold;
+    margin-top: 2px;
+    margin-bottom: 0;
+    line-height: 1.2;
 }
 
 /* ── SYNOPSIS ─────────────────────────────────── */
 .synopsis {
-  font-size: 8.8pt;
-  margin-top: 5px;
-  margin-bottom: 4px;
-  line-height: 1.25;
+    font-size: 9.2pt;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    line-height: 1.3;
 }
 
 /* ── SECTION ──────────────────────────────────── */
 .section {
-  margin-bottom: 3px;
+    margin-bottom: 4px;
 }
 
 .section-title {
-  font-size: 11.2pt;
+    font-size: 11pt;
     font-weight: bold;
     text-transform: uppercase;
-    border-bottom: 1.2px solid #000;
+    border-bottom: 1.2px solid #333;
     padding-bottom: 1px;
-  margin-bottom: 4px;
+    margin-bottom: 4px;
     letter-spacing: 0.04em;
-  break-after: avoid;
+    break-after: avoid;
 }
 
 /* ── SKILLS ───────────────────────────────────── */
 .skills-list { list-style: none; padding: 0; }
 
 .skills-list > li {
-  font-size: 8.5pt;
-  line-height: 1.22;
-  padding: 0.3px 0;
-    padding-left: 10px;
-    text-indent: -10px;
+    font-size: 8.9pt;
+    line-height: 1.25;
+    padding: 0.4px 0;
+    padding-left: 12px;
+    text-indent: -12px;
 }
 
 .skills-list > li::before { content: "\2022  "; }
@@ -107,29 +98,29 @@ body {
 
 /* ── EXPERIENCE ───────────────────────────────── */
 .job {
-  margin-bottom: 3px;
-  break-inside: auto;
+    margin-bottom: 4px;
+    break-inside: auto;
 }
 
-.job-title  { font-weight: bold; font-size: 9pt; }
-.job-company { font-weight: bold; font-size: 9pt; }
-.job-dates  { font-size: 8.4pt; font-weight: bold; margin-bottom: 1px; break-after: avoid; }
+.job-title  { font-weight: bold; font-size: 9.5pt; }
+.job-company { font-weight: bold; font-size: 9.5pt; }
+.job-dates  { font-size: 8.8pt; font-weight: bold; margin-bottom: 1px; break-after: avoid; }
 
 .group-lbl {
     font-weight: bold;
-  font-size: 8.4pt;
+    font-size: 8.8pt;
     margin-top: 2px;
     margin-bottom: 0px;
 }
 
-.bullets { list-style: none; padding: 0; margin: 1px 0 1px 10px; }
+.bullets { list-style: none; padding: 0; margin: 1px 0 1px 12px; }
 
 .bullets > li {
-  font-size: 8.3pt;
-  line-height: 1.22;
-  padding: 0.3px 0;
-    padding-left: 10px;
-    text-indent: -10px;
+    font-size: 8.7pt;
+    line-height: 1.25;
+    padding: 0.4px 0;
+    padding-left: 12px;
+    text-indent: -12px;
 }
 
 .bullets > li::before { content: "\2022  "; }
@@ -137,39 +128,40 @@ body {
 /* ── PROJECTS ─────────────────────────────────── */
 .proj-name {
     font-weight: bold;
-  font-size: 8.8pt;
+    font-size: 9.2pt;
     margin-bottom: 1px;
 }
 
-.proj { margin-bottom: 2px; }
+.proj { margin-bottom: 3px; }
 
 /* ── EDUCATION ────────────────────────────────── */
 .edu-degree {
     font-weight: bold;
     text-decoration: underline;
-  font-size: 8.8pt;
+    font-size: 9.2pt;
 }
 
-.edu-school { font-size: 8.4pt; }
-.edu-details { font-size: 8.4pt; }
-.edu-bullet  { font-size: 8.4pt; margin-left: 10px; }
+.edu-school  { font-size: 8.8pt; }
+.edu-details { font-size: 8.8pt; }
+.edu-bullet  { font-size: 8.8pt; margin-left: 12px; }
+
 .edu-coursework {
-  font-size: 8.4pt;
-  margin-top: 4px;
+    font-size: 8.8pt;
+    margin-top: 4px;
 }
 .edu-coursework-lbl { font-weight: bold; }
 
+/* ── ACHIEVEMENTS ─────────────────────────────── */
+/* reuses .bullets */
+
 /* ── LEADERSHIP ───────────────────────────────── */
 .leader-item {
-  font-size: 8.6pt;
-  line-height: 1.28;
-  padding: 0.6px 0;
+    font-size: 9pt;
+    line-height: 1.3;
+    padding: 0.6px 0;
 }
 
 .leader-lbl { font-weight: bold; }
-
-/* ── FOOTER TAG ───────────────────────────────── */
-/* rendered via @page @bottom-right content injection */
 </style>
 </head>
 <body>
@@ -177,14 +169,14 @@ body {
 <!-- HEADER -->
 <div class="header">
   <div class="header-left">
-    <div class="header-name">&lt;{{ name }}&gt;</div>
+    <div class="header-name">{{ name }}</div>
     {% if tagline %}<div class="tagline">{{ tagline }}</div>{% endif %}
   </div>
   <div class="header-contact">
     <span class="lbl">phone:</span> {{ contact.phone }}<br>
     <span class="lbl">email:</span> {{ contact.email }}<br>
     <span class="lbl">LinkedIn:</span> {{ contact.linkedin }}<br>
-    <span class="lbl">GitHub:</span> {{ contact.github }}
+    {% if contact.github %}<span class="lbl">GitHub:</span> {{ contact.github }}{% endif %}
   </div>
 </div>
 
@@ -252,11 +244,13 @@ body {
   {% if section.coursework %}
   <div class="edu-coursework"><span class="edu-coursework-lbl">Relevant Coursework:</span> {{ section.coursework }}</div>
   {% endif %}
+
   {# ── ACHIEVEMENTS ─────────────────────────── #}
   {% elif section.type == 'achievements' %}
   <ul class="bullets">
     {% for item in section['items'] %}<li>{{ item }}</li>{% endfor %}
   </ul>
+
   {# ── LEADERSHIP ──────────────────────── #}
   {% elif section.type == 'leadership' %}
   {% for item in section['items'] %}
@@ -268,7 +262,7 @@ body {
   {# ── FALLBACK ────────────────────────── #}
   {% else %}
   {% for line in section.lines %}
-  <div style="font-size:8pt;line-height:1.35;padding:0.5px 0;">{{ line }}</div>
+  <div style="font-size:8.5pt;line-height:1.35;padding:0.5px 0;">{{ line }}</div>
   {% endfor %}
   {% endif %}
 
