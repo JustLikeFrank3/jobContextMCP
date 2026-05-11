@@ -1252,5 +1252,50 @@
         "required": false
       }
     ]
+  },
+  {
+    "name": "log_interview",
+    "description": "Add or update a structured interview / call debrief record. Captures verbatim quotes, what landed, what didn't, HM priorities surfaced on the call, comp signals, and follow-up commitments. Auto-merges when (company + interview_date) match an existing record.",
+    "arguments": [
+      { "name": "company", "type": "string", "desc": "Target company name.", "required": true },
+      { "name": "role", "type": "string", "desc": "Specific role discussed.", "required": true },
+      { "name": "interview_date", "type": "string", "desc": "ISO date or datetime (YYYY-MM-DD or YYYY-MM-DD HH:MM).", "required": true },
+      { "name": "interview_type", "type": "string", "desc": "recruiter_screen | hiring_manager | technical | panel | onsite_loop | informational | team_match | behavioral | system_design | coding | debrief", "required": true },
+      { "name": "interviewer", "type": "string", "desc": "Interviewer name.", "required": false },
+      { "name": "interviewer_role", "type": "string", "desc": "Interviewer title / function.", "required": false },
+      { "name": "duration_minutes", "type": "integer", "desc": "Call length in minutes.", "required": false },
+      { "name": "self_rating", "type": "integer", "desc": "Self-rated performance, 1-10.", "required": false },
+      { "name": "interview_format", "type": "string", "desc": "phone | video | in_person | async. Defaults to video.", "required": false },
+      { "name": "what_landed", "type": "array", "desc": "Specific moments / framings that worked.", "required": false },
+      { "name": "what_didnt", "type": "array", "desc": "Rough spots, recovered or not.", "required": false },
+      { "name": "verbatim_quotes", "type": "array", "desc": "List of strings, or list of {speaker, quote, context} objects.", "required": false },
+      { "name": "surfaced_priorities", "type": "array", "desc": "HM priorities surfaced on the call but NOT in the public JD.", "required": false },
+      { "name": "process_details", "type": "string", "desc": "Next steps, format of next round, scheduling info.", "required": false },
+      { "name": "comp_signals", "type": "string", "desc": "Comp discussion (anchors, ranges, reactions).", "required": false },
+      { "name": "follow_up_commitments", "type": "array", "desc": "Things you committed to send / do.", "required": false },
+      { "name": "tags", "type": "array", "desc": "Free-form tags.", "required": false },
+      { "name": "notes", "type": "string", "desc": "Free-form long-form notes.", "required": false }
+    ]
+  },
+  {
+    "name": "get_interviews",
+    "description": "Retrieve interview records with structured summary. Filter by company, role, interviewer, type, tag, or date.",
+    "arguments": [
+      { "name": "company", "type": "string", "desc": "Company filter (partial, case-insensitive).", "required": false },
+      { "name": "role", "type": "string", "desc": "Role filter (partial, case-insensitive).", "required": false },
+      { "name": "interviewer", "type": "string", "desc": "Interviewer name filter (partial).", "required": false },
+      { "name": "interview_type", "type": "string", "desc": "Exact match on interview_type.", "required": false },
+      { "name": "tag", "type": "string", "desc": "Tag filter (case-insensitive).", "required": false },
+      { "name": "since", "type": "string", "desc": "ISO date — only interviews on/after this date.", "required": false },
+      { "name": "include_full", "type": "boolean", "desc": "If true, include full quotes / landed / didn't lists.", "required": false }
+    ]
+  },
+  {
+    "name": "get_interview_context",
+    "description": "Pull all interview history for a company (optionally filtered by role) as a structured context block. Designed to feed verbatim signal (quotes, surfaced HM priorities, what landed) into resume / cover letter / prep generation. Returns empty string if no matches — safe to unconditionally append.",
+    "arguments": [
+      { "name": "company", "type": "string", "desc": "Target company (substring match).", "required": true },
+      { "name": "role", "type": "string", "desc": "Optional role filter (substring match).", "required": false }
+    ]
   }
 ]

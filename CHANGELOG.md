@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2026-05-11
+
+### Added
+- **Interview tracking tool family** (`tools/interviews.py`) — three new MCP tools for capturing structured debriefs after recruiter screens, hiring manager calls, panels, and onsite loops:
+  - `log_interview(company, role, interview_date, interview_type, interviewer, ...)` — adds or updates a structured record keyed on `(company, interview_date)`. Captures `what_landed`, `what_didnt`, `verbatim_quotes` (with speaker + context), `surfaced_priorities` (HM-stated priorities absent from the JD), `process_details`, `comp_signals`, `follow_up_commitments`, `self_rating`, `tags`, and `notes`. Validates `interview_type` against a known set (`recruiter_screen`, `hiring_manager`, `technical_phone`, `panel`, `onsite`, `system_design`, `coding`, `behavioral`, `bar_raiser`, `other`) and `interview_format` against `phone | video | in_person | async`.
+  - `get_interviews(company?, role?, interview_type?, since?, limit?)` — retrieves stored interviews with filters; returns most-recent-first.
+  - `get_interview_context(company, role?)` — assembles all interviews for a company/role into a single context block (verbatim quotes, surfaced priorities, follow-ups) for injection into prep, fitment, resume, and cover letter generation.
+- **Auto-pull of interview context** in `assess_job_fitment()`, `generate_resume()`, and `generate_cover_letter()` — when a matching `(company, role)` interview record exists, its context block is appended to the model prompt automatically. Prevents the model from re-asking what the HM already told you.
+- **`data/interviews.json`** runtime data file (gitignored) + `data/interviews.example.json` reference schema; wired through `lib/config.py` and `server.py` `_sync_config_exports()`.
+- **`tests/test_interviews.py`** — covers add, update-by-key, filtering, validation, and context assembly.
+
+### Fixed
+- **`github:` line bleeding into resume synopsis** — `_parse_header()` in `tools/export.py` now skips `github`, `address`, `location`, and `city_state` contact lines (in addition to the existing `phone`, `email`, `linkedin` skips) so they don't get rendered as the first paragraph of the synopsis section.
+- **Cover letter body font size** — bumped from 9.2pt to 10.5pt in `templates/cover_letter.html` for readability at print scale.
+- **Bold rendering on recognition lines** — adopted the `Label: description` prefix pattern in resume `LEADERSHIP & RECOGNITION` blocks so the prefix renders bold via the existing template rule.
+
+## [0.6.1] - 2026-03-06
+
+### Fixed
+- **Cover letter closing** — sign-off changed from `Sincerely,` to `Kindest Regards,`; new rule in `_COVER_LETTER_FORMAT_SPEC` instructs the model to sign the name in Title Case (not ALL CAPS) with the name on its own line below the closing
+- **Filename casing (`name.title()` bug)** — `_safe_filename()` was calling `.title()` on the name from config, mangling roman numerals: "Frank Vladmir MacBride III" → "Frank Vladmir Macbride Iii"; removed the `.title()` call; the name in `config.json` is now used verbatim
+- **"Kindest Regards, Name" merged on one line** — `_parse_cover_letter_txt()` in `export.py` now detects closing salutations (`Kindest Regards,`, `Sincerely,`, `Best Regards,`, `Best,`) merged with the signature on the same line and splits them into separate paragraphs for correct PDF rendering
+
+### Added
+- **GitHub in cover letter contact block** — `github` field added to `_get_contact_defaults()` and `_extract_contact()` in `export.py`; `templates/cover_letter.html` sidebar now renders a GitHub row when the field is non-empty; `_build_cover_letter_user_message()` already injected the field from config
+- **`run_generate.py`** — CLI runner script for agent-driven generation; reads the JD from a file instead of inline Python strings (avoids terminal heredoc mangling by the VS Code Copilot chat tool); auto-resolves JDs from `workspace/jds/` by company name when no explicit path is given; usage: `python run_generate.py cover "Company" "Role" [jd_file]`
+- **`workspace/jds/`** — new directory for persisting job descriptions by company; covered by the existing `workspace/` gitignore; enables no-argument regeneration: `python run_generate.py cover "Meta" "Software Engineer, Infrastructure"`
+- **"zero downtime" added to master resume Azure bullet** — Azure migration bullet in `Frank MacBride Resume - MASTER SOURCE WITH METRICS.txt` now explicitly states "achieving zero downtime"; flows into all future resume and cover letter generations automatically
+
 ## [0.6.0] - 2026-02-28
 
 ### Added
