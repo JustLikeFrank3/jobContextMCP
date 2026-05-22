@@ -505,6 +505,125 @@ def get_contact_crossref(insight: str = "", name: str = "") -> str:
     return "\n".join(lines)
 
 
+def get_fb_outreach_queue(
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "recent",
+    include_pending: bool = False,
+) -> str:
+    """
+    Return a prioritized queue of Facebook friends not yet connected on LinkedIn.
+
+    Surfaces the warm outreach pipeline hiding in your Facebook friends list —
+    people you actually know personally who aren't in your professional network yet.
+    Sorted by recency (most recently added FB friend first) so the freshest
+    relationships surface at the top.
+
+    Active job target companies are included in the header so the AI can flag
+    anyone it recognizes as working at those companies.
+
+    Args:
+        limit:           Number of contacts to return per page (default 50).
+        offset:          Pagination offset (default 0).
+        sort_by:         "recent" (default) — most recently added FB friend first.
+                         "alpha" — alphabetical by name.
+        include_pending: If True, also include pending sent/received FB requests
+                         not yet on LinkedIn (default False — friends only).
+
+    Returns:
+        Prioritized contact list with name, FB relationship, date added,
+        and tracker data for any contacts already in your internal people db.
+        Active job targets are included as context for AI relevance scoring.
+    """
+    data = _load_json(_crossref_file(), None)
+    if data is None:
+        return "✗ No crossref data found. Run run_contact_crossref first."
+
+    # Pull active target companies from status.json
+    status_data = _load_json(config.STATUS_FILE, {"applications": []})
+    raw_companies = [a.get("company", "") for a in status_data.get("applications", [])]
+    seen_co: set[str] = set()
+    target_companies: list[str] = []
+    for co in raw_companies:
+        co = co.strip()
+        if co and co not in seen_co and not co.startswith("Unknown"):
+            seen_co.add(co)
+            target_companies.append(co)
+
+    # Filter: has facebook, no linkedin; optionally include pending
+    allowed_rels = {"friend", "pending_sent", "pending_received"} if include_pending else {"friend"}
+    queue = [
+        c for c in data["contacts"]
+        if "facebook" in c["platforms"]
+        and "linkedin" not in c["platforms"]
+        and c["platforms"]["facebook"].get("relationship") in allowed_rels
+    ]
+
+    # Sort
+    from datetime import datetime as _dt
+    if sort_by == "alpha":
+        queue.sort(key=lambda c: c["canonical_name"].lower())
+    else:
+        # recent first; ts=0 (no timestamp) pushed to end
+        queue.sort(key=lambda c: -(c["platforms"]["facebook"].get("ts") or 0))
+
+    # Tracker-enriched contacts always pinned to top, regardless of sort/page
+    priority = [c for c in queue if "internal" in c["platforms"]]
+    regular  = [c for c in queue if "internal" not in c["platforms"]]
+
+    total = len(regular)
+    page  = regular[offset: offset + limit]
+
+    lines = [
+        f"FB → LinkedIn Outreach Queue",
+        f"{len(queue)} FB {'friends' if not include_pending else 'contacts'} not yet on LinkedIn"
+        + (f"  |  {len(priority)} also in your tracker" if priority else ""),
+        "",
+        f"Active job targets (AI: flag anyone you recognize at these companies):",
+        "  " + ", ".join(target_companies[:20]) + ("..." if len(target_companies) > 20 else ""),
+        "",
+        f"Showing {offset + 1}–{offset + len(page)} of {total} regular + {len(priority)} pinned"
+        + f"  |  sorted by {'most recent' if sort_by == 'recent' else 'name'}",
+    ]
+
+    if priority:
+        lines.append("")
+        lines.append("★ Already in your tracker (always shown):")
+        for c in priority:
+            fb   = c["platforms"]["facebook"]
+            intl = c["platforms"]["internal"]
+            ts   = fb.get("ts") or 0
+            date = _dt.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else "no date"
+            co   = intl.get("company", "")
+            stat = intl.get("outreach_status", "none")
+            tags = intl.get("tags", [])
+            line = f"  {c['canonical_name']:<30s}  [{fb['relationship']}]  {date}"
+            if co:
+                line += f"  {co}"
+            line += f"  status={stat}"
+            if tags:
+                line += f"  tags={tags}"
+            lines.append(line)
+            if c.get("action_hints"):
+                lines.append(f"    → {'; '.join(c['action_hints'])}")
+
+    lines.append("")
+    for i, c in enumerate(page, start=offset + 1):
+        fb   = c["platforms"]["facebook"]
+        ts   = fb.get("ts") or 0
+        date = _dt.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else "—"
+        rel  = fb["relationship"]
+        rel_str = "" if rel == "friend" else f"  [{rel}]"
+        lines.append(f"  {i:>4}.  {c['canonical_name']:<32s}  {date}{rel_str}")
+
+    if offset + limit < total:
+        lines.append("")
+        lines.append(f"Next page: offset={offset + limit}")
+
+    return "\n".join(lines)
+
+
 def register(mcp) -> None:
     mcp.tool()(run_contact_crossref)
     mcp.tool()(get_contact_crossref)
+    mcp.tool()(get_fb_outreach_queue)
