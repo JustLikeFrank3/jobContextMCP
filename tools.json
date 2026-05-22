@@ -160,6 +160,27 @@
     ]
   },
   {
+    "name": "get_fb_outreach_queue",
+    "parameters": [
+      {
+        "name": "limit",
+        "default": 50
+      },
+      {
+        "name": "offset",
+        "default": 0
+      },
+      {
+        "name": "sort_by",
+        "default": "recent"
+      },
+      {
+        "name": "include_pending",
+        "default": false
+      }
+    ]
+  },
+  {
     "name": "get_hbdi_profile",
     "parameters": []
   },
