@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "source": "LinkedIn Connections Export",
+    "exported": "YYYY-MM-DD",
+    "total": 0,
+    "facebook_crossref_ready": true,
+    "note": "Populate with your LinkedIn connections CSV export, parsed into this structure."
+  },
+  "connections": [
+    {
+      "first_name": "Jane",
+      "last_name": "Doe",
+      "full_name": "Jane Doe",
+      "full_name_normalized": "jane doe",
+      "linkedin_url": "https://www.linkedin.com/in/janedoe",
+      "email": "",
+      "company": "Example Corp",
+      "position": "Software Engineer",
+      "connected_on": "01 Jan 2025",
+      "facebook_match": null
+    }
+  ]
+}

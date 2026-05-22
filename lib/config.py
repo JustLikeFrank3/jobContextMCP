@@ -19,6 +19,9 @@ PEOPLE_FILE: Path
 LINKEDIN_POSTS_FILE: Path
 REJECTIONS_FILE: Path
 INTERVIEWS_FILE: Path
+CONTACT_CROSSREF_FILE: Path
+LINKEDIN_CONNECTIONS_FILE: Path
+FB_FRIENDS_FOLDER: Path | None
 
 MASTER_RESUME: Path
 LEETCODE_CHEATSHEET: Path
@@ -51,6 +54,7 @@ def _reconfigure(cfg: dict) -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE
+    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, FB_FRIENDS_FOLDER
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -77,6 +81,10 @@ def _reconfigure(cfg: dict) -> None:
     LINKEDIN_POSTS_FILE = DATA_FOLDER / "linkedin_posts.json"
     REJECTIONS_FILE = DATA_FOLDER / "rejections.json"
     INTERVIEWS_FILE = DATA_FOLDER / "interviews.json"
+    CONTACT_CROSSREF_FILE = DATA_FOLDER / "contact_crossref.json"
+    LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
+    _fb_raw = cfg.get("fb_friends_folder", "")
+    FB_FRIENDS_FOLDER = Path(_fb_raw) if _fb_raw else None
 
     JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
     INTERVIEW_PREP_FOLDER = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")

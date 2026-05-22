@@ -7,6 +7,7 @@ config.json
 # Runtime data — contains private application/health info
 /data/*.json
 !/data/*.example.json
+/data/Connections.csv
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
