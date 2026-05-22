@@ -567,6 +567,12 @@ def get_fb_outreach_queue(
         # recent first; ts=0 (no timestamp) pushed to end
         queue.sort(key=lambda c: -(c["platforms"]["facebook"].get("ts") or 0))
 
+    # Drop deceased contacts — not outreach targets
+    queue = [
+        c for c in queue
+        if "deceased" not in c["platforms"].get("internal", {}).get("tags", [])
+    ]
+
     # Tracker-enriched contacts always pinned to top, regardless of sort/page
     priority = [c for c in queue if "internal" in c["platforms"]]
     regular  = [c for c in queue if "internal" not in c["platforms"]]
