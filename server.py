@@ -56,6 +56,7 @@ from tools import (
     compensation,
     ingest,
     hbdi,
+    crossref,
 )
 
 
@@ -63,6 +64,7 @@ def _sync_config_exports() -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE
+    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, FB_FRIENDS_FOLDER
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -84,6 +86,9 @@ def _sync_config_exports() -> None:
     LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
     REJECTIONS_FILE = config.REJECTIONS_FILE
     INTERVIEWS_FILE = config.INTERVIEWS_FILE
+    CONTACT_CROSSREF_FILE = config.CONTACT_CROSSREF_FILE
+    LINKEDIN_CONNECTIONS_FILE = config.LINKEDIN_CONNECTIONS_FILE
+    FB_FRIENDS_FOLDER = config.FB_FRIENDS_FOLDER
 
     MASTER_RESUME = config.MASTER_RESUME
     LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
@@ -140,6 +145,7 @@ digest.register(mcp)
 compensation.register(mcp)
 ingest.register(mcp)
 hbdi.register(mcp)
+crossref.register(mcp)
 setup.register(mcp)
 
 

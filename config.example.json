@@ -6,6 +6,7 @@
     "/path/to/another-project"
   ],
   "data_folder": "/path/to/job-search-mcp/data",
+  "fb_friends_folder": "/path/to/facebook-export/friends",
 
   "job_assessments_dir": "07-Job-Assessments",
   "interview_prep_docs_dir": "08-Interview-Prep-Docs",

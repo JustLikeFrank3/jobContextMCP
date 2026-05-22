@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] - 2026-05-21
+
+### Added
+- **Multi-platform contact cross-reference** (`tools/crossref.py`) — two new MCP tools that ingest a Facebook data export and cross-reference it against LinkedIn connections and the internal people tracker to surface relationship signals across platforms:
+  - `run_contact_crossref(fb_folder?)` — reads four Facebook export files (`your_friends.json`, `sent_friend_requests.json`, `received_friend_requests.json`, `removed_friends.json`), matches names against `linkedin_connections.json` and `people.json` using normalized name matching with middle-name and diacritic variance, writes a full multi-platform registry to `data/contact_crossref.json`, and updates each LinkedIn connection record with a `facebook_match` block. Re-runnable on any fresh export. Defaults to `fb_friends_folder` in `config.json`; accepts an explicit path override.
+  - `get_contact_crossref(insight?, name?)` — query the stored registry by insight bucket (`all_three_platforms`, `fb_friend_and_linkedin`, `fb_friend_and_internal`, `linkedin_and_internal_no_fb`, `fb_pending_sent_on_linkedin`, `fb_pending_received_on_linkedin`, `fb_removed_still_on_linkedin`, `linkedin_only`, `fb_friend_only`, `internal_only`) or look up any individual contact by name (partial match supported). Returns platform presence, relationship types, and action hints per contact. Returns a full summary with bucket counts when called with no arguments.
+- **`fb_friends_folder` config key** — optional path to your Facebook export folder; set in `config.json` so `run_contact_crossref()` can be called with no arguments. Added to `config.example.json`, `lib/config.py`, and `server.py` `_sync_config_exports()`.
+- **`data/contact_crossref.json`** runtime data file (gitignored) + `data/contact_crossref.example.json` reference schema.
+- **`data/linkedin_connections.json`** runtime data file (gitignored) + `data/linkedin_connections.example.json` reference schema — stores parsed LinkedIn connections with per-record `facebook_match` metadata populated after crossref.
+- **`data/Connections.csv`** (raw LinkedIn export) added to `.gitignore`.
+- **`tests/test_crossref.py`** — 40 tests covering name normalization, diacritic stripping, middle-name variance, FB index signal priority (friend > pending_received > pending_sent > removed), all lookup paths, all 6 action hint variants, and all 13 integration scenarios for `run_contact_crossref` and `get_contact_crossref`; 40/40 passing in 0.10s.
+
 ## [0.6.2] - 2026-05-11
 
 ### Added

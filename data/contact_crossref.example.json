@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "generated": "YYYY-MM-DD HH:MM",
+    "sources": {
+      "facebook_friends": 0,
+      "facebook_sent_requests": 0,
+      "facebook_received_requests": 0,
+      "facebook_removed": 0,
+      "linkedin_connections": 0,
+      "people_db": 0
+    },
+    "totals": {
+      "unique_contacts": 0,
+      "multi_platform": 0
+    }
+  },
+  "insights": {
+    "all_three_platforms": {
+      "count": 0,
+      "contacts": []
+    },
+    "fb_friend_and_linkedin": {
+      "count": 1,
+      "contacts": [
+        {
+          "name": "Jane Doe",
+          "facebook": { "relationship": "friend", "raw_name": "Jane Doe", "ts": 0 },
+          "linkedin": { "url": "https://linkedin.com/in/janedoe", "company": "Example Corp", "position": "Engineer", "connected_on": "01 Jan 2025" }
+        }
+      ]
+    },
+    "linkedin_only": { "count": 0, "contacts": [] },
+    "fb_friend_only": { "count": 0, "contacts": [] },
+    "internal_only": { "count": 0, "contacts": [] }
+  },
+  "contacts": [
+    {
+      "canonical_name": "Jane Doe",
+      "normalized": "jane doe",
+      "platforms": {
+        "facebook": { "relationship": "friend", "raw_name": "Jane Doe", "ts": 0 },
+        "linkedin": { "url": "https://linkedin.com/in/janedoe", "company": "Example Corp", "position": "Engineer", "connected_on": "01 Jan 2025" }
+      },
+      "platform_count": 2,
+      "signals": ["facebook", "linkedin"],
+      "action_hints": ["strong: confirmed FB friend + LinkedIn connection"]
+    }
+  ]
+}
