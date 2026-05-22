@@ -46,17 +46,17 @@ class _Collector:
 
 def _discover_tools() -> dict[str, callable]:
     from tools import (
-        session, job_hunt, resume, fitment, interview,
+        session, job_hunt, resume, fitment, interview, interviews,
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
-        rejections, digest, compensation, ingest, hbdi,
+        rejections, digest, compensation, ingest, hbdi, crossref,
     )
     collector = _Collector()
     for mod in [
-        session, job_hunt, resume, fitment, interview,
+        session, job_hunt, resume, fitment, interview, interviews,
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
-        rejections, digest, compensation, ingest, hbdi,
+        rejections, digest, compensation, ingest, hbdi, crossref,
     ]:
         mod.register(collector)
     return collector._tools
