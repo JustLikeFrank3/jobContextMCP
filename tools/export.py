@@ -254,7 +254,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
             if name_lines and not in_synopsis:
                 in_synopsis = True
             continue
-        # Skip lines that look like contact info or separators
+        # Skip lines that look like contact info, separators, or XML-style wrapper tags
         if (
             _EMAIL_RE.search(s)
             or _PHONE_RE.search(s)
@@ -262,6 +262,8 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
             or s.startswith("---")
             or re.match(r"^[A-Z][a-z]+:", s)  # "Phone:", "Email:", etc.
             or re.match(r"^(phone|email|linkedin|github|address|location|city[_\s]?state)\s*:", s, re.I)
+            or _OPENING_TAG_RE.match(s)  # <FRANK V. MACBRIDE III> wrapper tag
+            or _CLOSING_TAG_RE.match(s)  # </SOFTWARE_ENGINEER> footer tag
         ):
             continue
         if in_synopsis:
@@ -480,7 +482,73 @@ def _parse_experience_section(lines: list[str]) -> dict:
     if cur is not None:
         _finalize_job(cur)
 
+    jobs = _merge_same_company_jobs(jobs)
     return {"type": "experience", "jobs": jobs}
+
+
+# ── SAME-COMPANY JOB MERGING ──────────────────────────────────────────────
+
+def _combine_date_ranges(date_strings: list[str]) -> str:
+    """Combine multiple 'Month Year - Month Year' strings into one overall span."""
+    non_empty = [d for d in date_strings if d]
+    if not non_empty:
+        return ""
+    if len(non_empty) == 1:
+        return non_empty[0]
+    # Find the string with the earliest year (oldest role) and latest year (newest role)
+    def min_year(s: str) -> int:
+        years = [int(y) for y in _YEAR_RE.findall(s)]
+        return min(years) if years else 9999
+    def max_year(s: str) -> int:
+        years = [int(y) for y in _YEAR_RE.findall(s)]
+        return max(years) if years else 0
+    oldest = min(non_empty, key=min_year)
+    newest = max(non_empty, key=max_year)
+    start = oldest.split(" - ")[0].strip() if " - " in oldest else oldest.strip()
+    end   = newest.split(" - ")[-1].strip() if " - " in newest else newest.strip()
+    return f"{start} \u2013 {end}" if start != end else start
+
+
+def _normalize_company(company: str) -> str:
+    """Lowercase + collapse whitespace for company name comparison."""
+    return re.sub(r"\s+", " ", company.strip().lower())
+
+
+def _merge_same_company_jobs(jobs: list[dict]) -> list[dict]:
+    """Merge consecutive jobs at the same company into a single grouped entry."""
+    if not jobs:
+        return jobs
+    result: list[dict] = []
+    i = 0
+    while i < len(jobs):
+        job = jobs[i]
+        company_key = _normalize_company(job.get("company") or "")
+        group = [job]
+        j = i + 1
+        while j < len(jobs):
+            nxt = jobs[j]
+            if company_key and _normalize_company(nxt.get("company") or "") == company_key:
+                group.append(nxt)
+                j += 1
+            else:
+                break
+        if len(group) > 1:
+            dates = _combine_date_ranges([g.get("dates", "") for g in group])
+            sub_roles = [
+                {"title": g.get("title", ""), "dates": g.get("dates", ""),
+                 "bullets": g.get("bullets", []), "groups": g.get("groups", [])}
+                for g in group
+            ]
+            result.append({
+                "type": "grouped",
+                "company": job.get("company", ""),
+                "dates": dates,
+                "sub_roles": sub_roles,
+            })
+        else:
+            result.append(job)
+        i = j
+    return result
 
 
 # ── EDUCATION ─────────────────────────────────────────────────────────────
@@ -497,6 +565,8 @@ def _parse_education_section(lines: list[str]) -> dict:
             if len(parts) >= 3:
                 school = parts[1]
                 year   = parts[2]
+                if len(parts) > 3:
+                    detail_lines.extend(parts[3:])
             elif len(parts) == 2:
                 if _YEAR_RE.search(parts[1]):
                     year = parts[1]
@@ -541,7 +611,7 @@ def _parse_projects_section(lines: list[str]) -> dict:
             continue
         if _is_bullet(line):
             if cur_proj is None:
-                cur_proj = {"name": "Project", "bullets": []}
+                cur_proj = {"name": "", "bullets": []}
                 projects.append(cur_proj)
             cur_proj["bullets"].append(_clean_bullet(line))
         else:

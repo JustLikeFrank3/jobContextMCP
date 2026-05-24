@@ -8,7 +8,17 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 59 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 61 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+
+---
+
+## Why I Built This
+
+I got laid off and started using AI assistants to manage my job search. Every new session started from zero. I was re-explaining my resume, my pipeline, which companies I'd already talked to, what my STAR stories were, how I was holding up. The context overhead was brutal on top of everything else.
+
+I built a few tools to stop re-explaining myself. They grew into this.
+
+If you're in the same situation, it's yours.
 
 ---
 
@@ -71,7 +81,7 @@ graph TB
 
         subgraph NETWORK["Outreach & People"]
             T14["draft_outreach_message() · review_message()"]
-            T15["log_person() · get_people()"]
+            T15["log_person() · get_people() · get_person()"]
             T19["log_linkedin_post() · update_post_metrics() · get_linkedin_posts()"]
             T23["run_contact_crossref() · get_contact_crossref()"]
         end
@@ -192,6 +202,8 @@ sequenceDiagram
 | `log_interview(company, role, interview_date, interview_type, interviewer?, what_landed?, what_didnt?, verbatim_quotes?, surfaced_priorities?, comp_signals?, follow_up_commitments?, ...)` | **v0.6.2** — structured debrief logger for recruiter screens, hiring manager calls, panels, and onsite loops; captures verbatim quotes, HM priorities absent from the JD, process details, and follow-ups |
 | `get_interviews(company?, role?, interview_type?, since?, limit?)` | **v0.6.2** — retrieve stored interviews with filters; most-recent-first |
 | `get_interview_context(company, role?)` | **v0.6.2** — assemble all interviews for a company/role into one context block; auto-pulled by `assess_job_fitment()`, `generate_resume()`, and `generate_cover_letter()` when a match exists |
+| `get_person(name)` | **v0.6.4** — single-record lookup by partial name (case-insensitive); returns full record or disambiguation list; token-efficient alternative to `get_people()` for individual lookups |
+| `get_people(name?, company?, tag?, outreach_status?, slim?)` | retrieve/search the people database; `slim=True` returns name/company/relationship/status/tags only — no notes or context — for low-cost list scans |
 | `run_contact_crossref(fb_folder?)` | **v0.6.3** — ingest a Facebook export folder and cross-reference confirmed friends, pending requests, and removed connections against LinkedIn connections and your internal people tracker; writes `contact_crossref.json` and updates per-connection `facebook_match` metadata in `linkedin_connections.json`; re-runnable on any fresh export |
 | `get_contact_crossref(insight?, name?)` | **v0.6.3** — query the cross-platform registry by insight bucket (`all_three_platforms`, `fb_friend_and_linkedin`, `fb_removed_still_on_linkedin`, etc.) or look up any contact by name; returns platform presence, relationship type, and action hints |
 
@@ -289,7 +301,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 55 tools directly:
+`cli.py` is a first-class client. Invoke any of the 61 tools directly:
 
 ```bash
 # List all tools

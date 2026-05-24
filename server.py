@@ -197,6 +197,7 @@ generate_cover_letter = generate.generate_cover_letter
 
 log_person = people.log_person
 get_people = people.get_people
+get_person = people.get_person
 
 log_linkedin_post = posts.log_linkedin_post
 update_post_metrics = posts.update_post_metrics
