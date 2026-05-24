@@ -115,6 +115,13 @@ body {
 .job-company { font-weight: bold; font-size: 9pt; }
 .job-dates  { font-size: 8.4pt; font-weight: bold; margin-bottom: 1px; break-after: avoid; }
 
+/* ── GROUPED JOB (multiple roles, one employer) ── */
+.grouped-job { margin-bottom: 3px; break-inside: auto; }
+.grouped-company { font-weight: bold; font-size: 9pt; }
+.grouped-dates { font-size: 8.4pt; font-weight: bold; margin-bottom: 1px; }
+.sub-role { margin-left: 6px; margin-bottom: 1px; }
+.sub-role-header { font-weight: bold; font-size: 8.5pt; }
+
 .group-lbl {
     font-weight: bold;
   font-size: 8.4pt;
@@ -151,7 +158,7 @@ body {
 }
 
 .edu-school { font-size: 8.4pt; }
-.edu-details { font-size: 8.4pt; }
+.edu-details { font-size: 8.4pt; font-weight: bold; }
 .edu-bullet  { font-size: 8.4pt; margin-left: 10px; }
 .edu-coursework {
   font-size: 8.4pt;
@@ -209,6 +216,28 @@ body {
   {# ── EXPERIENCE ──────────────────────── #}
   {% elif section.type == 'experience' %}
   {% for job in section.jobs %}
+  {% if job.get('type') == 'grouped' %}
+  <div class="grouped-job">
+    <div class="grouped-company">{{ job.company }}</div>
+    <div class="grouped-dates">{{ job.dates }}</div>
+    {% for role in job.sub_roles %}
+    <div class="sub-role">
+      <div class="sub-role-header">{{ role.title }}{% if role.dates %} | {{ role.dates }}{% endif %}</div>
+      {% for grp in role.groups %}
+        <div class="group-lbl">{{ grp.label }}</div>
+        <ul class="bullets">
+          {% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}
+        </ul>
+      {% endfor %}
+      {% if role.bullets %}
+      <ul class="bullets">
+        {% for b in role.bullets %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
   <div class="job">
     <div class="job-title">{{ job.title }}</div>
     <div class="job-company">{{ job.company }}</div>
@@ -225,13 +254,14 @@ body {
     </ul>
     {% endif %}
   </div>
+  {% endif %}
   {% endfor %}
 
   {# ── PROJECTS ────────────────────────── #}
   {% elif section.type == 'projects' %}
   {% for proj in section.projects %}
   <div class="proj">
-    <div class="proj-name">{{ proj.name }}</div>
+    {% if proj.name %}<div class="proj-name">{{ proj.name }}</div>{% endif %}
     <ul class="bullets">
       {% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}
     </ul>

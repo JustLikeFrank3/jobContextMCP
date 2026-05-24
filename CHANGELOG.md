@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## Background
+
+Built during an active job search after a layoff. What began as a few tools to stop re-explaining context to AI assistants every session grew into a full MCP server. Shared here for anyone in the same situation.
+
+## [0.6.4] - 2026-05-24
+
+### Added
+- **`get_person(name)`** (`tools/people.py`) — single-record people lookup by partial, case-insensitive name match. Returns the full person record when exactly one match is found; returns a disambiguation list when multiple names match. Does not emit the `PEOPLE DATABASE` list header — output is a flat record string, not a table. Token cost is proportional to one person's data rather than the entire 75-person database. Use this instead of `get_people()` whenever you only need one contact.
+- **`get_people(slim=True)`** — new `slim` boolean parameter on the existing `get_people()` tool. When `True`, the formatter strips `context` and `notes` fields and returns only `id`, `name`, `company`, `relationship`, `outreach_status`, and `tags` per record. Adds a `[slim]` label to the result header. Useful for scanning the full contact list without loading months of accumulated conversation notes per person.
+- **`tests/test_people_tools.py`** — 16 tests covering `get_person` (exact match, partial match, case-insensitivity, not-found, multiple-match disambiguation, notes inclusion, contact info inclusion, empty database, no list header) and `get_people` slim mode (notes excluded, context excluded, essential fields present, slim label, full mode default, slim + filter combined, no results); 16/16 passing.
+
 ## [0.6.3] - 2026-05-21
 
 ### Added

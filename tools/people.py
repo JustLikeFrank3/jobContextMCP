@@ -125,15 +125,89 @@ def log_person(
     return f"✓ Person logged (#{entry['id']}): {entry['name']} — {entry['relationship']} at {entry['company']}{tone_note}"
 
 
+def _format_person_full(p: dict) -> str:
+    """Format a single person record with all fields."""
+    lines = [
+        f"#{p['id']} — {p['name']}",
+        f"   Relationship:    {p.get('relationship', '—')}",
+        f"   Company:         {p.get('company', '—')}",
+        f"   Outreach status: {p.get('outreach_status', 'none')}",
+        f"   Tags:            {', '.join(p.get('tags', [])) or '—'}",
+        f"   Context:         {p.get('context', '—')}",
+    ]
+    if p.get("contact_info"):
+        lines.append(f"   Contact info:    {p['contact_info']}")
+    if p.get("notes"):
+        lines.append(f"   Notes:           {p['notes']}")
+    lines.append(f"   Added:           {p.get('timestamp', '—')}")
+    if p.get("last_updated"):
+        lines.append(f"   Last updated:    {p['last_updated']}")
+    return "\n".join(lines)
+
+
+def _format_person_slim(p: dict) -> str:
+    """Format a single person record with essential fields only (no notes/context)."""
+    lines = [
+        f"#{p['id']} — {p['name']}",
+        f"   Company:         {p.get('company', '—')}",
+        f"   Relationship:    {p.get('relationship', '—')}",
+        f"   Outreach status: {p.get('outreach_status', 'none')}",
+        f"   Tags:            {', '.join(p.get('tags', [])) or '—'}",
+    ]
+    if p.get("last_updated"):
+        lines.append(f"   Last updated:    {p['last_updated']}")
+    return "\n".join(lines)
+
+
+def get_person(name: str) -> str:
+    """
+    Look up a single person by name (case-insensitive partial match).
+
+    Returns the full record if exactly one match is found.
+    If multiple people match, lists them so you can be more specific.
+    Use this instead of get_people() when you only need one person — much
+    cheaper on tokens.
+
+    Args:
+        name: Full or partial name to search for.
+
+    Returns:
+        Full person record, disambiguation list, or not-found message.
+    """
+    data = _load_json(config.PEOPLE_FILE, {"people": []})
+    people = data.get("people", [])
+
+    matches = [p for p in people if name.lower() in p.get("name", "").lower()]
+
+    if not matches:
+        return f"No person found matching '{name}'."
+
+    if len(matches) > 1:
+        names = ", ".join(f"#{p['id']} {p['name']}" for p in matches)
+        return f"Multiple matches for '{name}': {names}. Use a more specific name."
+
+    return _format_person_full(matches[0])
+
+
 def get_people(
     name: str = "",
     company: str = "",
     tag: str = "",
     outreach_status: str = "",
+    slim: bool = False,
 ) -> str:
     """
     Retrieve people from the contacts database, optionally filtered by name,
     company, tag, or outreach status. Returns all people if no filters given.
+
+    Args:
+        name:            Partial name filter (case-insensitive).
+        company:         Partial company filter (case-insensitive).
+        tag:             Tag filter (exact match, case-insensitive).
+        outreach_status: Filter by outreach status.
+        slim:            If True, return only name/company/relationship/status/tags
+                         with no notes or context. Much cheaper on tokens when you
+                         just need to scan the list.
     """
     data = _load_json(config.PEOPLE_FILE, {"people": []})
     people = data.get("people", [])
@@ -150,21 +224,11 @@ def get_people(
     if not people:
         return "No people found matching those filters."
 
-    lines = [f"═══ PEOPLE DATABASE ({len(people)} result{'s' if len(people) != 1 else ''}) ═══", ""]
+    fmt = _format_person_slim if slim else _format_person_full
+    mode_label = " [slim]" if slim else ""
+    lines = [f"═══ PEOPLE DATABASE ({len(people)} result{'s' if len(people) != 1 else ''}){mode_label} ═══", ""]
     for p in people:
-        lines.append(f"#{p['id']} — {p['name']}")
-        lines.append(f"   Relationship:    {p.get('relationship', '—')}")
-        lines.append(f"   Company:         {p.get('company', '—')}")
-        lines.append(f"   Outreach status: {p.get('outreach_status', 'none')}")
-        lines.append(f"   Tags:            {', '.join(p.get('tags', [])) or '—'}")
-        lines.append(f"   Context:         {p.get('context', '—')}")
-        if p.get("contact_info"):
-            lines.append(f"   Contact info:    {p['contact_info']}")
-        if p.get("notes"):
-            lines.append(f"   Notes:           {p['notes']}")
-        lines.append(f"   Added:           {p.get('timestamp', '—')}")
-        if p.get("last_updated"):
-            lines.append(f"   Last updated:    {p['last_updated']}")
+        lines.append(fmt(p))
         lines.append("")
 
     return "\n".join(lines).rstrip()
@@ -190,3 +254,4 @@ def lookup_person_context(name: str) -> str:
 def register(mcp) -> None:
     mcp.tool()(log_person)
     mcp.tool()(get_people)
+    mcp.tool()(get_person)
