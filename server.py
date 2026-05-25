@@ -49,6 +49,7 @@ from tools import (
     export,
     people,
     generate,
+    langgraph_pipeline,
     setup,
     posts,
     rejections,
@@ -138,6 +139,7 @@ star.register(mcp)
 outreach.register(mcp)
 export.register(mcp)
 generate.register(mcp)
+langgraph_pipeline.register(mcp)
 people.register(mcp)
 posts.register(mcp)
 rejections.register(mcp)
