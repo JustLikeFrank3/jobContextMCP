@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "id": 1,
+      "company": "Stripe",
+      "role": "Staff Software Engineer, Payments Infrastructure",
+      "jd": "We are looking for a Staff Engineer to join our Payments Infrastructure team...",
+      "source": "LinkedIn",
+      "added_date": "2026-05-25T10:00:00",
+      "status": "evaluated",
+      "fitment_score": "8/10",
+      "decision_notes": null,
+      "decided_date": null
+    },
+    {
+      "id": 2,
+      "company": "Grubhub",
+      "role": "Senior Software Engineer, Platform",
+      "jd": "Join our Platform team to build distributed systems at scale...",
+      "source": "Indeed",
+      "added_date": "2026-05-24T14:30:00",
+      "status": "dismissed",
+      "fitment_score": "4/10",
+      "decision_notes": "Comp too low, role is too junior for target level",
+      "decided_date": "2026-05-24T15:00:00"
+    }
+  ]
+}

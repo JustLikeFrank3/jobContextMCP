@@ -58,6 +58,7 @@ from tools import (
     ingest,
     hbdi,
     crossref,
+    job_queue,
 )
 
 
@@ -69,7 +70,7 @@ def _sync_config_exports() -> None:
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
-    global INTERVIEW_PREP_FOLDER
+    global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
 
     _cfg = config._cfg
 
@@ -102,6 +103,7 @@ def _sync_config_exports() -> None:
     FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
     SKILLS_SHORTER = config.SKILLS_SHORTER
     INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
+    JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -148,6 +150,7 @@ compensation.register(mcp)
 ingest.register(mcp)
 hbdi.register(mcp)
 crossref.register(mcp)
+job_queue.register(mcp)
 setup.register(mcp)
 
 
@@ -224,6 +227,11 @@ get_hbdi_profile = hbdi.get_hbdi_profile
 
 check_workspace = setup.check_workspace
 setup_workspace = setup.setup_workspace
+
+queue_job = job_queue.queue_job
+get_job_queue = job_queue.get_job_queue
+evaluate_queued_job = job_queue.evaluate_queued_job
+decide_job = job_queue.decide_job
 
 
 if __name__ == "__main__":

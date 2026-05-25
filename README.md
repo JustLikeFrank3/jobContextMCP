@@ -67,6 +67,7 @@ graph TB
             T6["get_job_hunt_status() · update_application()"]
             T6b["log_application_event() · log_rejection() · get_rejections()"]
             T6c["update_compensation() · get_compensation_comparison()"]
+            T6d["queue_job() · get_job_queue() · evaluate_queued_job() · decide_job()"]
             T7["assess_job_fitment() · get_customization_strategy()"]
             T8["generate_resume() · generate_cover_letter()"]
             T9["save_resume_txt() · save_cover_letter_txt() · resume_diff()"]
@@ -156,6 +157,10 @@ sequenceDiagram
 |------|---------|
 | `get_job_hunt_status()` | Full pipeline — all active applications, contacts, next steps |
 | `update_application(company, role, status, ...)` | Add or update an application |
+| `queue_job(company, role, jd, source?)` | **v0.6.5** — drop a JD into the evaluation inbox (`pending`); duplicate submissions return a message rather than overwriting |
+| `get_job_queue(status?)` | **v0.6.5** — list queued jobs, optionally filtered by `pending` / `evaluated` / `added` / `dismissed` |
+| `evaluate_queued_job(company, role)` | **v0.6.5** — load stored JD and assemble fitment context for review; advances status to `evaluated` (required before deciding) |
+| `decide_job(company, role, decision, notes?, fitment_score?)` | **v0.6.5** — `add` creates pipeline entry at status `interested`; `dismiss` soft-deletes; gate enforced on evaluation |
 | `read_master_resume()` | Your master resume (source of truth for all customizations) |
 | `list_existing_materials(company?)` | List generated resumes + cover letters |
 | `read_existing_resume(filename)` | Read a specific resume file |
@@ -380,6 +385,24 @@ Edit `~/.codeium/windsurf/mcp_config.json`:
 ```
 
 Windsurf also reads `.windsurfrules` — same `copilot-instructions.example.md` template applies.
+
+#### iPad / remote access via VS Code tunnel
+
+You can code against this server from an iPad (or any browser) using VS Code tunnels — no custom app, no open ports, no separate web UI required.
+
+```bash
+# On your Mac, once:
+code tunnel --accept-server-license-terms
+# Follow the GitHub device auth prompt, then open the printed URL in Safari on your iPad.
+```
+
+The tunnel runs through Microsoft's infrastructure (tied to your GitHub account) and gives you full VS Code — editor, terminal, file explorer, and Copilot — in the browser. Your MCP server starts automatically when VS Code opens the workspace, same as on desktop.
+
+To persist the tunnel across reboots, register it as a service:
+
+```bash
+code tunnel service install
+```
 
 #### Zed
 
