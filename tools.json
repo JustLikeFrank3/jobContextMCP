@@ -18,6 +18,28 @@
     "parameters": []
   },
   {
+    "name": "decide_job",
+    "parameters": [
+      {
+        "name": "company"
+      },
+      {
+        "name": "role"
+      },
+      {
+        "name": "decision"
+      },
+      {
+        "name": "notes",
+        "default": ""
+      },
+      {
+        "name": "fitment_score",
+        "default": ""
+      }
+    ]
+  },
+  {
     "name": "draft_outreach_message",
     "parameters": [
       {
@@ -234,8 +256,28 @@
     ]
   },
   {
+    "name": "evaluate_queued_job",
+    "parameters": [
+      {
+        "name": "company"
+      },
+      {
+        "name": "role"
+      }
+    ]
+  },
+  {
     "name": "get_job_hunt_status",
     "parameters": []
+  },
+  {
+    "name": "get_job_queue",
+    "parameters": [
+      {
+        "name": "status",
+        "default": ""
+      }
+    ]
   },
   {
     "name": "get_leetcode_cheatsheet",
@@ -681,6 +723,24 @@
     "parameters": [
       {
         "name": "fb_folder",
+        "default": ""
+      }
+    ]
+  },
+  {
+    "name": "queue_job",
+    "parameters": [
+      {
+        "name": "company"
+      },
+      {
+        "name": "role"
+      },
+      {
+        "name": "jd"
+      },
+      {
+        "name": "source",
         "default": ""
       }
     ]

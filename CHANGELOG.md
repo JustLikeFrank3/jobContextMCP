@@ -22,7 +22,19 @@ All notable changes to this project will be documented in this file.
 
 Built during an active job search after a layoff. What began as a few tools to stop re-explaining context to AI assistants every session grew into a full MCP server. Shared here for anyone in the same situation.
 
-## [0.6.4] - 2026-05-24
+## [0.6.5] - 2026-05-25
+
+### Added
+- **Job evaluation queue** (`tools/job_queue.py`) — pre-pipeline inbox for vetting job descriptions before committing to an application. Four new MCP tools implement a gated `queue → evaluate → decide` workflow:
+  - `queue_job(company, role, jd, source?)` — drops a JD into the queue at status `pending`; duplicate submissions return an informative message rather than overwriting.
+  - `get_job_queue(status?)` — returns all queued jobs, optionally filtered by status (`pending`, `evaluated`, `added`, `dismissed`); shows fitment score and decision notes when present.
+  - `evaluate_queued_job(company, role)` — loads the stored JD, calls `assess_job_fitment` to assemble a full fitment context package for review, and advances the job to status `evaluated`. Evaluation is required before `decide_job` will accept a decision (gate enforced at the data layer, not just convention).
+  - `decide_job(company, role, decision, notes?, fitment_score?)` — commits `add` or `dismiss`; `add` calls `update_application(company, role, "interested")` to create a pre-applied pipeline entry; `dismiss` soft-deletes the record (still queryable); both paths store `notes` and optional `fitment_score` from the AI's analysis.
+- **`data/job_queue.json`** runtime data file (gitignored) + `data/job_queue.example.json` reference schema — two-entry example showing `evaluated` and `dismissed` states.
+- **`JOB_QUEUE_FILE`** path constant added to `lib/config.py` and wired through `server.py` `_sync_config_exports()`.
+- **`tests/test_job_queue.py`** — 21 tests covering entry creation, auto-increment IDs, duplicate detection, status filtering, fitment context assembly, the evaluation gate, `add` pipeline write-through, `dismiss` isolation (does not touch `status.json`), fitment score storage, double-decision guard, and missing-job error paths; 21/21 passing, full suite 383/383.
+
+
 
 ### Added
 - **`get_person(name)`** (`tools/people.py`) — single-record people lookup by partial, case-insensitive name match. Returns the full person record when exactly one match is found; returns a disambiguation list when multiple names match. Does not emit the `PEOPLE DATABASE` list header — output is a flat record string, not a table. Token cost is proportional to one person's data rather than the entire 75-person database. Use this instead of `get_people()` whenever you only need one contact.
