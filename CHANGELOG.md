@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Planned
+
+- **Service layer extraction** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27)) — decouple business logic from MCP transport; MCP tools become thin wrappers around `resume_service`, `job_analysis_service`, `retrieval_service`, `tone_service`, `langgraph_service`. Required prerequisite for all remote/HTTP work.
+- **LangGraph resume generation workflow** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — port resume generation to a `StateGraph` (`load_context → rag_retrieval → draft → review → conditional_revise → output`); proves the service layer architecture and enables SSE streaming of workflow progress. Branch: `feat/langgraph-port`.
+- **FastAPI HTTP server + SSE streaming** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — expose core workflows over REST and SSE for iPad/browser/Open WebUI access without requiring local MCP support on the client. LAN-safe by default, Tailscale-compatible, API key auth. See `docs/remote-mobile-architecture.md` for full design.
+- **Data-driven persona config** ([#30](https://github.com/JustLikeFrank3/jobContextMCP/issues/30)) — JSON persona presets (`executive_polish`, `faang_technical`, `startup_founder`, etc.) consumed by service layer, LangGraph nodes, and future mobile UI. Separate persona (tone/weighting) from workflow (resume tailoring, interview prep, outreach). Build after service layer exists.
+
+### Agent Customization (2026-05-25)
+
+- **Recruiting consultant persona** — added `AGENT PERSONA & LENS` section to `.github/copilot-instructions.md`; gives the agent a calibrated external voice (20 years placing engineers, Atlanta market, full U.S. remote range, 2026 comp benchmarks) for job assessment, outreach review, and resume critique.
+- **`.github/agents/tech-interviewer.agent.md`** — dedicated interviewer mode agent; strict guide-without-solving behavior for coding, system design, and behavioral screens; honest debrief mode on demand.
+- **`.github/agents/resume-writer.agent.md`** — resume writer agent; loads master resume + tone profile before writing; hard honesty checkpoint before saving any file; customization strategy table by role type.
+- **`.github/agents/linkedin-outreach.agent.md`** — LinkedIn voice agent; enforces tone rules, logs every confirmed post/send to MCP database, distinguishes post / comment / DM / connection note formats.
+
 ## Background
 
 Built during an active job search after a layoff. What began as a few tools to stop re-explaining context to AI assistants every session grew into a full MCP server. Shared here for anyone in the same situation.
