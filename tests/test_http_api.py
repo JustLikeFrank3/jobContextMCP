@@ -284,3 +284,51 @@ class TestSSEStreaming:
         assert "generating" in stages
         assert "complete" in stages
         assert stages[-1] == "result"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# /workflows (LangGraph)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestWorkflowEndpoints:
+    def test_list_workflows(self, http_client_noauth):
+        r = http_client_noauth.get("/workflows")
+        assert r.status_code == 200
+        assert "resume_tailoring" in r.json()["workflows"]
+
+    def test_run_resume_tailoring_workflow_sync(self, http_client_noauth):
+        r = http_client_noauth.post("/workflows/resume_tailoring", json={
+            "company": "Stripe",
+            "role": "Staff Engineer",
+            "job_description": "Build payments infrastructure.",
+        })
+        assert r.status_code == 200
+        body = r.json()
+        assert "final_content" in body
+        assert isinstance(body["final_content"], str) and body["final_content"]
+
+    def test_run_unknown_workflow_returns_404(self, http_client_noauth):
+        r = http_client_noauth.post("/workflows/nonexistent", json={})
+        assert r.status_code == 404
+
+    def test_run_workflow_stream_emits_node_events(self, http_client_noauth):
+        with http_client_noauth.stream("POST", "/workflows/resume_tailoring/stream", json={
+            "company": "Stripe",
+            "role": "Staff Engineer",
+            "job_description": "JD",
+        }) as r:
+            assert r.status_code == 200
+            body = r.read().decode("utf-8")
+        events = _parse_sse(body)
+        stages = [e["event"] for e in events]
+        assert stages[0] == "starting"
+        assert "load_context" in stages
+        assert "draft" in stages
+        assert "review" in stages
+        assert "output" in stages
+        assert "complete" in stages
+        assert stages[-1] == "result"
+
+    def test_stream_unknown_workflow_returns_404(self, http_client_noauth):
+        r = http_client_noauth.post("/workflows/nope/stream", json={})
+        assert r.status_code == 404

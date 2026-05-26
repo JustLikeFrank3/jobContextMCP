@@ -1,27 +1,42 @@
-"""
-WorkflowService: stub for the Phase C LangGraph resume workflow.
+"""WorkflowService: drives LangGraph workflows and emits ProgressEvents.
 
-This module is intentionally minimal until Phase C lands. The placeholder
-class establishes the import surface so transport and CLI code can be wired
-up incrementally without circular-import churn later.
+Currently supports:
+    "resume_tailoring" — workflows.langgraph.resume_graph.build_resume_graph()
 
-When Phase C is implemented this module will:
-    - Import the StateGraph from workflows.langgraph.resume_graph
-    - Expose `run_resume_workflow(company, role, jd, on_progress=None)` that
-      drives the graph and emits a ProgressEvent at each node transition.
-    - Expose `run_workflow_by_name(name, inputs, on_progress=None)` for the
-      generic /workflows/{name} HTTP route.
+The service uses the compiled graph's `.stream(state, stream_mode="updates")`
+to receive one update per node transition, emits a ProgressEvent with the
+node name as the stage, and returns the final state dict after the stream
+ends.
 
-See CHANGELOG.md "Issue #29" for the full specification.
+This is the Phase C wiring; the Phase A2 stub raised NotImplementedError.
 """
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import Any, Callable, Optional
 
 from services.events import ProgressCallback, _emit
+from workflows.langgraph import build_resume_graph
+
+
+# Registry of available named workflows. Lazy-built so importing this module
+# does not eagerly construct LangGraph state machines.
+_GRAPH_BUILDERS: dict[str, Callable[[], Any]] = {
+    "resume_tailoring": build_resume_graph,
+}
+
+
+class UnknownWorkflowError(KeyError):
+    """Raised when WorkflowService.run is given a workflow name it does not know."""
 
 
 class WorkflowService:
-    """Placeholder for the LangGraph workflow orchestrator (Phase C)."""
+    """Drive a named LangGraph workflow with progress event emission."""
+
+    @staticmethod
+    def list_workflows() -> list[str]:
+        """Return the names of all registered workflows."""
+        return sorted(_GRAPH_BUILDERS.keys())
 
     @staticmethod
     def run(
@@ -29,25 +44,58 @@ class WorkflowService:
         inputs: dict[str, Any],
         on_progress: Optional[ProgressCallback] = None,
     ) -> dict[str, Any]:
-        """Run a named LangGraph workflow.
+        """Run a named LangGraph workflow to completion.
 
-        Not yet implemented. Raises NotImplementedError. The signature is
-        frozen so HTTP routes and tests can be scaffolded ahead of Phase C.
+        Stages emitted:
+            "starting"  — about to invoke the graph, payload includes inputs.
+            <node_name> — one event per node transition with the partial state
+                          delta-key list in payload.
+            "complete"  — graph finished, payload includes the final state keys.
 
         Args:
             name:        Workflow identifier (e.g. "resume_tailoring").
-            inputs:      Workflow input dict (company, role, jd, etc.).
-            on_progress: Optional progress callback for node transitions.
+            inputs:      Initial state dict matching the workflow's State schema.
+            on_progress: Optional progress callback.
 
         Returns:
-            Workflow final state dict.
+            The final accumulated state dict.
 
         Raises:
-            NotImplementedError: Always, until Phase C lands.
+            UnknownWorkflowError: If `name` is not in the registry.
         """
-        _emit(on_progress, "not_implemented",
-              f"Workflow '{name}' requested but LangGraph integration is pending (Phase C)",
-              {"workflow": name})
-        raise NotImplementedError(
-            "WorkflowService is a Phase C stub. See CHANGELOG Issue #29."
-        )
+        if name not in _GRAPH_BUILDERS:
+            available = ", ".join(WorkflowService.list_workflows()) or "(none)"
+            raise UnknownWorkflowError(
+                f"Unknown workflow {name!r}. Available: {available}"
+            )
+
+        _emit(on_progress, "starting", f"Starting workflow '{name}'",
+              {"workflow": name, "inputs": _safe_summary(inputs)})
+
+        graph = _GRAPH_BUILDERS[name]()
+
+        # stream_mode="updates" yields {node_name: {state_delta}} per step.
+        # We accumulate deltas into final_state and emit one event per node.
+        final_state: dict[str, Any] = dict(inputs)
+        for update in graph.stream(inputs, stream_mode="updates"):
+            for node_name, delta in update.items():
+                if delta:
+                    final_state.update(delta)
+                _emit(on_progress, node_name, f"Node '{node_name}' completed",
+                      {"delta_keys": sorted(delta.keys()) if delta else []})
+
+        _emit(on_progress, "complete", f"Workflow '{name}' finished",
+              {"workflow": name, "result_keys": sorted(final_state.keys())})
+
+        return final_state
+
+
+def _safe_summary(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Truncate long string values in the inputs payload for event display."""
+    out: dict[str, Any] = {}
+    for k, v in inputs.items():
+        if isinstance(v, str) and len(v) > 120:
+            out[k] = v[:117] + "..."
+        else:
+            out[k] = v
+    return out

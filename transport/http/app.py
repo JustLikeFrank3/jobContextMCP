@@ -17,6 +17,7 @@ from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
 from transport.http.routes import jobs as jobs_routes
 from transport.http.routes import resumes as resumes_routes
+from transport.http.routes import workflows as workflows_routes
 
 
 _logger = logging.getLogger(__name__)
@@ -55,5 +56,6 @@ def create_app() -> FastAPI:
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)
+    app.include_router(workflows_routes.router)
 
     return app
