@@ -1,0 +1,33 @@
+{
+  "name": "startup_founder",
+  "description": "Early-stage / founder-adjacent framing: range, scrappy ownership, 0-to-1 stories, momentum verbs.",
+  "tone_modifiers": {
+    "register": "founder-direct",
+    "voice": "first-person ownership, momentum verbs (shipped, owned, built), no corporate hedging",
+    "banned_phrases": [
+      "I hope this finds you well",
+      "I wanted to reach out",
+      "responsible for",
+      "tasked with"
+    ],
+    "preferred_punctuation": {
+      "flow_connector": "ellipsis",
+      "no_em_dash": true,
+      "no_hyphen_connector": true,
+      "no_emoji": true
+    }
+  },
+  "weighting": {
+    "recent_experience_boost": 1.2,
+    "leadership_keywords_boost": 1.1,
+    "ic_keywords_boost": 1.2,
+    "domain_keywords_boost": 1.0
+  },
+  "formatting_rules": {
+    "bullet_max_lines": 2,
+    "lead_with_credential": true,
+    "low_commitment_close": true,
+    "summary_word_target": 55,
+    "metrics_required_per_bullet": false
+  }
+}

@@ -16,6 +16,7 @@ from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
 from transport.http.routes import jobs as jobs_routes
+from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 
@@ -57,5 +58,6 @@ def create_app() -> FastAPI:
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)
     app.include_router(workflows_routes.router)
+    app.include_router(personas_routes.router)
 
     return app

@@ -109,3 +109,39 @@ def isolated_server(tmp_path: Path):
     srv._reconfigure(fake_cfg)
     yield tmp_path
     srv._reconfigure(original_cfg)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# HTTP transport fixtures (shared across HTTP/persona/workflow test modules)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def http_client_noauth(monkeypatch, isolated_server):
+    """FastAPI TestClient with API_KEY unset (auth disabled)."""
+    from fastapi.testclient import TestClient
+    from transport.http.app import create_app
+    from transport.http.config import reset_settings_cache
+
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+    reset_settings_cache()
+    app = create_app()
+    with TestClient(app) as client:
+        yield client
+    reset_settings_cache()
+
+
+@pytest.fixture()
+def http_client_authed(monkeypatch, isolated_server):
+    """FastAPI TestClient with API_KEY set to 'test-key'."""
+    from fastapi.testclient import TestClient
+    from transport.http.app import create_app
+    from transport.http.config import reset_settings_cache
+
+    monkeypatch.setenv("API_KEY", "test-key")
+    monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+    reset_settings_cache()
+    app = create_app()
+    with TestClient(app) as client:
+        yield client
+    reset_settings_cache()
