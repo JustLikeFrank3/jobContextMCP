@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Phase B FastAPI HTTP + SSE transport
+
+- **`transport/http/` package** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — FastAPI adapter exposing core workflows over REST and Server-Sent Events. Existing stdio MCP server (`server.py`) is unchanged; both transports share `tools/` and `services/`.
+  - **App factory** (`transport/http/app.py`) — builds FastAPI instance, attaches CORS, logs warning when `API_KEY` is unset.
+  - **Entry point** (`transport/http/main.py`) — `python -m transport.http.main` boots uvicorn. Reads `HOST` / `PORT` / `ENABLE_REMOTE` / `API_KEY` / `CORS_ORIGINS` from env (`transport/http/config.py`). Defaults to 127.0.0.1 bind; `ENABLE_REMOTE=true` flips to 0.0.0.0 for Tailscale / LAN.
+  - **Bearer-token auth** (`transport/http/auth.py`) — `Authorization: Bearer <API_KEY>` required on all non-health endpoints. Bare token also accepted. Auth is bypassed when `API_KEY` is unset (warning logged at startup); health endpoint is always open so load balancers can probe.
+  - **Routes:**
+    - `GET /health` — service status + auth-enabled flag.
+    - `POST /jobs/evaluate` and `POST /jobs/evaluate/stream` — queue + assess fitment, sync JSON or SSE per stage.
+    - `POST /jobs/decide` — record add/dismiss decision.
+    - `POST /resumes/generate` and `POST /resumes/generate/stream` — resume or cover letter generation, sync JSON or SSE.
+    - `POST /stories/search` — STAR story tag lookup.
+    - `GET /tone/profile` — current tone profile text.
+  - **SSE adapter** (`transport/http/sse.py`) — bridges sync `services.ProgressCallback` into an async `EventSourceResponse`. Runs the service call in a worker thread, pushes `ProgressEvent`s into an `asyncio.Queue`, and emits each as `event: <stage>\ndata: {...}`. Final synthetic `result` event carries the structured service return value.
+  - **Pydantic models** (`transport/http/models.py`) — request/response schemas per endpoint plus `StreamEvent` envelope.
+  - **Dependencies** — `fastapi>=0.115`, `uvicorn[standard]>=0.30`, `httpx>=0.27`, `sse-starlette>=2.1` added to `requirements.txt`.
+  - **Env template** — HTTP-transport section appended to `.env.example` with key-generation hint.
+  - **`tests/test_http_api.py`** — 18 tests covering health, auth (missing/wrong/valid/bare-token/disabled), jobs/evaluate, jobs/decide, resumes/generate, stories/search, tone/profile, plus SSE stage ordering and final result payload for both streaming endpoints. Suite now 422/422 passing.
+  - **Smoke-tested live:** `python -m transport.http.main` boots cleanly; `curl http://127.0.0.1:8765/health` returns 200.
+
 ### Added — Phase A2 orchestration services
 
 - **`services/` package** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27), partial) — thin orchestration layer for multi-step workflows that compose tool functions and emit progress events. Tool modules in `tools/` remain the unit-level API for single-step operations; services exist only where HTTP/SSE consumers need streamable named stages.
