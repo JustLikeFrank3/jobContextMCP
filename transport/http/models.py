@@ -64,6 +64,10 @@ class ResumeGenerateRequest(BaseModel):
     job_description: str = Field(..., min_length=1)
     output_filename: str = ""
     kind: Literal["resume", "cover_letter"] = "resume"
+    persona: str | None = Field(
+        default=None,
+        description="Optional persona name. Defaults to 'default' if omitted.",
+    )
 
 
 class ResumeGenerateResponse(BaseModel):

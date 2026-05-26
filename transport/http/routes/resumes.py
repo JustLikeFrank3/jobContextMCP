@@ -33,6 +33,7 @@ async def generate(req: ResumeGenerateRequest) -> ResumeGenerateResponse:
         job_description=req.job_description,
         output_filename=req.output_filename,
         kind=req.kind,
+        persona=req.persona,
     )
     return ResumeGenerateResponse(
         success=result.success,
@@ -54,6 +55,7 @@ async def generate_stream(req: ResumeGenerateRequest):
             job_description=req.job_description,
             output_filename=req.output_filename,
             kind=req.kind,
+            persona=req.persona,
             on_progress=cb,
         ),
     )

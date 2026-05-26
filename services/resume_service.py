@@ -60,6 +60,7 @@ class ResumeService:
         job_description: str,
         output_filename: str = "",
         kind: str = "resume",
+        persona: Optional[str] = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> ResumeResult:
         """Generate a tailored resume or cover letter end-to-end.
@@ -88,15 +89,29 @@ class ResumeService:
         if kind not in ("resume", "cover_letter"):
             raise ValueError(f"kind must be 'resume' or 'cover_letter', got {kind!r}")
 
+        # Resolve persona up-front so an invalid name fails fast before any
+        # generation work happens. None → "default".
+        from services.persona_service import PersonaService
+        persona_cfg = PersonaService.get(persona)
+
         _emit(on_progress, "starting", f"Starting {kind} generation for {role} @ {company}",
-              {"company": company, "role": role, "kind": kind})
+              {"company": company, "role": role, "kind": kind, "persona": persona_cfg.name})
 
         _emit(on_progress, "generating", f"Calling generate tool for {kind}")
 
+        # Persona is appended to the JD as a prompt-bias block. The underlying
+        # generate tool concatenates JD into its prompt, so this is the lowest-
+        # touch wiring point that works for both keyed and keyless paths.
+        jd_with_persona = (
+            job_description
+            + "\n\n---\n"
+            + persona_cfg.to_prompt_block()
+        )
+
         if kind == "resume":
-            content = _generate.generate_resume(company, role, job_description, output_filename)
+            content = _generate.generate_resume(company, role, jd_with_persona, output_filename)
         else:
-            content = _generate.generate_cover_letter(company, role, job_description, output_filename)
+            content = _generate.generate_cover_letter(company, role, jd_with_persona, output_filename)
 
         # The tool returns a "✓ ..." confirmation string when it ran the full
         # OpenAI + save + export pipeline; otherwise it returns a context

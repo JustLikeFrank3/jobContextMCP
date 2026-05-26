@@ -21,32 +21,8 @@ from transport.http.config import reset_settings_cache
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Fixtures
+# Helpers
 # ──────────────────────────────────────────────────────────────────────────────
-
-@pytest.fixture()
-def http_client_noauth(monkeypatch, isolated_server) -> Iterator[TestClient]:
-    """TestClient with API_KEY unset (auth disabled)."""
-    monkeypatch.delenv("API_KEY", raising=False)
-    monkeypatch.delenv("ENABLE_REMOTE", raising=False)
-    reset_settings_cache()
-    app = create_app()
-    with TestClient(app) as client:
-        yield client
-    reset_settings_cache()
-
-
-@pytest.fixture()
-def http_client_authed(monkeypatch, isolated_server) -> Iterator[TestClient]:
-    """TestClient with API_KEY set to 'test-key'."""
-    monkeypatch.setenv("API_KEY", "test-key")
-    monkeypatch.delenv("ENABLE_REMOTE", raising=False)
-    reset_settings_cache()
-    app = create_app()
-    with TestClient(app) as client:
-        yield client
-    reset_settings_cache()
-
 
 def _auth_headers() -> dict[str, str]:
     return {"Authorization": "Bearer test-key"}

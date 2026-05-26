@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Phase D Persona configuration
+
+- **`data/personas/`** — four bundled persona JSON configs: `default`, `executive_polish`, `faang_technical`, `startup_founder`. Each defines `tone_modifiers` (banned phrases, preferred punctuation, register), `weighting` (boosts for leadership / IC / domain / recency keywords), and `formatting_rules` (bullet limits, summary word target, STAR/metrics requirements).
+- **`services/persona_service.py`** — `PersonaService` (stateless loader) + `PersonaConfig` (frozen dataclass) + `UnknownPersonaError`. Resolution order:
+  1. `<DATA_FOLDER>/personas/*.json` — user overrides (any JSON here shadows the bundled set entirely).
+  2. Repo-bundled `data/personas/` — defaults for fresh installs and tests.
+  `PersonaConfig.to_prompt_block()` renders the persona as a system-prompt fragment for LLM injection.
+- **`ResumeService.generate` accepts an optional `persona` kwarg** — defaults to `"default"` when omitted; an unknown name raises `UnknownPersonaError` before any generation work. The persona prompt block is appended to the JD passed into the underlying generate tool, so both keyed (direct OpenAI) and keyless (context-package) paths receive the bias.
+- **HTTP endpoints** at `transport/http/routes/personas.py`:
+  - `GET /personas` — list available persona names.
+  - `GET /personas/{name}` — return the full config.
+  - `POST /resumes/generate` now accepts `persona: <name>` in the request body.
+- **Tests** — `tests/test_persona_service.py` (12 tests): service loader, user-override precedence, unknown-name error, prompt-block rendering, ResumeService wiring (default + named + unknown), HTTP endpoint coverage. HTTP fixtures (`http_client_noauth`, `http_client_authed`) moved from `tests/test_http_api.py` to `tests/conftest.py` so cross-module HTTP tests can share them. Suite 448/448 passing.
+
 ### Added — Phase C LangGraph resume workflow
 
 - **`workflows/langgraph/resume_graph.py`** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — `StateGraph` for tailored resume generation:

@@ -1,0 +1,34 @@
+{
+  "name": "executive_polish",
+  "description": "Director / VP / C-suite framing: outcomes, P&L, org scope, strategic narrative. Tighter, more declarative.",
+  "tone_modifiers": {
+    "register": "executive-formal",
+    "voice": "outcome-first, third-person business-impact phrasing, fewer first-person verbs",
+    "banned_phrases": [
+      "I hope this finds you well",
+      "I wanted to reach out",
+      "I am excited to",
+      "I trust this email finds you",
+      "passionate about"
+    ],
+    "preferred_punctuation": {
+      "flow_connector": "semicolon",
+      "no_em_dash": true,
+      "no_hyphen_connector": true,
+      "no_emoji": true
+    }
+  },
+  "weighting": {
+    "recent_experience_boost": 1.1,
+    "leadership_keywords_boost": 1.5,
+    "ic_keywords_boost": 0.6,
+    "domain_keywords_boost": 1.0
+  },
+  "formatting_rules": {
+    "bullet_max_lines": 2,
+    "lead_with_credential": true,
+    "low_commitment_close": false,
+    "summary_word_target": 80,
+    "metrics_required_per_bullet": true
+  }
+}
