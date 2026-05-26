@@ -93,8 +93,13 @@ def get_job_queue(status: str = "") -> str:
     return "\n".join(lines)
 
 
-def evaluate_queued_job(company: str, role: str) -> str:
-    """Run fitment analysis on a queued job. Loads the stored JD and assembles a full fitment context package for review. Sets status to 'evaluated' so decide_job can proceed. After reviewing this output, call decide_job with 'add' or 'dismiss'."""
+def evaluate_queued_job(company: str, role: str, persona: str = "") -> str:
+    """Run fitment analysis on a queued job. Loads the stored JD and assembles a full fitment context package for review. Sets status to 'evaluated' so decide_job can proceed. After reviewing this output, call decide_job with 'add' or 'dismiss'.
+
+    Optional `persona` (e.g. 'faang_technical', 'executive_polish') prepends a
+    persona lens to the context pack so the consuming agent applies role-specific
+    weighting.
+    """
     data = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})
     jobs: list = data.get("jobs", [])
 
@@ -116,6 +121,7 @@ def evaluate_queued_job(company: str, role: str) -> str:
         company=company,
         role=role,
         job_description=job["jd"],
+        persona=persona,
     )
 
 

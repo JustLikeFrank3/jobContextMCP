@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Persona-aware fitment assessment** — fitment tooling now accepts an optional `persona` parameter that flows cleanly through every layer (HTTP request → `JobAnalysisService` → `tools.fitment` / `tools.job_queue`). When set, the named persona's prompt block is prepended either to the returned context pack (for `assess_job_fitment` / `evaluate_queued_job` / `/jobs/evaluate`) or to the LLM system prompt (for `run_job_assessment`). Same JD against `faang_technical`, `executive_polish`, and `startup_founder` now produces materially different lenses on the same candidate. Unknown persona names emit a non-fatal warning instead of crashing. New `tests/test_fitment.py` (11 tests) covers persona injection across the tool, service, and route layers.
+
 ### Planned
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.

@@ -35,6 +35,7 @@ async def evaluate(req: JobEvaluateRequest) -> JobEvaluateResponse:
         role=req.role,
         job_description=req.job_description,
         source=req.source,
+        persona=req.persona,
     )
     return JobEvaluateResponse(
         company=result.company,
@@ -55,6 +56,7 @@ async def evaluate_stream(req: JobEvaluateRequest):
             role=req.role,
             job_description=req.job_description,
             source=req.source,
+            persona=req.persona,
             on_progress=cb,
         ),
     )
