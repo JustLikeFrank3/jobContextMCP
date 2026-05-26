@@ -312,6 +312,98 @@ def review_message(text: str) -> str:
     return "\n".join(lines)
 
 
+def draft_reply(
+    incoming_message: str,
+    contact: str = "",
+    company: str = "",
+    intent: str = "",
+) -> str:
+    """Package context for replying to an incoming message (recruiter, HM, contact).
+
+    Returns a context block bundling: the incoming text, Frank's tone profile,
+    relevant personal context, job-hunt status for the company (if any), known
+    contact context, and tactical reply instructions. The AI uses this to draft
+    a short, on-voice reply.
+
+    Args:
+        incoming_message: Verbatim text of the message Frank received.
+        contact:          Name of the sender (looked up via people DB if known).
+        company:          Company they represent (for status pull).
+        intent:           Frank's intended response posture: 'accept',
+                          'decline_polite', 'decline_compensation', 'request_info',
+                          'delay', 'enthusiastic_yes', or free-form. Optional.
+
+    Returns:
+        A multi-section context package the AI fills in.
+    """
+    if not incoming_message or not incoming_message.strip():
+        return "⚠ draft_reply: incoming_message is required"
+
+    tone = get_tone_profile()
+    pcontext = get_personal_context()
+    status = get_job_hunt_status() if company else ""
+    contact_ctx = lookup_person_context(contact) if contact else ""
+
+    intent_instruction = {
+        "accept": (
+            "Posture: positive, decisive. Confirm the next step explicitly. "
+            "If a time slot was offered, accept one or propose two alternatives. "
+            "Do not over-explain enthusiasm."
+        ),
+        "decline_polite": (
+            "Posture: warm decline. Be direct about not moving forward, leave the "
+            "door open for future contact, do not invent a reason if you don't need one. "
+            "Keep it under 4 sentences."
+        ),
+        "decline_compensation": (
+            "Posture: decline citing compensation mismatch without disclosing target numbers. "
+            "Phrase as 'the comp range we discussed is below where I need to be right now.' "
+            "Offer to reconnect if the band changes."
+        ),
+        "request_info": (
+            "Posture: ask one or two concrete questions before committing. "
+            "Examples: total comp band, on-call expectations, remote policy, team scope. "
+            "Pick what the incoming message left ambiguous."
+        ),
+        "delay": (
+            "Posture: buy time without ghosting. Acknowledge receipt, name a specific "
+            "follow-up window (e.g. 'I'll get back to you by end of week'), keep it short."
+        ),
+        "enthusiastic_yes": (
+            "Posture: high-confidence yes. Mirror one specific thing they said back to them, "
+            "confirm the next step, sign off."
+        ),
+    }.get(intent.strip().lower(), "") if intent else ""
+
+    sections = [
+        "──── INCOMING MESSAGE ────",
+        incoming_message.strip(),
+        "",
+        "──── FRANK'S TONE PROFILE ────",
+        tone,
+        "",
+        "──── PERSONAL CONTEXT (use only if relevant) ────",
+        pcontext,
+    ]
+    if status:
+        sections += ["", "──── JOB HUNT STATUS FOR THIS COMPANY ────", status]
+    if contact_ctx:
+        sections += ["", "──── CONTACT CONTEXT ────", contact_ctx]
+    sections += [
+        "",
+        "──── REPLY INSTRUCTIONS ────",
+        "Match the incoming register. Keep the reply under 6 sentences unless the "
+        "incoming message asks something substantive that needs more. "
+        "Do not open with 'I hope this finds you well' or any variation. "
+        "Do not use em dashes — use ellipses (...) for connective tissue. "
+        "No emojis. Lead with the answer or the most important sentence, not framing.",
+    ]
+    if intent_instruction:
+        sections += ["", "──── INTENT-SPECIFIC POSTURE ────", intent_instruction]
+    return "\n".join(sections)
+
+
 def register(mcp) -> None:
     mcp.tool()(draft_outreach_message)
     mcp.tool()(review_message)
+    mcp.tool()(draft_reply)
