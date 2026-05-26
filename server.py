@@ -62,48 +62,70 @@ from tools import (
 )
 
 
+# Tool modules in registration order (session MUST be first).
+_TOOL_MODULES = [
+    session,
+    job_hunt,
+    resume,
+    fitment,
+    interview,
+    interviews,
+    project_scanner,
+    health,
+    context,
+    tone,
+    rag,
+    star,
+    outreach,
+    export,
+    generate,
+    langgraph_pipeline,
+    people,
+    posts,
+    rejections,
+    digest,
+    compensation,
+    ingest,
+    hbdi,
+    crossref,
+    job_queue,
+    setup,
+]
+
+
 def _sync_config_exports() -> None:
-    global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE
-    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, FB_FRIENDS_FOLDER
-    global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
-    global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
-    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
-    global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
+    """Mirror every UPPERCASE attribute from lib.config (plus _cfg) onto this
+    module so tests and legacy callers can read paths via `server.STATUS_FILE`.
+    Auto-discovers new path constants — no manual additions needed when
+    lib.config grows.
+    """
+    module_globals = globals()
+    module_globals["_cfg"] = config._cfg
+    for name in dir(config):
+        if name.startswith("_"):
+            continue
+        if not name.isupper() and not name[0].isupper():
+            continue
+        module_globals[name] = getattr(config, name)
 
-    _cfg = config._cfg
 
-    RESUME_FOLDER = config.RESUME_FOLDER
-    LEETCODE_FOLDER = config.LEETCODE_FOLDER
-    SIDE_PROJECT_FOLDERS = config.SIDE_PROJECT_FOLDERS
-    DATA_FOLDER = config.DATA_FOLDER
-
-    STATUS_FILE = config.STATUS_FILE
-    HEALTH_LOG_FILE = config.HEALTH_LOG_FILE
-    PERSONAL_CONTEXT_FILE = config.PERSONAL_CONTEXT_FILE
-    TONE_FILE = config.TONE_FILE
-    SCAN_INDEX_FILE = config.SCAN_INDEX_FILE
-    PEOPLE_FILE = config.PEOPLE_FILE
-    LINKEDIN_POSTS_FILE = config.LINKEDIN_POSTS_FILE
-    REJECTIONS_FILE = config.REJECTIONS_FILE
-    INTERVIEWS_FILE = config.INTERVIEWS_FILE
-    CONTACT_CROSSREF_FILE = config.CONTACT_CROSSREF_FILE
-    LINKEDIN_CONNECTIONS_FILE = config.LINKEDIN_CONNECTIONS_FILE
-    FB_FRIENDS_FOLDER = config.FB_FRIENDS_FOLDER
-
-    MASTER_RESUME = config.MASTER_RESUME
-    LEETCODE_CHEATSHEET = config.LEETCODE_CHEATSHEET
-    QUICK_REFERENCE = config.QUICK_REFERENCE
-
-    RESUME_TEMPLATE_PNG = config.RESUME_TEMPLATE_PNG
-    COVER_LETTER_TEMPLATE_PNG = config.COVER_LETTER_TEMPLATE_PNG
-    TEMPLATE_FORMAT = config.TEMPLATE_FORMAT
-    GM_AWARDS = config.GM_AWARDS
-    FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
-    SKILLS_SHORTER = config.SKILLS_SHORTER
-    INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
-    JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
+def _sync_tool_exports() -> None:
+    """Alias every public callable defined in each tool module onto this
+    module so tests and legacy callers can call them as `server.queue_job(...)`.
+    Auto-discovers new tools — no manual aliases needed.
+    Skips `register`, dunders, and re-imported callables from other modules.
+    """
+    module_globals = globals()
+    for mod in _TOOL_MODULES:
+        for name, value in vars(mod).items():
+            if name.startswith("_") or name == "register":
+                continue
+            if not callable(value):
+                continue
+            # Only alias things defined IN this tool module, not re-imports.
+            if getattr(value, "__module__", "") != mod.__name__:
+                continue
+            module_globals[name] = value
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -127,111 +149,13 @@ mcp = FastMCP(
 
 
 session.register(mcp)  # MUST be first — session startup tool
-job_hunt.register(mcp)
-resume.register(mcp)
-fitment.register(mcp)
-interview.register(mcp)
-interviews.register(mcp)
-project_scanner.register(mcp)
-health.register(mcp)
-context.register(mcp)
-tone.register(mcp)
-rag.register(mcp)
-star.register(mcp)
-outreach.register(mcp)
-export.register(mcp)
-generate.register(mcp)
-langgraph_pipeline.register(mcp)
-people.register(mcp)
-posts.register(mcp)
-rejections.register(mcp)
-digest.register(mcp)
-compensation.register(mcp)
-ingest.register(mcp)
-hbdi.register(mcp)
-crossref.register(mcp)
-job_queue.register(mcp)
-setup.register(mcp)
+for _mod in _TOOL_MODULES[1:]:
+    _mod.register(mcp)
 
 
-get_job_hunt_status = job_hunt.get_job_hunt_status
-update_application = job_hunt.update_application
-
-read_master_resume = resume.read_master_resume
-list_existing_materials = resume.list_existing_materials
-read_existing_resume = resume.read_existing_resume
-read_reference_file = resume.read_reference_file
-
-assess_job_fitment = fitment.assess_job_fitment
-get_customization_strategy = fitment.get_customization_strategy
-
-get_interview_quick_reference = interview.get_interview_quick_reference
-get_leetcode_cheatsheet = interview.get_leetcode_cheatsheet
-generate_interview_prep_context = interview.generate_interview_prep_context
-get_existing_prep_file = interview.get_existing_prep_file
-save_interview_prep = interview.save_interview_prep
-
-log_interview = interviews.log_interview
-get_interviews = interviews.get_interviews
-get_interview_context = interviews.get_interview_context
-
-scan_project_for_skills = project_scanner.scan_project_for_skills
-
-log_mental_health_checkin = health.log_mental_health_checkin
-get_mental_health_log = health.get_mental_health_log
-
-log_personal_story = context.log_personal_story
-get_personal_context = context.get_personal_context
-
-log_tone_sample = tone.log_tone_sample
-get_tone_profile = tone.get_tone_profile
-scan_materials_for_tone = tone.scan_materials_for_tone
-
-search_materials = rag.search_materials
-reindex_materials = rag.reindex_materials
-
-get_star_story_context = star.get_star_story_context
-
-draft_outreach_message = outreach.draft_outreach_message
-
-export_resume_pdf = export.export_resume_pdf
-export_cover_letter_pdf = export.export_cover_letter_pdf
-
-generate_resume = generate.generate_resume
-generate_cover_letter = generate.generate_cover_letter
-
-log_person = people.log_person
-get_people = people.get_people
-get_person = people.get_person
-
-log_linkedin_post = posts.log_linkedin_post
-update_post_metrics = posts.update_post_metrics
-get_linkedin_posts = posts.get_linkedin_posts
-
-log_rejection = rejections.log_rejection
-get_rejections = rejections.get_rejections
-
-get_daily_digest = digest.get_daily_digest
-weekly_summary = digest.weekly_summary
-
-update_compensation = compensation.update_compensation
-get_compensation_comparison = compensation.get_compensation_comparison
-
-log_application_event = job_hunt.log_application_event
-review_message = outreach.review_message
-resume_diff = resume.resume_diff
-ingest_anecdote = ingest.ingest_anecdote
-
-run_hbdi_assessment = hbdi.run_hbdi_assessment
-get_hbdi_profile = hbdi.get_hbdi_profile
-
-check_workspace = setup.check_workspace
-setup_workspace = setup.setup_workspace
-
-queue_job = job_queue.queue_job
-get_job_queue = job_queue.get_job_queue
-evaluate_queued_job = job_queue.evaluate_queued_job
-decide_job = job_queue.decide_job
+# Auto-alias every public tool function onto this module so tests and legacy
+# callers can use `server.queue_job(...)`. Stable across new tool additions.
+_sync_tool_exports()
 
 
 if __name__ == "__main__":
