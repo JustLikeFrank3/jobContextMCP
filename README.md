@@ -166,13 +166,14 @@ sequenceDiagram
 | `update_application(company, role, status, ...)` | Add or update an application |
 | `queue_job(company, role, jd, source?)` | **v0.6.5** — drop a JD into the evaluation inbox (`pending`); duplicate submissions return a message rather than overwriting |
 | `get_job_queue(status?)` | **v0.6.5** — list queued jobs, optionally filtered by `pending` / `evaluated` / `added` / `dismissed` |
-| `evaluate_queued_job(company, role)` | **v0.6.5** — load stored JD and assemble fitment context for review; advances status to `evaluated` (required before deciding) |
+| `evaluate_queued_job(company, role, persona?)` | **v0.6.5** — load stored JD and assemble fitment context for review; advances status to `evaluated` (required before deciding). **v0.7.1** — optional `persona` prepends a persona lens to the context pack |
 | `decide_job(company, role, decision, notes?, fitment_score?)` | **v0.6.5** — `add` creates pipeline entry at status `interested`; `dismiss` soft-deletes; gate enforced on evaluation |
 | `read_master_resume()` | Your master resume (source of truth for all customizations) |
 | `list_existing_materials(company?)` | List generated resumes + cover letters |
 | `read_existing_resume(filename)` | Read a specific resume file |
 | `read_reference_file(filename)` | Read from a reference materials folder |
-| `assess_job_fitment(company, role, jd)` | Packages your resume + JD for AI fitment analysis |
+| `assess_job_fitment(company, role, jd, persona?)` | Packages your resume + JD for AI fitment analysis. **v0.7.1** — optional `persona` prepends a persona lens (e.g. `faang_technical`, `executive_polish`) so the consuming agent applies role-specific weighting |
+| `run_job_assessment(company, role, jd, persona?, auto_save?)` | **v0.7.1** — LLM-powered fitment scoring (OpenAI). Returns score, strong matches, gaps, key angles, comp assessment, recommendation. Optional `persona` prepended to the system prompt. Auto-saves to `07-Job-Assessments` unless `auto_save=False`. Falls back to context-pack mode when no OpenAI key is configured |
 | `get_customization_strategy(role_type)` | Resume emphasis guide by role type |
 | `get_interview_quick_reference()` | STAR stories + system design framework on demand |
 | `get_leetcode_cheatsheet(section?)` | Algorithm patterns — full cheatsheet or by topic |
@@ -252,6 +253,8 @@ Endpoints:
 ### Persona configs
 
 `services/persona_service.py` loads JSON persona presets from `data/personas/` (bundled defaults: `default`, `executive_polish`, `faang_technical`, `startup_founder`). Drop your own JSON into `<data_folder>/personas/` to override; the user directory takes precedence over bundled defaults. Each persona contributes a Markdown prompt block (tone modifiers, weighting, formatting rules) appended to the job description before generation. Pass `persona="executive_polish"` to `generate_resume()` or the `/resumes/generate` endpoint.
+
+**v0.7.1** extends persona awareness to the fitment stack. Pass `persona="faang_technical"` to `assess_job_fitment()`, `evaluate_queued_job()`, `run_job_assessment()`, or the `/jobs/evaluate` endpoint and the same JD will produce a different lens: `faang_technical` weighs systems depth and architectural reasoning, `executive_polish` weighs leadership narrative and outcomes, `startup_founder` weighs ownership and range. Unknown persona names emit a non-fatal warning rather than crashing.
 
 ### LangGraph resume workflow
 

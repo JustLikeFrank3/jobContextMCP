@@ -4,13 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-
-- **Persona-aware fitment assessment** — fitment tooling now accepts an optional `persona` parameter that flows cleanly through every layer (HTTP request → `JobAnalysisService` → `tools.fitment` / `tools.job_queue`). When set, the named persona's prompt block is prepended either to the returned context pack (for `assess_job_fitment` / `evaluate_queued_job` / `/jobs/evaluate`) or to the LLM system prompt (for `run_job_assessment`). Same JD against `faang_technical`, `executive_polish`, and `startup_founder` now produces materially different lenses on the same candidate. Unknown persona names emit a non-fatal warning instead of crashing. New `tests/test_fitment.py` (11 tests) covers persona injection across the tool, service, and route layers.
-
 ### Planned
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
+
+## [0.7.1] - 2026-05-25
+
+### Added
+
+- **Persona-aware fitment assessment** — fitment tooling now accepts an optional `persona` parameter that flows cleanly through every layer (HTTP request → `JobAnalysisService` → `tools.fitment` / `tools.job_queue`), mirroring the existing `ResumeGenerateRequest.persona` pattern. When set, the named persona's prompt block is prepended either to the returned context pack (`assess_job_fitment`, `evaluate_queued_job`, `POST /jobs/evaluate`) or to the LLM system prompt (`run_job_assessment`). Same JD against `faang_technical`, `executive_polish`, and `startup_founder` now produces materially different lenses on the same candidate. Unknown persona names emit a non-fatal warning instead of crashing. Real-world validation against a FanDuel JD showed the `faang_technical` lens sharpened gap framing (Azure→AWS adaptation, BFF pattern callout) without altering the underlying fit score. New `tests/test_fitment.py` (11 tests) covers persona injection across the tool, service, and route layers; full suite 476/476 green.
+
+### Fixed
+
+- **Circular-import guard** — `PersonaService` is now lazy-imported inside `tools.fitment` to break the `services/__init__ → resume_service → tools.generate → tools.fitment` cycle that would otherwise crash server boot when persona awareness was added.
 
 ## [0.7.0] - 2026-05-25
 
