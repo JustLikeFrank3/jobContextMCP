@@ -4,12 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Planned
+_No unreleased changes._
 
-- **Service layer extraction** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27)) — decouple business logic from MCP transport; MCP tools become thin wrappers around `resume_service`, `job_analysis_service`, `retrieval_service`, `tone_service`, `langgraph_service`. Required prerequisite for all remote/HTTP work.
-- **LangGraph resume generation workflow** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — port resume generation to a `StateGraph` (`load_context → rag_retrieval → draft → review → conditional_revise → output`); proves the service layer architecture and enables SSE streaming of workflow progress. Branch: `feat/langgraph-port`.
-- **FastAPI HTTP server + SSE streaming** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — expose core workflows over REST and SSE for iPad/browser/Open WebUI access without requiring local MCP support on the client. LAN-safe by default, Tailscale-compatible, API key auth. See `docs/remote-mobile-architecture.md` for full design.
-- **Data-driven persona config** ([#30](https://github.com/JustLikeFrank3/jobContextMCP/issues/30)) — JSON persona presets (`executive_polish`, `faang_technical`, `startup_founder`, etc.) consumed by service layer, LangGraph nodes, and future mobile UI. Separate persona (tone/weighting) from workflow (resume tailoring, interview prep, outreach). Build after service layer exists.
+## [0.7.0] - 2026-05-25
+
+First release of the remote/mobile track. Adds an HTTP+SSE transport (so the iPad can talk to the server without an MCP client on-device), a LangGraph-driven resume pipeline with draft/review/revise nodes, data-driven persona configs, an auto-discovering tool registry, and a feature track of five new tools (GitHub stats, upcoming interviews, referral chains, reply drafting, CLI scheduling). 465/465 tests passing.
 
 ### Agent Customization (2026-05-25)
 
@@ -22,7 +21,19 @@ All notable changes to this project will be documented in this file.
 
 Built during an active job search after a layoff. What began as a few tools to stop re-explaining context to AI assistants every session grew into a full MCP server. Shared here for anyone in the same situation.
 
-## [0.6.4] - 2026-05-24
+## [0.6.5] - 2026-05-25
+
+### Added
+- **Job evaluation queue** (`tools/job_queue.py`) — pre-pipeline inbox for vetting job descriptions before committing to an application. Four new MCP tools implement a gated `queue → evaluate → decide` workflow:
+  - `queue_job(company, role, jd, source?)` — drops a JD into the queue at status `pending`; duplicate submissions return an informative message rather than overwriting.
+  - `get_job_queue(status?)` — returns all queued jobs, optionally filtered by status (`pending`, `evaluated`, `added`, `dismissed`); shows fitment score and decision notes when present.
+  - `evaluate_queued_job(company, role)` — loads the stored JD, calls `assess_job_fitment` to assemble a full fitment context package for review, and advances the job to status `evaluated`. Evaluation is required before `decide_job` will accept a decision (gate enforced at the data layer, not just convention).
+  - `decide_job(company, role, decision, notes?, fitment_score?)` — commits `add` or `dismiss`; `add` calls `update_application(company, role, "interested")` to create a pre-applied pipeline entry; `dismiss` soft-deletes the record (still queryable); both paths store `notes` and optional `fitment_score` from the AI's analysis.
+- **`data/job_queue.json`** runtime data file (gitignored) + `data/job_queue.example.json` reference schema — two-entry example showing `evaluated` and `dismissed` states.
+- **`JOB_QUEUE_FILE`** path constant added to `lib/config.py` and wired through `server.py` `_sync_config_exports()`.
+- **`tests/test_job_queue.py`** — 21 tests covering entry creation, auto-increment IDs, duplicate detection, status filtering, fitment context assembly, the evaluation gate, `add` pipeline write-through, `dismiss` isolation (does not touch `status.json`), fitment score storage, double-decision guard, and missing-job error paths; 21/21 passing, full suite 383/383.
+
+
 
 ### Added
 - **`get_person(name)`** (`tools/people.py`) — single-record people lookup by partial, case-insensitive name match. Returns the full person record when exactly one match is found; returns a disambiguation list when multiple names match. Does not emit the `PEOPLE DATABASE` list header — output is a flat record string, not a table. Token cost is proportional to one person's data rather than the entire 75-person database. Use this instead of `get_people()` whenever you only need one contact.

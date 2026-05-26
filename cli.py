@@ -50,6 +50,7 @@ def _discover_tools() -> dict[str, callable]:
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
         rejections, digest, compensation, ingest, hbdi, crossref,
+        github,
     )
     collector = _Collector()
     for mod in [
@@ -57,6 +58,7 @@ def _discover_tools() -> dict[str, callable]:
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
         rejections, digest, compensation, ingest, hbdi, crossref,
+        github,
     ]:
         mod.register(collector)
     return collector._tools
@@ -80,6 +82,68 @@ def _print_usage() -> None:
     print(__doc__)
 
 
+def _print_schedule_instructions(tool_name: str, run_at: str = "08:00") -> None:
+    """Emit ready-to-use crontab + launchd plist to schedule a CLI tool.
+
+    Does NOT install anything on disk — copy/paste output into the appropriate
+    system to enable. Keeps the CLI portable and side-effect-free.
+    """
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent
+    python_bin = repo_root / ".venv" / "bin" / "python"
+    cli_path = repo_root / "cli.py"
+
+    try:
+        hour, minute = (int(p) for p in run_at.split(":", 1))
+    except Exception:
+        print(f"Error: --time must be HH:MM (got {run_at!r})")
+        sys.exit(1)
+
+    output_dir = repo_root / "data" / "scheduled"
+    log_path = output_dir / f"{tool_name}.log"
+
+    print(f"# Schedule: run {tool_name} daily at {run_at}")
+    print()
+    print("# ──── crontab entry (cron / linux / older mac) ────")
+    print("# Run `crontab -e` and append:")
+    print(
+        f"{minute} {hour} * * * {python_bin} {cli_path} {tool_name} "
+        f">> {log_path} 2>&1"
+    )
+    print()
+    print("# ──── launchd plist (macOS, recommended) ────")
+    label = f"com.frankmacbride.jobcontextmcp.{tool_name}"
+    plist_path = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    print(f"# Save to: {plist_path}")
+    print(f"# Then run: launchctl load {plist_path}")
+    print()
+    print(f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{python_bin}</string>
+        <string>{cli_path}</string>
+        <string>{tool_name}</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>{hour}</integer>
+        <key>Minute</key><integer>{minute}</integer>
+    </dict>
+    <key>StandardOutPath</key><string>{log_path}</string>
+    <key>StandardErrorPath</key><string>{log_path}</string>
+    <key>WorkingDirectory</key><string>{repo_root}</string>
+</dict>
+</plist>""")
+    print()
+    print(f"# Log output will accumulate at: {log_path}")
+    print(f"# Make sure the directory exists: mkdir -p {output_dir}")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -93,6 +157,23 @@ def main() -> None:
 
     if args[0] in ("--list", "-l"):
         _print_tools(tools)
+        sys.exit(0)
+
+    if args[0] in ("--schedule",):
+        if len(args) < 2:
+            print("Error: --schedule requires a tool name (e.g. --schedule get_daily_digest)")
+            sys.exit(1)
+        tool_name = args[1]
+        if tool_name not in tools:
+            print(f"Error: no tool named '{tool_name}'. Run --list to see all tools.")
+            sys.exit(1)
+        # Optional --time HH:MM (default 08:00)
+        run_at = "08:00"
+        if "--time" in args:
+            i = args.index("--time")
+            if i + 1 < len(args):
+                run_at = args[i + 1]
+        _print_schedule_instructions(tool_name, run_at)
         sys.exit(0)
 
     tool_name = args[0]

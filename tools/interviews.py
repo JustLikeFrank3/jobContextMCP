@@ -432,7 +432,57 @@ def get_interview_context(company: str, role: str = "") -> str:
     return "\n".join(lines)
 
 
+def get_upcoming_interviews(days_ahead: int = 14) -> str:
+    """Return interviews whose interview_date is on/after today, soonest first.
+
+    Args:
+        days_ahead: Window upper bound (days from today). Default 14.
+
+    Returns:
+        Formatted summary, or a friendly empty message.
+    """
+    import datetime as _dt
+
+    data = _load_json(config.INTERVIEWS_FILE, {"interviews": []})
+    interviews = data.get("interviews", [])
+    if not interviews:
+        return "No interviews logged yet."
+
+    today = _dt.date.today()
+    upper = today + _dt.timedelta(days=max(0, days_ahead))
+
+    def _parse(d: str):
+        try:
+            return _dt.date.fromisoformat((d or "")[:10])
+        except Exception:
+            return None
+
+    upcoming = []
+    for i in interviews:
+        d = _parse(i.get("interview_date", ""))
+        if d is None:
+            continue
+        if today <= d <= upper:
+            upcoming.append((d, i))
+
+    if not upcoming:
+        return f"No interviews scheduled in the next {days_ahead} days."
+
+    upcoming.sort(key=lambda t: t[0])
+    lines = [f"# Upcoming interviews (next {days_ahead} days, {len(upcoming)} total)"]
+    for d, i in upcoming:
+        days_out = (d - today).days
+        when = "today" if days_out == 0 else f"in {days_out}d"
+        lines.append(
+            f"- {d.isoformat()} ({when}): {i.get('company','?')} / {i.get('role','?')}"
+            f" — {i.get('interview_type','?')}"
+            + (f" with {i['interviewer']}" if i.get("interviewer") else "")
+        )
+    return "\n".join(lines)
+
+
 def register(mcp) -> None:
     mcp.tool()(log_interview)
     mcp.tool()(get_interviews)
     mcp.tool()(get_interview_context)
+    mcp.tool()(get_upcoming_interviews)
