@@ -50,6 +50,7 @@ class JobAnalysisService:
         role: str,
         job_description: str,
         source: str = "",
+        persona: str | None = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> AnalysisResult:
         """Queue a job and run fitment evaluation in one call.
@@ -69,6 +70,8 @@ class JobAnalysisService:
             role:            Target role title.
             job_description: Full JD text.
             source:          Optional source label (e.g. "linkedin", "referral").
+            persona:         Optional persona name to bias the fitment lens
+                             (e.g. 'faang_technical', 'executive_polish').
             on_progress:     Optional callback for streaming progress events.
 
         Returns:
@@ -84,9 +87,10 @@ class JobAnalysisService:
               "Job already in queue" if already_queued else "Job added to queue",
               {"already_queued": already_queued})
 
-        _emit(on_progress, "evaluating", "Running fitment assessment")
+        _emit(on_progress, "evaluating", "Running fitment assessment",
+              {"persona": persona or ""})
 
-        fitment_result = _job_queue.evaluate_queued_job(company, role)
+        fitment_result = _job_queue.evaluate_queued_job(company, role, persona or "")
 
         # evaluate_queued_job returns the fitment context on success, or an
         # informational message when the job is already decided / not found.
@@ -120,6 +124,7 @@ class JobAnalysisService:
         company: str,
         role: str,
         job_description: str,
+        persona: str | None = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> str:
         """Standalone fitment assessment (no queue interaction).
@@ -131,15 +136,16 @@ class JobAnalysisService:
             company:         Target company name.
             role:            Target role title.
             job_description: Full JD text.
+            persona:         Optional persona name to bias the fitment lens.
             on_progress:     Optional progress callback.
 
         Returns:
             The fitment context package text.
         """
         _emit(on_progress, "assessing", f"Assessing fitment for {role} @ {company}",
-              {"company": company, "role": role})
+              {"company": company, "role": role, "persona": persona or ""})
 
-        result = _fitment.assess_job_fitment(company, role, job_description)
+        result = _fitment.assess_job_fitment(company, role, job_description, persona=persona or "")
 
         _emit(on_progress, "complete", "Fitment assessment finished")
         return result
