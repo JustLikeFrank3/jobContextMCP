@@ -18,28 +18,6 @@
     "parameters": []
   },
   {
-    "name": "decide_job",
-    "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "decision"
-      },
-      {
-        "name": "notes",
-        "default": ""
-      },
-      {
-        "name": "fitment_score",
-        "default": ""
-      }
-    ]
-  },
-  {
     "name": "draft_outreach_message",
     "parameters": [
       {
@@ -53,6 +31,26 @@
       },
       {
         "name": "message_type",
+        "default": ""
+      }
+    ]
+  },
+  {
+    "name": "draft_reply",
+    "parameters": [
+      {
+        "name": "incoming_message"
+      },
+      {
+        "name": "contact",
+        "default": ""
+      },
+      {
+        "name": "company",
+        "default": ""
+      },
+      {
+        "name": "intent",
         "default": ""
       }
     ]
@@ -203,6 +201,14 @@
     ]
   },
   {
+    "name": "get_github_stats",
+    "parameters": [
+      {
+        "name": "username"
+      }
+    ]
+  },
+  {
     "name": "get_hbdi_profile",
     "parameters": []
   },
@@ -256,28 +262,8 @@
     ]
   },
   {
-    "name": "evaluate_queued_job",
-    "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      }
-    ]
-  },
-  {
     "name": "get_job_hunt_status",
     "parameters": []
-  },
-  {
-    "name": "get_job_queue",
-    "parameters": [
-      {
-        "name": "status",
-        "default": ""
-      }
-    ]
   },
   {
     "name": "get_leetcode_cheatsheet",
@@ -336,6 +322,18 @@
       {
         "name": "outreach_status",
         "default": ""
+      },
+      {
+        "name": "slim",
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "get_person",
+    "parameters": [
+      {
+        "name": "name"
       }
     ]
   },
@@ -349,6 +347,14 @@
       {
         "name": "person",
         "default": ""
+      }
+    ]
+  },
+  {
+    "name": "get_referral_chains",
+    "parameters": [
+      {
+        "name": "target_company"
       }
     ]
   },
@@ -398,6 +404,15 @@
     "parameters": []
   },
   {
+    "name": "get_upcoming_interviews",
+    "parameters": [
+      {
+        "name": "days_ahead",
+        "default": 14
+      }
+    ]
+  },
+  {
     "name": "ingest_anecdote",
     "parameters": [
       {
@@ -412,7 +427,7 @@
       },
       {
         "name": "people",
-        "default": null
+        "default": ""
       },
       {
         "name": "tone_sample",
@@ -472,11 +487,11 @@
       },
       {
         "name": "duration_minutes",
-        "default": null
+        "default": ""
       },
       {
         "name": "self_rating",
-        "default": null
+        "default": ""
       },
       {
         "name": "interview_format",
@@ -484,19 +499,19 @@
       },
       {
         "name": "what_landed",
-        "default": null
+        "default": ""
       },
       {
         "name": "what_didnt",
-        "default": null
+        "default": ""
       },
       {
         "name": "verbatim_quotes",
-        "default": null
+        "default": ""
       },
       {
         "name": "surfaced_priorities",
-        "default": null
+        "default": ""
       },
       {
         "name": "process_details",
@@ -508,11 +523,11 @@
       },
       {
         "name": "follow_up_commitments",
-        "default": null
+        "default": ""
       },
       {
         "name": "tags",
-        "default": null
+        "default": ""
       },
       {
         "name": "notes",
@@ -543,11 +558,11 @@
       },
       {
         "name": "hashtags",
-        "default": null
+        "default": ""
       },
       {
         "name": "links",
-        "default": null
+        "default": ""
       },
       {
         "name": "title",
@@ -595,7 +610,7 @@
       },
       {
         "name": "tags",
-        "default": null
+        "default": ""
       },
       {
         "name": "contact_info",
@@ -626,7 +641,7 @@
       },
       {
         "name": "people",
-        "default": null
+        "default": ""
       },
       {
         "name": "title",
@@ -723,24 +738,6 @@
     "parameters": [
       {
         "name": "fb_folder",
-        "default": ""
-      }
-    ]
-  },
-  {
-    "name": "queue_job",
-    "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "jd"
-      },
-      {
-        "name": "source",
         "default": ""
       }
     ]
@@ -924,7 +921,7 @@
       },
       {
         "name": "side_project_folders",
-        "default": null
+        "default": ""
       }
     ]
   },
@@ -1002,7 +999,7 @@
     "parameters": [
       {
         "name": "post_id",
-        "default": null
+        "default": ""
       },
       {
         "name": "source",
@@ -1010,43 +1007,43 @@
       },
       {
         "name": "impressions",
-        "default": null
+        "default": ""
       },
       {
         "name": "members_reached",
-        "default": null
+        "default": ""
       },
       {
         "name": "reactions",
-        "default": null
+        "default": ""
       },
       {
         "name": "comments",
-        "default": null
+        "default": ""
       },
       {
         "name": "reposts",
-        "default": null
+        "default": ""
       },
       {
         "name": "saves",
-        "default": null
+        "default": ""
       },
       {
         "name": "link_clicks",
-        "default": null
+        "default": ""
       },
       {
         "name": "profile_views_from_post",
-        "default": null
+        "default": ""
       },
       {
         "name": "followers_gained",
-        "default": null
+        "default": ""
       },
       {
         "name": "audience_highlights",
-        "default": null
+        "default": ""
       }
     ]
   },
