@@ -205,18 +205,22 @@ class TestJobAnalysisService:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# WorkflowService (Phase C stub)
+# WorkflowService (Phase C — now wired to LangGraph)
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestWorkflowService:
-    def test_run_emits_not_implemented_event_then_raises(self):
-        events, cb = _capture()
-        with pytest.raises(NotImplementedError, match="Phase C"):
-            WorkflowService.run("resume_tailoring", {"company": "X"}, on_progress=cb)
-        assert len(events) == 1
-        assert events[0].stage == "not_implemented"
-        assert events[0].payload["workflow"] == "resume_tailoring"
+    def test_list_workflows_contains_resume_tailoring(self):
+        assert "resume_tailoring" in WorkflowService.list_workflows()
 
-    def test_run_without_callback_still_raises(self):
-        with pytest.raises(NotImplementedError):
-            WorkflowService.run("anything", {})
+    def test_unknown_workflow_raises(self):
+        from services import UnknownWorkflowError
+        with pytest.raises(UnknownWorkflowError, match="Unknown workflow"):
+            WorkflowService.run("nonexistent", {})
+
+    def test_unknown_workflow_does_not_emit_node_events(self):
+        from services import UnknownWorkflowError
+        events, cb = _capture()
+        with pytest.raises(UnknownWorkflowError):
+            WorkflowService.run("nope", {}, on_progress=cb)
+        # No starting/node/complete events for an unknown workflow.
+        assert events == []

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Phase C LangGraph resume workflow
+
+- **`workflows/langgraph/resume_graph.py`** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — `StateGraph` for tailored resume generation:
+  ```
+  START → load_context → draft → review → (revise → review){0..N} → output → END
+  ```
+  - `load_context` pulls master resume, tone profile, customization strategy, and interview context.
+  - `draft` calls `tools.generate.generate_resume`; works both with OpenAI key (direct LLM) and without (context-package fallback for an AI client).
+  - `review` runs static heuristics (empty draft, error markers); sets `needs_revision` + `feedback`.
+  - Conditional edge routes to `revise` (which augments the JD with feedback and re-drafts, bumping `revisions`) or `output`. Loop bounded by `max_revisions` (default 1).
+  - `output` finalizes the state with `final_content`, `success`, `pdf_exported`.
+  - Graph is fully testable without an OpenAI key — every node falls back to deterministic disk operations.
+- **`services/workflow_service.py`** — replaced Phase A2 stub with real `WorkflowService.run(name, inputs, on_progress=...)` that drives the graph via `.stream(stream_mode="updates")`, emits one `ProgressEvent` per node transition plus `starting` and `complete`, and returns the accumulated final state. Registry pattern (`_GRAPH_BUILDERS`) supports future workflows without touching the service. `UnknownWorkflowError` raised for unregistered names.
+- **HTTP endpoints** added at `transport/http/routes/workflows.py`:
+  - `GET /workflows` — list registered workflows.
+  - `POST /workflows/{name}` — run sync, return final state JSON.
+  - `POST /workflows/{name}/stream` — SSE per node transition + final result event. Unknown names return 404 up-front rather than as an SSE error.
+- **Tests** — `tests/test_langgraph_workflow.py` (7 tests): graph build, end-to-end invoke, per-node streaming, revision-loop happy path, revision-loop bounded by `max_revisions=0`, WorkflowService event ordering, input truncation. Also extended `tests/test_services.py` (16 tests now) and `tests/test_http_api.py` (23 tests now) with workflow coverage. Suite 435/435 passing.
+
 ### Added — Phase B FastAPI HTTP + SSE transport
 
 - **`transport/http/` package** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — FastAPI adapter exposing core workflows over REST and Server-Sent Events. Existing stdio MCP server (`server.py`) is unchanged; both transports share `tools/` and `services/`.

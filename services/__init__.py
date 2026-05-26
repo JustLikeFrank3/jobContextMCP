@@ -27,7 +27,7 @@ Public exports:
 from services.events import ProgressEvent, ProgressCallback, _emit
 from services.resume_service import ResumeService, ResumeResult
 from services.job_analysis_service import JobAnalysisService, AnalysisResult
-from services.workflow_service import WorkflowService
+from services.workflow_service import WorkflowService, UnknownWorkflowError
 
 __all__ = [
     "ProgressEvent",
@@ -37,4 +37,5 @@ __all__ = [
     "JobAnalysisService",
     "AnalysisResult",
     "WorkflowService",
+    "UnknownWorkflowError",
 ]
