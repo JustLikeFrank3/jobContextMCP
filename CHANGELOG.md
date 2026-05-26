@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Feature track v0.7
+
+- **F1 — `tools/github.py`** (`get_github_stats(username)`): pulls public GitHub profile + top non-fork repos via the REST API. Uses `GITHUB_TOKEN` env if set; falls back to unauthenticated calls. Honors `JOBCONTEXTMCP_OFFLINE=1` to short-circuit with a deterministic stub (used by tests). Network errors degrade to a "⚠ unable to fetch" message. No new dependency — uses stdlib urllib.
+- **F2 — `tools/interviews.py: get_upcoming_interviews(days_ahead=14)`**: returns interviews with `interview_date >= today` within the window, sorted soonest first. Friendly empty-state messages.
+- **F3 — `tools/people.py: get_referral_chains(target_company)`**: groups contacts into `direct` (company match) and `adjacent` (mentions company in tags/context/notes) for referral planning. Shows outreach status alongside each contact.
+- **F4 — `tools/outreach.py: draft_reply(incoming_message, contact, company, intent)`**: packages incoming message + tone profile + personal context + job-hunt status + contact context + intent-specific posture instructions ("accept", "decline_polite", "decline_compensation", "request_info", "delay", "enthusiastic_yes") for AI-drafted replies.
+- **F5 — `cli.py --schedule <tool> [--time HH:MM]`**: emits ready-to-use crontab line + macOS launchd plist for any registered tool. Side-effect-free (prints to stdout for copy/paste); does not install anything on disk. Validates tool exists in the registry.
+- **F6 — Honcho (deferred)**: a persistent agent-state layer is interesting for cross-session memory and conversational continuity but adds a stateful runtime dependency that conflicts with the stdio/HTTP transport model. Revisit after F1-F5 see real usage. Not implemented this release.
+- **Wiring**: `tools/github.py` registered in both `server.py` (`_TOOL_MODULES`) and `cli.py` (`_discover_tools`). All existing modules pick up the new functions via their existing `register(mcp)` exports.
+- **Tests** — `tests/test_feature_track.py` (17 tests): F1 offline/error paths, F2 window filtering and today inclusion, F3 direct/adjacent grouping, F4 section composition + intent posture, F5 subprocess-based CLI tests for usage errors, default time, and HH:MM parsing. Suite 465/465 passing.
+
 ### Added — Phase D Persona configuration
 
 - **`data/personas/`** — four bundled persona JSON configs: `default`, `executive_polish`, `faang_technical`, `startup_founder`. Each defines `tone_modifiers` (banned phrases, preferred punctuation, register), `weighting` (boosts for leadership / IC / domain / recency keywords), and `formatting_rules` (bullet limits, summary word target, STAR/metrics requirements).

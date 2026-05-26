@@ -59,6 +59,7 @@ from tools import (
     hbdi,
     crossref,
     job_queue,
+    github,
 )
 
 
@@ -89,6 +90,7 @@ _TOOL_MODULES = [
     hbdi,
     crossref,
     job_queue,
+    github,
     setup,
 ]
 
