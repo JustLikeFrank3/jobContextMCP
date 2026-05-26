@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Planned
+
+- **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
 
 ## [0.7.0] - 2026-05-25
 
