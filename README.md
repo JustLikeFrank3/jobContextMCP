@@ -211,6 +211,58 @@ sequenceDiagram
 | `get_people(name?, company?, tag?, outreach_status?, slim?)` | retrieve/search the people database; `slim=True` returns name/company/relationship/status/tags only — no notes or context — for low-cost list scans |
 | `run_contact_crossref(fb_folder?)` | **v0.6.3** — ingest a Facebook export folder and cross-reference confirmed friends, pending requests, and removed connections against LinkedIn connections and your internal people tracker; writes `contact_crossref.json` and updates per-connection `facebook_match` metadata in `linkedin_connections.json`; re-runnable on any fresh export |
 | `get_contact_crossref(insight?, name?)` | **v0.6.3** — query the cross-platform registry by insight bucket (`all_three_platforms`, `fb_friend_and_linkedin`, `fb_removed_still_on_linkedin`, etc.) or look up any contact by name; returns platform presence, relationship type, and action hints |
+| `get_github_stats(username)` | **v0.7** — public GitHub profile + top non-fork repos via REST (stars, forks, language, last-pushed); uses `GITHUB_TOKEN` env if set; offline stub via `JOBCONTEXTMCP_OFFLINE=1` |
+| `get_upcoming_interviews(days_ahead?)` | **v0.7** — filters logged interviews to a forward window (default 14 days); sorted soonest-first with "today" / "in Nd" labels |
+| `get_referral_chains(target_company)` | **v0.7** — groups contacts into `direct` (company match) and `adjacent` (company mentioned in tags/context/notes) for referral planning |
+| `draft_reply(incoming_message, contact?, company?, intent?)` | **v0.7** — package tone profile, personal context, contact context, and intent-specific posture (`accept` / `decline_polite` / `decline_compensation` / `request_info` / `delay` / `enthusiastic_yes`) for AI-drafted replies to inbound messages |
+
+---
+
+## v0.7 — HTTP transport, personas, and LangGraph workflows
+
+Three additions in v0.7 turn the server from a stdio-only MCP tool into a remote-capable workflow engine.
+
+### HTTP + SSE transport (FastAPI)
+
+A new `transport/http/` package exposes core capabilities over REST + Server-Sent Events for clients that don't speak MCP (mobile, browser, scripts, Open WebUI):
+
+```bash
+# From the project root
+.venv/bin/uvicorn transport.http.main:app --host 0.0.0.0 --port 8765
+```
+
+Endpoints:
+
+- `GET /health`
+- `GET /context/session` — same payload as the MCP `get_session_context()` tool
+- `POST /resumes/generate` — sync resume generation; body `{ "company", "role", "job_description", "persona?" }`
+- `POST /resumes/generate/stream` — same call, SSE stream of progress events
+- `GET /jobs` / `POST /jobs/queue` / `POST /jobs/decide` — pipeline ops
+- `GET /personas` / `GET /personas/{name}` — list/inspect persona configs
+- `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
+- All write endpoints require `Authorization: Bearer <token>` when `JOBCONTEXTMCP_HTTP_TOKEN` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
+
+### Persona configs
+
+`services/persona_service.py` loads JSON persona presets from `data/personas/` (bundled defaults: `default`, `executive_polish`, `faang_technical`, `startup_founder`). Drop your own JSON into `<data_folder>/personas/` to override; the user directory takes precedence over bundled defaults. Each persona contributes a Markdown prompt block (tone modifiers, weighting, formatting rules) appended to the job description before generation. Pass `persona="executive_polish"` to `generate_resume()` or the `/resumes/generate` endpoint.
+
+### LangGraph resume workflow
+
+`workflows/langgraph/resume_graph.py` defines a `StateGraph`:
+
+```
+START → load_context → draft → review → (revise → review){0..N} → output → END
+```
+
+`services/workflow_service.py` registers workflows in a `_GRAPH_BUILDERS` registry and streams per-node progress events (`starting`, per-node updates, `complete`). Invoke via `POST /workflows/resume` (sync) or `POST /workflows/resume/stream` (SSE). Max revisions is configurable per-call (default 1).
+
+### CLI scheduling
+
+`python cli.py --schedule <tool> [--time HH:MM]` prints a ready-to-paste crontab line and a macOS launchd plist for any registered tool. Pure stdout, side-effect-free; copy what you want, install nothing you don't. Example:
+
+```bash
+python cli.py --schedule get_daily_digest --time 08:00
+```
 
 ---
 
@@ -726,12 +778,22 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 - **`run_hbdi_assessment()`** — HBDI cognitive style profiler: saves primary/secondary quadrant profile + interview framing advice to personal context
 - **`get_hbdi_profile()`** — retrieve stored HBDI profile with quadrant synthesis
 
-### Planned — v0.7
+### v0.7 *(shipped)*
 
-- `get_github_stats(username)` — pull public commit/repo activity to surface in resume bullets and cover letter talking points
-- `get_upcoming_interviews(days?)` — filter pipeline to applications with scheduled interviews in the next N days
-- `get_referral_chains(company)` — surface contacts who could refer you at a target company
-- `draft_reply(company, role, message_type)` — draft a follow-up, thank-you, or counter-offer reply using stored application context and tone profile
+- **HTTP + SSE transport** (`transport/http/`) — FastAPI app exposing `/health`, `/context/session`, `/resumes/generate[/stream]`, `/jobs`, `/personas`, `/workflows[/{name}[/stream]]`. Optional bearer-token auth via `JOBCONTEXTMCP_HTTP_TOKEN`. Lets the iPad (or any HTTP client) drive the server without an MCP shim.
+- **LangGraph resume workflow** (`workflows/langgraph/resume_graph.py`) — `load_context → draft → review → (revise → review){0..N} → output` with per-node SSE progress streaming through `services/workflow_service.py`.
+- **Persona configs** (`services/persona_service.py`, `data/personas/*.json`) — bundled `default` / `executive_polish` / `faang_technical` / `startup_founder` presets; user overrides via `<data_folder>/personas/`. Persona-aware `generate_resume()` and `/resumes/generate`.
+- **`get_github_stats(username)`** — public GitHub profile + top non-fork repos via stdlib urllib; offline stub for tests via `JOBCONTEXTMCP_OFFLINE=1`.
+- **`get_upcoming_interviews(days_ahead=14)`** — forward-window interview view.
+- **`get_referral_chains(target_company)`** — direct vs adjacent contact grouping for referral planning.
+- **`draft_reply(incoming, contact?, company?, intent?)`** — context-aware reply drafter with intent-specific posture instructions.
+- **`cli.py --schedule <tool> [--time HH:MM]`** — emits ready-to-paste crontab + macOS launchd plist for any registered tool.
+- **Auto-discovering tool registry** — `server.py` and `cli.py` load tool modules from a single list; new tools are picked up by adding the module to `_TOOL_MODULES` / `_discover_tools`.
+
+### Planned — v0.8
+
+- **Honcho persistent memory layer** *(deferred from v0.7)* — opt-in episodic memory on top of the persona system; seeds STAR stories, tone samples, and contact context, then queries before generation so the model has cross-session memory without re-reading every JSON file. Gated behind `honcho_api_key`.
+- **Mobile-first web UI** — thin SPA over the v0.7 HTTP transport for iPad-from-bed workflows (queue a job, review fitment, draft reply) without needing VS Code tunnel.
 
 ---
 

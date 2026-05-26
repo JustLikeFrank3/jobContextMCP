@@ -4,85 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added — Feature track v0.7
+_No unreleased changes._
 
-- **F1 — `tools/github.py`** (`get_github_stats(username)`): pulls public GitHub profile + top non-fork repos via the REST API. Uses `GITHUB_TOKEN` env if set; falls back to unauthenticated calls. Honors `JOBCONTEXTMCP_OFFLINE=1` to short-circuit with a deterministic stub (used by tests). Network errors degrade to a "⚠ unable to fetch" message. No new dependency — uses stdlib urllib.
-- **F2 — `tools/interviews.py: get_upcoming_interviews(days_ahead=14)`**: returns interviews with `interview_date >= today` within the window, sorted soonest first. Friendly empty-state messages.
-- **F3 — `tools/people.py: get_referral_chains(target_company)`**: groups contacts into `direct` (company match) and `adjacent` (mentions company in tags/context/notes) for referral planning. Shows outreach status alongside each contact.
-- **F4 — `tools/outreach.py: draft_reply(incoming_message, contact, company, intent)`**: packages incoming message + tone profile + personal context + job-hunt status + contact context + intent-specific posture instructions ("accept", "decline_polite", "decline_compensation", "request_info", "delay", "enthusiastic_yes") for AI-drafted replies.
-- **F5 — `cli.py --schedule <tool> [--time HH:MM]`**: emits ready-to-use crontab line + macOS launchd plist for any registered tool. Side-effect-free (prints to stdout for copy/paste); does not install anything on disk. Validates tool exists in the registry.
-- **F6 — Honcho (deferred)**: a persistent agent-state layer is interesting for cross-session memory and conversational continuity but adds a stateful runtime dependency that conflicts with the stdio/HTTP transport model. Revisit after F1-F5 see real usage. Not implemented this release.
-- **Wiring**: `tools/github.py` registered in both `server.py` (`_TOOL_MODULES`) and `cli.py` (`_discover_tools`). All existing modules pick up the new functions via their existing `register(mcp)` exports.
-- **Tests** — `tests/test_feature_track.py` (17 tests): F1 offline/error paths, F2 window filtering and today inclusion, F3 direct/adjacent grouping, F4 section composition + intent posture, F5 subprocess-based CLI tests for usage errors, default time, and HH:MM parsing. Suite 465/465 passing.
+## [0.7.0] - 2026-05-25
 
-### Added — Phase D Persona configuration
-
-- **`data/personas/`** — four bundled persona JSON configs: `default`, `executive_polish`, `faang_technical`, `startup_founder`. Each defines `tone_modifiers` (banned phrases, preferred punctuation, register), `weighting` (boosts for leadership / IC / domain / recency keywords), and `formatting_rules` (bullet limits, summary word target, STAR/metrics requirements).
-- **`services/persona_service.py`** — `PersonaService` (stateless loader) + `PersonaConfig` (frozen dataclass) + `UnknownPersonaError`. Resolution order:
-  1. `<DATA_FOLDER>/personas/*.json` — user overrides (any JSON here shadows the bundled set entirely).
-  2. Repo-bundled `data/personas/` — defaults for fresh installs and tests.
-  `PersonaConfig.to_prompt_block()` renders the persona as a system-prompt fragment for LLM injection.
-- **`ResumeService.generate` accepts an optional `persona` kwarg** — defaults to `"default"` when omitted; an unknown name raises `UnknownPersonaError` before any generation work. The persona prompt block is appended to the JD passed into the underlying generate tool, so both keyed (direct OpenAI) and keyless (context-package) paths receive the bias.
-- **HTTP endpoints** at `transport/http/routes/personas.py`:
-  - `GET /personas` — list available persona names.
-  - `GET /personas/{name}` — return the full config.
-  - `POST /resumes/generate` now accepts `persona: <name>` in the request body.
-- **Tests** — `tests/test_persona_service.py` (12 tests): service loader, user-override precedence, unknown-name error, prompt-block rendering, ResumeService wiring (default + named + unknown), HTTP endpoint coverage. HTTP fixtures (`http_client_noauth`, `http_client_authed`) moved from `tests/test_http_api.py` to `tests/conftest.py` so cross-module HTTP tests can share them. Suite 448/448 passing.
-
-### Added — Phase C LangGraph resume workflow
-
-- **`workflows/langgraph/resume_graph.py`** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — `StateGraph` for tailored resume generation:
-  ```
-  START → load_context → draft → review → (revise → review){0..N} → output → END
-  ```
-  - `load_context` pulls master resume, tone profile, customization strategy, and interview context.
-  - `draft` calls `tools.generate.generate_resume`; works both with OpenAI key (direct LLM) and without (context-package fallback for an AI client).
-  - `review` runs static heuristics (empty draft, error markers); sets `needs_revision` + `feedback`.
-  - Conditional edge routes to `revise` (which augments the JD with feedback and re-drafts, bumping `revisions`) or `output`. Loop bounded by `max_revisions` (default 1).
-  - `output` finalizes the state with `final_content`, `success`, `pdf_exported`.
-  - Graph is fully testable without an OpenAI key — every node falls back to deterministic disk operations.
-- **`services/workflow_service.py`** — replaced Phase A2 stub with real `WorkflowService.run(name, inputs, on_progress=...)` that drives the graph via `.stream(stream_mode="updates")`, emits one `ProgressEvent` per node transition plus `starting` and `complete`, and returns the accumulated final state. Registry pattern (`_GRAPH_BUILDERS`) supports future workflows without touching the service. `UnknownWorkflowError` raised for unregistered names.
-- **HTTP endpoints** added at `transport/http/routes/workflows.py`:
-  - `GET /workflows` — list registered workflows.
-  - `POST /workflows/{name}` — run sync, return final state JSON.
-  - `POST /workflows/{name}/stream` — SSE per node transition + final result event. Unknown names return 404 up-front rather than as an SSE error.
-- **Tests** — `tests/test_langgraph_workflow.py` (7 tests): graph build, end-to-end invoke, per-node streaming, revision-loop happy path, revision-loop bounded by `max_revisions=0`, WorkflowService event ordering, input truncation. Also extended `tests/test_services.py` (16 tests now) and `tests/test_http_api.py` (23 tests now) with workflow coverage. Suite 435/435 passing.
-
-### Added — Phase B FastAPI HTTP + SSE transport
-
-- **`transport/http/` package** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — FastAPI adapter exposing core workflows over REST and Server-Sent Events. Existing stdio MCP server (`server.py`) is unchanged; both transports share `tools/` and `services/`.
-  - **App factory** (`transport/http/app.py`) — builds FastAPI instance, attaches CORS, logs warning when `API_KEY` is unset.
-  - **Entry point** (`transport/http/main.py`) — `python -m transport.http.main` boots uvicorn. Reads `HOST` / `PORT` / `ENABLE_REMOTE` / `API_KEY` / `CORS_ORIGINS` from env (`transport/http/config.py`). Defaults to 127.0.0.1 bind; `ENABLE_REMOTE=true` flips to 0.0.0.0 for Tailscale / LAN.
-  - **Bearer-token auth** (`transport/http/auth.py`) — `Authorization: Bearer <API_KEY>` required on all non-health endpoints. Bare token also accepted. Auth is bypassed when `API_KEY` is unset (warning logged at startup); health endpoint is always open so load balancers can probe.
-  - **Routes:**
-    - `GET /health` — service status + auth-enabled flag.
-    - `POST /jobs/evaluate` and `POST /jobs/evaluate/stream` — queue + assess fitment, sync JSON or SSE per stage.
-    - `POST /jobs/decide` — record add/dismiss decision.
-    - `POST /resumes/generate` and `POST /resumes/generate/stream` — resume or cover letter generation, sync JSON or SSE.
-    - `POST /stories/search` — STAR story tag lookup.
-    - `GET /tone/profile` — current tone profile text.
-  - **SSE adapter** (`transport/http/sse.py`) — bridges sync `services.ProgressCallback` into an async `EventSourceResponse`. Runs the service call in a worker thread, pushes `ProgressEvent`s into an `asyncio.Queue`, and emits each as `event: <stage>\ndata: {...}`. Final synthetic `result` event carries the structured service return value.
-  - **Pydantic models** (`transport/http/models.py`) — request/response schemas per endpoint plus `StreamEvent` envelope.
-  - **Dependencies** — `fastapi>=0.115`, `uvicorn[standard]>=0.30`, `httpx>=0.27`, `sse-starlette>=2.1` added to `requirements.txt`.
-  - **Env template** — HTTP-transport section appended to `.env.example` with key-generation hint.
-  - **`tests/test_http_api.py`** — 18 tests covering health, auth (missing/wrong/valid/bare-token/disabled), jobs/evaluate, jobs/decide, resumes/generate, stories/search, tone/profile, plus SSE stage ordering and final result payload for both streaming endpoints. Suite now 422/422 passing.
-  - **Smoke-tested live:** `python -m transport.http.main` boots cleanly; `curl http://127.0.0.1:8765/health` returns 200.
-
-### Added — Phase A2 orchestration services
-
-- **`services/` package** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27), partial) — thin orchestration layer for multi-step workflows that compose tool functions and emit progress events. Tool modules in `tools/` remain the unit-level API for single-step operations; services exist only where HTTP/SSE consumers need streamable named stages.
-  - `services/events.py` — `ProgressEvent` dataclass + `ProgressCallback` type + `_emit` helper. Sync callback pattern; HTTP routes wrap in asyncio queue (Phase B). No async pollution of existing sync tools.
-  - `services/resume_service.py` — `ResumeService.generate(company, role, jd, kind="resume"|"cover_letter", on_progress=...)` wraps `tools.generate.generate_resume` / `generate_cover_letter` with `starting → generating → complete` events. Returns `ResumeResult` dataclass. `ResumeService.export_existing(filename, kind)` for standalone PDF rendering of an already-saved `.txt`.
-  - `services/job_analysis_service.py` — `JobAnalysisService.evaluate(company, role, jd, source=...)` orchestrates `queue_job → evaluate_queued_job` with `queuing → queued → evaluating → complete` events. Returns `AnalysisResult` with `evaluated` flag, `fitment_context`, `queue_status`. Also `.assess(...)` for standalone fitment, `.decide(...)` for evented decision recording.
-  - `services/workflow_service.py` — Phase C stub with frozen `WorkflowService.run(name, inputs, on_progress=...)` signature; raises `NotImplementedError` for now so HTTP routes and tests can be scaffolded ahead of LangGraph integration.
-  - `tests/test_services.py` — 15 tests covering event ordering, payload contents, result dataclass shape, queue reuse, already-decided skip path, and stub error. Suite now 404/404 passing.
-
-### Planned
-
-- **Service layer extraction** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27)) — decouple business logic from MCP transport; MCP tools become thin wrappers around `resume_service`, `job_analysis_service`, `retrieval_service`, `tone_service`, `langgraph_service`. Required prerequisite for all remote/HTTP work.
-- **LangGraph resume generation workflow** ([#29](https://github.com/JustLikeFrank3/jobContextMCP/issues/29)) — port resume generation to a `StateGraph` (`load_context → rag_retrieval → draft → review → conditional_revise → output`); proves the service layer architecture and enables SSE streaming of workflow progress. Branch: `feat/langgraph-port`.
-- **FastAPI HTTP server + SSE streaming** ([#28](https://github.com/JustLikeFrank3/jobContextMCP/issues/28)) — expose core workflows over REST and SSE for iPad/browser/Open WebUI access without requiring local MCP support on the client. LAN-safe by default, Tailscale-compatible, API key auth. See `docs/remote-mobile-architecture.md` for full design.
-- **Data-driven persona config** ([#30](https://github.com/JustLikeFrank3/jobContextMCP/issues/30)) — JSON persona presets (`executive_polish`, `faang_technical`, `startup_founder`, etc.) consumed by service layer, LangGraph nodes, and future mobile UI. Separate persona (tone/weighting) from workflow (resume tailoring, interview prep, outreach). Build after service layer exists.
+First release of the remote/mobile track. Adds an HTTP+SSE transport (so the iPad can talk to the server without an MCP client on-device), a LangGraph-driven resume pipeline with draft/review/revise nodes, data-driven persona configs, an auto-discovering tool registry, and a feature track of five new tools (GitHub stats, upcoming interviews, referral chains, reply drafting, CLI scheduling). 465/465 tests passing.
 
 ### Agent Customization (2026-05-25)
 
