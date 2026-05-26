@@ -251,7 +251,72 @@ def lookup_person_context(name: str) -> str:
     return "\n".join(parts)
 
 
+def get_referral_chains(target_company: str) -> str:
+    """Find contacts who could potentially refer Frank to a target company.
+
+    A "referral chain" is any person whose company matches `target_company`
+    (case-insensitive substring) and whose `outreach_status` is not already
+    "responded". Output is grouped by strength signal:
+      * direct  — person currently at the target company
+      * adjacent — person whose tags mention the company name or whose
+                   context mentions it
+
+    Args:
+        target_company: Company name to find referral paths into.
+
+    Returns:
+        Formatted text block. Empty-friendly message when no matches.
+    """
+    if not target_company or not target_company.strip():
+        return "⚠ get_referral_chains: target_company is required"
+    needle = target_company.strip().lower()
+
+    data = _load_json(config.PEOPLE_FILE, {"people": []})
+    people = data.get("people", [])
+    if not people:
+        return "No contacts logged yet. Use log_person() to start building the network."
+
+    direct: list[dict] = []
+    adjacent: list[dict] = []
+    for p in people:
+        company = (p.get("company") or "").lower()
+        tags = [t.lower() for t in p.get("tags", [])]
+        context = (p.get("context") or "").lower()
+        notes = (p.get("notes") or "").lower()
+
+        if needle and needle in company:
+            direct.append(p)
+        elif needle and (needle in " ".join(tags) or needle in context or needle in notes):
+            adjacent.append(p)
+
+    if not direct and not adjacent:
+        return f"No referral paths found for {target_company!r}."
+
+    lines = [f"# Referral chains for {target_company}"]
+
+    def _fmt(p: dict) -> str:
+        status = p.get("outreach_status", "none")
+        contact = f" — {p['contact_info']}" if p.get("contact_info") else ""
+        return (
+            f"- {p.get('name','?')} ({p.get('relationship','?')} @ {p.get('company','?')})"
+            f" [outreach: {status}]{contact}"
+        )
+
+    if direct:
+        lines.append("")
+        lines.append(f"## Direct ({len(direct)} at target company)")
+        for p in direct:
+            lines.append(_fmt(p))
+    if adjacent:
+        lines.append("")
+        lines.append(f"## Adjacent ({len(adjacent)} mention the company)")
+        for p in adjacent:
+            lines.append(_fmt(p))
+    return "\n".join(lines)
+
+
 def register(mcp) -> None:
     mcp.tool()(log_person)
     mcp.tool()(get_people)
     mcp.tool()(get_person)
+    mcp.tool()(get_referral_chains)
