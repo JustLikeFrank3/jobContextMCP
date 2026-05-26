@@ -39,15 +39,33 @@ _ASSESSMENT_SYSTEM = textwrap.dedent("""\
 """)
 
 
-def assess_job_fitment(company: str, role: str, job_description: str) -> str:
-    """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role."""
+def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
+    """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
+
+    When `persona` is set, prepends the persona's prompt block to the context
+    pack so the consuming agent reads it as a role-specific lens (e.g.
+    'faang_technical' weighs systems depth differently than 'executive_polish').
+    """
     master = _load_master_context()
     interview_block = get_interview_context(company=company, role=role)
     interview_section = f"\n\n{interview_block}" if interview_block else ""
+
+    persona_section = ""
+    if persona:
+        # Lazy import: services/__init__ -> resume_service -> tools.generate ->
+        # tools.fitment, so importing PersonaService at module top would cycle.
+        from services.persona_service import PersonaService, UnknownPersonaError
+        try:
+            cfg = PersonaService.get(persona)
+            persona_section = f"──── PERSONA LENS ────\n{cfg.to_prompt_block()}\n\n"
+        except UnknownPersonaError as exc:
+            persona_section = f"──── PERSONA LENS ────\n[warning: {exc}]\n\n"
+
     return (
         f"═══ FITMENT ASSESSMENT ═══\n"
         f"Company: {company}\n"
         f"Role:    {role}\n\n"
+        f"{persona_section}"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
         f"──── FRANK'S MASTER RESUME ────\n{master}"
         f"{interview_section}"
@@ -125,13 +143,17 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     return f"\u2713 Saved job assessment: {relative}"
 
 
-def run_job_assessment(company: str, role: str, job_description: str, auto_save: bool = True) -> str:
+def run_job_assessment(company: str, role: str, job_description: str, persona: str = "", auto_save: bool = True) -> str:
     """
     Run a real LLM-powered fitment assessment for a job posting.
 
     Unlike assess_job_fitment (which is a context packer), this tool actually calls
     the OpenAI API and returns a structured analysis: fitment score, strong matches,
     gaps, key angles to emphasize, comp assessment, and recommendation.
+
+    When `persona` is set (e.g. 'faang_technical', 'executive_polish'), the
+    persona's prompt block is prepended to the system message so the LLM
+    applies role-specific weighting and tone to the assessment.
 
     If auto_save=True (default), saves the result to 07-Job-Assessments automatically.
     """
@@ -143,10 +165,21 @@ def run_job_assessment(company: str, role: str, job_description: str, auto_save:
     key = config._cfg.get("openai_api_key", "")
     if not key or key.startswith("sk-..."):
         # Fallback: return context package for manual analysis
-        return assess_job_fitment(company, role, job_description)
+        return assess_job_fitment(company, role, job_description, persona=persona)
 
     client = OpenAI(api_key=key)
     model = config._cfg.get("openai_model", "gpt-4o-mini")
+
+    system_prompt = _ASSESSMENT_SYSTEM
+    persona_note = ""
+    if persona:
+        from services.persona_service import PersonaService, UnknownPersonaError
+        try:
+            cfg = PersonaService.get(persona)
+            system_prompt = f"{cfg.to_prompt_block()}\n\n{_ASSESSMENT_SYSTEM}"
+            persona_note = f" (persona: {cfg.name})"
+        except UnknownPersonaError as exc:
+            persona_note = f" (persona warning: {exc})"
 
     master = _load_master_context()
     candidate_name = config._cfg.get("name", "the candidate")
@@ -163,7 +196,7 @@ def run_job_assessment(company: str, role: str, job_description: str, auto_save:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": _ASSESSMENT_SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.2,
@@ -185,7 +218,7 @@ def run_job_assessment(company: str, role: str, job_description: str, auto_save:
     else:
         save_result = "(not saved — pass auto_save=True to persist)"
 
-    return f"✓ Assessment complete for {role} @ {company}\n{cost_note}  {save_result}\n\n{content}"
+    return f"✓ Assessment complete for {role} @ {company}{persona_note}\n{cost_note}  {save_result}\n\n{content}"
 
 
 def register(mcp) -> None:

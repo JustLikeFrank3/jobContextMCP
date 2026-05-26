@@ -30,6 +30,10 @@ class JobEvaluateRequest(BaseModel):
     role: str = Field(..., min_length=1)
     job_description: str = Field(..., min_length=1)
     source: str = ""
+    persona: str | None = Field(
+        default=None,
+        description="Optional persona name to bias the fitment lens (e.g. 'faang_technical', 'executive_polish'). Defaults to no persona.",
+    )
 
 
 class JobEvaluateResponse(BaseModel):
