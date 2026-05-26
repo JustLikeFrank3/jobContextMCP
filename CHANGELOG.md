@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Phase A2 orchestration services
+
+- **`services/` package** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27), partial) — thin orchestration layer for multi-step workflows that compose tool functions and emit progress events. Tool modules in `tools/` remain the unit-level API for single-step operations; services exist only where HTTP/SSE consumers need streamable named stages.
+  - `services/events.py` — `ProgressEvent` dataclass + `ProgressCallback` type + `_emit` helper. Sync callback pattern; HTTP routes wrap in asyncio queue (Phase B). No async pollution of existing sync tools.
+  - `services/resume_service.py` — `ResumeService.generate(company, role, jd, kind="resume"|"cover_letter", on_progress=...)` wraps `tools.generate.generate_resume` / `generate_cover_letter` with `starting → generating → complete` events. Returns `ResumeResult` dataclass. `ResumeService.export_existing(filename, kind)` for standalone PDF rendering of an already-saved `.txt`.
+  - `services/job_analysis_service.py` — `JobAnalysisService.evaluate(company, role, jd, source=...)` orchestrates `queue_job → evaluate_queued_job` with `queuing → queued → evaluating → complete` events. Returns `AnalysisResult` with `evaluated` flag, `fitment_context`, `queue_status`. Also `.assess(...)` for standalone fitment, `.decide(...)` for evented decision recording.
+  - `services/workflow_service.py` — Phase C stub with frozen `WorkflowService.run(name, inputs, on_progress=...)` signature; raises `NotImplementedError` for now so HTTP routes and tests can be scaffolded ahead of LangGraph integration.
+  - `tests/test_services.py` — 15 tests covering event ordering, payload contents, result dataclass shape, queue reuse, already-decided skip path, and stub error. Suite now 404/404 passing.
+
 ### Planned
 
 - **Service layer extraction** ([#27](https://github.com/JustLikeFrank3/jobContextMCP/issues/27)) — decouple business logic from MCP transport; MCP tools become thin wrappers around `resume_service`, `job_analysis_service`, `retrieval_service`, `tone_service`, `langgraph_service`. Required prerequisite for all remote/HTTP work.
