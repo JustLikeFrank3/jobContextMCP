@@ -196,7 +196,7 @@ def review_node(state: ResumeAgentState) -> dict:
 
         CONTENT CHECKS:
         7. Most relevant projects to this role included?
-        8. Every bullet has at least one specific metric or named artifact?
+        8. Every bullet has at least one specific metric OR a named artifact/technology/outcome? (Do NOT flag missing metrics if the source material has none — qualitative specificity is acceptable.)
         9. Free of em dashes, "I'm excited", AI-sounding openers?
         10. Addresses the core requirements of the target role?
 
@@ -237,6 +237,9 @@ def revise_node(state: ResumeAgentState) -> dict:
         Apply ONLY the changes described in the feedback. Do not make unrelated changes.
         Output the complete revised resume in .txt format — no preamble, no commentary.
 
+        MASTER RESUME (strict source of truth — do NOT invent any metric, percentage, number, date, or named artifact not present in the current draft or this source. If a bullet needs strengthening, use named technologies, concrete actions, or qualitative outcomes instead of fabricated numbers):
+        {_read(config.MASTER_RESUME)}
+
         REVIEWER FEEDBACK:
         {state['review_notes']}
 
@@ -249,7 +252,20 @@ def revise_node(state: ResumeAgentState) -> dict:
 
     response = _get_client().chat.completions.create(
         model=_model(),
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a resume editor. Your single most important rule: "
+                    "DO NOT invent any number, percentage, count, or metric that is not "
+                    "explicitly present in the MASTER RESUME provided in the user message. "
+                    "If the reviewer asked for a metric and none exists in the source, "
+                    "use a named technology, concrete action, or qualitative outcome instead. "
+                    "Fabricating metrics is a disqualifying error."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
         temperature=0.3,
         max_tokens=2000,
     )
