@@ -8,6 +8,24 @@ All notable changes to this project will be documented in this file.
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
 
+## [0.8.0] - 2026-05-29
+
+Adds web-based job ingestion — four new MCP tools for scraping individual job postings by URL and searching Greenhouse, Lever, and Google Jobs boards directly from the server. All results funnel into the existing `queue_job` pipeline. 34 new tests; full suite 499/499 green.
+
+### Added
+
+- **`scrape_job_url`** — fetches any job posting URL (Greenhouse, Lever, Ashby, Workday, most company career pages) via Jina Reader (`r.jina.ai`), extracts company/role/description, and optionally queues it. No extra dependencies; works without API keys.
+- **`search_jobs`** — searches Google Jobs via SerpAPI and returns ranked postings. Requires `serpapi_key` in config. Accepts `auto_queue=True` to pipeline results directly.
+- **`search_greenhouse_jobs`** — browses all open roles on any company's Greenhouse board via the public Greenhouse API. Free, no API key required.
+- **`search_lever_jobs`** — browses all open roles on any company's Lever board via the public Lever API. Free, no API key required.
+- **`docs/remote-mobile-architecture.md`** — full architecture plan for the upcoming HTTP/SSE/WebSocket remote transport layer, covering FastAPI server, service abstraction, LangGraph integration, auth, and mobile/iPad UX target.
+- **34 new tests** in `tests/test_job_scraper.py` covering all four tools, HTML stripping, URL parsing, mock HTTP responses, and `auto_queue` pipeline integration.
+
+### Changed
+
+- `config.example.json` and `lib/config.py` updated with `serpapi_key` field.
+- `tools/export.py` and `tools/langgraph_pipeline.py` minor fixes landed alongside this branch.
+
 ## [0.7.1] - 2026-05-25
 
 ### Added

@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.7.0-blue" alt="Version 0.7.0"/>
-  <img src="https://img.shields.io/badge/tests-465%2F465-brightgreen" alt="Tests 465/465"/>
-  <img src="https://img.shields.io/badge/tools-65-informational" alt="65 MCP tools"/>
+  <img src="https://img.shields.io/badge/version-0.8.0-blue" alt="Version 0.8.0"/>
+  <img src="https://img.shields.io/badge/tests-499%2F499-brightgreen" alt="Tests 499/499"/>
+  <img src="https://img.shields.io/badge/tools-69-informational" alt="69 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 
@@ -15,7 +15,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 65 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 69 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 

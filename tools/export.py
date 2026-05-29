@@ -268,7 +268,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
             continue
         if in_synopsis:
             # Detect tagline: pipe-separated keyword line (role | skill • skill)
-            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 20:
+            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 30:
                 tagline = s
             else:
                 synopsis_lines.append(s)
@@ -281,7 +281,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
                 name_lines.append(s)
         else:
             # Detect tagline even before the blank line separator (line 2 position)
-            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 20:
+            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 30:
                 tagline = s
             else:
                 synopsis_lines.append(s)
