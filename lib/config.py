@@ -37,6 +37,8 @@ SKILLS_SHORTER: Path
 JOB_ASSESSMENTS_FOLDER: Path
 INTERVIEW_PREP_FOLDER: Path
 
+SERPAPI_KEY: str
+
 
 def _load_config() -> dict:
     config_path = _HERE / "config.json"
@@ -60,6 +62,7 @@ def _reconfigure(cfg: dict) -> None:
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global JOB_ASSESSMENTS_FOLDER, INTERVIEW_PREP_FOLDER
+    global SERPAPI_KEY
 
     _cfg = dict(cfg)
 
@@ -101,6 +104,8 @@ def _reconfigure(cfg: dict) -> None:
     GM_AWARDS = RESUME_FOLDER / cfg.get("gm_awards_path", "06-Reference-Materials/Awards.txt")
     FEEDBACK_RECEIVED = RESUME_FOLDER / cfg.get("feedback_received_path", "06-Reference-Materials/Feedback.txt")
     SKILLS_SHORTER = RESUME_FOLDER / cfg.get("skills_shorter_path", "06-Reference-Materials/Skills Shorter.txt")
+
+    SERPAPI_KEY = cfg.get("serpapi_key", "")
 
 
 _reconfigure(_load_config())
