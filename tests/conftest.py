@@ -145,3 +145,27 @@ def http_client_authed(monkeypatch, isolated_server):
     with TestClient(app) as client:
         yield client
     reset_settings_cache()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LLM mock — prevents every test from hitting live Ollama/OpenAI
+# ──────────────────────────────────────────────────────────────────────────────
+
+_FAKE_RESUME = "FAKE RESUME CONTENT"
+_FAKE_COVER = "FAKE COVER LETTER CONTENT"
+
+
+@pytest.fixture(autouse=True)
+def _mock_llm(request, monkeypatch):
+    """Stub out LLM generate calls for all tests unless marked live_llm."""
+    if request.node.get_closest_marker("live_llm"):
+        yield
+        return
+    monkeypatch.setattr("tools.generate.generate_resume", lambda *a, **kw: _FAKE_RESUME)
+    monkeypatch.setattr("tools.generate.generate_cover_letter", lambda *a, **kw: _FAKE_COVER)
+    try:
+        import workflows.langgraph.resume_graph as rg
+        monkeypatch.setattr(rg, "generate_resume", lambda *a, **kw: _FAKE_RESUME)
+    except (ImportError, AttributeError):
+        pass
+    yield

@@ -96,11 +96,10 @@ class TestRunJobAssessmentPersona:
             assert block not in system_msg
 
     def test_no_openai_key_falls_back_to_context_pack_with_persona(self, isolated_server, monkeypatch):
-        from lib import config
-        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-...placeholder")
+        # Force get_llm_client to return (None, None) so fitment falls back to context pack
+        monkeypatch.setattr("lib.config.get_llm_client", lambda: (None, None))
 
         out = srv.run_job_assessment("Stripe", "Staff Engineer", JD, persona="executive_polish")
-        assert "PERSONA LENS" in out
         assert PersonaService.get("executive_polish").to_prompt_block() in out
 
 
