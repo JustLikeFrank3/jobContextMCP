@@ -107,5 +107,42 @@ def _reconfigure(cfg: dict) -> None:
 
     SERPAPI_KEY = cfg.get("serpapi_key", "")
 
+    LLM_PROVIDER = cfg.get("llm_provider", "openai")
+    OLLAMA_BASE_URL = cfg.get("ollama_base_url", "http://localhost:11434/v1")
+    OLLAMA_MODEL = cfg.get("ollama_model", "llama3.1:8b")
+
+
+def get_llm_client():
+    """Return (client, model_name) for whichever provider is configured.
+
+    llm_provider = "ollama"  → points the OpenAI SDK at the local Ollama server.
+                               No real API key needed; we pass a dummy string.
+    llm_provider = "openai"  → normal OpenAI cloud call (default).
+
+    The OpenAI Python SDK is compatible with any OpenAI-spec server, so Ollama
+    works by just swapping base_url and model name — no other code changes needed.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return None, None
+
+    cfg = _load_config()
+    provider = cfg.get("llm_provider", "openai")
+
+    if provider == "ollama":
+        base_url = cfg.get("ollama_base_url", "http://localhost:11434/v1")
+        model = cfg.get("ollama_model", "llama3.1:8b")
+        client = OpenAI(base_url=base_url, api_key="ollama")
+        return client, model
+
+    # default: openai
+    key = cfg.get("openai_api_key", "")
+    if not key or key.startswith("sk-..."):
+        return None, None
+    model = cfg.get("openai_model", "gpt-4o")
+    client = OpenAI(api_key=key)
+    return client, model
+
 
 _reconfigure(_load_config())
