@@ -2,15 +2,10 @@
   {
     "name": "assess_job_fitment",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "job_description"
-      }
+      "company",
+      "role",
+      "job_description",
+      "persona"
     ]
   },
   {
@@ -18,124 +13,89 @@
     "parameters": []
   },
   {
+    "name": "decide_job",
+    "parameters": [
+      "company",
+      "role",
+      "decision",
+      "notes",
+      "fitment_score"
+    ]
+  },
+  {
     "name": "draft_outreach_message",
     "parameters": [
-      {
-        "name": "contact"
-      },
-      {
-        "name": "company"
-      },
-      {
-        "name": "context"
-      },
-      {
-        "name": "message_type",
-        "default": ""
-      }
+      "contact",
+      "company",
+      "context",
+      "message_type"
     ]
   },
   {
     "name": "draft_reply",
     "parameters": [
-      {
-        "name": "incoming_message"
-      },
-      {
-        "name": "contact",
-        "default": ""
-      },
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "intent",
-        "default": ""
-      }
+      "incoming_message",
+      "contact",
+      "company",
+      "intent"
+    ]
+  },
+  {
+    "name": "evaluate_queued_job",
+    "parameters": [
+      "company",
+      "role",
+      "persona"
     ]
   },
   {
     "name": "export_cover_letter_pdf",
     "parameters": [
-      {
-        "name": "filename"
-      },
-      {
-        "name": "output_filename",
-        "default": ""
-      }
+      "filename",
+      "output_filename"
     ]
   },
   {
     "name": "export_resume_pdf",
     "parameters": [
-      {
-        "name": "filename"
-      },
-      {
-        "name": "footer_tag",
-        "default": ""
-      },
-      {
-        "name": "output_filename",
-        "default": ""
-      }
+      "filename",
+      "footer_tag",
+      "output_filename"
     ]
   },
   {
     "name": "generate_cover_letter",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "job_description"
-      },
-      {
-        "name": "output_filename",
-        "default": ""
-      }
+      "company",
+      "role",
+      "job_description",
+      "output_filename"
     ]
   },
   {
     "name": "generate_interview_prep_context",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "stage",
-        "default": "phone_screen"
-      },
-      {
-        "name": "job_description",
-        "default": ""
-      }
+      "company",
+      "role",
+      "stage",
+      "job_description"
     ]
   },
   {
     "name": "generate_resume",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "job_description"
-      },
-      {
-        "name": "output_filename",
-        "default": ""
-      }
+      "company",
+      "role",
+      "job_description",
+      "output_filename"
+    ]
+  },
+  {
+    "name": "generate_resume_agent",
+    "parameters": [
+      "company",
+      "role",
+      "job_description"
     ]
   },
   {
@@ -149,22 +109,14 @@
   {
     "name": "get_contact_crossref",
     "parameters": [
-      {
-        "name": "insight",
-        "default": ""
-      },
-      {
-        "name": "name",
-        "default": ""
-      }
+      "insight",
+      "name"
     ]
   },
   {
     "name": "get_customization_strategy",
     "parameters": [
-      {
-        "name": "role_type"
-      }
+      "role_type"
     ]
   },
   {
@@ -174,38 +126,16 @@
   {
     "name": "get_existing_prep_file",
     "parameters": [
-      {
-        "name": "company"
-      }
+      "company"
     ]
   },
   {
     "name": "get_fb_outreach_queue",
     "parameters": [
-      {
-        "name": "limit",
-        "default": 50
-      },
-      {
-        "name": "offset",
-        "default": 0
-      },
-      {
-        "name": "sort_by",
-        "default": "recent"
-      },
-      {
-        "name": "include_pending",
-        "default": false
-      }
-    ]
-  },
-  {
-    "name": "get_github_stats",
-    "parameters": [
-      {
-        "name": "username"
-      }
+      "limit",
+      "offset",
+      "sort_by",
+      "include_pending"
     ]
   },
   {
@@ -215,13 +145,8 @@
   {
     "name": "get_interview_context",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role",
-        "default": ""
-      }
+      "company",
+      "role"
     ]
   },
   {
@@ -231,34 +156,13 @@
   {
     "name": "get_interviews",
     "parameters": [
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "role",
-        "default": ""
-      },
-      {
-        "name": "interviewer",
-        "default": ""
-      },
-      {
-        "name": "interview_type",
-        "default": ""
-      },
-      {
-        "name": "tag",
-        "default": ""
-      },
-      {
-        "name": "since",
-        "default": ""
-      },
-      {
-        "name": "include_full",
-        "default": false
-      }
+      "company",
+      "role",
+      "interviewer",
+      "interview_type",
+      "tag",
+      "since",
+      "include_full"
     ]
   },
   {
@@ -266,117 +170,68 @@
     "parameters": []
   },
   {
+    "name": "get_job_queue",
+    "parameters": [
+      "status"
+    ]
+  },
+  {
     "name": "get_leetcode_cheatsheet",
     "parameters": [
-      {
-        "name": "section",
-        "default": ""
-      }
+      "section"
     ]
   },
   {
     "name": "get_linkedin_posts",
     "parameters": [
-      {
-        "name": "source",
-        "default": ""
-      },
-      {
-        "name": "hashtag",
-        "default": ""
-      },
-      {
-        "name": "min_reactions",
-        "default": 0
-      },
-      {
-        "name": "include_text",
-        "default": false
-      }
+      "source",
+      "hashtag",
+      "min_reactions",
+      "include_text"
     ]
   },
   {
     "name": "get_mental_health_log",
     "parameters": [
-      {
-        "name": "days",
-        "default": 14
-      }
+      "days"
     ]
   },
   {
     "name": "get_people",
     "parameters": [
-      {
-        "name": "name",
-        "default": ""
-      },
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "tag",
-        "default": ""
-      },
-      {
-        "name": "outreach_status",
-        "default": ""
-      },
-      {
-        "name": "slim",
-        "default": false
-      }
+      "name",
+      "company",
+      "tag",
+      "outreach_status",
+      "slim"
     ]
   },
   {
     "name": "get_person",
     "parameters": [
-      {
-        "name": "name"
-      }
+      "name"
     ]
   },
   {
     "name": "get_personal_context",
     "parameters": [
-      {
-        "name": "tag",
-        "default": ""
-      },
-      {
-        "name": "person",
-        "default": ""
-      }
+      "tag",
+      "person"
     ]
   },
   {
     "name": "get_referral_chains",
     "parameters": [
-      {
-        "name": "target_company"
-      }
+      "target_company"
     ]
   },
   {
     "name": "get_rejections",
     "parameters": [
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "stage",
-        "default": ""
-      },
-      {
-        "name": "since",
-        "default": ""
-      },
-      {
-        "name": "include_pattern_analysis",
-        "default": true
-      }
+      "company",
+      "stage",
+      "since",
+      "include_pattern_analysis"
     ]
   },
   {
@@ -386,17 +241,9 @@
   {
     "name": "get_star_story_context",
     "parameters": [
-      {
-        "name": "tag"
-      },
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "role_type",
-        "default": ""
-      }
+      "tag",
+      "company",
+      "role_type"
     ]
   },
   {
@@ -406,296 +253,135 @@
   {
     "name": "get_upcoming_interviews",
     "parameters": [
-      {
-        "name": "days_ahead",
-        "default": 14
-      }
+      "days_ahead"
     ]
   },
   {
     "name": "ingest_anecdote",
     "parameters": [
-      {
-        "name": "story"
-      },
-      {
-        "name": "tags"
-      },
-      {
-        "name": "title",
-        "default": ""
-      },
-      {
-        "name": "people",
-        "default": ""
-      },
-      {
-        "name": "tone_sample",
-        "default": true
-      }
+      "story",
+      "tags",
+      "title",
+      "people",
+      "tone_sample"
     ]
   },
   {
     "name": "list_existing_materials",
     "parameters": [
-      {
-        "name": "company",
-        "default": ""
-      }
+      "company"
     ]
   },
   {
     "name": "log_application_event",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "event_type"
-      },
-      {
-        "name": "notes",
-        "default": ""
-      }
+      "company",
+      "role",
+      "event_type",
+      "notes"
     ]
   },
   {
     "name": "log_interview",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "interview_date"
-      },
-      {
-        "name": "interview_type"
-      },
-      {
-        "name": "interviewer",
-        "default": ""
-      },
-      {
-        "name": "interviewer_role",
-        "default": ""
-      },
-      {
-        "name": "duration_minutes",
-        "default": ""
-      },
-      {
-        "name": "self_rating",
-        "default": ""
-      },
-      {
-        "name": "interview_format",
-        "default": "video"
-      },
-      {
-        "name": "what_landed",
-        "default": ""
-      },
-      {
-        "name": "what_didnt",
-        "default": ""
-      },
-      {
-        "name": "verbatim_quotes",
-        "default": ""
-      },
-      {
-        "name": "surfaced_priorities",
-        "default": ""
-      },
-      {
-        "name": "process_details",
-        "default": ""
-      },
-      {
-        "name": "comp_signals",
-        "default": ""
-      },
-      {
-        "name": "follow_up_commitments",
-        "default": ""
-      },
-      {
-        "name": "tags",
-        "default": ""
-      },
-      {
-        "name": "notes",
-        "default": ""
-      }
+      "company",
+      "role",
+      "interview_date",
+      "interview_type",
+      "interviewer",
+      "interviewer_role",
+      "duration_minutes",
+      "self_rating",
+      "interview_format",
+      "what_landed",
+      "what_didnt",
+      "verbatim_quotes",
+      "surfaced_priorities",
+      "process_details",
+      "comp_signals",
+      "follow_up_commitments",
+      "tags",
+      "notes"
     ]
   },
   {
     "name": "log_linkedin_post",
     "parameters": [
-      {
-        "name": "text"
-      },
-      {
-        "name": "source"
-      },
-      {
-        "name": "context",
-        "default": ""
-      },
-      {
-        "name": "posted_date",
-        "default": ""
-      },
-      {
-        "name": "url",
-        "default": ""
-      },
-      {
-        "name": "hashtags",
-        "default": ""
-      },
-      {
-        "name": "links",
-        "default": ""
-      },
-      {
-        "name": "title",
-        "default": ""
-      },
-      {
-        "name": "auto_log_tone",
-        "default": true
-      }
+      "text",
+      "source",
+      "context",
+      "posted_date",
+      "url",
+      "hashtags",
+      "links",
+      "title",
+      "auto_log_tone"
     ]
   },
   {
     "name": "log_mental_health_checkin",
     "parameters": [
-      {
-        "name": "mood"
-      },
-      {
-        "name": "energy"
-      },
-      {
-        "name": "notes",
-        "default": ""
-      },
-      {
-        "name": "productive",
-        "default": false
-      }
+      "mood",
+      "energy",
+      "notes",
+      "productive"
     ]
   },
   {
     "name": "log_person",
     "parameters": [
-      {
-        "name": "name"
-      },
-      {
-        "name": "relationship"
-      },
-      {
-        "name": "company"
-      },
-      {
-        "name": "context"
-      },
-      {
-        "name": "tags",
-        "default": ""
-      },
-      {
-        "name": "contact_info",
-        "default": ""
-      },
-      {
-        "name": "outreach_status",
-        "default": "none"
-      },
-      {
-        "name": "notes",
-        "default": ""
-      },
-      {
-        "name": "sent_message",
-        "default": ""
-      }
+      "name",
+      "relationship",
+      "company",
+      "context",
+      "tags",
+      "contact_info",
+      "outreach_status",
+      "notes",
+      "sent_message"
     ]
   },
   {
     "name": "log_personal_story",
     "parameters": [
-      {
-        "name": "story"
-      },
-      {
-        "name": "tags"
-      },
-      {
-        "name": "people",
-        "default": ""
-      },
-      {
-        "name": "title",
-        "default": ""
-      }
+      "story",
+      "tags",
+      "people",
+      "title"
     ]
   },
   {
     "name": "log_rejection",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "stage"
-      },
-      {
-        "name": "reason",
-        "default": ""
-      },
-      {
-        "name": "notes",
-        "default": ""
-      },
-      {
-        "name": "date",
-        "default": ""
-      }
+      "company",
+      "role",
+      "stage",
+      "reason",
+      "notes",
+      "date"
     ]
   },
   {
     "name": "log_tone_sample",
     "parameters": [
-      {
-        "name": "text"
-      },
-      {
-        "name": "source"
-      },
-      {
-        "name": "context",
-        "default": ""
-      }
+      "text",
+      "source",
+      "context"
+    ]
+  },
+  {
+    "name": "queue_job",
+    "parameters": [
+      "company",
+      "role",
+      "jd",
+      "source"
     ]
   },
   {
     "name": "read_existing_resume",
     "parameters": [
-      {
-        "name": "filename"
-      }
+      "filename"
     ]
   },
   {
@@ -705,9 +391,7 @@
   {
     "name": "read_reference_file",
     "parameters": [
-      {
-        "name": "filename"
-      }
+      "filename"
     ]
   },
   {
@@ -717,157 +401,84 @@
   {
     "name": "resume_diff",
     "parameters": [
-      {
-        "name": "file_a"
-      },
-      {
-        "name": "file_b"
-      }
+      "file_a",
+      "file_b"
     ]
   },
   {
     "name": "review_message",
     "parameters": [
-      {
-        "name": "text"
-      }
+      "text"
     ]
   },
   {
     "name": "run_contact_crossref",
     "parameters": [
-      {
-        "name": "fb_folder",
-        "default": ""
-      }
+      "fb_folder"
     ]
   },
   {
     "name": "run_hbdi_assessment",
     "parameters": [
-      {
-        "name": "q1_no_spec_project"
-      },
-      {
-        "name": "q2_critical_feedback"
-      },
-      {
-        "name": "q3_tedious_finish"
-      },
-      {
-        "name": "q4_senior_disagreement"
-      },
-      {
-        "name": "score_a"
-      },
-      {
-        "name": "score_b"
-      },
-      {
-        "name": "score_c"
-      },
-      {
-        "name": "score_d"
-      },
-      {
-        "name": "notes",
-        "default": ""
-      }
+      "q1_no_spec_project",
+      "q2_critical_feedback",
+      "q3_tedious_finish",
+      "q4_senior_disagreement",
+      "score_a",
+      "score_b",
+      "score_c",
+      "score_d",
+      "notes"
     ]
   },
   {
     "name": "run_job_assessment",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "job_description"
-      },
-      {
-        "name": "auto_save",
-        "default": true
-      }
+      "company",
+      "role",
+      "job_description",
+      "persona",
+      "auto_save"
     ]
   },
   {
     "name": "save_cover_letter_txt",
     "parameters": [
-      {
-        "name": "filename"
-      },
-      {
-        "name": "content"
-      }
+      "filename",
+      "content"
     ]
   },
   {
     "name": "save_interview_prep",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "content"
-      },
-      {
-        "name": "filename",
-        "default": ""
-      }
+      "company",
+      "content",
+      "filename"
     ]
   },
   {
     "name": "save_job_assessment",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "content"
-      },
-      {
-        "name": "filename",
-        "default": ""
-      },
-      {
-        "name": "source",
-        "default": ""
-      }
+      "company",
+      "content",
+      "filename",
+      "source"
     ]
   },
   {
     "name": "save_resume_txt",
     "parameters": [
-      {
-        "name": "filename"
-      },
-      {
-        "name": "content"
-      }
+      "filename",
+      "content"
     ]
   },
   {
     "name": "scan_materials_for_tone",
     "parameters": [
-      {
-        "name": "category",
-        "default": "cover_letters"
-      },
-      {
-        "name": "limit",
-        "default": 3
-      },
-      {
-        "name": "company",
-        "default": ""
-      },
-      {
-        "name": "force",
-        "default": false
-      }
+      "category",
+      "limit",
+      "company",
+      "force"
     ]
   },
   {
@@ -875,176 +486,102 @@
     "parameters": []
   },
   {
+    "name": "scrape_job_url",
+    "parameters": [
+      "url",
+      "auto_queue"
+    ]
+  },
+  {
+    "name": "search_greenhouse_jobs",
+    "parameters": [
+      "company_slug",
+      "query",
+      "num_results",
+      "auto_queue"
+    ]
+  },
+  {
+    "name": "search_jobs",
+    "parameters": [
+      "query",
+      "location",
+      "num_results",
+      "auto_queue"
+    ]
+  },
+  {
+    "name": "search_lever_jobs",
+    "parameters": [
+      "company_slug",
+      "query",
+      "num_results",
+      "auto_queue"
+    ]
+  },
+  {
     "name": "search_materials",
     "parameters": [
-      {
-        "name": "query"
-      },
-      {
-        "name": "category",
-        "default": ""
-      }
+      "query",
+      "category"
     ]
   },
   {
     "name": "setup_workspace",
     "parameters": [
-      {
-        "name": "name"
-      },
-      {
-        "name": "email"
-      },
-      {
-        "name": "phone"
-      },
-      {
-        "name": "linkedin"
-      },
-      {
-        "name": "city_state"
-      },
-      {
-        "name": "master_resume_content"
-      },
-      {
-        "name": "address",
-        "default": ""
-      },
-      {
-        "name": "openai_api_key",
-        "default": ""
-      },
-      {
-        "name": "leetcode_language",
-        "default": "java"
-      },
-      {
-        "name": "side_project_folders",
-        "default": ""
-      }
+      "name",
+      "email",
+      "phone",
+      "linkedin",
+      "city_state",
+      "master_resume_content",
+      "address",
+      "openai_api_key",
+      "leetcode_language",
+      "side_project_folders"
     ]
   },
   {
     "name": "update_application",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "status"
-      },
-      {
-        "name": "next_steps",
-        "default": ""
-      },
-      {
-        "name": "contact",
-        "default": ""
-      },
-      {
-        "name": "notes",
-        "default": ""
-      }
+      "company",
+      "role",
+      "status",
+      "next_steps",
+      "contact",
+      "notes"
     ]
   },
   {
     "name": "update_compensation",
     "parameters": [
-      {
-        "name": "company"
-      },
-      {
-        "name": "role"
-      },
-      {
-        "name": "base",
-        "default": 0
-      },
-      {
-        "name": "equity_total",
-        "default": 0
-      },
-      {
-        "name": "equity_vest_years",
-        "default": 4
-      },
-      {
-        "name": "bonus_target_pct",
-        "default": 0.0
-      },
-      {
-        "name": "level",
-        "default": ""
-      },
-      {
-        "name": "location",
-        "default": ""
-      },
-      {
-        "name": "remote",
-        "default": false
-      },
-      {
-        "name": "notes",
-        "default": ""
-      }
+      "company",
+      "role",
+      "base",
+      "equity_total",
+      "equity_vest_years",
+      "bonus_target_pct",
+      "level",
+      "location",
+      "remote",
+      "notes"
     ]
   },
   {
     "name": "update_post_metrics",
     "parameters": [
-      {
-        "name": "post_id",
-        "default": ""
-      },
-      {
-        "name": "source",
-        "default": ""
-      },
-      {
-        "name": "impressions",
-        "default": ""
-      },
-      {
-        "name": "members_reached",
-        "default": ""
-      },
-      {
-        "name": "reactions",
-        "default": ""
-      },
-      {
-        "name": "comments",
-        "default": ""
-      },
-      {
-        "name": "reposts",
-        "default": ""
-      },
-      {
-        "name": "saves",
-        "default": ""
-      },
-      {
-        "name": "link_clicks",
-        "default": ""
-      },
-      {
-        "name": "profile_views_from_post",
-        "default": ""
-      },
-      {
-        "name": "followers_gained",
-        "default": ""
-      },
-      {
-        "name": "audience_highlights",
-        "default": ""
-      }
+      "post_id",
+      "source",
+      "impressions",
+      "members_reached",
+      "reactions",
+      "comments",
+      "reposts",
+      "saves",
+      "link_clicks",
+      "profile_views_from_post",
+      "followers_gained",
+      "audience_highlights"
     ]
   },
   {
