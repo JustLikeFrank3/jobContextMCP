@@ -17,6 +17,16 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 def _people_payload() -> dict:
     raw = _load_json(config.PEOPLE_FILE, [])
     people = raw if isinstance(raw, list) else raw.get("people", [])
+    def _recency_key(person: dict) -> str:
+        last_contacted = person.get("last_contacted")
+        if last_contacted not in (None, ""):
+            return str(last_contacted)
+        last_updated = person.get("last_updated")
+        if last_updated not in (None, ""):
+            return str(last_updated)
+        return ""
+
+    people_sorted = sorted(people, key=_recency_key, reverse=True)
 
     status_counts = Counter(p.get("outreach_status", "none") for p in people)
     relationship_counts = Counter(p.get("relationship", "unknown") for p in people)
@@ -25,14 +35,14 @@ def _people_payload() -> dict:
         p for p in people
         if (p.get("outreach_status") or "").lower() in ("drafted", "sent", "follow-up")
     ]
-    follow_up.sort(key=lambda p: (p.get("last_contacted") or p.get("last_updated") or ""), reverse=True)
+    follow_up.sort(key=_recency_key, reverse=True)
 
     return {
         "total": len(people),
         "by_status": [{"status": s, "count": c} for s, c in status_counts.most_common()],
         "by_relationship": [{"relationship": r, "count": c} for r, c in relationship_counts.most_common()],
         "follow_up_queue": follow_up[:30],
-        "recent": people[:20],
+        "recent": people_sorted[:20],
     }
 
 

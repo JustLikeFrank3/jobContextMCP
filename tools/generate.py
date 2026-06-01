@@ -262,7 +262,7 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
 # ── HELPERS ────────────────────────────────────────────────────────────────────
 
 def _openai_client():
-    """Return an OpenAI client using whichever provider is configured (openai or ollama)."""
+    """Return configured LLM client using whichever provider is configured (openai or ollama)."""
     try:
         from lib.config import get_llm_client
         client, _ = get_llm_client()
