@@ -72,6 +72,7 @@ def _sync_config_exports() -> None:
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
+    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY
 
     _cfg = config._cfg
 
@@ -105,6 +106,8 @@ def _sync_config_exports() -> None:
     SKILLS_SHORTER = config.SKILLS_SHORTER
     INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
     JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
+    JOB_ASSESSMENTS_FOLDER = config.JOB_ASSESSMENTS_FOLDER
+    SERPAPI_KEY = config.SERPAPI_KEY
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -166,6 +169,7 @@ read_reference_file = resume.read_reference_file
 
 assess_job_fitment = fitment.assess_job_fitment
 get_customization_strategy = fitment.get_customization_strategy
+run_job_assessment = fitment.run_job_assessment
 
 get_interview_quick_reference = interview.get_interview_quick_reference
 get_leetcode_cheatsheet = interview.get_leetcode_cheatsheet
@@ -241,6 +245,42 @@ search_greenhouse_jobs = job_scraper.search_greenhouse_jobs
 search_lever_jobs = job_scraper.search_lever_jobs
 
 get_upcoming_interviews = interviews.get_upcoming_interviews
+
+get_session_context = session.get_session_context
+
+save_resume_txt = resume.save_resume_txt
+save_cover_letter_txt = resume.save_cover_letter_txt
+
+save_job_assessment = fitment.save_job_assessment
+
+get_daily_checkin_nudge = health.get_daily_checkin_nudge
+
+get_all_star_context = star.get_all_star_context
+
+draft_reply = outreach.draft_reply
+
+ResumeAgentState = langgraph_pipeline.ResumeAgentState
+load_context_node = langgraph_pipeline.load_context_node
+retrieve_node = langgraph_pipeline.retrieve_node
+draft_node = langgraph_pipeline.draft_node
+review_node = langgraph_pipeline.review_node
+revise_node = langgraph_pipeline.revise_node
+route_after_review = langgraph_pipeline.route_after_review
+generate_resume_agent = langgraph_pipeline.generate_resume_agent
+
+lookup_person_context = people.lookup_person_context
+get_referral_chains = people.get_referral_chains
+
+run_contact_crossref = crossref.run_contact_crossref
+get_contact_crossref = crossref.get_contact_crossref
+get_fb_outreach_queue = crossref.get_fb_outreach_queue
+
+_TOOL_MODULES = [
+    session, job_hunt, resume, fitment, interview, interviews, project_scanner,
+    health, context, tone, rag, star, outreach, export, generate,
+    langgraph_pipeline, people, posts, rejections, digest, compensation,
+    ingest, hbdi, crossref, job_queue, setup, job_scraper,
+]
 
 
 if __name__ == "__main__":
