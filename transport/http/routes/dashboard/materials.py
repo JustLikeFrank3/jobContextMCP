@@ -68,7 +68,7 @@ def _materials_payload() -> dict:
         "optimized_resumes": folders.get("optimized_resumes", {}).get("count", 0),
         "cover_letters": folders.get("cover_letters", {}).get("count", 0),
         "resume_pdfs": folders.get("resume_pdfs", {}).get("count", 0),
-        "gap": folders.get("optimized_resumes", {}).get("count", 0) - len(tracked),
+        "gap": len(untracked_files),
         "untracked_resume_files": untracked_files,
     }
 

@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from lib import config
 from lib.io import _load_json
 from transport.http.auth import require_api_key
-from .shared import BASE_CSS, nav_tabs, page_header
+from .shared import BASE_CSS, _auth_header_js, nav_tabs, page_header
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -71,6 +71,7 @@ _JOB_HUNT_HTML = """<!doctype html>
     @media (max-width: 980px) { .kanban { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 680px) { .kanban { grid-template-columns: 1fr; } }
   </style>
+  AUTH_HEADER_JS_PLACEHOLDER
 </head>
 <body>
 <main class="wrap">
@@ -190,6 +191,7 @@ async def job_hunt_board() -> HTMLResponse:
     html = (
         _JOB_HUNT_HTML
         .replace("BASE_CSS_PLACEHOLDER", BASE_CSS)
+        .replace("AUTH_HEADER_JS_PLACEHOLDER", _auth_header_js())
         .replace("PAGE_HEADER_PLACEHOLDER", page_header("Job Hunt Tracker", "Applications & Kanban board"))
         .replace("NAV_TABS_PLACEHOLDER", nav_tabs("job-hunt"))
     )

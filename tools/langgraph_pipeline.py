@@ -425,7 +425,7 @@ def _model() -> str:
     try:
         from lib.config import get_llm_client
         _, model = get_llm_client()
-        return model
+        return model or config._cfg.get("openai_model", "gpt-4o-mini")
     except Exception:
         return config._cfg.get("openai_model", "gpt-4o-mini")
 

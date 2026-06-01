@@ -19,7 +19,11 @@ def _posts_payload() -> dict:
     def _metric(p, key):
         # metrics may be a nested dict or top-level key
         m = p.get("metrics") or {}
-        return p.get(key) or m.get(key) or 0
+        if key in p and p.get(key) is not None:
+            return p.get(key)
+        if key in m and m.get(key) is not None:
+            return m.get(key)
+        return 0
 
     total_impressions = sum(_metric(p, "impressions") for p in posts)
     total_reactions   = sum(_metric(p, "reactions") for p in posts)

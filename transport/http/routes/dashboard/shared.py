@@ -1,6 +1,8 @@
 """Shared HTML fragments reused across dashboard pages."""
 from __future__ import annotations
 
+import json
+
 from .assets import logo_svg
 from transport.http.config import get_settings
 
@@ -11,9 +13,10 @@ def _auth_header_js() -> str:
     otherwise. The page itself is already auth-gated, so embedding the key here
     does not widen the attack surface."""
     settings = get_settings()
+    headers = {}
     if settings.auth_enabled and settings.api_key:
-        return f'<script>window._authHeaders = {{"Authorization": "Bearer {settings.api_key}"}};</script>'
-    return '<script>window._authHeaders = {};</script>'
+        headers = {"Authorization": "Bearer " + settings.api_key}
+    return f'<script>window._authHeaders = {json.dumps(headers)};</script>'
 
 
 BASE_CSS = """

@@ -25,6 +25,7 @@ def _people_payload() -> dict:
         p for p in people
         if (p.get("outreach_status") or "").lower() in ("drafted", "sent", "follow-up")
     ]
+    follow_up.sort(key=lambda p: (p.get("last_contacted") or p.get("last_updated") or ""), reverse=True)
 
     return {
         "total": len(people),
@@ -71,7 +72,7 @@ async def people_board() -> HTMLResponse:
   <h2 class="section-title">Follow-up Queue</h2>
   <div class="person-list" id="follow-up-list"></div>
 
-  <h2 class="section-title">All Contacts</h2>
+  <h2 class="section-title">Recent Contacts</h2>
   <div class="search-bar">
     <input class="search" id="people-search" placeholder="Filter by name, company, tags…" style="flex:1;max-width:440px" />
   </div>
