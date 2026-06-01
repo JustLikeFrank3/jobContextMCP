@@ -158,17 +158,10 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     If auto_save=True (default), saves the result to 07-Job-Assessments automatically.
     """
     try:
-        from openai import OpenAI  # type: ignore
-    except ImportError:
-        return "✗ openai package not installed. Run: pip install openai"
-
-    key = config._cfg.get("openai_api_key", "")
-    if not key or key.startswith("sk-..."):
-        # Fallback: return context package for manual analysis
-        return assess_job_fitment(company, role, job_description, persona=persona)
-
-    client = OpenAI(api_key=key)
-    model = config._cfg.get("openai_model", "gpt-4o-mini")
+        from lib.config import get_llm_client
+        client, model = get_llm_client()
+    except Exception:
+        return "✗ Failed to load LLM client. Check config.json llm_provider settings."
 
     system_prompt = _ASSESSMENT_SYSTEM
     persona_note = ""

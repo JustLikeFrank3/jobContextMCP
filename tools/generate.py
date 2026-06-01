@@ -262,19 +262,22 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
 # ── HELPERS ────────────────────────────────────────────────────────────────────
 
 def _openai_client():
-    """Return an OpenAI client using the key from config, or None if not configured."""
+    """Return an OpenAI client using whichever provider is configured (openai or ollama)."""
     try:
-        from openai import OpenAI  # type: ignore
-    except ImportError:
+        from lib.config import get_llm_client
+        client, _ = get_llm_client()
+        return client
+    except Exception:
         return None
-    key = config._cfg.get("openai_api_key", "")
-    if not key or key.startswith("sk-..."):
-        return None
-    return OpenAI(api_key=key)
 
 
 def _model() -> str:
-    return config._cfg.get("openai_model", "gpt-4o-mini")
+    try:
+        from lib.config import get_llm_client
+        _, model = get_llm_client()
+        return model
+    except Exception:
+        return config._cfg.get("openai_model", "gpt-4o-mini")
 
 
 def _infer_role_type(role: str) -> str:
