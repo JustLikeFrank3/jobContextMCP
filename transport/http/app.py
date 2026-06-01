@@ -19,6 +19,7 @@ from transport.http.routes import jobs as jobs_routes
 from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
+from transport.http.routes.dashboard import router as dashboard_router
 
 
 _logger = logging.getLogger(__name__)
@@ -59,5 +60,6 @@ def create_app() -> FastAPI:
     app.include_router(context_routes.router)
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
+    app.include_router(dashboard_router)
 
     return app

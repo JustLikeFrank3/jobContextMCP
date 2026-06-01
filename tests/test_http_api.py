@@ -194,6 +194,106 @@ class TestContextEndpoints:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Dashboard endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestDashboardEndpoints:
+    def test_job_hunt_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/job-hunt")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Job Hunt Tracker" in r.text
+
+    def test_job_hunt_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/job-hunt/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "applications" in body
+        assert "by_status" in body
+        assert "total" in body
+
+    def test_materials_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/materials")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Materials" in r.text
+
+    def test_materials_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/materials/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "folders" in body
+        assert "optimized_resumes" in body
+        assert "cover_letters" in body
+        assert "tracked_applications" in body
+        assert "gap" in body
+        assert "untracked_resume_files" in body
+
+    def test_home_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "jobContextMCP" in r.text
+
+    def test_rejections_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/rejections")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Rejections" in r.text
+
+    def test_rejections_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/rejections/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "total" in body
+        assert "by_stage" in body
+        assert "by_company" in body
+        assert "recent" in body
+
+    def test_posts_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/posts")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Posts" in r.text
+
+    def test_posts_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/posts/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "total" in body
+        assert "total_impressions" in body
+        assert "total_reactions" in body
+        assert "posts" in body
+
+    def test_people_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/people")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Outreach" in r.text
+
+    def test_people_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/people/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "total" in body
+        assert "by_status" in body
+        assert "follow_up_queue" in body
+
+    def test_health_dashboard_page_renders(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/health")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Wellbeing" in r.text
+
+    def test_health_dashboard_data_shape(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/health/data")
+        assert r.status_code == 200
+        body = r.json()
+        assert "total_entries" in body
+        assert "recent" in body
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # SSE streaming
 # ──────────────────────────────────────────────────────────────────────────────
 
