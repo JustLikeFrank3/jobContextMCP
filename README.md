@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.8.0-blue" alt="Version 0.8.0"/>
-  <img src="https://img.shields.io/badge/tests-499%2F499-brightgreen" alt="Tests 499/499"/>
+  <img src="https://img.shields.io/badge/version-0.9.0-blue" alt="Version 0.9.0"/>
+  <img src="https://img.shields.io/badge/tests-523%2F523-brightgreen" alt="Tests 523/523"/>
   <img src="https://img.shields.io/badge/tools-69-informational" alt="69 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -800,10 +800,29 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 - **`cli.py --schedule <tool> [--time HH:MM]`** — emits ready-to-paste crontab + macOS launchd plist for any registered tool.
 - **Auto-discovering tool registry** — `server.py` and `cli.py` load tool modules from a single list; new tools are picked up by adding the module to `_TOOL_MODULES` / `_discover_tools`.
 
-### Planned — v0.8
+### v0.8 *(shipped)*
 
-- **Honcho persistent memory layer** *(deferred from v0.7)* — opt-in episodic memory on top of the persona system; seeds STAR stories, tone samples, and contact context, then queries before generation so the model has cross-session memory without re-reading every JSON file. Gated behind `honcho_api_key`.
-- **Mobile-first web UI** — thin SPA over the v0.7 HTTP transport for iPad-from-bed workflows (queue a job, review fitment, draft reply) without needing VS Code tunnel.
+- **Job scraper tools** — `scrape_job_url`, `search_jobs` (SerpAPI), `search_greenhouse_jobs`, `search_lever_jobs`. Fetch any posting by URL or browse company boards directly; all results funnel into the `queue_job` pipeline.
+- **Persona-aware fitment** — `assess_job_fitment`, `evaluate_queued_job`, and `POST /jobs/evaluate` all accept an optional `persona` parameter; `run_job_assessment` prepends the persona prompt block to the LLM system message.
+
+### v0.9 *(shipped)*
+
+- **Web dashboard** — server-rendered HTML dashboards at `http://<host>:8000/dashboard`. Seven views covering the full job-search loop:
+  - **Home** (`/dashboard/`) — nav hub with status summary
+  - **Job Hunt** (`/dashboard/job-hunt`) — Kanban by stage + searchable application list
+  - **Materials** (`/dashboard/materials`) — resume file browser + gap analysis vs tracked applications
+  - **Rejections** (`/dashboard/rejections`) — funnel by stage, top companies, recent 20
+  - **Posts** (`/dashboard/posts`) — LinkedIn post metrics list (impressions / reactions / comments)
+  - **People** (`/dashboard/people`) — contact status grid, follow-up queue, searchable list
+  - **Health** (`/dashboard/health`) — mood/energy trend chart + recent check-in log
+- Dashboard routes live in `transport/http/routes/dashboard/` as a self-contained package with shared CSS/nav in `shared.py`.
+- Each view exposes a companion `*/data` JSON endpoint for scripting/polling.
+- **LLM mock fixture** (`tests/conftest.py`) — global `_mock_llm` autouse fixture prevents all tests from making real LLM/Ollama calls; opt out per-test with `@pytest.mark.live_llm`.
+
+### Planned
+
+- **Honcho persistent memory layer** — opt-in episodic memory on top of the persona system; seeds STAR stories, tone samples, and contact context, then queries before generation so the model has cross-session memory without re-reading every JSON file. Gated behind `honcho_api_key`.
+- **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}`; server parses company/role heuristically, runs queue + evaluate in one call.
 
 ---
 

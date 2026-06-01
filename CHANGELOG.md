@@ -8,6 +8,34 @@ All notable changes to this project will be documented in this file.
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
 
+## [0.9.0] - 2026-06-01
+
+Adds seven server-rendered web dashboards over the existing HTTP transport. No new MCP tools — the dashboards surface data already tracked by the server in a browser-accessible format. Also fixes the test suite hanging on real LLM calls. 523/523 tests green.
+
+### Added
+
+- **Web dashboard package** (`transport/http/routes/dashboard/`) — self-contained FastAPI sub-package mounted at `/dashboard`. Shared CSS, nav, and page chrome live in `shared.py`; each view is an isolated module.
+- **Home** (`GET /dashboard/`) — banner + six nav cards with inline SVG icons; job-search command center.
+- **Job Hunt** (`GET /dashboard/job-hunt`, `GET /dashboard/job-hunt/data`) — Kanban columns (Active / Interviewing / Offer / Rejected) + full searchable application list.
+- **Materials** (`GET /dashboard/materials`, `GET /dashboard/materials/data`) — resume file browser across 5 workspace folders + gap analysis between tracked applications and generated files.
+- **Rejections** (`GET /dashboard/rejections`, `GET /dashboard/rejections/data`) — funnel by stage, top 15 companies by rejection count, recent 20 rejections.
+- **Posts** (`GET /dashboard/posts`, `GET /dashboard/posts/data`) — LinkedIn post metrics list (impressions / reactions / comments per post) with hashtag filter. Handles nested `metrics` dict and missing `stage` field in real post data.
+- **People** (`GET /dashboard/people`, `GET /dashboard/people/data`) — contact status grid, follow-up queue sorted by last contact date, searchable full list.
+- **Health** (`GET /dashboard/health`, `GET /dashboard/health/data`) — mood/energy trend chart, 30-day rolling averages, recent check-in log. Tolerates non-numeric mood values (e.g. string entries) via `_to_num()` coercion.
+- **`_mock_llm` autouse fixture** (`tests/conftest.py`) — patches `tools.generate.generate_resume`, `generate_cover_letter`, and `workflows.langgraph.resume_graph.generate_resume` for every test, preventing silent hangs from real Ollama calls. Tests can opt out with `@pytest.mark.live_llm`.
+- **13 new dashboard tests** in `tests/test_http_api.py` covering all 7 page + data endpoints.
+
+### Fixed
+
+- `tests/test_http_api.py::TestDashboardEndpoints::test_posts_dashboard_data_shape` — updated assertion from stale `by_stage` key to `total_impressions` / `posts`.
+- `tests/test_fitment.py::TestRunJobAssessmentPersona::test_no_openai_key_falls_back_to_context_pack_with_persona` — test was making a real Ollama call; rewrote to mock `get_llm_client` and assert on the system-prompt content.
+- `tests/test_langgraph_workflow.py` — removed redundant module-level LLM mock (now covered by conftest).
+
+### Changed
+
+- `transport/http/app.py` — replaced two old `include_router` calls with a single import of the new dashboard package router.
+- Old `transport/http/routes/dashboard.py` and `transport/http/routes/materials.py` deleted; logic moved into the package.
+
 ## [0.8.0] - 2026-05-29
 
 Adds web-based job ingestion — four new MCP tools for scraping individual job postings by URL and searching Greenhouse, Lever, and Google Jobs boards directly from the server. All results funnel into the existing `queue_job` pipeline. 34 new tests; full suite 499/499 green.
