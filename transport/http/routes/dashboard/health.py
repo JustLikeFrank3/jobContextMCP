@@ -83,7 +83,7 @@ async def health_board() -> HTMLResponse:
     function esc(s) { return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
     async function boot() {
-      const res = await fetch('/dashboard/health/data');
+      const res = await fetch('/dashboard/health/data', { headers: window._authHeaders });
       const data = await res.json();
 
       document.getElementById('v-total').textContent  = data.total_entries;
@@ -93,18 +93,24 @@ async def health_board() -> HTMLResponse:
       // Sparkline
       const recent = [...(data.recent || [])].reverse(); // oldest→newest for left-to-right
       document.getElementById('sparkline').innerHTML = recent.map(e => {
-        const mood   = (e.mood || 0) / 10 * 100;
-        const energy = (e.energy || 0) / 10 * 100;
+        const moodNum   = Number.parseFloat(e.mood);
+        const energyNum = Number.parseFloat(e.energy);
+        const mood   = (Number.isFinite(moodNum)   ? moodNum   : 0) / 10 * 100;
+        const energy = (Number.isFinite(energyNum) ? energyNum : 0) / 10 * 100;
+        const moodTitle   = esc(String(e.mood ?? '')).replaceAll('"', '&quot;');
+        const energyTitle = esc(String(e.energy ?? '')).replaceAll('"', '&quot;');
         return `<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%">
-          <div class="spark-bar" title="Mood: ${e.mood}" style="height:${mood}%;background:#3b82f6;flex:1"></div>
-          <div class="spark-bar" title="Energy: ${e.energy}" style="height:${energy}%;background:#3FA8A8;flex:1"></div>
+          <div class="spark-bar" title="Mood: ${moodTitle}" style="height:${mood}%;background:#3b82f6;flex:1"></div>
+          <div class="spark-bar" title="Energy: ${energyTitle}" style="height:${energy}%;background:#3FA8A8;flex:1"></div>
         </div>`;
       }).join('') || '<div style="color:var(--muted);font-size:0.8rem;padding:8px">No data yet.</div>';
 
       // Entry list
       document.getElementById('entry-list').innerHTML = (data.recent || []).map(e => {
-        const moodPct   = ((e.mood || 0) / 10 * 100).toFixed(0);
-        const energyPct = ((e.energy || 0) / 10 * 100).toFixed(0);
+        const moodNum   = Number.parseFloat(e.mood);
+        const energyNum = Number.parseFloat(e.energy);
+        const moodPct   = (Number.isFinite(moodNum)   ? moodNum   : 0) / 10 * 100;
+        const energyPct = (Number.isFinite(energyNum) ? energyNum : 0) / 10 * 100;
         return `<div class="entry-card">
           <div class="entry-top">
             <div class="entry-date">${esc(e.date || '—')}</div>
@@ -113,13 +119,13 @@ async def health_board() -> HTMLResponse:
           <div class="meter-row">
             <div class="meter">
               <span class="meter-label">Mood</span>
-              <div class="meter-track"><div class="meter-fill" style="width:${moodPct}%;background:#3b82f6"></div></div>
-              <span class="meter-val">${e.mood ?? '—'}</span>
+              <div class="meter-track"><div class="meter-fill" style="width:${moodPct.toFixed(0)}%;background:#3b82f6"></div></div>
+              <span class="meter-val">${esc(String(e.mood ?? '—'))}</span>
             </div>
             <div class="meter">
               <span class="meter-label">Energy</span>
-              <div class="meter-track"><div class="meter-fill" style="width:${energyPct}%;background:#3FA8A8"></div></div>
-              <span class="meter-val">${e.energy ?? '—'}</span>
+              <div class="meter-track"><div class="meter-fill" style="width:${energyPct.toFixed(0)}%;background:#3FA8A8"></div></div>
+              <span class="meter-val">${esc(String(e.energy ?? '—'))}</span>
             </div>
           </div>
           ${e.notes ? `<div class="entry-notes">${esc(e.notes)}</div>` : ''}

@@ -53,7 +53,6 @@ def _materials_payload() -> dict:
     folders = _scan_folders()
     tracked = _load_tracked_companies()
     opt_files = [f["name"] for f in folders.get("optimized_resumes", {}).get("files", [])]
-    matched = set()
     untracked_files = []
     for fname in opt_files:
         fname_lower = fname.lower()
@@ -61,9 +60,7 @@ def _materials_payload() -> dict:
             company.lower() in fname_lower or fname_lower.startswith(company.lower().replace(" ", ""))
             for company in tracked
         )
-        if found:
-            matched.add(fname)
-        else:
+        if not found:
             untracked_files.append(fname)
     return {
         "folders": folders,
@@ -128,7 +125,7 @@ async def materials_board() -> HTMLResponse:
     function esc(s) { return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
     async function boot() {
-      const res = await fetch('/dashboard/materials/data');
+      const res = await fetch('/dashboard/materials/data', { headers: window._authHeaders });
       data = await res.json();
       const gapEl = document.getElementById('v-gap');
       document.getElementById('v-opt').textContent     = data.optimized_resumes;

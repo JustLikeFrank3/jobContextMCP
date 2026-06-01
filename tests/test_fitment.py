@@ -97,9 +97,6 @@ class TestRunJobAssessmentPersona:
 
     def test_no_openai_key_falls_back_to_context_pack_with_persona(self, isolated_server, monkeypatch):
         # Verify the persona block is prepended to the system prompt sent to the LLM.
-        from lib.config import get_llm_client as _orig_get_llm_client
-
-        captured_system = []  # noqa: F841 (reserved for future assertions)
 
         fake_response = MagicMock()
         fake_response.choices[0].message.content = "## FITMENT SCORE\n7/10 — good fit."

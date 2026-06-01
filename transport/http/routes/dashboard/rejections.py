@@ -76,7 +76,7 @@ async def rejections_board() -> HTMLResponse:
     function esc(s) { return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
     async function boot() {
-      const res = await fetch('/dashboard/rejections/data');
+      const res = await fetch('/dashboard/rejections/data', { headers: window._authHeaders });
       const data = await res.json();
 
       document.getElementById('v-total').textContent    = data.total;

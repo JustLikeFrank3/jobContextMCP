@@ -2,6 +2,18 @@
 from __future__ import annotations
 
 from .assets import logo_svg
+from transport.http.config import get_settings
+
+
+def _auth_header_js() -> str:
+    """Return a <script> snippet that sets window._authHeaders for use in fetch()
+    calls. Injects the API key only when auth is enabled; harmless empty object
+    otherwise. The page itself is already auth-gated, so embedding the key here
+    does not widen the attack surface."""
+    settings = get_settings()
+    if settings.auth_enabled and settings.api_key:
+        return f'<script>window._authHeaders = {{"Authorization": "Bearer {settings.api_key}"}};</script>'
+    return '<script>window._authHeaders = {};</script>'
 
 
 BASE_CSS = """
@@ -110,6 +122,7 @@ def html_page(title: str, active_tab: str, subtitle: str, extra_css: str, body: 
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContextMCP — {title}</title>
   <style>{BASE_CSS}{extra_css}</style>
+  {_auth_header_js()}
 </head>
 <body>
 <main class="wrap">

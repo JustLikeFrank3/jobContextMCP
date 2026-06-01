@@ -14,8 +14,6 @@ import pytest
 from services import WorkflowService, ProgressEvent
 from workflows.langgraph import build_resume_graph
 
-_FAKE_RESUME = "✓ Resume generated for Test Co — Staff Engineer\n\nSummary: ..."
-
 
 def _capture():
     events: list[ProgressEvent] = []

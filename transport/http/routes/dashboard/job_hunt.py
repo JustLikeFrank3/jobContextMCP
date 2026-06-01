@@ -156,13 +156,14 @@ _JOB_HUNT_HTML = """<!doctype html>
     if (!apps.length) { el.list.innerHTML = '<div class="empty">No matching applications.</div>'; return; }
     el.list.innerHTML = apps.map(a => {
       const status = fmtStatus(a.status);
+      const statusClass = status.replace(/[^a-z0-9_-]/g, '-');
       return `<article class="item">
         <div class="top">
           <div>
             <div class="title">${esc(a.company)} — ${esc(a.role)}</div>
             <div class="meta">Last update: ${esc(a.last_updated || '—')}</div>
           </div>
-          <span class="status ${status}">${esc(status)}</span>
+          <span class="status ${statusClass}">${esc(status)}</span>
         </div>
         ${a.next_steps ? `<div class="detail"><strong>Next:</strong> ${esc(a.next_steps)}</div>` : ''}
         ${a.contact    ? `<div class="detail"><strong>Contact:</strong> ${esc(a.contact)}</div>`    : ''}
@@ -172,7 +173,7 @@ _JOB_HUNT_HTML = """<!doctype html>
   }
 
   async function boot() {
-    const res = await fetch('/dashboard/job-hunt/data');
+    const res = await fetch('/dashboard/job-hunt/data', { headers: window._authHeaders });
     if (!res.ok) { el.list.innerHTML = `<div class="empty">Failed to load (${res.status}).</div>`; return; }
     state = await res.json();
     renderSummary(); renderKanban(); renderList();

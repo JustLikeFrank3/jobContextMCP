@@ -163,6 +163,9 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     except Exception:
         return "✗ Failed to load LLM client. Check config.json llm_provider settings."
 
+    if client is None:
+        return assess_job_fitment(company, role, job_description, persona=persona)
+
     system_prompt = _ASSESSMENT_SYSTEM
     persona_note = ""
     if persona:

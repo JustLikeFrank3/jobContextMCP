@@ -1,8 +1,6 @@
 """LinkedIn Posts pipeline dashboard — GET /dashboard/posts and /dashboard/posts/data."""
 from __future__ import annotations
 
-from collections import Counter
-
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -108,7 +106,7 @@ async def posts_board() -> HTMLResponse:
     }
 
     async function boot() {
-      const res = await fetch('/dashboard/posts/data');
+      const res = await fetch('/dashboard/posts/data', { headers: window._authHeaders });
       const data = await res.json();
       allPosts = data.posts || [];
 
