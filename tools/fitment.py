@@ -159,7 +159,7 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     """
     try:
         from lib.config import get_llm_client
-        client, model = get_llm_client()
+        client, model = get_llm_client(task="assessment")
     except Exception:
         return "✗ Failed to load LLM client. Check config.json llm_provider settings."
     if client is None:

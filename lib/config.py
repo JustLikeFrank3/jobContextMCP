@@ -112,7 +112,7 @@ def _reconfigure(cfg: dict) -> None:
     OLLAMA_MODEL = cfg.get("ollama_model", "llama3.1:8b")
 
 
-def get_llm_client():
+def get_llm_client(task: str = ""):
     """Return (client, model_name) for whichever provider is configured.
 
     llm_provider = "ollama"  → points the OpenAI SDK at the local Ollama server.
@@ -133,6 +133,8 @@ def get_llm_client():
     if provider == "ollama":
         base_url = cfg.get("ollama_base_url", "http://localhost:11434/v1")
         model = cfg.get("ollama_model", "llama3.1:8b")
+        if task == "assessment":
+            model = cfg.get("ollama_model_assessment", model)
         client = OpenAI(base_url=base_url, api_key="ollama")
         return client, model
 
@@ -141,6 +143,8 @@ def get_llm_client():
     if not key or key.startswith("sk-..."):
         return None, None
     model = cfg.get("openai_model", "gpt-4o")
+    if task == "assessment":
+        model = cfg.get("openai_model_assessment", model)
     client = OpenAI(api_key=key)
     return client, model
 
