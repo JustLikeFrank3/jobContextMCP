@@ -95,6 +95,7 @@ _PAGES = [
     ("Posts",       "/dashboard/posts",       "posts"),
     ("Outreach",    "/dashboard/people",      "people"),
     ("Wellbeing",   "/dashboard/health",      "health"),
+    ("Digest",      "/dashboard/digest",      "digest"),
 ]
 
 

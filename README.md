@@ -250,6 +250,35 @@ Endpoints:
 - `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
 - All write endpoints require `Authorization: Bearer <token>` when `JOBCONTEXTMCP_HTTP_TOKEN` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
 
+### Web dashboard quick start (local + phone)
+
+Use the helper script so you don't have to remember startup flags each time:
+
+```bash
+# Local machine only
+scripts/dashboard.sh start-local
+
+# LAN / phone access
+scripts/dashboard.sh start-lan
+
+# Check current URL + PID
+scripts/dashboard.sh status
+
+# Stop it
+scripts/dashboard.sh stop
+```
+
+When running in LAN mode, open:
+
+```text
+http://<YOUR_MAC_LAN_IP>:8000/dashboard/
+```
+
+Notes:
+- Mac and phone must be on the same Wi-Fi.
+- If browser can't connect, allow incoming connections for Terminal/Python in macOS Firewall.
+- If you expose LAN access, set `JOBCONTEXTMCP_HTTP_TOKEN` in your environment before running.
+
 ### Persona configs
 
 `services/persona_service.py` loads JSON persona presets from `data/personas/` (bundled defaults: `default`, `executive_polish`, `faang_technical`, `startup_founder`). Drop your own JSON into `<data_folder>/personas/` to override; the user directory takes precedence over bundled defaults. Each persona contributes a Markdown prompt block (tone modifiers, weighting, formatting rules) appended to the job description before generation. Pass `persona="executive_polish"` to `generate_resume()` or the `/resumes/generate` endpoint.

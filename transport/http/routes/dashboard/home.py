@@ -34,6 +34,10 @@ _PAGES = [
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M3 14l3-4 3 2 3-5 3 3"/><path d="M3 17h14"/></svg>',
         "Wellbeing", "/dashboard/health", "Mood & energy log, trend sparklines",
     ),
+    (
+        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M4 4h12v2H4zM4 9h8v2H4zM4 14h10v2H4z"/></svg>',
+        "Daily Digest", "/dashboard/digest", "On-demand morning briefing: follow-ups, stale apps, priorities",
+    ),
 ]
 
 
