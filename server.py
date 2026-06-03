@@ -60,6 +60,7 @@ from tools import (
     crossref,
     job_queue,
     job_scraper,
+    github,
 )
 
 
@@ -159,6 +160,7 @@ crossref.register(mcp)
 job_queue.register(mcp)
 setup.register(mcp)
 job_scraper.register(mcp)
+github.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -279,11 +281,15 @@ run_contact_crossref = crossref.run_contact_crossref
 get_contact_crossref = crossref.get_contact_crossref
 get_fb_outreach_queue = crossref.get_fb_outreach_queue
 
+get_github_stats = github.get_github_stats
+refresh_portfolio_metrics = github.refresh_portfolio_metrics
+get_portfolio_metrics = github.get_portfolio_metrics
+
 _TOOL_MODULES = [
     session, job_hunt, resume, fitment, interview, interviews, project_scanner,
     health, context, tone, rag, star, outreach, export, generate,
     langgraph_pipeline, people, posts, rejections, digest, compensation,
-    ingest, hbdi, crossref, job_queue, setup, job_scraper,
+    ingest, hbdi, crossref, job_queue, setup, job_scraper, github,
 ]
 
 
