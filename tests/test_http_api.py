@@ -58,7 +58,7 @@ class TestAuth:
             "company": "X", "role": "Y", "job_description": "z",
         })
         assert r.status_code == 401
-        assert "Missing Authorization" in r.json()["detail"]
+        assert "Missing credentials" in r.json()["detail"]
 
     def test_wrong_key_rejected(self, http_client_authed):
         r = http_client_authed.post(
@@ -67,7 +67,7 @@ class TestAuth:
             json={"company": "X", "role": "Y", "job_description": "z"},
         )
         assert r.status_code == 401
-        assert "Invalid API key" in r.json()["detail"]
+        assert "Invalid credentials" in r.json()["detail"]
 
     def test_valid_key_accepted(self, http_client_authed):
         r = http_client_authed.post(

@@ -21,9 +21,8 @@ CODEX_BUG_REPORT.md
 CODEX_REFACTOR_TASK.md
 debug_parser.py
 
-# Python virtual environment
-.venv/
-.venv */
+# Python virtual environment (any name: .venv, .venv.nosync, iCloud dupes)
+.venv*
 __pycache__/
 *.pyc
 *.pyo

@@ -59,27 +59,33 @@ class ApiKeyAuthProvider(AuthProvider):
     """
 
     def __init__(self) -> None:
-        self._settings = get_settings()
+        # Intentionally do NOT snapshot settings here. get_settings() is cached
+        # one layer down and is reset by tests (reset_settings_cache); reading
+        # it fresh on each call keeps this provider correct even though the
+        # provider instance itself is lru_cached.
+        pass
 
     @property
     def auth_enabled(self) -> bool:
-        return self._settings.auth_enabled
+        return get_settings().auth_enabled
 
     def authenticate_request(self, authorization: str | None, session_token: str | None) -> User | None:
-        if not self.auth_enabled:
+        settings = get_settings()
+        if not settings.auth_enabled:
             return _SYSTEM_USER
 
         token = _normalize_bearer(authorization) or (session_token.strip() if session_token else None)
-        if token and token == self._settings.api_key:
+        if token and token == settings.api_key:
             return _SYSTEM_USER
         return None
 
     def authenticate_login(self, credential: str) -> tuple[User, str] | None:
-        if not self.auth_enabled:
+        settings = get_settings()
+        if not settings.auth_enabled:
             return (_SYSTEM_USER, "")
-        if credential and credential.strip() == self._settings.api_key:
+        if credential and credential.strip() == settings.api_key:
             # Session token is the same API key for the current provider.
-            return (_SYSTEM_USER, self._settings.api_key or "")
+            return (_SYSTEM_USER, settings.api_key or "")
         return None
 
 

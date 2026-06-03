@@ -72,7 +72,7 @@ def _sync_config_exports() -> None:
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
-    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY
+    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY, LATEX_RESUME_DIR
 
     _cfg = config._cfg
 
@@ -108,6 +108,7 @@ def _sync_config_exports() -> None:
     JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
     JOB_ASSESSMENTS_FOLDER = config.JOB_ASSESSMENTS_FOLDER
     SERPAPI_KEY = config.SERPAPI_KEY
+    LATEX_RESUME_DIR = config.LATEX_RESUME_DIR
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -191,6 +192,7 @@ get_personal_context = context.get_personal_context
 
 log_tone_sample = tone.log_tone_sample
 get_tone_profile = tone.get_tone_profile
+get_tone_profile_budgeted = tone.get_tone_profile_budgeted
 scan_materials_for_tone = tone.scan_materials_for_tone
 
 search_materials = rag.search_materials
@@ -205,6 +207,7 @@ export_cover_letter_pdf = export.export_cover_letter_pdf
 
 generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter
+preview_story_retrieval = generate.preview_story_retrieval
 
 log_person = people.log_person
 get_people = people.get_people
