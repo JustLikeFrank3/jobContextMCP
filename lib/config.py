@@ -22,6 +22,7 @@ INTERVIEWS_FILE: Path
 JOB_QUEUE_FILE: Path
 CONTACT_CROSSREF_FILE: Path
 LINKEDIN_CONNECTIONS_FILE: Path
+GITHUB_METRICS_FILE: Path
 FB_FRIENDS_FOLDER: Path | None
 
 MASTER_RESUME: Path
@@ -58,7 +59,7 @@ def _reconfigure(cfg: dict) -> None:
     global _cfg
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE, JOB_QUEUE_FILE
-    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, FB_FRIENDS_FOLDER
+    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, GITHUB_METRICS_FILE, FB_FRIENDS_FOLDER
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -89,6 +90,7 @@ def _reconfigure(cfg: dict) -> None:
     JOB_QUEUE_FILE = DATA_FOLDER / "job_queue.json"
     CONTACT_CROSSREF_FILE = DATA_FOLDER / "contact_crossref.json"
     LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
+    GITHUB_METRICS_FILE = DATA_FOLDER / "github_metrics.json"
     _fb_raw = cfg.get("fb_friends_folder", "")
     FB_FRIENDS_FOLDER = Path(_fb_raw) if _fb_raw else None
 
@@ -178,6 +180,21 @@ def get_generation_budgets() -> dict:
             if isinstance(v, int) and v >= 0:
                 budgets[k] = v
     return budgets
+
+
+def get_github_metrics_config() -> dict:
+    """Return the github_metrics config block (username + repos to track).
+
+    Shape: {"username": str, "repos": [str, ...]}. Repo entries may be either
+    bare names (combined with username) or full "owner/name" slugs.
+    """
+    block = _cfg.get("github_metrics", {}) if isinstance(_cfg, dict) else {}
+    if not isinstance(block, dict):
+        return {"username": "", "repos": []}
+    return {
+        "username": block.get("username", ""),
+        "repos": list(block.get("repos", []) or []),
+    }
 
 
 _reconfigure(_load_config())
