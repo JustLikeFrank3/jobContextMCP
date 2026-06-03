@@ -10,6 +10,10 @@ from .assets import banner_svg
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 _PAGES = [
+  (
+    '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M3 5h14M3 10h10M3 15h6"/><circle cx="16" cy="10" r="2"/></svg>',
+    "Pipeline", "/dashboard/pipeline", "Share-sheet intake, assessment, resume selection, cover letter, and apply queue",
+  ),
     (
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>',
         "Job Hunt", "/dashboard/job-hunt", "Applications, Kanban board, status breakdown",

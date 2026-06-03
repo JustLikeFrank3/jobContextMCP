@@ -26,6 +26,15 @@
   "openai_model": "gpt-4o-mini",
   "serpapi_key": "",
 
+  "_comment_generation_budgets": "Token budgets for AI generation. personal_context_token_budget caps how many tokens of STAR stories get retrieved per request; cover_letter_max_tokens is a hard ceiling on the whole prompt so requests can never exceed the model TPM limit as the story library grows.",
+  "generation_budgets": {
+    "personal_context_token_budget": 1500,
+    "max_personal_stories": 8,
+    "cover_letter_max_tokens": 12000,
+    "resume_max_tokens": 12000,
+    "safety_margin_tokens": 500
+  },
+
   "_comment_contact": "Contact info for cover letter PDF sidebar. Lives here (gitignored) so it never appears in source code.",
   "contact": {
     "name": "YOUR FULL NAME",

@@ -976,7 +976,16 @@ def export_cover_letter_pdf(
     filename: str,
     output_filename: str = "",
 ) -> str:
-    """
+    """Pipeline B — HTML/weasyprint cover letter export.
+
+    Renders a .txt cover letter to PDF using the Frank MacBride two-column
+    HTML template via weasyprint.  This is the *fallback* pipeline for
+    environments where tectonic is unavailable.
+
+    For the primary LaTeX-based pipeline (identical visual output to the
+    manually-compiled frank-resume-latex versions) use
+    tools.latex_export.generate_cover_letter_latex() instead.
+
     Export a .txt cover letter to PDF using the Frank MacBride two-column template.
 
     Args:

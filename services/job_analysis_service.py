@@ -92,18 +92,23 @@ class JobAnalysisService:
 
         fitment_result = _job_queue.evaluate_queued_job(company, role, persona or "")
 
-        # evaluate_queued_job returns the fitment context on success, or an
-        # informational message when the job is already decided / not found.
-        is_fitment_context = "FITMENT ASSESSMENT" in fitment_result
+        # evaluate_queued_job returns either a full LLM assessment report or
+        # the legacy fitment context pack. Accept both success formats.
+        is_fitment_context = any(
+            token in fitment_result
+            for token in ("FITMENT ASSESSMENT", "## FITMENT SCORE", "✓ Assessment complete")
+        )
         is_already_decided = "already decided" in fitment_result
 
         notes = []
         if is_already_decided:
             notes.append("Job already decided — fitment context not regenerated")
 
-        queue_status = "evaluated" if is_fitment_context else (
-            "decided" if is_already_decided else "unknown"
-        )
+        queue_status = "unknown"
+        if is_already_decided:
+            queue_status = "decided"
+        if is_fitment_context:
+            queue_status = "evaluated"
 
         _emit(on_progress, "complete",
               f"Evaluation finished (status: {queue_status})",

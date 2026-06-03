@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import assets, digest, health, home, job_hunt, materials, people, posts, rejections
+from . import assets, digest, health, home, job_hunt, login, materials, people, pipeline, posts, rejections
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-for _sub in [assets, home, job_hunt, materials, rejections, posts, people, health, digest]:
+for _sub in [assets, login, home, pipeline, job_hunt, materials, rejections, posts, people, health, digest]:
     router.include_router(_sub.router)

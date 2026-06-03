@@ -19,10 +19,20 @@ import textwrap
 
 from lib import config
 from lib.io import _load_master_context
-from tools.tone import get_tone_profile
+from lib.story_retrieval import (
+    RetrievalDiagnostics,
+    estimate_tokens,
+    format_stories,
+    retrieve_stories,
+)
 from tools.fitment import get_customization_strategy
 from tools.interviews import get_interview_context
+from tools.context import get_personal_context
+from tools.tone import get_tone_profile
 from tools.resume import save_resume_txt, save_cover_letter_txt
+
+_NO_PERSONAL_STORIES = "No personal stories found"
+
 
 
 # ── FORMAT SPECIFICATIONS ──────────────────────────────────────────────────────
@@ -250,6 +260,8 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
       'I am writing to apply', 'I look forward to joining', or any variant
     - NEVER end with: 'I look forward to hearing from you', 'Thank you for your time
       and consideration', or other boilerplate closers
+        - If you mention the employer by name, it must match TARGET COMPANY exactly
+        - If you mention the role by name, it must match TARGET ROLE exactly
     - No paragraph without at least one specific metric or concrete artifact
     - No generic company praise — be specific about what the target company actually
       does or what specifically the JD reveals about their challenges
@@ -307,17 +319,105 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     return f"{prefix} Resume - {slug}.txt" if suffix == "Resume" else f"{prefix} Cover Letter - {slug}.txt"
 
 
+def _build_personal_context_block(
+    role: str = "",
+    job_description: str = "",
+    token_budget: int | None = None,
+) -> tuple[str, RetrievalDiagnostics | None]:
+    """Return a (block, diagnostics) tuple for the personal-context section.
+
+    Uses the local retrieval layer (lib.story_retrieval) to select only the
+    most role-relevant stories within ``token_budget`` tokens. Only candidate
+    stories sharing a query term are scored, so this scales as the library
+    grows. When no role/JD is provided, falls back to the unranked full list
+    (used by the no-API context-package path).
+    """
+    budgets = config.get_generation_budgets()
+    if token_budget is None:
+        token_budget = budgets["personal_context_token_budget"]
+    max_stories = budgets["max_personal_stories"]
+
+    try:
+        if role or job_description:
+            selected, diag = retrieve_stories(
+                role,
+                job_description,
+                path=config.PERSONAL_CONTEXT_FILE,
+                token_budget=token_budget,
+                max_stories=max_stories,
+            )
+            if not selected:
+                return "", diag
+            return "──── PERSONAL CONTEXT ────\n" + format_stories(selected), diag
+
+        personal = get_personal_context()
+        if personal.startswith(_NO_PERSONAL_STORIES):
+            return "", None
+        return "──── PERSONAL CONTEXT ────\n" + personal, None
+    except Exception:
+        return "", None
+
+
+def _dynamic_personal_budget(fixed_sections: list[str], max_tokens: int, safety: int) -> int:
+    """Tokens available for the personal-context block after fixed sections.
+
+    Guarantees fixed_cost + personal_budget <= max_tokens - safety, so the
+    assembled prompt stays under the model ceiling no matter how large the
+    story library grows. Also clamped to the configured per-request budget.
+    """
+    budgets = config.get_generation_budgets()
+    configured = budgets["personal_context_token_budget"]
+    fixed_cost = estimate_tokens("\n\n".join(s for s in fixed_sections if s))
+    headroom = max_tokens - fixed_cost - safety
+    return max(0, min(configured, headroom))
+
+
+def _enforce_token_ceiling(message: str, max_tokens: int) -> str:
+    """Absolute last-resort guard: hard-truncate if somehow over the ceiling.
+
+    With dynamic budgeting this should never fire, but it guarantees the
+    contract that the prompt can never exceed ``max_tokens``.
+    """
+    if estimate_tokens(message) <= max_tokens:
+        return message
+    # Truncate by characters using the ~4 chars/token heuristic, then trim a
+    # little extra to absorb tokenizer variance.
+    approx_chars = max(0, int(max_tokens * 4 * 0.95))
+    truncated = message[:approx_chars]
+    return truncated + "\n\n[context truncated to honor token ceiling]"
+
+
 def _build_resume_user_message(company: str, role: str, job_description: str) -> str:
+    budgets = config.get_generation_budgets()
+    max_tokens = budgets["resume_max_tokens"]
+    safety = budgets["safety_margin_tokens"]
+
     master = _load_master_context()
     tone = get_tone_profile()
     strategy = get_customization_strategy(_infer_role_type(role))
     interview_block = get_interview_context(company=company, role=role)
+
+    fixed_sections = [
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION:\n{job_description}",
+        f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        interview_block or "",
+        f"TONE PROFILE (write in this voice):\n{tone}",
+        _RESUME_FORMAT_SPEC,
+        "Now write the resume. Output the raw .txt content only.",
+    ]
+    personal_budget = _dynamic_personal_budget(fixed_sections, max_tokens, safety)
+    personal, _diag = _build_personal_context_block(role, job_description, personal_budget)
+
     sections = [
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        personal,
     ]
     if interview_block:
         sections.append(interview_block)
@@ -326,67 +426,17 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
         _RESUME_FORMAT_SPEC,
         "Now write the resume. Output the raw .txt content only.",
     ])
-    return "\n\n".join(sections)
+    return _enforce_token_ceiling("\n\n".join(s for s in sections if s), max_tokens)
 
 
 def _build_cover_letter_user_message(company: str, role: str, job_description: str) -> str:
-    from tools.star import get_star_story_context
+    budgets = config.get_generation_budgets()
+    max_tokens = budgets["cover_letter_max_tokens"]
+    safety = budgets["safety_margin_tokens"]
+
     master = _load_master_context()
     tone = get_tone_profile()
-
-    # Detect whether the job_description contains explicit framing override instructions
-    jd_upper = job_description.upper()
-    has_framing_override = (
-        "CRITICAL FRAMING CONTEXT" in jd_upper
-        or "KEY STORIES TO SURFACE" in jd_upper
-    )
-
-    if has_framing_override:
-        # Pull stories relevant to the framing context (identity, community, events, music)
-        star_1 = get_star_story_context("community", company, "")
-        star_2 = get_star_story_context("leadership", company, "")
-        star_context = (
-            "──── STAR STORIES (use these as supporting material) ────\n"
-            "These are real, verified career stories. The JOB DESCRIPTION above contains explicit\n"
-            "framing instructions — follow those instructions for which stories to surface.\n"
-            "The STAR stories below are additional supporting material.\n\n"
-            + star_1 + "\n\n" + star_2
-        )
-        para1_instruction = (
-            "PARA 1 (80–100 words): Hook. The JOB DESCRIPTION above contains a 'CRITICAL FRAMING\n"
-            "  CONTEXT' section with explicit story and angle guidance — follow it exactly.\n"
-            "  Lead with the personal/background angle specified in the framing context (e.g. fan\n"
-            "  identity, industry background, personal connection to the company's mission).\n"
-            "  Do NOT lead with a technical migration or code achievement for this para.\n"
-        )
-        para2_instruction = (
-            "PARA 2 (150–170 words): Primary story. The JOB DESCRIPTION's 'KEY STORIES TO SURFACE'\n"
-            "  section specifies which stories to use — use those. Include specific metrics and\n"
-            "  concrete details. Do NOT default to the Oracle/PostgreSQL migration or Spring Boot\n"
-            "  version upgrade unless the framing context specifically calls for it.\n"
-            "  Include any verbatim manager quotes from the STAR stories where relevant.\n"
-        )
-    else:
-        # Default: pull cloud/modernization stories for generic engineering cover letters
-        star_1 = get_star_story_context("cloud_migration", company, "infrastructure")
-        star_2 = get_star_story_context("modernization", company, "infrastructure")
-        star_context = (
-            "──── STAR STORIES (use these as source material for Para 2) ────\n"
-            "These are real, verified career stories. Draw specific details, quotes, and metrics\n"
-            "from these stories into the cover letter — do not paraphrase vaguely.\n\n"
-            + star_1 + "\n\n" + star_2
-        )
-        para1_instruction = (
-            "PARA 1 (80–100 words): Hook. Lead with the most impressive technical accomplishment\n"
-            "  from the master resume / STAR stories. Then 2 sentences on why this specific\n"
-            "  company — draw from the job description to name something concrete, not generic.\n"
-        )
-        para2_instruction = (
-            "PARA 2 (150–170 words): Professional ownership depth. Use the STAR stories injected\n"
-            "  above as source material. Cover each major fact with 2 sentences (what it was +\n"
-            "  why it was hard or what it proved). Include any verbatim manager quotes from the\n"
-            "  STAR stories. Close with one sentence making the end-to-end ownership chain explicit.\n"
-        )
+    strategy = get_customization_strategy(_infer_role_type(role))
 
     contact = config._cfg.get("contact", {})
     name = contact.get("name", "")
@@ -396,32 +446,22 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     github = contact.get("github", "")
     contact_block = f"{name.upper()}\n\nphone: +1.{phone}\nemail: {email}\nlinkedin: {linkedin}\ngithub: {github}"
     interview_block = get_interview_context(company=company, role=role)
-    sections = [
-        f"TARGET COMPANY: {company}",
-        f"TARGET ROLE: {role}",
-        f"JOB DESCRIPTION:\n{job_description}",
-        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
-        star_context,
-    ]
-    if interview_block:
-        sections.append(interview_block)
-    sections.extend([
-        f"TONE PROFILE (write in this voice):\n{tone}",
-        f"CONTACT BLOCK (use this exactly as the file header, no address fields):\n{contact_block}",
-        _COVER_LETTER_FORMAT_SPEC,
-    ])
-    return "\n\n".join(sections + [
+
+    instructions = (
         f"Now write the cover letter for {company}. Output the raw .txt content only.\n"
+        "Use the resume, customization strategy, interview context, the general personal_context, the tone profile, and the job description.\n"
         "STRUCTURE: exactly 4 paragraphs. Do not merge them.\n"
         "\n"
         "EXPANSION RULE: After stating any technical fact, write 1–2 follow-up sentences explaining\n"
         "(a) what made it hard or risky, and (b) why it is directly relevant to the target role.\n"
         "Never drop a fact in a single clause and move on — every metric needs context.\n"
         "\n"
-        + para1_instruction
-        + "\n"
-        + para2_instruction
-        + "\n"
+        "PARA 1 (80–100 words): Hook. Lead with one high-signal accomplishment from the resume that maps to this role,\n"
+        "  then add two concrete sentences on why this company/role specifically (based on JD details, not generic praise).\n"
+        "\n"
+        "PARA 2 (150–170 words): Primary ownership story. Use one major example with concrete metrics,\n"
+        "  constraints, and tradeoffs. Make the end-to-end ownership chain explicit and tie each fact to the target role.\n"
+        "\n"
         "PARA 3 (150–170 words): Side projects. Use metrics from the master resume projects section.\n"
         "  Cover each project with 2 sentences (what it does + a specific metric or constraint\n"
         "  solved). Close with one sentence on what the projects together demonstrate.\n"
@@ -430,8 +470,41 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  specific scale or challenges from the JD. End with the exact phrase:\n"
         "  'Happy to walk through any of this in more detail.'\n"
         "\n"
-        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong'.",
+        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong'."
+    )
+
+    fixed_sections = [
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION:\n{job_description}",
+        f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        interview_block or "",
+        f"TONE PROFILE (write in this voice):\n{tone}",
+        f"CONTACT BLOCK (use this exactly as the file header, no address fields):\n{contact_block}",
+        _COVER_LETTER_FORMAT_SPEC,
+        instructions,
+    ]
+    personal_budget = _dynamic_personal_budget(fixed_sections, max_tokens, safety)
+    personal, _diag = _build_personal_context_block(role, job_description, personal_budget)
+
+    sections = [
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION:\n{job_description}",
+        f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
+        personal,
+    ]
+    if interview_block:
+        sections.append(interview_block)
+    sections.extend([
+        f"TONE PROFILE (write in this voice):\n{tone}",
+        f"CONTACT BLOCK (use this exactly as the file header, no address fields):\n{contact_block}",
+        _COVER_LETTER_FORMAT_SPEC,
+        instructions,
     ])
+    return _enforce_token_ceiling("\n\n".join(s for s in sections if s), max_tokens)
 
 
 def _context_fallback(system: str, user: str, tool_name: str) -> str:
@@ -448,6 +521,62 @@ def _context_fallback(system: str, user: str, tool_name: str) -> str:
         "── USER CONTEXT ──",
         user,
     ])
+
+
+def _extract_cover_letter_body(content: str) -> str:
+    """Extract only the prose body paragraphs for LaTeX pipeline export."""
+    text = content.strip()
+    if not text:
+        return ""
+
+    lines = [ln.rstrip() for ln in text.splitlines()]
+
+    # Start at salutation when present.
+    start = 0
+    for i, ln in enumerate(lines):
+        if ln.strip().lower().startswith("dear hiring manager"):
+            start = i + 1
+            break
+
+    body_lines = lines[start:]
+
+    # Stop before sign-off block.
+    end = len(body_lines)
+    for i, ln in enumerate(body_lines):
+        low = ln.strip().lower()
+        if low in {"kindest regards,", "regards,", "sincerely,"}:
+            end = i
+            break
+
+    body = "\n".join(body_lines[:end]).strip()
+    return body
+
+
+def _sanitize_cover_letter_output(content: str) -> str:
+    """Remove wrapper chatter so the saved file contains only the letter."""
+    text = (content or "").strip()
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+    while lines:
+        first = lines[0].strip().lower()
+        if not first:
+            lines.pop(0)
+            continue
+        if first.startswith(("here is the cover letter", "cover letter in .txt format")):
+            lines.pop(0)
+            continue
+        break
+
+    cleaned = "\n".join(lines).strip()
+    cleaned = re.sub(
+        r"^Here is the cover letter in \.txt format, following the specified rules:\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    return cleaned
 
 
 # ── PUBLIC TOOLS ───────────────────────────────────────────────────────────────
@@ -527,6 +656,7 @@ def generate_cover_letter(
     role: str,
     job_description: str,
     output_filename: str = "",
+    export_pipeline: str = "html",
 ) -> str:
     """
     Generate a tailored cover letter for a specific company and role.
@@ -567,11 +697,23 @@ def generate_cover_letter(
     except Exception as exc:
         return f"✗ OpenAI API error: {exc}\n\nFalling back to context package:\n\n{_context_fallback(_COVER_LETTER_SYSTEM, user_msg, 'generate_cover_letter')}"
 
+    content = _sanitize_cover_letter_output(content)
     save_result = save_cover_letter_txt(filename, content)
 
     try:
-        from tools.export import export_cover_letter_pdf
-        pdf_result = export_cover_letter_pdf(filename)
+        if export_pipeline == "latex":
+            from tools.latex_export import generate_cover_letter_latex
+
+            body = _extract_cover_letter_body(content)
+            if not body:
+                raise RuntimeError("Unable to extract cover letter body for LaTeX export")
+
+            latex_pdf = generate_cover_letter_latex(body=body, company=company, role=role)
+            pdf_result = f"✓ PDF exported (LaTeX): {latex_pdf}"
+        else:
+            from tools.export import export_cover_letter_pdf
+
+            pdf_result = export_cover_letter_pdf(filename)
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 
@@ -583,12 +725,42 @@ def generate_cover_letter(
 
     return "\n".join([
         f"✓ Cover letter generated for {role} @ {company}",
+        f"  export pipeline: {export_pipeline}",
         f"  model:  {_model()}{cost_note}",
         f"  {save_result}",
         f"  {pdf_result}",
     ])
 
 
+def preview_story_retrieval(role: str, job_description: str = "") -> str:
+    """Preview which personal stories the retrieval layer would inject for a role.
+
+    Runs the same local inverted-index retrieval used by resume/cover-letter
+    generation and returns full diagnostics: library size, how many candidate
+    stories were actually scored (vs the full library), relevance scores, token
+    counts, the active token budget, and which stories were selected. Use this
+    to tune relevance or verify the context stays within budget as the story
+    library grows.
+
+    Args:
+        role:            Target role title.
+        job_description: Optional JD text (improves relevance signal).
+
+    Returns:
+        Formatted diagnostics report.
+    """
+    budgets = config.get_generation_budgets()
+    _selected, diag = retrieve_stories(
+        role,
+        job_description,
+        path=config.PERSONAL_CONTEXT_FILE,
+        token_budget=budgets["personal_context_token_budget"],
+        max_stories=budgets["max_personal_stories"],
+    )
+    return diag.render()
+
+
 def register(mcp) -> None:
     mcp.tool()(generate_resume)
     mcp.tool()(generate_cover_letter)
+    mcp.tool()(preview_story_retrieval)

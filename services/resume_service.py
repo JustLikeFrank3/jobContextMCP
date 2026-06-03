@@ -60,6 +60,7 @@ class ResumeService:
         job_description: str,
         output_filename: str = "",
         kind: str = "resume",
+        export_pipeline: str = "html",
         persona: Optional[str] = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> ResumeResult:
@@ -95,7 +96,7 @@ class ResumeService:
         persona_cfg = PersonaService.get(persona)
 
         _emit(on_progress, "starting", f"Starting {kind} generation for {role} @ {company}",
-              {"company": company, "role": role, "kind": kind, "persona": persona_cfg.name})
+              {"company": company, "role": role, "kind": kind, "persona": persona_cfg.name, "export_pipeline": export_pipeline})
 
         _emit(on_progress, "generating", f"Calling generate tool for {kind}")
 
@@ -111,7 +112,13 @@ class ResumeService:
         if kind == "resume":
             content = _generate.generate_resume(company, role, jd_with_persona, output_filename)
         else:
-            content = _generate.generate_cover_letter(company, role, jd_with_persona, output_filename)
+            content = _generate.generate_cover_letter(
+                company,
+                role,
+                jd_with_persona,
+                output_filename,
+                export_pipeline=export_pipeline,
+            )
 
         # The tool returns a "✓ ..." confirmation string when it ran the full
         # OpenAI + save + export pipeline; otherwise it returns a context

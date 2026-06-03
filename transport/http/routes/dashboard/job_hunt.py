@@ -174,7 +174,7 @@ _JOB_HUNT_HTML = """<!doctype html>
   }
 
   async function boot() {
-    const res = await fetch('/dashboard/job-hunt/data', { headers: window._authHeaders });
+    const res = await fetch('/dashboard/job-hunt/data', { credentials: 'same-origin' });
     if (!res.ok) { el.list.innerHTML = `<div class="empty">Failed to load (${res.status}).</div>`; return; }
     state = await res.json();
     renderSummary(); renderKanban(); renderList();

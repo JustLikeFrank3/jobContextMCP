@@ -72,6 +72,27 @@ def _company_from_url(url: str) -> str:
     return name.replace("-", " ").title()
 
 
+def _normalize_title_metadata(role: str, company: str, url: str) -> tuple[str, str]:
+    """Clean aggregator-style titles, especially LinkedIn share pages."""
+    cleaned_role = re.sub(r"^\s*title:\s*", "", role or "", flags=re.IGNORECASE).strip()
+    cleaned_role = re.sub(r"\s*\|\s*linkedin\s*$", "", cleaned_role, flags=re.IGNORECASE).strip()
+
+    host = (urlparse(url).hostname or "").lower()
+    if "linkedin." in host:
+        m = re.match(r"^(?P<company>.+?)\s+hiring\s+(?P<role>.+)$", cleaned_role, flags=re.IGNORECASE)
+        if m:
+            title_company = re.sub(r"\s+", " ", m.group("company")).strip(" ,|-")
+            title_role = re.sub(r"\s+", " ", m.group("role")).strip(" ,|-")
+            if title_company:
+                company = title_company
+            cleaned_role = title_role
+
+        cleaned_role = re.sub(r"\s+in\s+[A-Z][A-Za-z .'-]+,\s*[A-Z]{2}\s*$", "", cleaned_role).strip()
+
+    cleaned_role = re.sub(r"\s+", " ", cleaned_role).strip(" ,|-")
+    return company, cleaned_role
+
+
 def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
     """
     Return (company, role, description) extracted from Jina Reader markdown.
@@ -105,6 +126,8 @@ def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
         if m:
             company = m.group(1).strip()
             break
+
+    company, role = _normalize_title_metadata(role, company, url)
 
     description = text[:8000]
     return company, role, description

@@ -253,7 +253,7 @@ async def digest_page() -> HTMLResponse:
       try {
         const res = await fetch('/dashboard/digest/generate', {
           method: 'POST',
-          headers: window._authHeaders,
+          credentials: 'same-origin',
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();

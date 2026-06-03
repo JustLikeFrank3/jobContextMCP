@@ -4,19 +4,16 @@ from __future__ import annotations
 import json
 
 from .assets import logo_svg
-from transport.http.config import get_settings
 
 
 def _auth_header_js() -> str:
-    """Return a <script> snippet that sets window._authHeaders for use in fetch()
-    calls. Injects the API key only when auth is enabled; harmless empty object
-    otherwise. The page itself is already auth-gated, so embedding the key here
-    does not widen the attack surface."""
-    settings = get_settings()
-    headers = {}
-    if settings.auth_enabled and settings.api_key:
-        headers = {"Authorization": "Bearer " + settings.api_key}
-    return f'<script>window._authHeaders = {json.dumps(headers)};</script>'
+  """Return dashboard fetch defaults.
+
+  Browser dashboards now authenticate via the `jc_session` HTTP-only cookie
+  set by /dashboard/login, so we intentionally do not expose API keys to
+  client-side JavaScript.
+  """
+  return ''
 
 
 BASE_CSS = """
@@ -89,6 +86,7 @@ BASE_CSS = """
 # All pages that exist — used to render consistent nav
 _PAGES = [
     ("Home",        "/dashboard",             "home"),
+  ("Pipeline",    "/dashboard/pipeline",    "pipeline"),
     ("Job Hunt",    "/dashboard/job-hunt",    "job-hunt"),
     ("Materials",   "/dashboard/materials",   "materials"),
     ("Rejections",  "/dashboard/rejections",  "rejections"),
@@ -100,11 +98,12 @@ _PAGES = [
 
 
 def nav_tabs(active: str) -> str:
-    links = "\n    ".join(
-        f'<a href="{href}"{" class=\"active\"" if key == active else ""}>{label}</a>'
-        for label, href, key in _PAGES
-    )
-    return f'<nav class="tabs">\n    {links}\n  </nav>'
+  links = "\n    ".join(
+    f'<a href="{href}"{active_attr}>{label}</a>'
+    for label, href, key in _PAGES
+    for active_attr in (" class=\"active\"" if key == active else "",)
+  )
+  return f'<nav class="tabs">\n    {links}\n  </nav>'
 
 
 def page_header(title: str, subtitle: str = "") -> str:

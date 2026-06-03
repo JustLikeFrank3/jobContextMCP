@@ -36,6 +36,7 @@ FEEDBACK_RECEIVED: Path
 SKILLS_SHORTER: Path
 JOB_ASSESSMENTS_FOLDER: Path
 INTERVIEW_PREP_FOLDER: Path
+LATEX_RESUME_DIR: Path | None
 
 SERPAPI_KEY: str
 
@@ -61,7 +62,7 @@ def _reconfigure(cfg: dict) -> None:
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
-    global JOB_ASSESSMENTS_FOLDER, INTERVIEW_PREP_FOLDER
+    global JOB_ASSESSMENTS_FOLDER, INTERVIEW_PREP_FOLDER, LATEX_RESUME_DIR
     global SERPAPI_KEY
 
     _cfg = dict(cfg)
@@ -93,6 +94,8 @@ def _reconfigure(cfg: dict) -> None:
 
     JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
     INTERVIEW_PREP_FOLDER = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
+    _latex_dir = cfg.get("latex_resume_dir", "")
+    LATEX_RESUME_DIR = Path(_latex_dir) if _latex_dir else None
 
     MASTER_RESUME = RESUME_FOLDER / cfg["master_resume_path"]
     LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg.get("leetcode_cheatsheet_path", "Algorithm_Cheatsheet.md")
@@ -147,6 +150,32 @@ def get_llm_client(task: str = ""):
         model = cfg.get("openai_model_assessment", model)
     client = OpenAI(api_key=key)
     return client, model
+
+
+# ── Generation token budgets ────────────────────────────────────────────────
+
+_DEFAULT_GENERATION_BUDGETS = {
+    "personal_context_token_budget": 1500,
+    "max_personal_stories": 8,
+    "cover_letter_max_tokens": 12000,
+    "resume_max_tokens": 12000,
+    "safety_margin_tokens": 500,
+}
+
+
+def get_generation_budgets() -> dict:
+    """Return generation token budgets, merging config over built-in defaults.
+
+    Centralizes the hard limits that keep generation prompts under the model
+    TPM ceiling regardless of how large personal_context.json grows.
+    """
+    budgets = dict(_DEFAULT_GENERATION_BUDGETS)
+    configured = _cfg.get("generation_budgets", {}) if isinstance(_cfg, dict) else {}
+    if isinstance(configured, dict):
+        for k, v in configured.items():
+            if isinstance(v, int) and v >= 0:
+                budgets[k] = v
+    return budgets
 
 
 _reconfigure(_load_config())

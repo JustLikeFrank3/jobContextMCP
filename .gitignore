@@ -23,6 +23,7 @@ debug_parser.py
 
 # Python virtual environment
 .venv/
+.venv */
 __pycache__/
 *.pyc
 *.pyo

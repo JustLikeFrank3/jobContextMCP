@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from lib import config
 from lib.io import _load_json
@@ -37,11 +38,28 @@ def _scan_folders() -> dict:
                 key=lambda f: f.stat().st_mtime,
                 reverse=True,
             )
-            result[key] = {"folder": folder_name, "count": len(files),
-                           "files": [{"name": f.name, "ext": f.suffix.lower()} for f in files]}
+            result[key] = {
+                "folder": folder_name,
+                "count": len(files),
+                "files": [
+                    {
+                        "name": f.name,
+                        "ext": f.suffix.lower(),
+                        "href": f"/dashboard/materials/file/{key}/{quote(f.name, safe='')}",
+                    }
+                    for f in files
+                ],
+            }
         else:
             result[key] = {"folder": folder_name, "count": 0, "files": []}
     return result
+
+
+def _folder_path(folder_key: str) -> Path | None:
+    folder_meta = _FOLDERS.get(folder_key)
+    if not folder_meta:
+        return None
+    return _workspace_base() / folder_meta[0]
 
 
 def _load_tracked_companies() -> list[str]:
@@ -78,6 +96,25 @@ async def materials_data() -> JSONResponse:
     return JSONResponse(_materials_payload())
 
 
+@router.get("/materials/file/{folder_key}/{file_name:path}", responses={404: {"description": "File not found"}})
+async def materials_file(folder_key: str, file_name: str) -> FileResponse:
+    folder = _folder_path(folder_key)
+    if folder is None:
+        raise HTTPException(status_code=404, detail=f"Unknown folder: {folder_key}")
+    if not folder.exists():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {folder_key}")
+
+    root = folder.resolve()
+    target = (folder / file_name).resolve()
+    if root != target.parent and root not in target.parents:
+        raise HTTPException(status_code=404, detail="Invalid file path")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_name}")
+
+    media_type = "application/pdf" if target.suffix.lower() == ".pdf" else None
+    return FileResponse(target, media_type=media_type)
+
+
 @router.get("/materials")
 async def materials_board() -> HTMLResponse:
     extra_css = """
@@ -90,7 +127,7 @@ async def materials_board() -> HTMLResponse:
     .folder-name { font-weight: 600; font-size: 0.92rem; color: #c8d8f4; }
     .folder-count { background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 0.75rem; color: var(--muted); }
     .file-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
-    .file-item { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
+    .file-item { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--muted); padding: 4px 6px; border-radius: 6px; text-decoration: none; }
     .file-item:hover { background: #0e1628; color: var(--text); }
     .ext-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 5px; border-radius: 4px; background: var(--chip); color: var(--accent); text-transform: uppercase; flex-shrink: 0; }
     .gap-item { background: var(--panel); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; color: #fde9b0; margin-bottom: 6px; }
@@ -101,7 +138,7 @@ async def materials_board() -> HTMLResponse:
   <section class="cards">
     <div class="card"><div class="k">Optimized Resumes</div><div class="v" id="v-opt">—</div></div>
     <div class="card"><div class="k">Cover Letters</div><div class="v" id="v-cl">—</div></div>
-    <div class="card"><div class="k">Resume PDFs</div><div class="v" id="v-pdf">—</div></div>
+    <div class="card"><div class="k">Output PDFs</div><div class="v" id="v-pdf">—</div></div>
     <div class="card"><div class="k">Tracked Applications</div><div class="v" id="v-tracked">—</div></div>
     <div class="card"><div class="k">Untracked Resumes</div><div class="v" id="v-gap">—</div></div>
   </section>
@@ -118,14 +155,14 @@ async def materials_board() -> HTMLResponse:
     const FOLDER_LABELS = {
       optimized_resumes: 'Optimized Resumes',
       cover_letters:     'Cover Letters',
-      resume_pdfs:       'Resume PDFs',
+      resume_pdfs:       'Output PDFs',
       job_assessments:   'Job Assessments',
       interview_prep:    'Interview Prep',
     };
     function esc(s) { return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
     async function boot() {
-      const res = await fetch('/dashboard/materials/data', { headers: window._authHeaders });
+      const res = await fetch('/dashboard/materials/data', { credentials: 'same-origin' });
       data = await res.json();
       const gapEl = document.getElementById('v-gap');
       document.getElementById('v-opt').textContent     = data.optimized_resumes;
@@ -154,7 +191,7 @@ async def materials_board() -> HTMLResponse:
             <span class="folder-count">${folder.count}</span>
           </div>
           <div class="file-list">
-            ${files.map(f => `<div class="file-item"><span class="ext-badge">${esc(f.ext.replace('.',''))}</span><span>${esc(f.name)}</span></div>`).join('')}
+            ${files.map(f => `<a class="file-item" href="${esc(f.href)}" target="_blank" rel="noopener noreferrer"><span class="ext-badge">${esc(f.ext.replace('.',''))}</span><span>${esc(f.name)}</span></a>`).join('')}
             ${folder.count > 50 ? `<div class="empty">+ ${folder.count - 50} more…</div>` : ''}
           </div>`;
         grid.appendChild(div);

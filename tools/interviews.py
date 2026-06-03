@@ -397,10 +397,12 @@ def get_interview_context(company: str, role: str = "") -> str:
         "",
     ]
     for i in matches:
+        interviewer_role = i.get('interviewer_role')
+        role_suffix = f" ({interviewer_role})" if interviewer_role else ""
         lines.append(
             f"▪ {i.get('interview_date', '?')} — {i.get('interview_type', '?')}"
             f" with {i.get('interviewer', 'unknown')}"
-            f"{f' ({i['interviewer_role']})' if i.get('interviewer_role') else ''}"
+            f"{role_suffix}"
         )
         if i.get("self_rating") is not None:
             lines.append(f"  Self-rated: {i['self_rating']}/10")
