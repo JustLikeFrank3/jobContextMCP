@@ -136,21 +136,26 @@ class TestDigest:
     def test_daily_digest_shows_active_apps(self, isolated_server):
         srv.update_application("FanDuel", "Senior SWE", "phone screen")
         result = srv.get_daily_digest()
-        assert "1 active application" in result
+        # New digest renders a PIPELINE snapshot line ("N active / M in flight ...").
+        assert "PIPELINE: 1 active" in result
 
     def test_daily_digest_shows_stale_apps(self, isolated_server):
         import datetime
         from lib.io import _load_json, _save_json
         from lib import config
 
-        srv.update_application("OldCo", "SWE", "applied")
-        # Manually age the last_updated date
+        # 'researching' is a non-waiting status, so once it ages past 14 days it
+        # surfaces under the digest's NEEDS REVIEW section (waiting statuses go
+        # to WAITING ON OTHERS instead). Keep it under 60 days so it isn't
+        # dropped as long-dormant.
+        srv.update_application("OldCo", "SWE", "researching")
+        aged = (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
         data = _load_json(config.STATUS_FILE, {"applications": []})
-        data["applications"][0]["last_updated"] = "2026-01-01 00:00"
+        data["applications"][0]["last_updated"] = aged
         _save_json(config.STATUS_FILE, data)
 
         result = srv.get_daily_digest()
-        assert "STALE" in result
+        assert "NEEDS REVIEW" in result
         assert "OldCo" in result
 
     def test_weekly_summary_runs_without_error(self, isolated_server):

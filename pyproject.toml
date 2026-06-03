@@ -1,6 +1,9 @@
 [tool.pytest.ini_options]
 testpaths   = ["tests"]
 addopts     = "-v --tb=short"
+markers     = [
+    "live_llm: test exercises the real LLM client code path (with its own mocked client); opts out of the autouse offline get_llm_client stub.",
+]
 
 [tool.coverage.run]
 source  = ["server", "lib", "tools"]

@@ -157,12 +157,23 @@ _FAKE_COVER = "FAKE COVER LETTER CONTENT"
 
 @pytest.fixture(autouse=True)
 def _mock_llm(request, monkeypatch):
-    """Stub out LLM generate calls for all tests unless marked live_llm."""
+    """Stub out LLM generate calls for all tests unless marked live_llm.
+
+    Also forces get_llm_client() to return (None, None) so the fitment /
+    assessment path (run_job_assessment, evaluate_queued_job, JobAnalysisService)
+    takes its deterministic offline context-pack fallback instead of making a
+    live OpenAI/Ollama request. Without this, those tests silently hit the real
+    API and pass or fail depending on network/rate-limit state.
+
+    Tests that genuinely need the live-LLM code path (with their own mocked
+    client) opt out via @pytest.mark.live_llm.
+    """
     if request.node.get_closest_marker("live_llm"):
         yield
         return
     monkeypatch.setattr("tools.generate.generate_resume", lambda *a, **kw: _FAKE_RESUME)
     monkeypatch.setattr("tools.generate.generate_cover_letter", lambda *a, **kw: _FAKE_COVER)
+    monkeypatch.setattr("lib.config.get_llm_client", lambda task="": (None, None))
     try:
         import workflows.langgraph.resume_graph as rg
         monkeypatch.setattr(rg, "generate_resume", lambda *a, **kw: _FAKE_RESUME)
