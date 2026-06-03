@@ -975,6 +975,7 @@ def export_resume_pdf(
 def export_cover_letter_pdf(
     filename: str,
     output_filename: str = "",
+    footer_tag: str = "SOFTWARE ENGINEER",
 ) -> str:
     """Pipeline B — HTML/weasyprint cover letter export.
 
@@ -1013,7 +1014,7 @@ def export_cover_letter_pdf(
     except UnicodeDecodeError:
         text = source.read_text(encoding="latin-1")
     data = _parse_cover_letter_txt(text)
-    data["footer_tag"] = "SOFTWARE ENGINEER"
+    data["footer_tag"] = footer_tag
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem)

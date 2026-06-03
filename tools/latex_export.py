@@ -60,6 +60,12 @@ _TEX_TEMPLATE = r"""\documentclass[letter,11pt]{{article}}
 
 \vspace{{24pt}}
 
+\begin{{flushright}}
+{date}
+\end{{flushright}}
+
+\vspace{{8pt}}
+
 Dear Hiring Manager,
 
 {body}
@@ -160,8 +166,10 @@ def generate_cover_letter_latex(
     company: str,
     role: str,
     *,
-    role_title: str = "AI Full Stack Software Engineer",
+    role_title: str = "Full Stack Software Engineer",
+    letter_date: str = "",
     output_dir: Path | None = None,
+    identity: dict[str, str] | None = None,
 ) -> Path:
     """Pipeline A — render a cover letter via LaTeX/tectonic.
 
@@ -173,8 +181,13 @@ def generate_cover_letter_latex(
         role:        Target role / job title (used only in the output filename).
         role_title:  Value for the \\role macro in the LaTeX header.
                      Defaults to Frank's standard title.
+        letter_date: Right-aligned date printed under the letterhead. Defaults
+                     to today in 'Month D, YYYY' format when blank.
         output_dir:  Where to write the final PDF.  Defaults to the workspace
                  03-Resume-PDFs folder so dashboard previews can find it.
+        identity:    Optional contact/identity overrides for demo output.
+                 Supported keys match _AUTHOR_DEFAULTS: name, phone, city,
+                 email, linkedin, github. Defaults preserve Frank's data.
 
     Returns:
         Path to the compiled PDF.
@@ -189,14 +202,24 @@ def generate_cover_letter_latex(
     # Build a safe filename slug
     slug = re.sub(r"[^A-Za-z0-9]+", "_", f"{company}_{role}").strip("_")
     from datetime import date
-    dated = date.today().strftime("%Y%m%d")
+    today = date.today()
+    dated = today.strftime("%Y%m%d")
     pdf_name = f"cover_letter_{slug}_{dated}.pdf"
     final_pdf = output_dir / pdf_name
 
+    # Default the printed letter date to today (e.g. 'June 3, 2026'). Strip any
+    # zero-padding on the day so it reads naturally.
+    if not letter_date:
+        letter_date = today.strftime("%B %-d, %Y")
+
+    author = {**_AUTHOR_DEFAULTS, **(identity or {})}
+    author = {key: _escape_latex(value) for key, value in author.items()}
+
     tex_body = _prose_to_tex(body)
     tex_src = _TEX_TEMPLATE.format(
-        **_AUTHOR_DEFAULTS,
+        **author,
         role_title=_escape_latex(role_title),
+        date=_escape_latex(letter_date),
         body=tex_body,
     )
 

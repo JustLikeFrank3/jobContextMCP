@@ -30,12 +30,21 @@ _ASSESSMENT_SYSTEM = textwrap.dedent("""\
     ## COMP ASSESSMENT
     One paragraph on whether the posted comp range matches the candidate's level
     and market value. Include any negotiation notes.
+    BUG GUARD (ingestion workflow): The job description you receive may be
+    truncated or may omit compensation entirely. Only reference comp numbers
+    that appear verbatim in the provided job description. If no comp range is
+    present, write exactly "No compensation range was provided in the posting."
+    and stop. Never invent, estimate, or infer a "competitive range" — a
+    fabricated number here poisons downstream negotiation prep.
 
     ## RECOMMENDATION
     One sentence: Apply aggressively / Apply with caveats / Do not apply.
     Follow with 2-3 sentences of reasoning.
 
     Be direct. No filler. No hedge language. If the fit is weak, say so.
+    GLOBAL ANTI-FABRICATION RULE: Every claim in every section must be grounded
+    in either the provided master resume or the provided job description. If a
+    detail is not present in your inputs, do not assert it as fact.
 """)
 
 

@@ -8,6 +8,7 @@ config.json
 /data/*.json
 !/data/*.example.json
 /data/Connections.csv
+/data/*.bak*
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
@@ -30,6 +31,8 @@ __pycache__/
 # RAG index (contains embeddings of your personal data)
 data/rag_embeddings.npy
 data/rag_index.json
+data/*_semantic_embeddings.npy
+data/*_semantic_index.json
 
 # Shareable/joke exports — not for repo
 docs/branding/banner/jobcontextmcp-share.jpg

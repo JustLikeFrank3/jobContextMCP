@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard command-center README preview** — added the dashboard screenshot and expanded quick-start notes for the browser UI: Home/Daily Digest, Pipeline, Job Hunt, Materials, Rejections, Posts, Outreach, People, and Wellbeing views.
+- **Dedicated dashboard Daily Digest page** — added the browser digest flow with `GET /dashboard/digest`, `POST /dashboard/digest/generate`, parsed briefing sections, timestamps, spinner/progress feedback, and same-data parity with the `get_daily_digest()` tool.
+- **Dashboard browser login/session support** — dashboard users can authenticate with the existing HTTP token via `/dashboard/login`; successful login sets an HTTP-only `jc_session` cookie and `/dashboard/logout` clears it.
+- **Dashboard pipeline UX upgrades** — pipeline actions are job-id-based, preserve selected resume choices, show assessment details inline, expose busy/progress state, support unqueue/remove actions, and make LaTeX/HTML cover-letter exports available from the same screen.
+- **Semantic personal-story retrieval for cover letters** — `lib/story_retrieval.py` can now blend keyword scores with cached OpenAI embeddings, mission-oriented semantic queries, query-chrome stripping, and hook-tag boosts so company mission language can surface the strongest personal story even when the JD has little literal overlap.
+- **Cover-letter prompt budget cleanup** — long scraped job pages are compacted before prompt assembly, removing LinkedIn/apply/sign-in/navigation chrome and preserving role, mission, responsibility, qualification, and benefit anchors.
+- **LaTeX cover-letter controls** — the Tectonic export path now prints a right-aligned letter date, accepts an explicit `letter_date`, and uses a configurable role title.
+- **Selected-resume-aware cover-letter titles** — dashboard cover-letter generation passes the selected resume variant through the service layer so Modern/AI resume choices can use the AI title while classic variants keep the default full-stack title.
+- **Assessment-specific LLM routing** — `lib.config.get_llm_client()` now supports provider/profile switching so generation and assessment calls can use separate OpenAI/Ollama model settings without changing caller code.
+- **Durable GitHub portfolio metrics** — GitHub traffic snapshots can be refreshed into a local history file and summarized later, preserving clone/view metrics beyond GitHub's rolling 14-day traffic window.
+- **`httpx2>=2.3.0` dependency** — aligns the test client with the current Starlette/FastAPI stack and removes the test-suite deprecation warning.
+
+### Changed
+
+- **Cover-letter generation** now targets a fuller one-page body, uses a primary mission/brand hook when semantic retrieval is enabled, asks for three distinct grounded artifacts, and applies deterministic cleanup for stock phrases and unsupported metrics.
+- **Generation prompt assembly** now uses retrieval-first budgeting: bounded master/tone/JD sections, recency/diversity tone sample selection, dynamic personal-context budgets, and a final token-ceiling guard.
+- **Story retrieval diagnostics** now report semantic availability and candidate counts alongside selected stories, making it easier to debug why a personal context item did or did not appear.
+- **HTML cover-letter export** accepts a footer/title tag so generated PDFs can reflect the selected resume/title variant.
+- **Dashboard auth tests** now set session cookies through the active test client cookie jar for compatibility with newer httpx/httpx2 behavior.
+
+### Fixed
+
+- **Noisy LinkedIn postings crowding out personal context** — JD cleanup keeps the cover-letter prompt from losing retrieved stories to scraped page metadata.
+- **Mission-fit cover letters over-indexing on work history** — semantic story retrieval lets human/creator/brand stories such as independent-label work rank ahead of unrelated literal keyword matches when that is the better company hook.
+- **Fitment-assessment fabrication guardrails** — compensation analysis must quote only JD-provided compensation numbers, and unsupported facts must be grounded in either the JD or the master resume.
+- **Dashboard auth-provider staleness** — token settings are read fresh instead of reusing stale auth state across configuration changes.
+- **Dashboard same-origin credentials** — browser requests and tests now exercise the session-cookie path cleanly instead of relying on deprecated per-request cookie injection.
+- **Assessment wrapper cleanup** — saved/displayed assessments strip tool/context wrappers so dashboard details focus on the actual fitment result.
+- **Full test suite** is green again on the current branch: 565/565 passing.
+
 ### Planned
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.

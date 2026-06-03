@@ -62,6 +62,7 @@ class ResumeService:
         kind: str = "resume",
         export_pipeline: str = "html",
         persona: Optional[str] = None,
+        selected_resume: Optional[str] = None,
         on_progress: Optional[ProgressCallback] = None,
     ) -> ResumeResult:
         """Generate a tailored resume or cover letter end-to-end.
@@ -82,6 +83,10 @@ class ResumeService:
             job_description: Full JD text.
             output_filename: Optional explicit filename (default: auto-derived).
             kind:            "resume" or "cover_letter".
+            selected_resume: Filename of the resume chosen for this job. When it
+                             names the MODERN/AI variant the cover-letter header
+                             title becomes "AI Full Stack Software Engineer";
+                             otherwise it stays "Full Stack Software Engineer".
             on_progress:     Optional callback for streaming progress events.
 
         Returns:
@@ -112,12 +117,21 @@ class ResumeService:
         if kind == "resume":
             content = _generate.generate_resume(company, role, jd_with_persona, output_filename)
         else:
+            # The cover-letter header title tracks the assessment's resume
+            # recommendation: the MODERN/AI resume variant earns the "AI"
+            # prefix; the generic resume keeps the plain title.
+            role_title = (
+                "AI Full Stack Software Engineer"
+                if selected_resume and "modern" in selected_resume.lower()
+                else "Full Stack Software Engineer"
+            )
             content = _generate.generate_cover_letter(
                 company,
                 role,
                 jd_with_persona,
                 output_filename,
                 export_pipeline=export_pipeline,
+                role_title=role_title,
             )
 
         # The tool returns a "✓ ..." confirmation string when it ran the full

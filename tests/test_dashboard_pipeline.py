@@ -23,9 +23,7 @@ from lib.io import _load_json
 from transport.http.routes.dashboard import pipeline as pl
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Seed helpers
-# ──────────────────────────────────────────────────────────────────────────────
 
 def _seed_jobs(jobs: list[dict]) -> None:
     """Write a job_queue.json into the isolated data dir (post-reconfigure)."""
@@ -51,9 +49,7 @@ def _job(**over) -> dict:
     return base
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Page render
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestPipelinePage:
     def test_pipeline_page_renders(self, http_client_noauth):
@@ -65,9 +61,7 @@ class TestPipelinePage:
         assert "/dashboard/pipeline/evaluate" in r.text
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # /pipeline/data
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestPipelineData:
     def test_empty_queue_shape(self, http_client_noauth):
@@ -120,9 +114,7 @@ class TestPipelineData:
         assert "MODERN" in body["jobs"][0]["recommended_resume"].upper()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # /pipeline/select-resume
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestSelectResume:
     def test_missing_resume_name_returns_400(self, http_client_noauth):
@@ -234,10 +226,8 @@ class TestPipelineAuth:
         assert r.status_code == 200
 
     def test_pipeline_data_accepts_session_cookie(self, http_client_authed):
-        r = http_client_authed.get(
-            "/dashboard/pipeline/data",
-            cookies={"jc_session": "test-key"},
-        )
+        http_client_authed.cookies.set("jc_session", "test-key")
+        r = http_client_authed.get("/dashboard/pipeline/data")
         assert r.status_code == 200
 
 

@@ -345,6 +345,7 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
         kind="cover_letter",
         export_pipeline=req.export_pipeline,
         persona=req.persona,
+        selected_resume=selected,
     )
     return JSONResponse({
         "ok": result.success,

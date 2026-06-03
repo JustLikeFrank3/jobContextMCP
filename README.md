@@ -4,8 +4,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.9.0-blue" alt="Version 0.9.0"/>
-  <img src="https://img.shields.io/badge/tests-523%2F523-brightgreen" alt="Tests 523/523"/>
-  <img src="https://img.shields.io/badge/tools-73-informational" alt="73 MCP tools"/>
+  <img src="https://img.shields.io/badge/tests-565%2F565-brightgreen" alt="Tests 565/565"/>
+  <img src="https://img.shields.io/badge/tools-75-informational" alt="75 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 
@@ -15,7 +15,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 73 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 75 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -31,11 +31,21 @@ If you're in the same situation, it's yours.
 
 ## Output
 
+### Web dashboard
+
+![JobContextMCP Dashboard v1](docs/jobContextMCP%20Dashboard%20v1.png)
+
+The browser dashboard turns the local MCP workspace into a job-search command center: daily digest, pipeline triage, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
+
+### Generated documents
+
 | Resume | Cover Letter |
 |--------|-------------|
 | ![Resume demo](docs/demo-resume.png) | ![Cover letter demo](docs/demo-cover-letter.png) |
 
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
+
+LaTeX/Tectonic cover-letter output is also supported for the stricter formatted option. Demo screenshots for the LaTeX resume and cover-letter variants will live in `docs/` alongside the existing dashboard and template previews.
 
 ---
 
@@ -193,9 +203,9 @@ sequenceDiagram
 | `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
 | `draft_outreach_message(contact, company, context, message_type?)` | **v4** — package tone profile, personal context, and writing instructions for AI-drafted outreach |
 | `export_resume_pdf(filename, footer_tag?, output_filename?)` | **v4** — parse a .txt resume and render it to PDF |
-| `export_cover_letter_pdf(filename, output_filename?)` | **v4** — parse a .txt cover letter and render it to PDF with two-column sidebar |
+| `export_cover_letter_pdf(filename, output_filename?, footer_tag?)` | **v4** — parse a .txt cover letter and render it to PDF with two-column sidebar and configurable footer/title tag |
 | `generate_resume(company, role, job_description, output_filename?)` | **v4.1** — generate tailored resume via OpenAI API (or context package for Copilot), auto-save + export PDF |
-| `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate tailored cover letter, auto-save + export PDF |
+| `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate tailored cover letter, auto-save + export PDF; now cleans scraped JD noise and uses semantic story retrieval for mission/brand hooks |
 | `log_linkedin_post(text, source, context?, posted_date?, url?, hashtags?, links?, title?)` | **v4.8** — store a LinkedIn post with metadata; auto-ingests as tone sample by default |
 | `update_post_metrics(post_id?, source?, impressions?, reactions?, ...)` | **v4.8** — update engagement metrics and audience demographics on a stored post |
 | `get_linkedin_posts(source?, hashtag?, min_reactions?, include_text?)` | **v4.8** — retrieve posts with filterable aggregate metrics summary |
@@ -220,6 +230,8 @@ sequenceDiagram
 | `run_contact_crossref(fb_folder?)` | **v0.6.3** — ingest a Facebook export folder and cross-reference confirmed friends, pending requests, and removed connections against LinkedIn connections and your internal people tracker; writes `contact_crossref.json` and updates per-connection `facebook_match` metadata in `linkedin_connections.json`; re-runnable on any fresh export |
 | `get_contact_crossref(insight?, name?)` | **v0.6.3** — query the cross-platform registry by insight bucket (`all_three_platforms`, `fb_friend_and_linkedin`, `fb_removed_still_on_linkedin`, etc.) or look up any contact by name; returns platform presence, relationship type, and action hints |
 | `get_github_stats(username)` | **v0.7** — public GitHub profile + top non-fork repos via REST (stars, forks, language, last-pushed); uses `GITHUB_TOKEN` env if set; offline stub via `JOBCONTEXTMCP_OFFLINE=1` |
+| `refresh_portfolio_metrics()` | **v0.9** — snapshots GitHub clone/view traffic for configured repositories into durable local history so GitHub's rolling 14-day traffic window is not lost |
+| `get_portfolio_metrics()` | **v0.9** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones from local history |
 | `get_upcoming_interviews(days_ahead?)` | **v0.7** — filters logged interviews to a forward window (default 14 days); sorted soonest-first with "today" / "in Nd" labels |
 | `get_referral_chains(target_company)` | **v0.7** — groups contacts into `direct` (company match) and `adjacent` (company mentioned in tags/context/notes) for referral planning |
 | `draft_reply(incoming_message, contact?, company?, intent?)` | **v0.7** — package tone profile, personal context, contact context, and intent-specific posture (`accept` / `decline_polite` / `decline_compensation` / `request_info` / `delay` / `enthusiastic_yes`) for AI-drafted replies to inbound messages |
@@ -252,6 +264,14 @@ Endpoints:
 
 ### Web dashboard quick start (local + phone)
 
+The dashboard at `/dashboard/` is the visual layer over the same local data and services exposed through MCP/HTTP. Current views include:
+
+- **Home / Daily Digest** — a quick status snapshot for follow-ups, stale applications, upcoming interviews, posts, and wellbeing nudges. The digest page is available at `GET /dashboard/digest`; `POST /dashboard/digest/generate` regenerates the parsed briefing with a spinner, timestamp, and collapsible sections.
+- **Pipeline** — queue, assess, select a resume variant, generate a tailored resume or cover letter, and export PDFs from one screen. Pipeline actions are job-id-based, include busy/progress states, show assessment details inline, and expose LaTeX/HTML cover-letter export buttons plus unqueue/remove controls.
+- **Job Hunt, Materials, Rejections, Posts, Outreach, People, Wellbeing** — focused pages for the same job-search records available through the CLI and MCP tools.
+
+When `JOBCONTEXTMCP_HTTP_TOKEN` is configured, browser login uses the same token model as the HTTP API. `/dashboard/login` sets an HTTP-only `jc_session` cookie for the local dashboard, `/dashboard/logout` clears it, and API-style calls can still use `Authorization: Bearer <token>`. The auth provider reads settings fresh at request time so changing the token does not require stale in-memory state cleanup.
+
 Use the helper script so you don't have to remember startup flags each time:
 
 ```bash
@@ -278,6 +298,7 @@ Notes:
 - Mac and phone must be on the same Wi-Fi.
 - If browser can't connect, allow incoming connections for Terminal/Python in macOS Firewall.
 - If you expose LAN access, set `JOBCONTEXTMCP_HTTP_TOKEN` in your environment before running.
+- For AI/LLM/RAG roles, the pipeline can recommend the Modern/AI resume variant and pass that selection through to cover-letter title/export settings.
 
 ### Persona configs
 
@@ -623,6 +644,18 @@ Add your OpenAI API key to `config.json` (created by `setup_workspace()`):
 "openai_model": "gpt-4o-mini"
 ```
 
+Generation and assessment can also use profile-specific model routing. Set `llm_provider` to `openai` or `ollama`, then override assessment-heavy calls without changing the default generation model:
+
+```json
+"llm_provider": "openai",
+"openai_model": "gpt-4o-mini",
+"openai_model_assessment": "gpt-4o-mini",
+"ollama_model": "llama3.1:8b",
+"ollama_model_assessment": "qwen2.5:14b"
+```
+
+Prompt assembly is budget-aware. Optional `generation_budgets` settings bound the master resume, tone profile, personal stories, job description, and final prompt ceiling; the tone selector favors recent/diverse writing samples and cover-letter story selection can use semantic embeddings when an OpenAI key is available. The semantic caches are local generated files under `data/` and are gitignored.
+
 Then build the RAG index:
 
 ```bash
@@ -739,6 +772,12 @@ When in doubt: if something made you proud, surprised a colleague, landed in a c
 saved `.txt` + exported PDF. They load the master resume, tone profile, and job-fitment
 strategy automatically — no manual context assembly needed.
 
+Cover-letter generation also pulls relevant personal stories from `personal_context.json`. For mission/brand-heavy roles it can use semantic story retrieval, cached OpenAI embeddings, and hook-tag boosts so abstract company language still finds the strongest human angle instead of only matching literal resume keywords. Long scraped job pages are cleaned before prompting, so LinkedIn navigation chrome and sign-in metadata do not crowd out the actual JD or personal context.
+
+Prompt budgeting is retrieval-first: the generator bounds fixed context sections, packs tone samples by recency/diversity, computes the remaining personal-story budget dynamically, then enforces a final prompt ceiling before calling the model. If semantic retrieval is available, the top cover-letter story is marked as the primary hook so the opener uses a concrete mission/brand connection instead of generic enthusiasm.
+
+PDF export supports both the default HTML/WeasyPrint templates and the LaTeX/Tectonic cover-letter path. The LaTeX cover-letter template prints a right-aligned date, uses a configurable role title, and the dashboard passes the selected resume variant through so AI/Modern resume selections can produce an `AI Full Stack Software Engineer` letter title while classic selections use `Full Stack Software Engineer`.
+
 ### With OpenAI key (fully automated)
 Add `openai_api_key` (and optionally `openai_model`) to `config.json`:
 
@@ -773,11 +812,12 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 - Target length: 650–800 words (one tight page in Courier New 9.2pt).
 
 **Cover letter**
-- Hard max: **325 words** in the letter body.
-- Exactly **4 paragraphs** — Para 1: hook + role + company; Para 2: technical achievement + metric; Para 3: second differentiator; Para 4: short closer (1–2 sentences).
-- No date, no address block, no Re: line, no company name in the body.
+- Target: **380–430 words** in the letter body for a full one-page render.
+- Exactly **4 paragraphs** — Para 1: genuine personal/company hook + role; Para 2: technical achievement + grounded metric; Para 3: distinct artifacts and differentiators; Para 4: short closer.
+- No address block or Re: line; the LaTeX template handles the date when that export path is used.
 - Salutation: `Dear Hiring Manager,` — no variations.
 - No bullets, no bold, no headers inside the body — prose only.
+- Metrics and compensation claims must be grounded in the master resume, interview notes, or JD; unsupported percentages, salary ranges, and generic hype phrases are stripped or rejected by prompt rules and sanitizers.
 
 > These constraints are baked into the prompts. Deviations cause PDF rendering errors because the
 > templates have fixed dimensions. If you add your own generation logic, copy the format specs
@@ -799,6 +839,8 @@ export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Enginee
 ```
 
 PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
+
+The LaTeX-formatted fake-identity screenshots will be added under `docs/` once the demo materials are generated, so README image links stay on-repo and do not expose private application documents.
 
 ---
 

@@ -16,9 +16,7 @@ Covers:
 from transport.http.routes.dashboard import login as lg
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # GET /dashboard/login
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestLoginPage:
     def test_login_page_shows_disabled_notice_when_no_key(self, http_client_noauth):
@@ -38,9 +36,7 @@ class TestLoginPage:
         assert "/dashboard/pipeline" in r.text
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # POST /dashboard/login
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestLoginSubmit:
     def test_wrong_key_redirects_back_to_login(self, http_client_authed):
@@ -91,15 +87,12 @@ class TestLoginSubmit:
         )
         token = login.cookies.get("jc_session")
         assert token == "test-key"
-        r = http_client_authed.get(
-            "/dashboard/pipeline/data", cookies={"jc_session": token}
-        )
+        http_client_authed.cookies.set("jc_session", token)
+        r = http_client_authed.get("/dashboard/pipeline/data")
         assert r.status_code == 200
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # POST /dashboard/logout
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestLogout:
     def test_logout_redirects_to_login_and_clears_cookie(self, http_client_authed):
@@ -111,9 +104,7 @@ class TestLogout:
         assert "jc_session=" in set_cookie
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # _safe_next — pure guard
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TestSafeNext:
     def test_allows_dashboard_paths(self):

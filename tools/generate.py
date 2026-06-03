@@ -33,6 +33,23 @@ from tools.resume import save_resume_txt, save_cover_letter_txt
 
 _NO_PERSONAL_STORIES = "No personal stories found"
 
+# Tags that mark a PERSONAL story as cover-letter hook material: human/identity
+# throughlines, life ventures, and explicit brand/anchor connections. The
+# cover-letter retrieval boosts these so a thematically-relevant story (e.g. an
+# indie record label for a "democratize stories" mission) can out-rank a GM work
+# story that merely shares more technical vocabulary with the role title.
+# Keyword overlap alone cannot make that semantic leap; surfacing the story to
+# the generation model lets it make the connection.
+_COVER_LETTER_HOOK_TAGS = {
+    "identity", "personal", "personal_connection",
+    "brand-connection", "brand_connection",
+    "cover-letter-anchor", "cover_letter_anchor", "cover_letter_hook",
+    "why-this-company", "non_linear_path", "character", "storytelling",
+    "music", "film", "creativity", "entrepreneurship", "writing", "journalism",
+    "family", "childhood", "travel", "hospitality", "bar_management",
+    "bar-management", "performing_arts", "fanboy", "loyalty",
+}
+
 
 
 # ── FORMAT SPECIFICATIONS ──────────────────────────────────────────────────────
@@ -150,31 +167,33 @@ Full Name
 ```
 
 ### Critical rules — NON-NEGOTIABLE
-1. TARGET 480–540 WORDS in the letter body (everything from "Dear..." through the sign-off name).
-   Count your words. Under 460 is too thin — expand. Over 580 is overflow — cut.
-2. Exactly 4 body paragraphs — no more, no less:
-   • Para 1 (80–100 words): Hook + role name + why this specific company. Be specific — name
-     something real about the company, not generic praise. IMPORTANT: If the job description
-     contains a "CRITICAL FRAMING CONTEXT" or "KEY STORIES TO SURFACE" section, Para 1 MUST
-     use the framing angle specified there as the hook (e.g. personal background, fan identity,
-     industry connection) — not a generic technical achievement opening.
-   • Para 2 (150–170 words): Primary professional ownership story. CRITICAL: If the job
-     description contains explicit framing instructions (e.g. "CRITICAL FRAMING CONTEXT",
-     "KEY STORIES TO SURFACE", or similar), those instructions take absolute priority over
-     the defaults below — use the stories specified there, not the defaults.
+1. TARGET 380–430 WORDS in the letter body (everything from "Dear..." through the sign-off name).
+   The page is fixed-size and runs short below this; aim for a full page. Reach the count with
+   substance (a second project, a real constraint, a verbatim metric), never with filler or
+   restated claims. Over 460 is overflow; cut.
+2. Exactly 4 body paragraphs, no more, no less. The word ranges below are guidance, not quotas:
+   • Para 1: Hook + role name + why this specific company. Be specific; name something real
+     about the company, not generic praise. IMPORTANT: If the job description contains a
+     "CRITICAL FRAMING CONTEXT" or "KEY STORIES TO SURFACE" section, Para 1 MUST use the framing
+     angle specified there as the hook (personal background, fan identity, industry connection),
+     not a generic technical achievement opening. This paragraph does not need a metric.
+   • Para 2: Primary professional ownership story. CRITICAL: If the job description contains
+     explicit framing instructions ("CRITICAL FRAMING CONTEXT", "KEY STORIES TO SURFACE", or
+     similar), those take absolute priority over the defaults below.
      DEFAULT (when no framing override is present): Cover end-to-end system ownership
-     (data layer through presentation layer), full-stack modernization with specific metrics
-     from the master resume, infrastructure migrations, and any verbatim manager quotes from
-     the STAR stories. Close with one sentence making the ownership chain explicit — no layer
-     delegated. Do NOT include specific version numbers (Java 21, Spring Boot 3.5.4,
-     Angular 6→18) — these are implementation details, not achievements.
-   • Para 3 (150–170 words): Side projects + AI innovation. Draw entirely from the master resume
-     projects section. Lead with the most relevant AI/tooling project, include specific metrics
-     (clones, tools, latency numbers, etc.), then cover cross-platform performance engineering work.
-     Close with one sentence on what the projects together demonstrate about independent ownership
-     and technical range.
-   • Para 4 (60–80 words): Closer — reaffirm interest with one specific forward-looking sentence,
-     invite next step. Short but not dismissive.
+     (data layer through presentation layer) with specific metrics from the master resume,
+     infrastructure migrations, and any verbatim manager quotes from the STAR stories. Make the
+     ownership chain explicit; no layer delegated. Do NOT list version numbers (Java 21,
+     Spring Boot 3.5.4, Angular 6→18); they are implementation details, not achievements.
+   • Para 3: Cover THREE distinct artifacts from the master resume to show range and fill the
+     page. Lead with whatever is the STRONGEST match to this specific job description (the AI/RAG
+     tooling, a side project, or performance work) and give it two sentences with verbatim
+     metrics. Then add two more concrete artifacts, one sentence each, each carrying a real metric
+     verbatim from the master resume (for example the LiveVox latency work: 2.8ms web / 12.7ms
+     iOS render, 98% SLA). Close with one sentence on what they demonstrate together. Do not pad;
+     every sentence carries a distinct fact.
+   • Para 4: Closer. State the fit directly in Frank's own words, then invite a conversation.
+     Short but not dismissive. Write the invite in his voice; do not paste a stock closing line.
 3. NO date, NO company address, NO "Re:" line, NO address/city_state fields in the contact
    header — only name, phone, email, linkedin.
 4. Start with the salutation: `Dear Hiring Manager,`
@@ -195,18 +214,22 @@ Full Name
        - "I would welcome"
        - "I am passionate about"
        - "thank you for your consideration"
+       - "thank you for considering"
+       - "thank you for your time"
        - "I hope to hear from you"
        - any variant of the above
    • ABSOLUTELY NO em dashes (—) or double hyphens (--) anywhere in the letter body.
      They read as AI-generated. Rewrite with semicolons, commas, parentheses, or
      new sentences. Zero exceptions.
-   • The opener must be declarative and specific. First sentence = what was built or accomplished.
-   • Para 4 (the closer): make a direct statement about fit, then invite conversation.
-     Good example: "The infrastructure challenges at Meta's scale are the kind of problems I
-     want to work on. Happy to walk through any of this in more detail."
-     Bad example: "I am eager to contribute... I look forward to hearing from you."
+   • The opener is declarative and specific. It may lead with a human throughline (a story, a
+     belief, a personal thread) drawn from the framing context or tone samples; it does not have
+     to open with an accomplishment and does not need a metric.
+   • Para 4 (the closer): make a direct statement about fit, then invite a conversation, in
+     Frank's own voice. Do NOT reuse a fixed closing sentence; write a fresh invite that matches
+     the tone samples. Never end with "I look forward to hearing from you" or similar boilerplate.
    • No sycophantic language anywhere. Confidence, not deference.
-   • Every paragraph must contain at least one specific number, metric, or named artifact.
+   • The ownership paragraphs (2 and 3) must be metric-anchored. The opener and closer may carry
+     the human throughline without a metric; do not stuff numbers into every sentence.
 8. CLOSING: Use "Kindest Regards," (not "Sincerely"). Sign the name in Title Case — NOT all
    caps. Example: "Frank Vladmir MacBride III" not "FRANK VLADMIR MACBRIDE III".
 """
@@ -245,15 +268,22 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
     to a .txt file and fed to a strict PDF parser.
 
     Write in the candidate's voice as defined by their tone profile. The tone
-    samples are your ground truth — study them before writing.
+    samples are your ground truth. Study them and match their rhythm, register,
+    and sentence shapes above any structural rule below. If a formatting rule
+    fights the voice in the samples, keep the voice.
 
     Voice characteristics to enforce:
-    - Direct, declarative, confident without being boastful
-    - Opens with what was built or accomplished, not with feelings about the opportunity
-    - Specific and metric-anchored — every achievement has a number
-    - Conversational but not casual — no filler phrases, no corporate speak
-    - Side projects from the master resume are genuine differentiators and should
-      appear in Para 3 when relevant — use metrics verbatim from the master resume
+    - Direct, declarative, confident without being boastful.
+    - The opener may lead with a human throughline (a story, a stated belief, a
+      personal thread) rather than an accomplishment, if that is how the samples
+      read. The opener does not need a metric.
+    - Metrics live in the ownership paragraphs; every claim there is specific and
+      uses numbers verbatim from the master resume. Do not stuff a metric into
+      every sentence, and do not pad to hit a length.
+    - Conversational but not casual; no filler phrases, no corporate speak.
+    - A side project earns a place only when it is the strongest match to the job
+      description, not as a mandatory section. Use metrics verbatim from the
+      master resume when it does.
 
     Hard prohibitions:
     - NEVER start with: 'I'm excited', 'I am thrilled', 'I would love', 'I am eager',
@@ -287,9 +317,9 @@ def _model() -> str:
     try:
         from lib.config import get_llm_client
         _, model = get_llm_client()
-        return model
+        return str(model or config._cfg.get("openai_model", "gpt-4o-mini"))
     except Exception:
-        return config._cfg.get("openai_model", "gpt-4o-mini")
+        return str(config._cfg.get("openai_model", "gpt-4o-mini"))
 
 
 def _infer_role_type(role: str) -> str:
@@ -323,6 +353,8 @@ def _build_personal_context_block(
     role: str = "",
     job_description: str = "",
     token_budget: int | None = None,
+    boost_tags: set[str] | None = None,
+    semantic: bool = False,
 ) -> tuple[str, RetrievalDiagnostics | None]:
     """Return a (block, diagnostics) tuple for the personal-context section.
 
@@ -331,10 +363,18 @@ def _build_personal_context_block(
     stories sharing a query term are scored, so this scales as the library
     grows. When no role/JD is provided, falls back to the unranked full list
     (used by the no-API context-package path).
+
+    ``boost_tags`` (cover-letter path) multiplies the score of human/identity/
+    brand stories so they compete with work stories that share more literal
+    technical vocabulary with the role title.
+
+    ``semantic`` enables an embedding-backed story pass for cover-letter hooks
+    where mission/product alignment often has little literal keyword overlap.
     """
     budgets = config.get_generation_budgets()
     if token_budget is None:
         token_budget = budgets["personal_context_token_budget"]
+    token_budget = int(token_budget or 0)
     max_stories = budgets["max_personal_stories"]
 
     try:
@@ -345,10 +385,23 @@ def _build_personal_context_block(
                 path=config.PERSONAL_CONTEXT_FILE,
                 token_budget=token_budget,
                 max_stories=max_stories,
+                boost_tags=boost_tags,
+                semantic=semantic,
             )
             if not selected:
                 return "", diag
-            return "──── PERSONAL CONTEXT ────\n" + format_stories(selected), diag
+            prefix = "──── PERSONAL CONTEXT ────\n"
+            if semantic:
+                prefix += (
+                    "PRIMARY COVER LETTER HOOK: The first story below is the top-ranked "
+                    "mission/brand/personal hook for this company. If it is a human story "
+                    "rather than a normal work accomplishment, use that first story for "
+                    "Paragraph 1 before considering any later stories. Include one concrete "
+                    "detail from that story (for example: independent label, feature films, "
+                    "artists, stages, audiences, or what Frank actually produced), not just a "
+                    "generic theme.\n\n"
+                )
+            return prefix + format_stories(selected), diag
 
         personal = get_personal_context()
         if personal.startswith(_NO_PERSONAL_STORIES):
@@ -385,6 +438,76 @@ def _enforce_token_ceiling(message: str, max_tokens: int) -> str:
     approx_chars = max(0, int(max_tokens * 4 * 0.95))
     truncated = message[:approx_chars]
     return truncated + "\n\n[context truncated to honor token ceiling]"
+
+
+_JD_NOISY_LINE_RE = re.compile(
+    r"^(apply|sign in|join now|email or phone|password|show|forgot password|"
+    r"new to linkedin|by clicking continue|user agreement|privacy policy|"
+    r"cookie policy|skip to main content|expand search|clear text|jobs|people|"
+    r"learning|see who .* hired|this button displays|join to apply)\b",
+    re.IGNORECASE,
+)
+
+_JD_ANCHOR_TERMS = (
+    "advance human", "democratize", "about", "mission", "culture",
+    "responsibilities", "requirements", "qualifications", "backend",
+    "content foundations", "java", "python", "api", "cloud",
+    "distributed", "microservices", "platform", "stories", "knowledge",
+    "curiosity", "ideas", "customer",
+)
+
+
+def _compact_jd_lines(lines: list[str], max_chars: int) -> str:
+    if len("\n".join(lines)) <= max_chars:
+        return "\n".join(lines)
+    selected: list[str] = []
+    for line in lines:
+        lower = line.lower()
+        if any(term in lower for term in _JD_ANCHOR_TERMS):
+            selected.append(line)
+        if len("\n".join(selected)) >= max_chars:
+            break
+    return "\n".join(selected) or "\n".join(lines)[:max_chars]
+
+
+def _clean_job_description_for_prompt(
+    company: str,
+    role: str,
+    job_description: str,
+    *,
+    max_chars: int = 3600,
+) -> str:
+    """Strip scraper chrome from a JD before prompt budgeting.
+
+    LinkedIn fetches often include the whole public page: sign-in forms, image
+    markdown, repeated apply panels, legal links, and CDN hashes. Passing all of
+    that to cover-letter generation crowds out the personal-context block, which
+    is where the human hook lives. Keep the useful role/mission text and discard
+    navigation metadata.
+    """
+    text = job_description or ""
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text)
+    text = re.sub(r"\b[a-z0-9]*\d[a-z0-9]{12,}\b", " ", text, flags=re.IGNORECASE)
+
+    lines = []
+    for raw in text.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip(" -*#\t")
+        if not line or _JD_NOISY_LINE_RE.search(line):
+            continue
+        if len(line) < 4:
+            continue
+        lines.append(line)
+    cleaned = "\n".join(dict.fromkeys(lines))
+    body = _compact_jd_lines(list(dict.fromkeys(lines)), max_chars) if len(cleaned) > max_chars else cleaned
+
+    return "\n".join([
+        f"Company: {company}",
+        f"Role: {role}",
+        "Cleaned job description / mission excerpts:",
+        body[:max_chars],
+    ])
 
 
 def _build_resume_user_message(company: str, role: str, job_description: str) -> str:
@@ -436,6 +559,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     budgets = config.get_generation_budgets()
     max_tokens = budgets["cover_letter_max_tokens"]
     safety = budgets["safety_margin_tokens"]
+    clean_job_description = _clean_job_description_for_prompt(company, role, job_description)
 
     master = _load_master_context()
     tone = get_tone_profile_budgeted(
@@ -456,33 +580,57 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     instructions = (
         f"Now write the cover letter for {company}. Output the raw .txt content only.\n"
         "Use the resume, customization strategy, interview context, the general personal_context, the tone profile, and the job description.\n"
-        "STRUCTURE: exactly 4 paragraphs. Do not merge them.\n"
         "\n"
-        "EXPANSION RULE: After stating any technical fact, write 1–2 follow-up sentences explaining\n"
-        "(a) what made it hard or risky, and (b) why it is directly relevant to the target role.\n"
-        "Never drop a fact in a single clause and move on — every metric needs context.\n"
+        "VOICE COMES FIRST: the TONE PROFILE samples are the authority on how Frank sounds.\n"
+        "Match their rhythm, sentence length, and register. If any structure rule below fights\n"
+        "that voice, keep the voice. Write like the samples, not like a template.\n"
         "\n"
-        "PARA 1 (80–100 words): Hook. Lead with one high-signal accomplishment from the resume that maps to this role,\n"
-        "  then add two concrete sentences on why this company/role specifically (based on JD details, not generic praise).\n"
+        "STRUCTURE: exactly 4 paragraphs. Do not merge them. The word counts below are guidance,\n"
+        "not quotas; say each point in as few words as it takes and never pad with filler.\n"
+        "PAGE FILL: the PDF page is fixed-size and currently runs short. Aim for a full page:\n"
+        "target 380-430 words total. Reach it with substance (a second concrete project, a real\n"
+        "constraint, a verbatim metric), never with adjectives or restated claims.\n"
         "\n"
-        "PARA 2 (150–170 words): Primary ownership story. Use one major example with concrete metrics,\n"
-        "  constraints, and tradeoffs. Make the end-to-end ownership chain explicit and tie each fact to the target role.\n"
+        "PARA 1 (~80-100 words): Hook. FIRST scan the PERSONAL CONTEXT for a story whose theme\n"
+        "  genuinely connects to THIS company's mission, product, or brand (a venture Frank ran, a\n"
+        "  passion, a formative life experience). If one truly connects, OPEN with that human\n"
+        "  throughline in Frank's voice and tie it to the company by name; this is PREFERRED over a\n"
+        "  work accomplishment. Do not force it or overstate it; if nothing genuinely connects, open\n"
+        "  with a crisp professional hook instead. No metric required here. Either way, follow with\n"
+        "  one or two concrete sentences on why THIS company/role, grounded in real JD details.\n"
+        "  The PERSONAL CONTEXT block is already ranked for this company. If its first story is a\n"
+        "  non-work/human story about creative production, music, film, writing, artists, fandom,\n"
+        "  childhood brand memory, or another genuine personal connection, use that story as Para 1.\n"
+        "  Do NOT substitute a GM achievement, cloud migration, Copilot adoption, or jobContextMCP\n"
+        "  project as the opener when such a ranked human story is present.\n"
         "\n"
-        "PARA 3 (150–170 words): Side projects. Use metrics from the master resume projects section.\n"
-        "  Cover each project with 2 sentences (what it does + a specific metric or constraint\n"
-        "  solved). Close with one sentence on what the projects together demonstrate.\n"
+        "PARA 2 (~120-150 words): Primary ownership story. One major example with concrete metrics\n"
+        "  from the master resume. Make the end-to-end ownership chain explicit. State facts cleanly;\n"
+        "  do not append a justifying clause to every metric.\n"
         "\n"
-        "PARA 4 (60–80 words): Closer. One forward-looking sentence referencing the company's\n"
-        "  specific scale or challenges from the JD. End with the exact phrase:\n"
-        "  'Happy to walk through any of this in more detail.'\n"
+        "PARA 3 (~140-170 words): Cover THREE distinct artifacts from the master resume to show range.\n"
+        "  Lead with the STRONGEST match to this specific JD (the AI/RAG tooling, a side project, or\n"
+        "  performance work) in two sentences with verbatim metrics, then add TWO more artifacts, one\n"
+        "  sentence each, every one carrying a distinct real metric verbatim from the master resume\n"
+        "  (e.g. the LiveVox latency work: 2.8ms web / 12.7ms iOS render, 98% SLA). Close with one\n"
+        "  sentence on what they demonstrate together. Every sentence carries a distinct fact; no padding.\n"
         "\n"
-        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong'."
+        "PARA 4 (~50-70 words): Closer. State the fit directly in Frank's own words, then invite a\n"
+        "  conversation. Write a fresh invite in his voice; do NOT paste a stock closing line and do\n"
+        "  NOT end with 'I look forward to hearing from you' or similar boilerplate.\n"
+        "\n"
+        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong'.\n"
+        "\n"
+        "FINAL SELF-CHECK before you finish: count the words in the body (salutation through sign-off\n"
+        "name). If it is under 380, you stopped too early. Go back into Para 2 and Para 3 and add\n"
+        "another concrete artifact with a verbatim metric until the body reaches 380-430. Do not add\n"
+        "adjectives, restated claims, or a longer closer to hit the count; add real substance only."
     )
 
     fixed_sections = [
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
-        f"JOB DESCRIPTION:\n{job_description}",
+        f"JOB DESCRIPTION:\n{clean_job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         interview_block or "",
@@ -492,12 +640,18 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         instructions,
     ]
     personal_budget = _dynamic_personal_budget(fixed_sections, max_tokens, safety)
-    personal, _diag = _build_personal_context_block(role, job_description, personal_budget)
+    personal, _diag = _build_personal_context_block(
+        role,
+        clean_job_description,
+        personal_budget,
+        boost_tags=_COVER_LETTER_HOOK_TAGS,
+        semantic=True,
+    )
 
     sections = [
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
-        f"JOB DESCRIPTION:\n{job_description}",
+        f"JOB DESCRIPTION:\n{clean_job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         personal,
@@ -530,32 +684,85 @@ def _context_fallback(system: str, user: str, tool_name: str) -> str:
 
 
 def _extract_cover_letter_body(content: str) -> str:
-    """Extract only the prose body paragraphs for LaTeX pipeline export."""
+    """Extract only the prose body paragraphs for LaTeX pipeline export.
+
+    The LaTeX template supplies its own salutation ("Dear Hiring Manager,") and
+    sign-off ("Regards, \\name"), so this must strip BOTH ends off the model's
+    draft. The model does not always use the canonical wording: it may invent a
+    salutation ("Dear Scribd Hiring Team,"), prepend a company/address header,
+    or close with "Best regards," plus contact lines. Match all of those loosely
+    so nothing leaks into the rendered letter as a duplicate.
+    """
     text = content.strip()
     if not text:
         return ""
 
     lines = [ln.rstrip() for ln in text.splitlines()]
 
-    # Start at salutation when present.
+    # Start AFTER the salutation. Accept any "Dear ...," line; this also discards
+    # any leading company/address header the model prepended above it.
     start = 0
     for i, ln in enumerate(lines):
-        if ln.strip().lower().startswith("dear hiring manager"):
+        if ln.strip().lower().startswith("dear "):
             start = i + 1
             break
 
     body_lines = lines[start:]
 
-    # Stop before sign-off block.
+    # Stop BEFORE the sign-off block. Cut at the first of:
+    #   - a closing phrase ("Regards,", "Best regards,", "Sincerely,", ...)
+    #   - a courtesy line the prompt bans ("Thank you for considering ...")
+    #   - a stray contact line (email / phone) that escaped the header
+    _CLOSERS = {
+        "kindest regards,", "kind regards,", "regards,", "best regards,",
+        "warm regards,", "best,", "sincerely,", "respectfully,", "cheers,",
+        "kindest regards", "regards", "best regards", "sincerely", "thank you,",
+    }
+    _email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+    _phone_re = re.compile(r"\+?\d[\d().\s-]{7,}")
     end = len(body_lines)
     for i, ln in enumerate(body_lines):
         low = ln.strip().lower()
-        if low in {"kindest regards,", "regards,", "sincerely,"}:
+        if (
+            low in _CLOSERS
+            or low.startswith("thank you for")
+            or _email_re.search(ln)
+            or _phone_re.search(ln.strip())
+        ):
             end = i
             break
 
     body = "\n".join(body_lines[:end]).strip()
     return body
+
+
+# Deterministic backstop substitutions for the stock opener/closer phrases the
+# prompt bans. "I" stays capitalized in every position, so a fixed replacement
+# is grammatically safe anywhere in a sentence.
+_WANT_TO = "I want to"
+_BANNED_LEADIN_SUBS = [
+    (r"\bI(?:'m| am) eager to\b", _WANT_TO),
+    (r"\bI(?:'m| am) excited to\b", _WANT_TO),
+    # "excited about/by" slips past the "excited to" pattern; the model reaches
+    # for it in the closer ("I am excited about the opportunity to...").
+    (r"\bI(?:'m| am) excited (?:about|by) the (?:opportunity|chance) to\b", _WANT_TO),
+    (r"\bI(?:'m| am) excited (?:about|by)\b", "I am interested in"),
+    (r"\bI(?:'m| am) thrilled to\b", _WANT_TO),
+    (r"\bI would love to\b", _WANT_TO),
+    (r"\bI(?:'m| am) passionate about\b", "I care about"),
+    # Closer-paragraph variants the model reaches for at higher temperature.
+    (r"\bI(?:'d| would) welcome the (?:chance|opportunity) to\b", _WANT_TO),
+    (r"\bI(?:'d| would) welcome\b", "I want"),
+    # "look forward to" takes a gerund OR a noun; "I would enjoy" is the only
+    # swap that stays grammatical before both ("...enjoy discussing" / "...enjoy
+    # the conversation"). Do not use "I want to talk about" here: it produces
+    # "I want to talk about the conversation" when a noun follows.
+    (r"\bI look forward to\b", "I would enjoy"),
+    (r"\bLooking forward to\b", "I would enjoy"),
+    (r"\b(?:the opportunity|the chance|this role|this) excites me\b", "this interests me"),
+    (r"\bexcites me\b", "interests me"),
+    (r"\bstrong fit\b", "solid match"),
+]
 
 
 def _sanitize_cover_letter_output(content: str) -> str:
@@ -582,7 +789,107 @@ def _sanitize_cover_letter_output(content: str) -> str:
         cleaned,
         flags=re.IGNORECASE,
     ).strip()
-    return cleaned
+    cleaned = re.sub(
+        r"improved query performance by \d+% and reduced costs by \d+%",
+        "improved query performance and reduced costs through resource rightsizing and auto-scaling policies",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bdrastically improved load times\b",
+        "improved query responsiveness",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Deterministic em-dash / double-hyphen backstop. The prompt forbids them,
+    # but the model still leaks one occasionally; never ship one to the PDF.
+    # A comma is the lowest-damage substitution for a stray dash.
+    cleaned = re.sub(r"\s*(?:—|--)\s*", ", ", cleaned)
+    cleaned = re.sub(r"\s+,", ",", cleaned)
+    cleaned = re.sub(r",\s*,", ",", cleaned)
+
+    # Normalize typographic apostrophes/quotes to ASCII first. The model often
+    # emits a curly apostrophe (U+2019) in contractions ("I’m"), which would slip
+    # past the straight-quote banned-phrase patterns below; ASCII is also safer
+    # for the strict txt -> PDF parser.
+    cleaned = cleaned.replace("\u2019", "'").replace("\u2018", "'")
+    cleaned = cleaned.replace("\u201c", '"').replace("\u201d", '"')
+
+    # Deterministic banned-lead-in backstop. The prompt bans these stock
+    # opener/closer phrases, but the model still leaks one ("I'm eager to...");
+    # swap each for a neutral, grammatically-safe equivalent. "I" stays
+    # capitalized in every position, so a fixed replacement is safe anywhere.
+    for pattern, repl in _BANNED_LEADIN_SUBS:
+        cleaned = re.sub(pattern, repl, cleaned)
+
+    return cleaned.strip()
+
+
+# Page-fill floor. gpt-4o single-shot reliably undershoots; below this we make
+# one expansion pass rather than ship a half-empty page.
+_COVER_LETTER_WORD_FLOOR = 380
+
+
+def _cover_letter_body_word_count(content: str) -> int:
+    """Word count of the letter body only (salutation through sign-off)."""
+    body = _extract_cover_letter_body(content) or content
+    return len(re.findall(r"\S+", body))
+
+
+def _expand_cover_letter_if_short(
+    client,
+    content: str,
+    user_msg: str,
+    *,
+    floor: int = _COVER_LETTER_WORD_FLOOR,
+) -> str:
+    """Deterministic page-fill backstop (Option A): up to two expansion passes.
+
+    gpt-4o stops short of the word floor from a single prompt no matter how the
+    target is phrased. Rather than pad the prompt (which it ignores), re-send the
+    draft and instruct it to lengthen Para 2 and Para 3 with additional concrete
+    artifacts and verbatim metrics from the master resume already in `user_msg`.
+    Returns the original draft unchanged on any error or non-improvement.
+    """
+    best = content
+    count = _cover_letter_body_word_count(best)
+    for _ in range(2):
+        if count >= floor:
+            return best
+        try:
+            response = client.chat.completions.create(
+                model=_model(),
+                messages=[
+                    {"role": "system", "content": _COVER_LETTER_SYSTEM},
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": best},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"The extracted letter body is {count} words; the fixed-size page needs "
+                            "380-430. Expand Para 2 and Para 3 by 70-100 words total, ONLY by adding "
+                            "more concrete artifacts and verbatim metrics from the master resume already "
+                            "provided above (distinct projects, real constraints, real numbers). Do NOT "
+                            "invent or paraphrase metrics; if a metric is not exactly present in the source "
+                            "context, remove it. Do NOT add adjectives, restated claims, a longer closer, or "
+                            "any new paragraph; keep exactly 4 paragraphs and the same voice. Obey every "
+                            "voice and banned-phrase rule. Output the full revised letter only."
+                        ),
+                    },
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+            )
+            expanded = response.choices[0].message.content or ""
+        except Exception:
+            break
+        expanded_count = _cover_letter_body_word_count(expanded)
+        if expanded_count <= count:
+            break
+        best = expanded
+        count = expanded_count
+    return best
 
 
 # ── PUBLIC TOOLS ───────────────────────────────────────────────────────────────
@@ -663,6 +970,7 @@ def generate_cover_letter(
     job_description: str,
     output_filename: str = "",
     export_pipeline: str = "html",
+    role_title: str = "Full Stack Software Engineer",
 ) -> str:
     """
     Generate a tailored cover letter for a specific company and role.
@@ -674,12 +982,13 @@ def generate_cover_letter(
     write the content.
 
     Hard constraints enforced in the prompt (the PDF template is fixed-size):
-    - MAX 325 words in the letter body.
+    - TARGET 380–430 words in the letter body to fill the page; reach it with substance, not filler.
     - Exactly 4 paragraphs.
     - No date, no address block, no company name, no Re: line.
     - No bullets, no bold, no headers — prose only.
     - Salutation must be: Dear Hiring Manager,
-    - Paragraph 4 is a short closer (1-2 sentences).
+    - Voice from the tone samples takes priority over the structure template.
+    - Paragraph 4 is a short closer (1-2 sentences) written in Frank's voice.
     """
     user_msg = _build_cover_letter_user_message(company, role, job_description)
     client = _openai_client()
@@ -696,13 +1005,15 @@ def generate_cover_letter(
                 {"role": "system", "content": _COVER_LETTER_SYSTEM},
                 {"role": "user", "content": user_msg},
             ],
-            temperature=0.5,
+            temperature=0.3,
             max_tokens=2000,
         )
         content = response.choices[0].message.content or ""
     except Exception as exc:
         return f"✗ OpenAI API error: {exc}\n\nFalling back to context package:\n\n{_context_fallback(_COVER_LETTER_SYSTEM, user_msg, 'generate_cover_letter')}"
 
+    # Option A page-fill backstop: re-prompt once if the body undershoots.
+    content = _expand_cover_letter_if_short(client, content, user_msg)
     content = _sanitize_cover_letter_output(content)
     save_result = save_cover_letter_txt(filename, content)
 
@@ -714,12 +1025,12 @@ def generate_cover_letter(
             if not body:
                 raise RuntimeError("Unable to extract cover letter body for LaTeX export")
 
-            latex_pdf = generate_cover_letter_latex(body=body, company=company, role=role)
+            latex_pdf = generate_cover_letter_latex(body=body, company=company, role=role, role_title=role_title)
             pdf_result = f"✓ PDF exported (LaTeX): {latex_pdf}"
         else:
             from tools.export import export_cover_letter_pdf
 
-            pdf_result = export_cover_letter_pdf(filename)
+            pdf_result = export_cover_letter_pdf(filename, footer_tag=role_title.upper())
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 
