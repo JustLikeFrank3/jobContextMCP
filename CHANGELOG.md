@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **Dashboard command-center README preview** — added the dashboard screenshot and expanded quick-start notes for the browser UI: Home/Daily Digest, Pipeline, Job Hunt, Materials, Rejections, Posts, Outreach, People, and Wellbeing views.
+- **LaTeX demo screenshots** — added fake-identity resume and cover-letter screenshots under `docs/` and embedded them in the README output preview.
 - **Dedicated dashboard Daily Digest page** — added the browser digest flow with `GET /dashboard/digest`, `POST /dashboard/digest/generate`, parsed briefing sections, timestamps, spinner/progress feedback, and same-data parity with the `get_daily_digest()` tool.
 - **Dashboard browser login/session support** — dashboard users can authenticate with the existing HTTP token via `/dashboard/login`; successful login sets an HTTP-only `jc_session` cookie and `/dashboard/logout` clears it.
 - **Dashboard pipeline UX upgrades** — pipeline actions are job-id-based, preserve selected resume choices, show assessment details inline, expose busy/progress state, support unqueue/remove actions, and make LaTeX/HTML cover-letter exports available from the same screen.

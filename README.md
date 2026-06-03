@@ -45,7 +45,11 @@ The browser dashboard turns the local MCP workspace into a job-search command ce
 
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
 
-LaTeX/Tectonic cover-letter output is also supported for the stricter formatted option. Demo screenshots for the LaTeX resume and cover-letter variants will live in `docs/` alongside the existing dashboard and template previews.
+LaTeX/Tectonic cover-letter output is also supported for the stricter formatted option.
+
+| LaTeX Resume | LaTeX Cover Letter |
+|--------------|-------------------|
+| ![Nobody MacFakename LaTeX resume](docs/Nobody%20MacFakename%20Resume.png) | ![Nobody MacFakename LaTeX cover letter](docs/Nobody%20MacFakeNAme%20CoverLetter.png) |
 
 ---
 
@@ -840,7 +844,7 @@ export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Enginee
 
 PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
 
-The LaTeX-formatted fake-identity screenshots will be added under `docs/` once the demo materials are generated, so README image links stay on-repo and do not expose private application documents.
+The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so README image links stay on-repo and do not expose private application documents.
 
 ---
 
