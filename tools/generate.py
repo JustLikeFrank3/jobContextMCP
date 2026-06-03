@@ -28,7 +28,7 @@ from lib.story_retrieval import (
 from tools.fitment import get_customization_strategy
 from tools.interviews import get_interview_context
 from tools.context import get_personal_context
-from tools.tone import get_tone_profile
+from tools.tone import get_tone_profile, get_tone_profile_budgeted
 from tools.resume import save_resume_txt, save_cover_letter_txt
 
 _NO_PERSONAL_STORIES = "No personal stories found"
@@ -393,7 +393,10 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     safety = budgets["safety_margin_tokens"]
 
     master = _load_master_context()
-    tone = get_tone_profile()
+    tone = get_tone_profile_budgeted(
+        token_budget=budgets["tone_token_budget"],
+        max_samples=budgets["max_tone_samples"],
+    )
     strategy = get_customization_strategy(_infer_role_type(role))
     interview_block = get_interview_context(company=company, role=role)
 
@@ -435,7 +438,10 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     safety = budgets["safety_margin_tokens"]
 
     master = _load_master_context()
-    tone = get_tone_profile()
+    tone = get_tone_profile_budgeted(
+        token_budget=budgets["tone_token_budget"],
+        max_samples=budgets["max_tone_samples"],
+    )
     strategy = get_customization_strategy(_infer_role_type(role))
 
     contact = config._cfg.get("contact", {})

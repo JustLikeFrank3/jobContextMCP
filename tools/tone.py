@@ -45,6 +45,110 @@ def get_tone_profile() -> str:
     return "\n".join(lines)
 
 
+def _format_tone_samples(samples: list, total_count: int) -> str:
+    """Render a list of tone samples into the standard profile block."""
+    total_words = sum(s.get("word_count", 0) for s in samples)
+    header = f"═══ TONE PROFILE ({len(samples)} of {total_count} samples, {total_words} words) ═══"
+    lines = [
+        header,
+        "Use these samples to calibrate Frank's voice before writing anything.",
+        "",
+    ]
+    for s in samples:
+        lines.append(f"── Sample #{s['id']} | {s['source']} ──")
+        if s.get("context"):
+            lines.append(f"Context: {s['context']}")
+        lines.append(s["text"])
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _tone_sample_cost(s: dict) -> int:
+    """Estimated token cost of rendering one tone sample in the profile."""
+    from lib.story_retrieval import estimate_tokens
+
+    parts = [f"── Sample #{s.get('id')} | {s.get('source', '')} ──"]
+    if s.get("context"):
+        parts.append(f"Context: {s['context']}")
+    parts.append(s.get("text", ""))
+    return estimate_tokens("\n".join(parts))
+
+
+def _pack_tone_samples(
+    ordered: list,
+    token_budget: int,
+    max_samples: int,
+    diverse: bool,
+    state: dict,
+) -> None:
+    """Greedily add samples to ``state`` under budget/count limits.
+
+    When ``diverse`` is True, skips sources already represented. Oversized
+    samples are skipped (not stopped at) so one huge sample can't waste the
+    remaining budget.
+    """
+    for s in ordered:
+        if len(state["selected"]) >= max_samples:
+            return
+        if s.get("id") in state["ids"]:
+            continue
+        src = (s.get("source") or "").lower()
+        if diverse and src in state["sources"]:
+            continue
+        cost = _tone_sample_cost(s)
+        if state["used"] + cost > token_budget:
+            continue
+        state["selected"].append(s)
+        state["ids"].add(s.get("id"))
+        state["sources"].add(src)
+        state["used"] += cost
+
+
+def get_tone_profile_budgeted(
+    token_budget: int = 1500,
+    max_samples: int = 6,
+) -> str:
+    """Return a token-bounded tone profile for generation prompts.
+
+    Unlike get_tone_profile() (which dumps every sample and can balloon to
+    20k+ tokens), this selects the most recent, source-diverse samples and
+    greedily packs them until ``token_budget`` or ``max_samples`` is reached.
+    This keeps the tone section a bounded fixed cost so it can never starve
+    the personal-context retrieval budget or bust the prompt ceiling.
+
+    Selection strategy:
+      1. Newest-first (latest samples best reflect current voice).
+      2. Prefer source diversity — at most one sample per source on the first
+         pass, then backfill with remaining samples if budget allows.
+      3. Greedy pack until budget/count limit; oversized samples are skipped.
+    """
+    data = _load_json(config.TONE_FILE, {"samples": []})
+    samples = data.get("samples", [])
+    if not samples:
+        return (
+            "No tone samples logged yet.\n"
+            "Use log_tone_sample() to ingest writing samples — cover letters, "
+            "messages, anything Frank actually wrote."
+        )
+
+    if token_budget <= 0 or max_samples <= 0:
+        return ""
+
+    ordered = sorted(samples, key=lambda s: s.get("id", 0), reverse=True)
+    state = {"selected": [], "used": 0, "ids": set(), "sources": set()}
+
+    _pack_tone_samples(ordered, token_budget, max_samples, True, state)
+    _pack_tone_samples(ordered, token_budget, max_samples, False, state)
+
+    selected = state["selected"]
+    if not selected:
+        return ""
+
+    # Restore chronological order for a natural read.
+    selected.sort(key=lambda s: s.get("id", 0))
+    return _format_tone_samples(selected, len(samples))
+
+
 def scan_materials_for_tone(
     category: str = "cover_letters",
     limit: int = 3,

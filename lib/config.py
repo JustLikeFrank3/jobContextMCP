@@ -157,6 +157,8 @@ def get_llm_client(task: str = ""):
 _DEFAULT_GENERATION_BUDGETS = {
     "personal_context_token_budget": 1500,
     "max_personal_stories": 8,
+    "tone_token_budget": 1500,
+    "max_tone_samples": 6,
     "cover_letter_max_tokens": 12000,
     "resume_max_tokens": 12000,
     "safety_margin_tokens": 500,
