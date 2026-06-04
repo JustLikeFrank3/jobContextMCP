@@ -3,19 +3,19 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.9.0-blue" alt="Version 0.9.0"/>
-  <img src="https://img.shields.io/badge/tests-565%2F565-brightgreen" alt="Tests 565/565"/>
-  <img src="https://img.shields.io/badge/tools-75-informational" alt="75 MCP tools"/>
+  <img src="https://img.shields.io/badge/version-0.9.x%20%E2%86%92%201.0-blue" alt="Version 0.9.x approaching 1.0"/>
+  <img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests passing"/>
+  <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 
 # JobContextMCP
 
-A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, and other MCP-compatible AI assistants persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, or interview prep from scratch.
+A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
 
-Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
+Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, local JSON data stores, optional OpenAI/Ollama generation, WeasyPrint/LaTeX export paths, and a mobile-friendly dashboard.
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 75 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 77 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -65,109 +65,118 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 
 ---
 
+## Feature Map
+
+JobContextMCP is now more than a stdio MCP server. The current branch combines:
+
+| Area | Included capabilities |
+|------|----------------------|
+| Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
+| Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
+| Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest, pipeline triage, queue assessment, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
+| Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export, LaTeX/Tectonic cover letters |
+| Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
+| People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
+| Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
+| Transports | MCP stdio, MCP SSE/streamable HTTP via Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
+
+---
+
 ## Architecture
 
 ```mermaid
 graph TB
-    AI["GitHub Copilot / Claude / Cursor / Windsurf / Zed"]
+  subgraph CLIENTS["Clients"]
+    COPILOT["GitHub Copilot / Claude / Cursor / Windsurf / Zed"]
+    CLI["cli.py / cron / launchd / scripts"]
+    DASH["Web Dashboard"]
+    PHONE["Phone / iPad over LAN or tunnel"]
+    HTTPCLIENT["HTTP / SSE clients"]
+  end
 
-    AI -->|MCP protocol| SERVER
+  COPILOT -->|"MCP stdio / SSE / streamable-http"| MCP["FastMCP server"]
+  CLI -->|"direct tool registry"| TOOLS
+  DASH -->|"FastAPI routes"| HTTP["HTTP API + dashboard router"]
+  PHONE -->|"browser + token cookie"| HTTP
+  HTTPCLIENT -->|"REST / SSE"| HTTP
 
-    subgraph SERVER["JobContextMCP  —  FastMCP server"]
-        direction TB
+  HTTP --> SERVICES
+  MCP --> TOOLS
+  SERVICES --> TOOLS
 
-        subgraph CTX["Context & Identity"]
-            T1["get_session_context()"]
-            T2["read_master_resume()"]
-            T3["get_personal_context()"]
-            T4["get_tone_profile() · log_tone_sample()"]
-            T5["get_star_story_context()"]
-        end
+  subgraph SERVICES["Service layer"]
+    PERSONA["Persona service"]
+    WORKFLOW["LangGraph workflow service"]
+    RAG["RAG / semantic search"]
+    LLM["OpenAI / Ollama adapters"]
+    PDF["HTML + LaTeX PDF export"]
+    AUTH["Token + dashboard session auth"]
+  end
 
-        subgraph PIPELINE["Application Pipeline"]
-            T6["get_job_hunt_status() · update_application()"]
-            T6b["log_application_event() · log_rejection() · get_rejections()"]
-            T6c["update_compensation() · get_compensation_comparison()"]
-            T6d["queue_job() · get_job_queue() · evaluate_queued_job() · decide_job()"]
-            T7["assess_job_fitment() · get_customization_strategy()"]
-            T8["generate_resume() · generate_cover_letter()"]
-            T9["save_resume_txt() · save_cover_letter_txt() · resume_diff()"]
-            T10["export_resume_pdf() · export_cover_letter_pdf()"]
-        end
+  subgraph TOOLS["77 MCP / CLI tools"]
+    CTX["Context + identity"]
+    PIPE["Pipeline + queue + compensation"]
+    DOCS["Resume + cover letter generation"]
+    INTERVIEW["Interview prep + debriefs"]
+    OUTREACH["People + outreach + replies"]
+    ANALYTICS["Digest + weekly summary + rejections"]
+    PORTFOLIO["GitHub stats + portfolio metrics"]
+    SETUP["Workspace setup + diagnostics"]
+  end
 
-        subgraph INTERVIEW["Interview Prep"]
-            T11["get_interview_quick_reference()"]
-            T12["get_leetcode_cheatsheet()"]
-            T13["generate_interview_prep_context()"]
-        end
+  subgraph FILES["Local gitignored workspace"]
+    CONFIG["config.json"]
+    DATA["Data JSON files\nstatus, people, interviews, posts\nrejections, health, tone, stories"]
+    MATERIALS["Resume folder\n01-Current-Optimized to 08-Interview-Prep-Docs"]
+    INDEX["RAG / scan / portfolio metric caches"]
+    PROJECTS["LeetCode + side projects"]
+  end
 
-        subgraph NETWORK["Outreach & People"]
-            T14["draft_outreach_message() · review_message()"]
-            T15["log_person() · get_people() · get_person()"]
-            T19["log_linkedin_post() · update_post_metrics() · get_linkedin_posts()"]
-            T23["run_contact_crossref() · get_contact_crossref()"]
-        end
-
-        subgraph UTIL["Utilities"]
-            T16["scan_project_for_skills()"]
-            T16b["get_daily_digest() · weekly_summary()"]
-            T17["search_materials() · reindex_materials()"]
-            T18["log_mental_health_checkin() · get_mental_health_log()"]
-        end
-
-        subgraph SETUP["Setup & Identity"]
-            T20["check_workspace()"]
-            T21["setup_workspace(name, email, ...)"]
-            T22["run_hbdi_assessment() · get_hbdi_profile()"]
-        end
-    end
-
-    subgraph FILES["Your Files  —  local, gitignored"]
-        F1["Master resume .txt\nSTAR stories · tone samples\npipeline · contacts · health log"]
-        F2["Generated resumes + cover letters .txt\nExported PDFs"]
-        F3["LeetCode folder\nSide project folder"]
-    end
-
-    CTX --> F1
-    PIPELINE --> F1
-    PIPELINE --> F2
-    INTERVIEW --> F3
-    UTIL --> F3
-    UTIL --> F1
+  SERVICES --> CONFIG
+  TOOLS --> DATA
+  TOOLS --> MATERIALS
+  TOOLS --> INDEX
+  TOOLS --> PROJECTS
 ```
 
-### End-to-End: Job Description → Submitted Application
+### End-to-End: Mobile/Dashboard Pipeline Flow
 
 ```mermaid
 sequenceDiagram
     participant You
-    participant Copilot
-    participant MCP as MCP Server
-    participant Files as Your Files
+    participant UI as Dashboard or Phone
+    participant API as FastAPI HTTP Layer
+    participant Tools as MCP Tool Layer
+    participant LLM as OpenAI, Ollama, or Copilot Fallback
+    participant Files as Local gitignored files
 
-    You->>Copilot: Session opens
-    Copilot->>MCP: get_session_context()
-    MCP->>Files: master resume + awards + peer feedback
-    MCP->>Files: tone samples (voice calibration)
-    MCP->>Files: STAR stories + personal context
-    MCP->>Files: live pipeline + contacts
-    MCP-->>Copilot: Full context bundle (~70KB)
-    Note over Copilot: Fully contextualized — no re-explaining
+    You->>UI: Paste or queue job description
+    UI->>API: POST /jobs/queue
+    API->>Tools: queue_job(company, role, jd, source)
+    Tools->>Files: Save pending queue item
 
-    You->>Copilot: Paste job description
-    Copilot->>MCP: assess_job_fitment(company, role, jd)
-    MCP-->>Copilot: Fitment score + gaps + emphasis strategy
-    Copilot->>MCP: generate_resume(company, role, jd)
-    MCP->>Files: Read master resume + customization strategy
-    MCP->>Files: Write tailored resume .txt
-    MCP->>Files: Parse .txt → render WeasyPrint PDF
-    MCP-->>Copilot: resume saved + PDF exported
-    Copilot->>MCP: generate_cover_letter(company, role, jd)
-    MCP->>Files: Write cover letter .txt (≤400 words enforced)
-    MCP->>Files: Parse .txt → render two-column sidebar PDF
-    MCP-->>Copilot: cover letter saved + PDF exported
-    Copilot->>MCP: update_application(company, role, "applied")
-    Note over You,Files: Resume PDF + Cover Letter PDF ready to submit
+    You->>UI: Open Pipeline and click Assess
+    UI->>API: Evaluate queued job by id, company, or role
+    API->>Tools: evaluate_queued_job or run_job_assessment
+    Tools->>Files: Load resume, stories, tone, interviews, pipeline
+    Tools->>LLM: Optional persona-aware assessment
+    LLM-->>Tools: Score, gaps, angles, recommendation
+    Tools->>Files: Save assessment and mark evaluated
+    Tools-->>UI: Fitment card with recommendation
+
+    You->>UI: Choose resume variant and generate materials
+    UI->>API: Generate resume or cover letter
+    API->>Tools: generate_resume or generate_cover_letter
+    Tools->>Files: Read master resume, tone, stories, selected variant
+    Tools->>LLM: Generate or return Copilot-ready context package
+    Tools->>Files: Save text output
+    Tools->>Files: Export WeasyPrint or LaTeX PDF
+
+    You->>UI: Add to pipeline or dismiss
+    UI->>API: Decide queued job
+    API->>Tools: decide_job add or dismiss
+    Tools->>Files: Update status.json and immutable event log
+    Tools-->>UI: Pipeline state, generated files, next action
 ```
 
 ---
@@ -223,7 +232,7 @@ sequenceDiagram
 | `resume_diff(file_a, file_b)` | **v5** — unified diff between two resume `.txt` files with added/removed line summary |
 | `review_message(text)` | **v5** — tone review for outreach drafts: flags corporate phrases, desperation signals, hedging, weak openers, missing CTAs |
 | `check_workspace()` | **v0.6** — diagnostic scan: reports present/missing `config.json`, data files, workspace directories, master resume word count, and OpenAI key status |
-| `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, all 7 data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
+| `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, core runtime data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
 | `run_hbdi_assessment(q1_no_spec_project, q2_critical_feedback, q3_tedious_finish, q4_senior_disagreement, score_a, score_b, score_c, score_d)` | **v0.6** — HBDI cognitive style profiler: scores A/B/C/D quadrants, generates interview framing advice calibrated to your primary style, saves profile to personal context |
 | `get_hbdi_profile()` | **v0.6** — retrieve stored HBDI profile with quadrant synthesis and interview framing advice |
 | `log_interview(company, role, interview_date, interview_type, interviewer?, what_landed?, what_didnt?, verbatim_quotes?, surfaced_priorities?, comp_signals?, follow_up_commitments?, ...)` | **v0.6.2** — structured debrief logger for recruiter screens, hiring manager calls, panels, and onsite loops; captures verbatim quotes, HM priorities absent from the JD, process details, and follow-ups |
@@ -242,9 +251,9 @@ sequenceDiagram
 
 ---
 
-## v0.7 — HTTP transport, personas, and LangGraph workflows
+## v0.7–v0.9 — HTTP transport, mobile dashboard, personas, LangGraph workflows, and portfolio metrics
 
-Three additions in v0.7 turn the server from a stdio-only MCP tool into a remote-capable workflow engine.
+The v0.7–v0.9 line turns the project from a stdio-only MCP server into a local job-search operating layer. MCP tools, REST/SSE APIs, dashboard routes, mobile/LAN access, persona-aware generation, workflow streaming, and portfolio analytics all share the same local data files.
 
 ### HTTP + SSE transport (FastAPI)
 
@@ -261,18 +270,27 @@ Endpoints:
 - `GET /context/session` — same payload as the MCP `get_session_context()` tool
 - `POST /resumes/generate` — sync resume generation; body `{ "company", "role", "job_description", "persona?" }`
 - `POST /resumes/generate/stream` — same call, SSE stream of progress events
-- `GET /jobs` / `POST /jobs/queue` / `POST /jobs/decide` — pipeline ops
+- `POST /jobs/evaluate` — queue + assess a pasted job description
+- `POST /jobs/ingest-url` — fetch a job URL, queue it, and run fitment evaluation; used by the iOS Share Sheet shortcut
+- `POST /jobs/decide` — add or dismiss an evaluated job
 - `GET /personas` / `GET /personas/{name}` — list/inspect persona configs
 - `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
+- `GET /dashboard/` and focused `/dashboard/*` routes — browser/mobile UI over the same services
 - All write endpoints require `Authorization: Bearer <token>` when `JOBCONTEXTMCP_HTTP_TOKEN` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
 
 ### Web dashboard quick start (local + phone)
 
 The dashboard at `/dashboard/` is the visual layer over the same local data and services exposed through MCP/HTTP. Current views include:
 
-- **Home / Daily Digest** — a quick status snapshot for follow-ups, stale applications, upcoming interviews, posts, and wellbeing nudges. The digest page is available at `GET /dashboard/digest`; `POST /dashboard/digest/generate` regenerates the parsed briefing with a spinner, timestamp, and collapsible sections.
-- **Pipeline** — queue, assess, select a resume variant, generate a tailored resume or cover letter, and export PDFs from one screen. Pipeline actions are job-id-based, include busy/progress states, show assessment details inline, and expose LaTeX/HTML cover-letter export buttons plus unqueue/remove controls.
-- **Job Hunt, Materials, Rejections, Posts, Outreach, People, Wellbeing** — focused pages for the same job-search records available through the CLI and MCP tools.
+- **Home / Daily Digest** — follow-ups, stale applications, upcoming interviews, recent rejections, post metrics, wellbeing nudges, and priority focus areas. The digest page is available at `GET /dashboard/digest`; `POST /dashboard/digest/generate` regenerates the parsed briefing with a spinner, timestamp, and collapsible sections.
+- **Pipeline** — queue jobs, evaluate fitment, inspect assessment details, select resume variants, generate tailored resumes and cover letters, export HTML/LaTeX PDFs, add/dismiss jobs, and remove queued items from one job-id-driven flow.
+- **Job Hunt** — application status, immutable event history, next steps, compensation data, and stale-item cleanup.
+- **Materials** — generated resumes, cover letters, PDFs, reference files, diffs, and exports.
+- **Rejections** — rejection logging, filtering, stage/reason pattern analysis, and digest integration.
+- **Posts** — LinkedIn post logging, metrics updates, source/hashtag filters, and tone-sample reuse.
+- **Outreach / People** — people lookup, slim scans, contact detail views, referral planning, message review, and reply-drafting context.
+- **Wellbeing** — mood/energy logs, trend summaries, and job-search sustainability check-ins.
+- **Portfolio** — GitHub public repo stats and durable traffic snapshots for resume/STAR-ready project metrics.
 
 When `JOBCONTEXTMCP_HTTP_TOKEN` is configured, browser login uses the same token model as the HTTP API. `/dashboard/login` sets an HTTP-only `jc_session` cookie for the local dashboard, `/dashboard/logout` clears it, and API-style calls can still use `Authorization: Bearer <token>`. The auth provider reads settings fresh at request time so changing the token does not require stale in-memory state cleanup.
 
@@ -303,6 +321,62 @@ Notes:
 - If browser can't connect, allow incoming connections for Terminal/Python in macOS Firewall.
 - If you expose LAN access, set `JOBCONTEXTMCP_HTTP_TOKEN` in your environment before running.
 - For AI/LLM/RAG roles, the pipeline can recommend the Modern/AI resume variant and pass that selection through to cover-letter title/export settings.
+
+### iOS Share Sheet shortcut setup
+
+The mobile pipeline can start directly from Safari, LinkedIn, Greenhouse, Lever, Workday, or any app that exposes a job URL to the iOS Share Sheet. The shortcut posts the shared URL to `POST /jobs/ingest-url`; the server fetches the posting, parses company/role/JD text, queues it, runs fitment evaluation, and makes the result visible in `/dashboard/pipeline`.
+
+Prerequisites:
+
+1. Start the dashboard in LAN mode on your Mac:
+
+  ```bash
+  scripts/dashboard.sh start-lan
+  ```
+
+2. Confirm your phone can open the dashboard URL printed by the script, for example:
+
+  ```text
+  http://192.168.68.66:8000/dashboard/
+  ```
+
+3. If `JOBCONTEXTMCP_HTTP_TOKEN` is set, keep that token handy. The shortcut must send the same bearer token as the dashboard/API.
+
+Create the Shortcut:
+
+1. Open **Shortcuts** on iPhone or iPad.
+2. Tap **+** and name it `Queue Job in JobContextMCP`.
+3. Tap the shortcut info button and enable **Show in Share Sheet**.
+4. Under **Share Sheet Types**, allow **URLs** and **Safari Web Pages**. Optional: also allow **Text** if you sometimes share copied URLs as text.
+5. Add action: **Receive URLs from Share Sheet**.
+6. Add action: **Get URLs from Input**. This normalizes Safari pages into a plain URL.
+7. Add action: **Get Contents of URL**.
+  - URL: `http://<YOUR_MAC_LAN_IP>:8000/jobs/ingest-url`
+  - Method: `POST`
+  - Headers:
+    - `Content-Type`: `application/json`
+    - `Authorization`: `Bearer <JOBCONTEXTMCP_HTTP_TOKEN>` *(only if auth is enabled)*
+  - Request Body: `JSON`
+  - JSON fields:
+    - `url`: the output of **Get URLs from Input**
+    - `source`: `ios_share_sheet`
+    - `persona`: optional, for example `faang_technical` or `executive_polish`
+8. Add action: **Show Result** using the response from **Get Contents of URL**.
+9. Optional final action: **Open URLs** with `http://<YOUR_MAC_LAN_IP>:8000/dashboard/pipeline` so the shortcut drops you into the queued job list.
+
+Usage:
+
+1. Open a job posting on your phone.
+2. Tap **Share**.
+3. Choose **Queue Job in JobContextMCP**.
+4. Wait for the response, then open the dashboard Pipeline page to review the assessment, choose a resume variant, generate materials, and queue/apply.
+
+Troubleshooting:
+
+- If the shortcut returns `401`, the `Authorization` header is missing or the token does not match `JOBCONTEXTMCP_HTTP_TOKEN`.
+- If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running with `start-lan`, and macOS Firewall allows Python/Terminal incoming connections.
+- If `/jobs/ingest-url` returns that it could not extract a role or posting text, the job board likely requires login or blocks scraping. Use the dashboard Pipeline/manual queue flow and paste the JD text directly.
+- If the Mac changes networks, the LAN IP can change. Run `scripts/dashboard.sh status` and update the Shortcut URL.
 
 ### Persona configs
 
@@ -422,7 +496,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 73 tools directly:
+`cli.py` is a first-class client. Invoke any of the 77 tools directly:
 
 ```bash
 # List all tools
@@ -608,7 +682,7 @@ setup_workspace(
 
 This single call:
 - Creates `config.json` with your contact info and OpenAI key slot
-- Initializes all 7 data files (`status.json`, `personal_context.json`, `tone_samples.json`, `rejections.json`, `mental_health_log.json`, `linkedin_posts.json`, `people.json`)
+- Initializes the core runtime data files used by the dashboard, MCP tools, and CLI
 - Creates all 8 resume subdirectories (`01-Current-Optimized` through `08-Interview-Prep-Docs`) inside `workspace/resumes/`
 - Saves your master resume `.txt` and creates a LeetCode practice scaffold in `workspace/leetcode/`
 
@@ -654,9 +728,26 @@ Generation and assessment can also use profile-specific model routing. Set `llm_
 "llm_provider": "openai",
 "openai_model": "gpt-4o-mini",
 "openai_model_assessment": "gpt-4o-mini",
+"ollama_base_url": "http://localhost:11434/v1",
 "ollama_model": "llama3.1:8b",
 "ollama_model_assessment": "qwen2.5:14b"
 ```
+
+For local Ollama generation, install/run Ollama, pull the models you configure, and switch the provider:
+
+```bash
+ollama pull llama3.1:8b
+ollama pull qwen2.5:14b
+```
+
+```json
+"llm_provider": "ollama",
+"ollama_base_url": "http://localhost:11434/v1",
+"ollama_model": "llama3.1:8b",
+"ollama_model_assessment": "qwen2.5:14b"
+```
+
+The project talks to Ollama through its OpenAI-compatible `/v1` API, so the same resume generation, fitment assessment, dashboard pipeline, and LangGraph workflow paths can run against either OpenAI cloud models or local Ollama models. RAG embeddings still require an OpenAI embedding key unless you replace the embedding backend.
 
 Prompt assembly is budget-aware. Optional `generation_budgets` settings bound the master resume, tone profile, personal stories, job description, and final prompt ceiling; the tone selector favors recent/diverse writing samples and cover-letter story selection can use semantic embeddings when an OpenAI key is available. The semantic caches are local generated files under `data/` and are gitignored.
 
@@ -854,11 +945,11 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 
 ---
 
-## Roadmap
+## Roadmap / Release Status
 
 ### v0.6 *(shipped)*
 
-- **`setup_workspace()`** — conversational bootstrapper: creates `config.json`, all 7 data files, `workspace/resumes/` subdirectories `01–08`, and a LeetCode scaffold from a single chat; zero manual JSON editing
+- **`setup_workspace()`** — conversational bootstrapper: creates `config.json`, core runtime data files, `workspace/resumes/` subdirectories `01–08`, and a LeetCode scaffold from a single chat; zero manual JSON editing
 - **`check_workspace()`** — diagnostic scan: reports what's present, missing, or misconfigured; run any time files go missing
 - **`run_hbdi_assessment()`** — HBDI cognitive style profiler: saves primary/secondary quadrant profile + interview framing advice to personal context
 - **`get_hbdi_profile()`** — retrieve stored HBDI profile with quadrant synthesis
@@ -875,10 +966,31 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 - **`cli.py --schedule <tool> [--time HH:MM]`** — emits ready-to-paste crontab + macOS launchd plist for any registered tool.
 - **Auto-discovering tool registry** — `server.py` and `cli.py` load tool modules from a single list; new tools are picked up by adding the module to `_TOOL_MODULES` / `_discover_tools`.
 
-### Planned — v0.8
+### v0.8 *(shipped)*
 
-- **Honcho persistent memory layer** *(deferred from v0.7)* — opt-in episodic memory on top of the persona system; seeds STAR stories, tone samples, and contact context, then queries before generation so the model has cross-session memory without re-reading every JSON file. Gated behind `honcho_api_key`.
-- **Mobile-first web UI** — thin SPA over the v0.7 HTTP transport for iPad-from-bed workflows (queue a job, review fitment, draft reply) without needing VS Code tunnel.
+- **Mobile-first local dashboard** — dashboard pages over the v0.7 HTTP transport for daily digest, pipeline, job hunt, materials, rejections, posts, outreach, people, and wellbeing.
+- **Dashboard authentication** — token-backed `/dashboard/login` and `/dashboard/logout` with an HTTP-only `jc_session` cookie, plus bearer-token compatibility for API clients.
+- **Daily digest UI** — parsed briefing sections, timestamped regeneration, collapsible content, and dashboard-first triage.
+- **Job-id-based pipeline actions** — assess, select resume, generate materials, export PDFs, unqueue, remove, add, and dismiss without relying on brittle company/role matching alone.
+- **Inline assessment details** — fitment scores, gaps, angles, and recommendations visible directly in the pipeline.
+- **Resume-variant-aware generation/export** — dashboard selections pass through to cover-letter title/export settings.
+- **LaTeX/HTML cover-letter export routing** — dashboard buttons cover both strict formatted output and HTML/WeasyPrint output.
+
+### v0.9 *(shipped)*
+
+- **`refresh_portfolio_metrics()`** — snapshots GitHub clone/view traffic for configured repositories into durable local history so GitHub's rolling 14-day traffic window is not lost.
+- **`get_portfolio_metrics()`** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones.
+- **Portfolio analytics for applications** — durable project evidence can feed resumes, STAR stories, and interview prep without hand-copying GitHub traffic screenshots.
+
+### Approaching v1.0
+
+The remaining work before 1.0 is stabilization rather than a major feature reset:
+
+- Normalize README/tool counts and generated docs around `77` tools.
+- Harden dashboard pipeline edge cases and empty-state UX.
+- Keep MCP, CLI, HTTP, and dashboard behavior aligned through shared service calls.
+- Expand smoke tests around dashboard flows, exports, queue decisions, and portfolio snapshots.
+- Lock the public setup path for fresh users: clone, setup, dashboard, first generated application.
 
 ---
 

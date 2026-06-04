@@ -1,5 +1,6 @@
-# Example people.json for jobContextMCP
-# Copy to people.json and customize with your contacts.
+# ── data/people.example.json ─────────────────────────────────────────────────
+# Copy this to data/people.json and customize with your contacts.
+# data/people.json is gitignored — your real contact list stays private.
 [
   {
     "name": "Jane Doe",

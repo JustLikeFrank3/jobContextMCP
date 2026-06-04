@@ -1,3 +1,7 @@
+# ── data/linkedin_connections.example.json ───────────────────────────────────
+# Copy this to data/linkedin_connections.json.
+# Export from LinkedIn: Settings > Data Privacy > Get a copy of your data > Connections.
+# data/linkedin_connections.json is gitignored — your real data stays private.
 {
   "metadata": {
     "source": "LinkedIn Connections Export",

@@ -10,6 +10,7 @@ Covers:
   - POST /dashboard/pipeline/evaluate      (404 for missing job)
   - POST /dashboard/pipeline/select-resume (400 missing name / 404 / success)
   - POST /dashboard/pipeline/unqueue       (404 / success resets status)
+    - POST /dashboard/pipeline/mark-applied  (success updates queue + application log)
   - POST /dashboard/pipeline/remove        (404 / success deletes row)
   - auth enforcement on the pipeline router
   - pure helpers: _recommend_resume, _normalize_fitment_context,
@@ -104,6 +105,11 @@ class TestPipelineData:
         body = http_client_noauth.get("/dashboard/pipeline/data").json()
         assert body["jobs"][0]["assessed"] is True
 
+    def test_applied_job_marked_assessed(self, http_client_noauth):
+        _seed_jobs([_job(id=4, status="applied")])
+        body = http_client_noauth.get("/dashboard/pipeline/data").json()
+        assert body["jobs"][0]["assessed"] is True
+
     def test_ai_role_recommends_modern_resume(self, http_client_noauth):
         _seed_jobs([_job(
             id=9,
@@ -163,6 +169,30 @@ class TestUnqueueAndRemove:
     def test_unqueue_unknown_job_returns_404(self, http_client_noauth):
         _seed_jobs([_job(id=1)])
         r = http_client_noauth.post("/dashboard/pipeline/unqueue", json={"job_id": 42})
+        assert r.status_code == 404
+
+    def test_mark_applied_updates_queue_and_application(self, http_client_noauth):
+        _seed_jobs([_job(id=1, status="added", company="Afresh", role="Engineer")])
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/mark-applied",
+            json={"job_id": 1, "notes": "Submitted manually."},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "applied"
+        saved = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})["jobs"][0]
+        assert saved["status"] == "applied"
+        assert saved["decision_notes"] == "Submitted manually."
+
+        status_data = _load_json(config.STATUS_FILE, {"applications": []})
+        app = status_data["applications"][0]
+        assert app["company"] == "Afresh"
+        assert app["role"] == "Engineer"
+        assert app["status"] == "applied"
+        assert app["events"][-1]["type"] == "applied"
+
+    def test_mark_applied_unknown_job_returns_404(self, http_client_noauth):
+        _seed_jobs([_job(id=1)])
+        r = http_client_noauth.post("/dashboard/pipeline/mark-applied", json={"job_id": 42})
         assert r.status_code == 404
 
     def test_remove_deletes_row(self, http_client_noauth):

@@ -139,6 +139,12 @@
     ]
   },
   {
+    "name": "get_github_stats",
+    "parameters": [
+      "username"
+    ]
+  },
+  {
     "name": "get_hbdi_profile",
     "parameters": []
   },
@@ -218,6 +224,10 @@
       "tag",
       "person"
     ]
+  },
+  {
+    "name": "get_portfolio_metrics",
+    "parameters": []
   },
   {
     "name": "get_referral_chains",
@@ -370,6 +380,13 @@
     ]
   },
   {
+    "name": "preview_story_retrieval",
+    "parameters": [
+      "role",
+      "job_description"
+    ]
+  },
+  {
     "name": "queue_job",
     "parameters": [
       "company",
@@ -393,6 +410,10 @@
     "parameters": [
       "filename"
     ]
+  },
+  {
+    "name": "refresh_portfolio_metrics",
+    "parameters": []
   },
   {
     "name": "reindex_materials",

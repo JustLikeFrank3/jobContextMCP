@@ -1,3 +1,6 @@
+# ── data/tone_samples.example.json ───────────────────────────────────────────
+# Copy this to data/tone_samples.json and add writing samples to calibrate your voice.
+# data/tone_samples.json is gitignored — your real samples stay private.
 {
   "samples": [
     {

@@ -1,3 +1,6 @@
+# ── data/linkedin_posts.example.json ─────────────────────────────────────────
+# Copy this to data/linkedin_posts.json to track your LinkedIn post activity.
+# data/linkedin_posts.json is gitignored — your real data stays private.
 {
   "posts": [
     {

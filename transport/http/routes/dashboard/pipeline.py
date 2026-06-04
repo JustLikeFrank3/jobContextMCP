@@ -10,8 +10,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from lib import config
-from lib.io import _load_json, _save_json
+from lib.io import _load_json, _load_master_context, _now, _save_json
 from services import JobAnalysisService, ResumeService
+from tools.job_hunt import log_application_event, update_application
 from transport.http.auth import require_api_key
 from .shared import html_page
 
@@ -172,15 +173,8 @@ def _first_sentence(text: str, max_len: int = 240) -> str:
     return s[:max_len]
 
 
-def _synthesize_assessment(j: dict) -> tuple[str, str]:
-    """Return (summary, detail) synthesized from stored queue data."""
-    status = (j.get("status") or "pending").lower()
-    score = (j.get("fitment_score") or "").strip()
-    notes = (j.get("decision_notes") or "").strip()
-    jd = (j.get("jd") or "").strip()
-    fitment_context = _normalize_fitment_context((j.get("fitment_context") or "").strip())
-
-    text = f"{j.get('role','')}\n{jd}".lower()
+def _signal_line(role: str, jd: str) -> str:
+    text = f"{role}\n{jd}".lower()
     signals = {
         "ai/llm": ["llm", "openai", "rag", "agent", "copilot", "prompt", "semantic kernel", "langchain", "llamaindex"],
         "backend": ["python", "java", "node", "api", "microservice", "backend", "distributed"],
@@ -192,15 +186,135 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
         reverse=True,
     )
     top_hits = [label for count, label in hit_counts if count][:3]
-    signal_line = ", ".join(top_hits) if top_hits else "no strong keyword signal"
+    return ", ".join(top_hits) if top_hits else "no strong keyword signal"
 
-    summary = f"Status: {status} • signal: {signal_line}"
-    if status == "pending":
-        summary = f"Not evaluated yet • signal pre-read: {signal_line}"
-    if status == "evaluated":
-        summary = f"Evaluated • signal: {signal_line}"
+
+def _is_ai_focused(role: str, jd: str) -> bool:
+    text = f"{role}\n{jd}".lower()
+    return any(_contains_keyword(text, kw) for kw in _AI_ROLE_KEYWORDS)
+
+
+_AI_ROLE_KEYWORDS = (
+    "ai",
+    "llm",
+    "rag",
+    "agent",
+    "machine learning",
+    "generative",
+    "copilot",
+    "prompt",
+    "model context protocol",
+    "mcp",
+)
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    if " " in keyword or "/" in keyword or "-" in keyword:
+        return keyword in text
+    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
+
+
+def _ai_evidence_from_master(limit: int = 4) -> list[str]:
+    """Return high-signal AI platform evidence from the master resume.
+
+    The LLM assessment can underweight side-project/platform evidence. The
+    dashboard should still surface concrete MCP/RAG/LangGraph/OpenAI evidence
+    when the queued role is AI-focused.
+    """
+    try:
+        master = _load_master_context()
+    except Exception:
+        return []
+
+    keywords = (
+        "model context protocol",
+        "mcp",
+        "fastmcp",
+        "rag",
+        "semantic search",
+        "openai api",
+        "langgraph",
+        "vector",
+        "embedding",
+        "github copilot",
+        "claude ai",
+        "ai-assisted",
+        "ai tool adoption",
+    )
+    evidence: list[str] = []
+    for raw in master.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip().lstrip("•- ").strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if any(_contains_keyword(lower, keyword) for keyword in keywords):
+            evidence.append(line)
+        if len(evidence) >= limit:
+            break
+    return evidence
+
+
+def _ai_assessment_caveat(role: str, jd: str, fitment_context: str) -> str:
+    if not _is_ai_focused(role, jd):
+        return ""
+    lower = fitment_context.lower()
+    contradiction = any(
+        phrase in lower
+        for phrase in (
+            "lacks direct ai platform experience",
+            "lack of direct ai platform experience",
+            "no explicit experience in building or maintaining ai platforms",
+            "limited machine learning exposure",
+        )
+    )
+    evidence = _ai_evidence_from_master()
+    if not evidence:
+        return ""
+    prefix = "AI evidence from resume"
+    if contradiction:
+        prefix = "AI evidence the assessment underweighted"
+    return f"{prefix}: " + " | ".join(evidence)
+
+
+def _assessment_summary(status: str, score: str, signal_line: str) -> str:
     if score:
-        summary = f"Fitment score: {score} • signal: {signal_line}"
+        return f"Fitment score: {score} • signal: {signal_line}"
+    if status == "pending":
+        return f"Not evaluated yet • signal pre-read: {signal_line}"
+    if status == "evaluated":
+        return f"Evaluated • signal: {signal_line}"
+    return f"Status: {status} • signal: {signal_line}"
+
+
+def _next_action_for_recommendation(recommendation: str) -> str:
+    if not recommendation:
+        return "Run assessment to generate recommendation."
+    rec_l = recommendation.lower()
+    if "apply aggressively" in rec_l:
+        return "Queue apply now, then tailor resume bullets to the top 1-2 strengths."
+    if "caveat" in rec_l:
+        return "Apply with caveats: address top risk in cover letter paragraph 2."
+    if "do not apply" in rec_l:
+        return "Do not queue apply; keep notes and move this role to dismissed."
+    return "Run assessment to generate recommendation."
+
+
+def _source_url_from_jd(jd: str) -> str:
+    source_url_match = re.search(r"https?://\S+", jd)
+    return source_url_match.group(0) if source_url_match else "No source URL found in JD."
+
+
+def _synthesize_assessment(j: dict) -> tuple[str, str]:
+    """Return (summary, detail) synthesized from stored queue data."""
+    status = (j.get("status") or "pending").lower()
+    score = (j.get("fitment_score") or "").strip()
+    notes = (j.get("decision_notes") or "").strip()
+    jd = (j.get("jd") or "").strip()
+    fitment_context = _normalize_fitment_context((j.get("fitment_context") or "").strip())
+    role = j.get("role", "")
+    signal_line = _signal_line(role, jd)
+    summary = _assessment_summary(status, score, signal_line)
+    ai_caveat = _ai_assessment_caveat(role, jd, fitment_context)
 
     fitment_summary = _fitment_preview(fitment_context)
     score_section = _extract_md_section(fitment_context, "FITMENT SCORE")
@@ -210,20 +324,9 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
 
     effective_score = score or _first_sentence(score_section, max_len=32)
     recommendation = _first_sentence(recommendation_section, max_len=220)
-
-    next_action = "Run assessment to generate recommendation."
-    if recommendation:
-        rec_l = recommendation.lower()
-        if "apply aggressively" in rec_l:
-            next_action = "Queue apply now, then tailor resume bullets to the top 1-2 strengths."
-        elif "caveat" in rec_l:
-            next_action = "Apply with caveats: address top risk in cover letter paragraph 2."
-        elif "do not apply" in rec_l:
-            next_action = "Do not queue apply; keep notes and move this role to dismissed."
+    next_action = _next_action_for_recommendation(recommendation)
 
     short_notes = re.sub(r"\s+", " ", notes)[:450] if notes else "No decision notes saved."
-    source_url_match = re.search(r"https?://\S+", jd)
-    source_url = source_url_match.group(0) if source_url_match else "No source URL found in JD."
 
     strengths_line = " | ".join(strong_matches) if strong_matches else "No extracted strengths."
     risks_line = " | ".join(gaps_risks) if gaps_risks else "No extracted risks."
@@ -235,10 +338,11 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
         f"Recommendation: {recommendation or 'No recommendation extracted.'}",
         f"Top strengths: {strengths_line}",
         f"Top risks: {risks_line}",
+        f"AI platform evidence: {ai_caveat or 'No AI-specific evidence surfaced for this role.'}",
         f"Next action: {next_action}",
         f"Fitment context preview: {fitment_summary or 'No stored fitment context.'}",
         f"Notes: {short_notes}",
-        f"Source: {source_url}",
+        f"Source: {_source_url_from_jd(jd)}",
     ])
     return summary, detail
 
@@ -261,7 +365,7 @@ def _pipeline_payload() -> dict:
             "added_date": j.get("added_date", ""),
             "fitment_score": j.get("fitment_score") or "",
             "decision_notes": j.get("decision_notes") or "",
-            "assessed": status in {"evaluated", "added", "dismissed"},
+            "assessed": status in {"evaluated", "added", "applied", "dismissed"},
             "assessment_summary": assessment_summary,
             "assessment_detail": assessment_detail,
             "recommended_resume": _recommend_resume(role, j.get("jd", ""), resume_options),
@@ -383,6 +487,40 @@ async def pipeline_queue_apply(req: _JobActionRequest) -> JSONResponse:
     return JSONResponse({"ok": True, "result": result})
 
 
+@router.post("/pipeline/mark-applied", responses={404: {"description": "Job id not found"}})
+async def pipeline_mark_applied(req: _JobActionRequest) -> JSONResponse:
+    job = _find_job(req.job_id)
+    company = job.get("company", "")
+    role = job.get("role", "")
+    note = req.notes.strip() or "Marked applied from dashboard queue."
+
+    def mutate(j: dict) -> None:
+        j["status"] = "applied"
+        j["decision_notes"] = note
+        j["decided_date"] = _now()
+
+    updated_job = _update_job(req.job_id, mutate)
+    app_result = update_application(
+        company=company,
+        role=role,
+        status="applied",
+        notes=note,
+    )
+    event_result = log_application_event(
+        company=company,
+        role=role,
+        event_type="applied",
+        notes=note,
+    )
+    return JSONResponse({
+        "ok": True,
+        "job_id": req.job_id,
+        "status": updated_job.get("status"),
+        "application_result": app_result,
+        "event_result": event_result,
+    })
+
+
 @router.post("/pipeline/unqueue", responses={404: {"description": "Job id not found"}})
 async def pipeline_unqueue(req: _JobActionRequest) -> JSONResponse:
     _update_job(req.job_id, lambda j: j.update({
@@ -490,6 +628,12 @@ async function action(jobId, type){
             setBusy(true, `Queueing application for job #${jobId}...`);
             await post('/dashboard/pipeline/queue-apply', { job_id: jobId });
         }
+        if(type === 'applied') {
+            const note = prompt('Optional application note:', 'Applied manually from dashboard.');
+            if(note === null) return;
+            setBusy(true, `Marking job #${jobId} applied...`);
+            await post('/dashboard/pipeline/mark-applied', { job_id: jobId, notes: note });
+        }
         if(type === 'unqueue') {
             setBusy(true, `Resetting job #${jobId} to pending...`);
             await post('/dashboard/pipeline/unqueue', { job_id: jobId });
@@ -515,19 +659,22 @@ function render(){
   const pending = state.jobs.filter(j => j.status === 'pending').length;
   const evald = state.jobs.filter(j => j.status === 'evaluated').length;
   const added = state.jobs.filter(j => j.status === 'added').length;
+    const applied = state.jobs.filter(j => j.status === 'applied').length;
   el.summary.innerHTML = [
     {k:'Queue Total', v:state.total},
     {k:'Pending', v:pending},
     {k:'Evaluated', v:evald},
-    {k:'Added', v:added}
+        {k:'Added', v:added},
+        {k:'Applied', v:applied}
   ].map(c => `<article class='card'><div class='k'>${esc(c.k)}</div><div class='v'>${esc(c.v)}</div></article>`).join('');
 
   const jobs = filtered();
   if(!jobs.length){ el.list.innerHTML = '<div class="empty">No jobs found.</div>'; return; }
 
   el.list.innerHTML = jobs.map(j => {
-    const disabledEval = (j.status === 'added' || j.status === 'dismissed') ? 'disabled' : '';
+    const disabledEval = (j.status === 'added' || j.status === 'applied' || j.status === 'dismissed') ? 'disabled' : '';
     const disabledApply = j.status !== 'evaluated' ? 'disabled' : '';
+    const disabledApplied = (j.status === 'applied' || j.status === 'dismissed') ? 'disabled' : '';
     const statusClass = (j.status || '').replace(/[^a-z0-9_-]/g,'-');
     const evalLabel = j.assessed ? 'Re-run Assessment' : 'Run Assessment';
     return `<article class='item'>
@@ -560,6 +707,7 @@ function render(){
         <button onclick='action(${j.id},"cl-latex")'>Cover Letter (LaTeX)</button>
         <button onclick='action(${j.id},"cl-html")'>Cover Letter (HTML)</button>
         <button onclick='action(${j.id},"apply")' ${disabledApply}>Queue Apply</button>
+        <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>
                 <button class='danger' onclick='action(${j.id},"remove")'>Remove</button>
       </div>
@@ -588,6 +736,7 @@ load();
 .meta { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
 .status { font-size: 0.8rem; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: #0f1728; color: #dbe8ff; text-transform: lowercase; }
 .status.added { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); color: #d9ffe6; }
+.status.applied { border-color: color-mix(in srgb, var(--ok) 65%, var(--line)); color: #bfffd2; background: #0f2418; }
 .status.dismissed { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: #ffdede; }
 .hint { color: var(--muted); font-size: 0.78rem; }
 .busy { background: #0e1628; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#d7e3f8; }

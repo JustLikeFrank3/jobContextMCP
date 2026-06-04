@@ -1,3 +1,6 @@
+# ── data/personal_context.example.json ───────────────────────────────────────
+# Copy this to data/personal_context.json and populate with your STAR stories.
+# data/personal_context.json is gitignored — your real stories stay private.
 {
   "stories": [
     {

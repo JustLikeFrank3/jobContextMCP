@@ -1,5 +1,6 @@
 import textwrap
 from pathlib import Path
+import re
 
 from lib.io import _load_master_context
 from lib import config
@@ -45,7 +46,84 @@ _ASSESSMENT_SYSTEM = textwrap.dedent("""\
     GLOBAL ANTI-FABRICATION RULE: Every claim in every section must be grounded
     in either the provided master resume or the provided job description. If a
     detail is not present in your inputs, do not assert it as fact.
+
+    AI PLATFORM CALIBRATION RULE: If the master resume includes explicit work
+    building MCP servers, RAG / semantic search, vector embeddings, LangGraph
+    workflows, OpenAI API integrations, dashboard/HTTP transports for AI tools,
+    or AI tool adoption programs, surface that evidence in STRONG MATCHES and
+    KEY ANGLES for AI Platform / Agent Platform / LLM / RAG roles. Do not call
+    the candidate's AI platform experience "absent" merely because it comes
+    from a side project or platform project rather than a formal ML-model title.
+    You may still distinguish AI platform engineering from ML model training,
+    but the distinction must acknowledge the concrete AI platform evidence.
 """)
+
+
+_AI_ROLE_KEYWORDS = (
+    "ai",
+    "llm",
+    "rag",
+    "agent",
+    "copilot",
+    "machine learning",
+    "generative",
+    "prompt",
+    "model context protocol",
+    "mcp",
+)
+
+_AI_EVIDENCE_KEYWORDS = (
+    "ai",
+    "llm",
+    "rag",
+    "copilot",
+    "claude",
+    "openai",
+    "model context protocol",
+    "mcp",
+    "fastmcp",
+    "langgraph",
+    "agent",
+    "semantic search",
+    "faiss",
+    "vector",
+    "embedding",
+    "prompt",
+)
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    if " " in keyword or "/" in keyword or "-" in keyword:
+        return keyword in text
+    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
+
+
+def _is_ai_focused(role: str, job_description: str) -> bool:
+    text = f"{role}\n{job_description}".lower()
+    return any(_contains_keyword(text, keyword) for keyword in _AI_ROLE_KEYWORDS)
+
+
+def _extract_ai_platform_evidence(master: str, limit: int = 10) -> str:
+    """Pull concrete AI-platform evidence to the front of assessment prompts.
+
+    The full master resume can be long enough that side-project AI platform work
+    gets underweighted by the LLM. This deterministic excerpt keeps MCP/RAG/
+    LangGraph/OpenAI evidence visible for AI Platform and Agent Platform roles.
+    """
+    evidence: list[str] = []
+    for raw in master.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if any(_contains_keyword(lower, keyword) for keyword in _AI_EVIDENCE_KEYWORDS):
+            evidence.append(line)
+        if len(evidence) >= limit:
+            break
+
+    if not evidence:
+        return ""
+    return "\n".join(f"- {line}" for line in evidence)
 
 
 def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
@@ -58,6 +136,15 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
     master = _load_master_context()
     interview_block = get_interview_context(company=company, role=role)
     interview_section = f"\n\n{interview_block}" if interview_block else ""
+    ai_evidence_section = ""
+    if _is_ai_focused(role, job_description):
+        ai_evidence = _extract_ai_platform_evidence(master)
+        if ai_evidence:
+            ai_evidence_section = (
+                "──── AI PLATFORM EVIDENCE EXTRACTED FROM MASTER RESUME ────\n"
+                "Use this evidence when assessing AI Platform / Agent Platform fit.\n"
+                f"{ai_evidence}\n\n"
+            )
 
     persona_section = ""
     if persona:
@@ -76,6 +163,7 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
         f"Role:    {role}\n\n"
         f"{persona_section}"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
+        f"{ai_evidence_section}"
         f"──── FRANK'S MASTER RESUME ────\n{master}"
         f"{interview_section}"
     )
@@ -187,14 +275,25 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
 
     master = _load_master_context()
     candidate_name = config._cfg.get("name", "the candidate")
+    ai_evidence_msg = ""
+    if _is_ai_focused(role, job_description):
+        ai_evidence = _extract_ai_platform_evidence(master)
+        if ai_evidence:
+            ai_evidence_msg = (
+                "AI PLATFORM EVIDENCE EXTRACTED FROM MASTER RESUME:\n"
+                "This is high-signal context for AI Platform / Agent Platform roles. "
+                "Do not ignore it when scoring direct platform fit.\n"
+                f"{ai_evidence}"
+            )
     user_msg = "\n\n".join([
         f"CANDIDATE: {candidate_name}",
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
+        ai_evidence_msg,
         f"MASTER RESUME / FULL CAREER CONTEXT:\n{master}",
         "Now produce the fitment assessment.",
-    ])
+    ]).replace("\n\n\n", "\n\n")
 
     try:
         response = client.chat.completions.create(

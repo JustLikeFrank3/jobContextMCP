@@ -1,3 +1,6 @@
+# ── data/job_queue.example.json ──────────────────────────────────────────────
+# Copy this to data/job_queue.json to queue jobs for fitment evaluation.
+# data/job_queue.json is gitignored — your real data stays private.
 {
   "jobs": [
     {

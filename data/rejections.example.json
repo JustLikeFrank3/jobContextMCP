@@ -1,3 +1,6 @@
+# ── data/rejections.example.json ─────────────────────────────────────────────
+# Copy this to data/rejections.json to track rejections and pattern analysis.
+# data/rejections.json is gitignored — your real data stays private.
 {
   "rejections": []
 }

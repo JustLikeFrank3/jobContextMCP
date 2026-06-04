@@ -32,6 +32,7 @@ from tools.tone import get_tone_profile, get_tone_profile_budgeted
 from tools.resume import save_resume_txt, save_cover_letter_txt
 
 _NO_PERSONAL_STORIES = "No personal stories found"
+_PERSONAL_CONTEXT_HEADER = "──── PERSONAL CONTEXT ────\n"
 
 # Tags that mark a PERSONAL story as cover-letter hook material: human/identity
 # throughlines, life ventures, and explicit brand/anchor connections. The
@@ -49,6 +50,65 @@ _COVER_LETTER_HOOK_TAGS = {
     "family", "childhood", "travel", "hospitality", "bar_management",
     "bar-management", "performing_arts", "fanboy", "loyalty",
 }
+_COMPANY_HOOK_TAGS = {
+    "brand-connection", "brand_connection", "personal_connection",
+    "personal-connection", "cover-letter-anchor", "cover_letter_anchor",
+    "cover_letter_hook", "cover-letter-hook", "why-this-company",
+    "why_this_company", "childhood", "fanboy", "loyalty",
+}
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+def _story_has_company_hook_tags(story: dict) -> bool:
+    tags = {_slug(str(t)) for t in (story.get("tags") or [])}
+    hook_tags = {_slug(t) for t in _COMPANY_HOOK_TAGS}
+    return bool(tags & hook_tags)
+
+def _story_matches_company(story: dict, company: str) -> bool:
+    company_slug = _slug(company)
+    if not company_slug:
+        return False
+    company_terms = {_slug(part) for part in re.split(r"\s+", company) if len(part) > 2}
+    fields = [story.get("title", ""), story.get("story", "")]
+    fields.extend(str(t) for t in (story.get("tags") or []))
+    haystack = _slug(" ".join(fields))
+    return company_slug in haystack or any(term and term in haystack for term in company_terms)
+
+def _filter_cross_company_hook_stories(stories: list[dict], company: str) -> tuple[list[dict], bool]:
+    """Reject brand/company hooks that belong to a different employer.
+
+    A Home Depot childhood story is valid for Home Depot and poisonous for
+    Workday. Project/leadership stories can still pass through; company-affinity
+    stories require an exact company match.
+    """
+    kept: list[dict] = []
+    rejected_any = False
+    for story in stories:
+        if _story_has_company_hook_tags(story) and not _story_matches_company(story, company):
+            rejected_any = True
+            continue
+        kept.append(story)
+    return kept, rejected_any
+
+
+def _role_is_compatible(candidate: str, target: str) -> bool:
+    candidate_l = (candidate or "").strip().lower()
+    target_l = (target or "").strip().lower()
+    return candidate_l == target_l or target_l in candidate_l or candidate_l in target_l
+
+
+def _matching_assessment_jobs(jobs: list[dict], company: str, role: str) -> list[dict]:
+    company_l = (company or "").strip().lower()
+    matches = []
+    for job in jobs:
+        if str(job.get("company") or "").strip().lower() != company_l:
+            continue
+        if not _role_is_compatible(str(job.get("role") or ""), role):
+            continue
+        if str(job.get("fitment_context") or "").strip():
+            matches.append(job)
+    return matches
 
 
 
@@ -252,7 +312,13 @@ _RESUME_SYSTEM = textwrap.dedent("""\
     The PROJECTS section is REQUIRED — do not omit it. Include 2–3 side projects
     from the master resume that are most relevant to the target role. Select based
     on what the JD emphasizes — all project names and metrics must come verbatim
-    from the master resume.
+    from the master resume, except GitHub clone/view traffic which must come from
+    the GITHUB PORTFOLIO METRICS block when present.
+
+    Volatile portfolio metrics rule: if the prompt includes a GITHUB PORTFOLIO
+    METRICS block, use those clone/view numbers instead of any stale clone counts
+    embedded in the master resume. If the block is absent, omit clone/view counts
+    rather than guessing.
 
     Bullets must be specific and metric-driven. Generic bullets like "improved
     performance" or "collaborated with teams" are not acceptable — every bullet
@@ -283,7 +349,13 @@ _COVER_LETTER_SYSTEM = textwrap.dedent("""\
     - Conversational but not casual; no filler phrases, no corporate speak.
     - A side project earns a place only when it is the strongest match to the job
       description, not as a mandatory section. Use metrics verbatim from the
-      master resume when it does.
+            master resume when it does, except GitHub clone/view traffic which must
+            come from the GITHUB PORTFOLIO METRICS block when present.
+
+        Volatile portfolio metrics rule: if the prompt includes a GITHUB PORTFOLIO
+        METRICS block, use those clone/view numbers instead of any stale clone counts
+        embedded in the master resume. If the block is absent, omit clone/view counts
+        rather than guessing.
 
     Hard prohibitions:
     - NEVER start with: 'I'm excited', 'I am thrilled', 'I would love', 'I am eager',
@@ -322,6 +394,99 @@ def _model() -> str:
         return str(config._cfg.get("openai_model", "gpt-4o-mini"))
 
 
+def _portfolio_metrics_block() -> str:
+    """Return live/stored GitHub metrics for prompt grounding.
+
+    Clone/view counts drift constantly and the master resume can lag behind.
+    Generation prompts should treat this block as the source of truth for
+    portfolio traffic numbers and ignore stale clone counts elsewhere.
+    """
+    try:
+        from tools.github import get_portfolio_metrics
+
+        metrics = get_portfolio_metrics().strip()
+    except Exception:
+        return ""
+
+    if not metrics or metrics.startswith("No portfolio metrics recorded yet"):
+        return ""
+    if metrics.startswith("⚠"):
+        return ""
+    return (
+        "GITHUB PORTFOLIO METRICS (source of truth for clone/view counts; "
+        "override stale clone counts in the master resume):\n"
+        f"{metrics}"
+    )
+
+
+def _assessment_context_block(company: str, role: str) -> str:
+    """Return the latest queued fitment assessment for this company/role.
+
+    Cover letters should be grounded first in structured assessment evidence,
+    then optionally in personal stories. This prevents story retrieval from
+    forcing a weak or wrong company-affinity hook.
+    """
+    try:
+        from lib.io import _load_json
+
+        data = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})
+    except Exception:
+        return ""
+
+    matches = _matching_assessment_jobs(data.get("jobs", []) or [], company, role)
+    if not matches:
+        return ""
+    matches.sort(key=lambda j: str(j.get("added_date") or ""), reverse=True)
+    job = matches[0]
+    ctx = str(job.get("fitment_context") or "").strip()
+    if len(ctx) > 3500:
+        ctx = ctx[:3500] + "\n[assessment truncated for prompt budget]"
+    return (
+        "STRUCTURED FITMENT ASSESSMENT (primary cover-letter evidence; use before stories):\n"
+        f"Status: {job.get('status', '')}\n"
+        f"Fitment score: {job.get('fitment_score') or 'see assessment'}\n"
+        f"{ctx}"
+    )
+
+
+def _is_ai_role(role: str, job_description: str) -> bool:
+    text = f"{role}\n{job_description}".lower()
+    return any(
+        kw in text
+        for kw in (
+            "ai", "llm", "rag", "agent", "copilot", "machine learning",
+            "generative", "prompt", "model context protocol", "mcp",
+        )
+    )
+
+
+def _cover_letter_narrative_plan(company: str, role: str, job_description: str) -> str:
+    """Hard narrative contract for cover letters.
+
+    The LLM tends to satisfy metric requirements by dumping every good artifact.
+    This plan forces one coherent spine and keeps current projects out of the
+    past tense.
+    """
+    base = [
+        "COVER LETTER NARRATIVE PLAN (follow this before selecting bullets):",
+        "- Write one coherent story, not a catalog of achievements.",
+        "- Use no more than one primary project in Paragraph 2 and no more than three supporting artifacts in Paragraph 3.",
+        "- Do not repeat the same evidence in multiple paragraphs.",
+        "- jobContextMCP is an active/current project. Refer to it as 'I built and maintain jobContextMCP' or 'jobContextMCP currently...', never only as a completed past-tense artifact.",
+        "- GitHub traffic phrasing must be natural: say 'currently shows X clones in the last 14 days' or 'has X clones in the last 14 days'; do not say 'cloned X times'.",
+        "- Avoid sweeping alignment claims like 'aligns perfectly'; name the actual engineering overlap instead.",
+    ]
+    if _is_ai_role(role, job_description):
+        base.extend([
+            f"- Narrative spine for {company}: current AI platform builder with production platform instincts.",
+            "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story marked 'PRIMARY COVER LETTER HOOK' explicitly tied to this company, use that personal/brand/childhood/fan story as the Para 1 hook — do not override it with the professional angle below. ONLY IF no such hook exists: open on the professional angle: AI tools are only useful when they become reliable platforms with memory, retrieval, workflow, and operational surfaces.",
+            "- Paragraph 2: make jobContextMCP the primary ownership story: active MCP/FastAPI platform, 77 tools, RAG/FAISS, LangGraph, dashboard/API surfaces, and live GitHub metrics from the portfolio block.",
+            "- Paragraph 3: add supporting proof only: GM AI adoption (35%+), GM cloud/platform reliability (zero downtime / 98% SLA / Kafka), and one performance or full-stack project if it directly strengthens the role fit.",
+            "- Do not lead with the Azure migration for an AI Platform role; use it as supporting platform reliability evidence.",
+        ])
+    return "\n".join(base)
+
+
 def _infer_role_type(role: str) -> str:
     """Best-effort mapping of a job title to a customization strategy role_type."""
     r = role.lower()
@@ -349,9 +514,63 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     return f"{prefix} Resume - {slug}.txt" if suffix == "Resume" else f"{prefix} Cover Letter - {slug}.txt"
 
 
+def _no_company_story_block(company: str) -> str:
+    return (
+        _PERSONAL_CONTEXT_HEADER +
+        f"NO COMPANY-SPECIFIC PERSONAL STORY FOUND for {company or 'this company'}. "
+        "Do not borrow a brand/childhood/fan story from another company. "
+        "Use the structured fitment assessment and a concise professional intro grounded in the JD instead."
+    )
+
+
+def _semantic_story_prefix(selected: list[dict], company: str) -> str:
+    if company and any(_story_has_company_hook_tags(s) for s in selected):
+        return (
+            _PERSONAL_CONTEXT_HEADER +
+            "PRIMARY COVER LETTER HOOK: The first company-connection story below "
+            f"is explicitly tied to {company}. Use it only because it matches this "
+            "company. Include one concrete detail, not a generic theme.\n\n"
+        )
+    return _no_company_story_block(company) + "\n\n"
+
+
+def _ranked_personal_context_block(
+    role: str,
+    job_description: str,
+    company: str,
+    token_budget: int,
+    max_stories: int,
+    boost_tags: set[str] | None,
+    semantic: bool,
+) -> tuple[str, RetrievalDiagnostics | None]:
+    selected, diag = retrieve_stories(
+        role,
+        job_description,
+        path=config.PERSONAL_CONTEXT_FILE,
+        token_budget=token_budget,
+        max_stories=max_stories,
+        boost_tags=boost_tags,
+        semantic=semantic,
+    )
+    if not selected:
+        return "", diag
+
+    rejected_cross_company = False
+    if semantic and company:
+        selected, rejected_cross_company = _filter_cross_company_hook_stories(selected, company)
+    if not selected and rejected_cross_company:
+        return _no_company_story_block(company), diag
+    if not selected:
+        return "", diag
+
+    prefix = _semantic_story_prefix(selected, company) if semantic else _PERSONAL_CONTEXT_HEADER
+    return prefix + format_stories(selected), diag
+
+
 def _build_personal_context_block(
     role: str = "",
     job_description: str = "",
+    company: str = "",
     token_budget: int | None = None,
     boost_tags: set[str] | None = None,
     semantic: bool = False,
@@ -379,34 +598,20 @@ def _build_personal_context_block(
 
     try:
         if role or job_description:
-            selected, diag = retrieve_stories(
+            return _ranked_personal_context_block(
                 role,
                 job_description,
-                path=config.PERSONAL_CONTEXT_FILE,
-                token_budget=token_budget,
-                max_stories=max_stories,
-                boost_tags=boost_tags,
-                semantic=semantic,
+                company,
+                token_budget,
+                max_stories,
+                boost_tags,
+                semantic,
             )
-            if not selected:
-                return "", diag
-            prefix = "──── PERSONAL CONTEXT ────\n"
-            if semantic:
-                prefix += (
-                    "PRIMARY COVER LETTER HOOK: The first story below is the top-ranked "
-                    "mission/brand/personal hook for this company. If it is a human story "
-                    "rather than a normal work accomplishment, use that first story for "
-                    "Paragraph 1 before considering any later stories. Include one concrete "
-                    "detail from that story (for example: independent label, feature films, "
-                    "artists, stages, audiences, or what Frank actually produced), not just a "
-                    "generic theme.\n\n"
-                )
-            return prefix + format_stories(selected), diag
 
         personal = get_personal_context()
         if personal.startswith(_NO_PERSONAL_STORIES):
             return "", None
-        return "──── PERSONAL CONTEXT ────\n" + personal, None
+        return _PERSONAL_CONTEXT_HEADER + personal, None
     except Exception:
         return "", None
 
@@ -516,6 +721,7 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     safety = budgets["safety_margin_tokens"]
 
     master = _load_master_context()
+    portfolio_metrics = _portfolio_metrics_block()
     tone = get_tone_profile_budgeted(
         token_budget=budgets["tone_token_budget"],
         max_samples=budgets["max_tone_samples"],
@@ -528,6 +734,7 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        portfolio_metrics,
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         interview_block or "",
         f"TONE PROFILE (write in this voice):\n{tone}",
@@ -535,13 +742,18 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
         "Now write the resume. Output the raw .txt content only.",
     ]
     personal_budget = _dynamic_personal_budget(fixed_sections, max_tokens, safety)
-    personal, _diag = _build_personal_context_block(role, job_description, personal_budget)
+    personal, _diag = _build_personal_context_block(
+        role,
+        job_description,
+        token_budget=personal_budget,
+    )
 
     sections = [
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        portfolio_metrics,
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         personal,
     ]
@@ -562,11 +774,14 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     clean_job_description = _clean_job_description_for_prompt(company, role, job_description)
 
     master = _load_master_context()
+    portfolio_metrics = _portfolio_metrics_block()
     tone = get_tone_profile_budgeted(
         token_budget=budgets["tone_token_budget"],
         max_samples=budgets["max_tone_samples"],
     )
     strategy = get_customization_strategy(_infer_role_type(role))
+    assessment_context = _assessment_context_block(company, role)
+    narrative_plan = _cover_letter_narrative_plan(company, role, clean_job_description)
 
     contact = config._cfg.get("contact", {})
     name = contact.get("name", "")
@@ -579,7 +794,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
 
     instructions = (
         f"Now write the cover letter for {company}. Output the raw .txt content only.\n"
-        "Use the resume, customization strategy, interview context, the general personal_context, the tone profile, and the job description.\n"
+        "Use the structured fitment assessment first, then the resume, customization strategy, interview context, personal context, tone profile, and job description.\n"
         "\n"
         "VOICE COMES FIRST: the TONE PROFILE samples are the authority on how Frank sounds.\n"
         "Match their rhythm, sentence length, and register. If any structure rule below fights\n"
@@ -587,39 +802,46 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "\n"
         "STRUCTURE: exactly 4 paragraphs. Do not merge them. The word counts below are guidance,\n"
         "not quotas; say each point in as few words as it takes and never pad with filler.\n"
+        "COHERENCE RULE: follow the COVER LETTER NARRATIVE PLAN. The letter must read like one\n"
+        "story with a clear throughline, not a shuffled list of unrelated resume bullets.\n"
         "PAGE FILL: the PDF page is fixed-size and currently runs short. Aim for a full page:\n"
         "target 380-430 words total. Reach it with substance (a second concrete project, a real\n"
         "constraint, a verbatim metric), never with adjectives or restated claims.\n"
         "\n"
-        "PARA 1 (~80-100 words): Hook. FIRST scan the PERSONAL CONTEXT for a story whose theme\n"
-        "  genuinely connects to THIS company's mission, product, or brand (a venture Frank ran, a\n"
-        "  passion, a formative life experience). If one truly connects, OPEN with that human\n"
-        "  throughline in Frank's voice and tie it to the company by name; this is PREFERRED over a\n"
-        "  work accomplishment. Do not force it or overstate it; if nothing genuinely connects, open\n"
-        "  with a crisp professional hook instead. No metric required here. Either way, follow with\n"
-        "  one or two concrete sentences on why THIS company/role, grounded in real JD details.\n"
-        "  The PERSONAL CONTEXT block is already ranked for this company. If its first story is a\n"
-        "  non-work/human story about creative production, music, film, writing, artists, fandom,\n"
-        "  childhood brand memory, or another genuine personal connection, use that story as Para 1.\n"
-        "  Do NOT substitute a GM achievement, cloud migration, Copilot adoption, or jobContextMCP\n"
-        "  project as the opener when such a ranked human story is present.\n"
+        "PARA 1 (~80-100 words): Hook. FIRST use the STRUCTURED FITMENT ASSESSMENT to identify\n"
+        "  the real professional angle for this company and role. Then check PERSONAL CONTEXT.\n"
+        "  Use a personal/brand/childhood/fan story ONLY if the block explicitly says PRIMARY\n"
+        "  COVER LETTER HOOK and explicitly ties that story to the target company. If the block\n"
+        "  says NO COMPANY-SPECIFIC PERSONAL STORY FOUND, do not invent one and do not borrow one\n"
+        "  from another company; open with a crisp professional hook grounded in the JD instead.\n"
+        "  Never use 'Growing up', childhood rituals, family shopping, fandom, Home Depot, or any\n"
+        "  other company-affinity story unless the story explicitly matches THIS target company.\n"
+        "  Follow with one or two concrete sentences on why THIS company/role, grounded in real\n"
+        "  JD details and the assessment.\n"
         "\n"
         "PARA 2 (~120-150 words): Primary ownership story. One major example with concrete metrics\n"
-        "  from the master resume. Make the end-to-end ownership chain explicit. State facts cleanly;\n"
-        "  do not append a justifying clause to every metric.\n"
+        "  from the master resume. For AI/LLM/platform roles, make jobContextMCP the primary story\n"
+        "  unless the assessment says a different artifact is clearly stronger. Describe it as active\n"
+        "  work: 'I built and maintain jobContextMCP' or 'jobContextMCP currently...'. Make the\n"
+        "  end-to-end ownership chain explicit. State facts cleanly; do not append a justifying clause\n"
+        "  to every metric.\n"
         "\n"
         "PARA 3 (~140-170 words): Cover THREE distinct artifacts from the master resume to show range.\n"
         "  Lead with the STRONGEST match to this specific JD (the AI/RAG tooling, a side project, or\n"
         "  performance work) in two sentences with verbatim metrics, then add TWO more artifacts, one\n"
         "  sentence each, every one carrying a distinct real metric verbatim from the master resume\n"
         "  (e.g. the LiveVox latency work: 2.8ms web / 12.7ms iOS render, 98% SLA). Close with one\n"
-        "  sentence on what they demonstrate together. Every sentence carries a distinct fact; no padding.\n"
+        "  sentence on what they demonstrate together. If jobContextMCP is used, clone/view traffic\n"
+        "  MUST come from GITHUB PORTFOLIO METRICS, not stale clone counts in the master resume.\n"
+        "  Phrase GitHub traffic naturally: 'currently shows X clones in the last 14 days' or 'has\n"
+        "  X clones in the last 14 days'; never write 'cloned X times'.\n"
+        "  Every sentence carries a distinct fact; no padding.\n"
         "\n"
         "PARA 4 (~50-70 words): Closer. State the fit directly in Frank's own words, then invite a\n"
         "  conversation. Write a fresh invite in his voice; do NOT paste a stock closing line and do\n"
         "  NOT end with 'I look forward to hearing from you' or similar boilerplate.\n"
         "\n"
-        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong'.\n"
+        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong', 'aligns perfectly'.\n"
         "\n"
         "FINAL SELF-CHECK before you finish: count the words in the body (salutation through sign-off\n"
         "name). If it is under 380, you stopped too early. Go back into Para 2 and Para 3 and add\n"
@@ -632,6 +854,9 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{clean_job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        narrative_plan,
+        assessment_context,
+        portfolio_metrics,
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         interview_block or "",
         f"TONE PROFILE (write in this voice):\n{tone}",
@@ -643,7 +868,8 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     personal, _diag = _build_personal_context_block(
         role,
         clean_job_description,
-        personal_budget,
+        company=company,
+        token_budget=personal_budget,
         boost_tags=_COVER_LETTER_HOOK_TAGS,
         semantic=True,
     )
@@ -653,6 +879,9 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{clean_job_description}",
         f"CUSTOMIZATION STRATEGY:\n{strategy}",
+        narrative_plan,
+        assessment_context,
+        portfolio_metrics,
         f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
         personal,
     ]
@@ -762,6 +991,8 @@ _BANNED_LEADIN_SUBS = [
     (r"\b(?:the opportunity|the chance|this role|this) excites me\b", "this interests me"),
     (r"\bexcites me\b", "interests me"),
     (r"\bstrong fit\b", "solid match"),
+    (r"\baligns perfectly with\b", "maps directly to"),
+    (r"\balign perfectly with\b", "map directly to"),
 ]
 
 
@@ -822,6 +1053,28 @@ def _sanitize_cover_letter_output(content: str) -> str:
     # capitalized in every position, so a fixed replacement is safe anywhere.
     for pattern, repl in _BANNED_LEADIN_SUBS:
         cleaned = re.sub(pattern, repl, cleaned)
+
+    # Backstop for awkward/past-tense portfolio phrasing. GitHub reports clone
+    # events; the project was not "cloned 371 times" as a completed event, and
+    # jobContextMCP is an active project, not just a past artifact.
+    cleaned = re.sub(
+        r"I built a Model Context Protocol \(MCP\) server, open-sourced and cloned ([\d,]+) times in the last 14 days",
+        r"I built and maintain jobContextMCP, an open-source Model Context Protocol (MCP) server that currently shows \1 clones in the last 14 days",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bopen-sourced and cloned ([\d,]+) times in the last 14 days\b",
+        r"open source and currently shows \1 clones in the last 14 days",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bcloned ([\d,]+) times in the last 14 days\b",
+        r"currently shows \1 clones in the last 14 days",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
 
     return cleaned.strip()
 

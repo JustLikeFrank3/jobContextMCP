@@ -1,3 +1,6 @@
+# ── data/interviews.example.json ─────────────────────────────────────────────
+# Copy this to data/interviews.json to track scheduled and completed interviews.
+# data/interviews.json is gitignored — your real data stays private.
 {
   "interviews": [
     {
