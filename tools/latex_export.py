@@ -72,7 +72,7 @@ Dear Hiring Manager,
 
 \vspace{{8pt}}
 
-\noindent Regards, \\[10pt]
+\noindent Kindest Regards, \\[10pt]
 \name
 
 \end{{document}}
@@ -182,7 +182,7 @@ def generate_cover_letter_latex(
         role_title:  Value for the \\role macro in the LaTeX header.
                      Defaults to Frank's standard title.
         letter_date: Right-aligned date printed under the letterhead. Defaults
-                     to today in 'Month D, YYYY' format when blank.
+                 to today in 'Month D, YYYY' format when blank.
         output_dir:  Where to write the final PDF.  Defaults to the workspace
                  03-Resume-PDFs folder so dashboard previews can find it.
         identity:    Optional contact/identity overrides for demo output.
@@ -207,7 +207,7 @@ def generate_cover_letter_latex(
     pdf_name = f"cover_letter_{slug}_{dated}.pdf"
     final_pdf = output_dir / pdf_name
 
-    # Default the printed letter date to today (e.g. 'June 3, 2026'). Strip any
+    # Default the printed letter date to today (e.g. 'June 7, 2026'). Strip any
     # zero-padding on the day so it reads naturally.
     if not letter_date:
         letter_date = today.strftime("%B %-d, %Y")

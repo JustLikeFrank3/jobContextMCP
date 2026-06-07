@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent.parent
@@ -68,15 +69,15 @@ def _reconfigure(cfg: dict) -> None:
 
     _cfg = dict(cfg)
 
-    RESUME_FOLDER = Path(cfg["resume_folder"])
-    LEETCODE_FOLDER = Path(cfg["leetcode_folder"])
+    RESUME_FOLDER = Path(cfg["resume_folder"]).expanduser()
+    LEETCODE_FOLDER = Path(cfg["leetcode_folder"]).expanduser()
     # Support both legacy single string and new array format
     _spf = cfg.get("side_project_folders") or cfg.get("side_project_folder")
     if isinstance(_spf, list):
-        SIDE_PROJECT_FOLDERS = [Path(p) for p in _spf]
+        SIDE_PROJECT_FOLDERS = [Path(p).expanduser() for p in _spf]
     else:
-        SIDE_PROJECT_FOLDERS = [Path(_spf)] if _spf else []
-    DATA_FOLDER = Path(cfg["data_folder"])
+        SIDE_PROJECT_FOLDERS = [Path(_spf).expanduser()] if _spf else []
+    DATA_FOLDER = Path(cfg["data_folder"]).expanduser()
 
     STATUS_FILE = DATA_FOLDER / "status.json"
     HEALTH_LOG_FILE = DATA_FOLDER / "mental_health_log.json"
@@ -92,12 +93,12 @@ def _reconfigure(cfg: dict) -> None:
     LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
     GITHUB_METRICS_FILE = DATA_FOLDER / "github_metrics.json"
     _fb_raw = cfg.get("fb_friends_folder", "")
-    FB_FRIENDS_FOLDER = Path(_fb_raw) if _fb_raw else None
+    FB_FRIENDS_FOLDER = Path(_fb_raw).expanduser() if _fb_raw else None
 
     JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
     INTERVIEW_PREP_FOLDER = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
     _latex_dir = cfg.get("latex_resume_dir", "")
-    LATEX_RESUME_DIR = Path(_latex_dir) if _latex_dir else None
+    LATEX_RESUME_DIR = Path(_latex_dir).expanduser() if _latex_dir else None
 
     MASTER_RESUME = RESUME_FOLDER / cfg["master_resume_path"]
     LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg.get("leetcode_cheatsheet_path", "Algorithm_Cheatsheet.md")
@@ -144,7 +145,7 @@ def get_llm_client(task: str = ""):
         return client, model
 
     # default: openai
-    key = cfg.get("openai_api_key", "")
+    key = cfg.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
     if not key or key.startswith("sk-..."):
         return None, None
     model = cfg.get("openai_model", "gpt-4o")

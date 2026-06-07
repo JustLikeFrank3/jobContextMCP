@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.9.x%20%E2%86%92%201.0-blue" alt="Version 0.9.x approaching 1.0"/>
-  <img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests passing"/>
+  <img src="https://img.shields.io/badge/tests-574%20passing-brightgreen" alt="574 tests passing"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -271,7 +271,7 @@ Endpoints:
 - `POST /resumes/generate` — sync resume generation; body `{ "company", "role", "job_description", "persona?" }`
 - `POST /resumes/generate/stream` — same call, SSE stream of progress events
 - `POST /jobs/evaluate` — queue + assess a pasted job description
-- `POST /jobs/ingest-url` — fetch a job URL, queue it, and run fitment evaluation; used by the iOS Share Sheet shortcut
+- `POST /jobs/ingest-url` — fetch a job URL, queue it, and run fitment evaluation; used by the iOS Share Sheet shortcut. Works best with canonical ATS pages (Greenhouse, Lever, Ashby, Workday, company career sites). For LinkedIn postings, use LinkedIn as the discovery layer — tap **Apply** to reach the employer's ATS page, then share that URL instead.
 - `POST /jobs/decide` — add or dismiss an evaluated job
 - `GET /personas` / `GET /personas/{name}` — list/inspect persona configs
 - `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
@@ -324,7 +324,19 @@ Notes:
 
 ### iOS Share Sheet shortcut setup
 
-The mobile pipeline can start directly from Safari, LinkedIn, Greenhouse, Lever, Workday, or any app that exposes a job URL to the iOS Share Sheet. The shortcut posts the shared URL to `POST /jobs/ingest-url`; the server fetches the posting, parses company/role/JD text, queues it, runs fitment evaluation, and makes the result visible in `/dashboard/pipeline`.
+The mobile pipeline starts from any app that exposes a job URL to the iOS Share Sheet. The shortcut posts the shared URL to `POST /jobs/ingest-url`; the server fetches the posting, parses company/role/JD text, queues it, runs fitment evaluation, and makes the result visible in `/dashboard/pipeline`.
+
+**Recommended source URLs:** Greenhouse, Lever, Ashby, Workday, and direct company career pages. These sites serve the canonical job description to any HTTP client and are consistently parseable.
+
+**LinkedIn note:** LinkedIn restricts automated access to its job pages, so sharing a `linkedin.com/jobs/view/` URL won't extract the posting. Use LinkedIn as the discovery layer instead:
+
+```
+Find on LinkedIn → tap Apply → ATS page opens → Share ATS URL → shortcut queues it
+```
+
+This is actually a better data source. ATS pages typically have more complete job descriptions, accurate location requirements, salary data when posted, and fewer formatting artifacts than LinkedIn's copy. "Ingested directly from the employer's ATS" is also a cleaner story than scraping LinkedIn.
+
+For jobs without an Apply button or with a broken ATS link, the Pipeline page has a **＋ Add Job** button — paste the company, role, and JD text directly.
 
 Prerequisites:
 
@@ -366,16 +378,17 @@ Create the Shortcut:
 
 Usage:
 
-1. Open a job posting on your phone.
-2. Tap **Share**.
-3. Choose **Queue Job in JobContextMCP**.
-4. Wait for the response, then open the dashboard Pipeline page to review the assessment, choose a resume variant, generate materials, and queue/apply.
+1. Find a job on LinkedIn (or anywhere else).
+2. Tap **Apply** — this opens the employer's ATS page in Safari.
+3. Tap **Share** from Safari.
+4. Choose **Queue Job in JobContextMCP**.
+5. Wait for the response, then open the dashboard Pipeline page to review the assessment, choose a resume variant, generate materials, and queue/apply.
 
 Troubleshooting:
 
 - If the shortcut returns `401`, the `Authorization` header is missing or the token does not match `JOBCONTEXTMCP_HTTP_TOKEN`.
 - If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running with `start-lan`, and macOS Firewall allows Python/Terminal incoming connections.
-- If `/jobs/ingest-url` returns that it could not extract a role or posting text, the job board likely requires login or blocks scraping. Use the dashboard Pipeline/manual queue flow and paste the JD text directly.
+- If `/jobs/ingest-url` returns a LinkedIn-blocked message, you shared the LinkedIn URL instead of the ATS URL. Tap Apply on the LinkedIn page first to get to the employer's site, then share.
 - If the Mac changes networks, the LAN IP can change. Run `scripts/dashboard.sh status` and update the Shortcut URL.
 
 ### Persona configs

@@ -35,7 +35,8 @@ All notable changes to this project will be documented in this file.
 - **Dashboard auth-provider staleness** — token settings are read fresh instead of reusing stale auth state across configuration changes.
 - **Dashboard same-origin credentials** — browser requests and tests now exercise the session-cookie path cleanly instead of relying on deprecated per-request cookie injection.
 - **Assessment wrapper cleanup** — saved/displayed assessments strip tool/context wrappers so dashboard details focus on the actual fitment result.
-- **Full test suite** is green again on the current branch: 565/565 passing.
+- **Full test suite** is green again on the current branch: 574/574 passing.
+- **Portable `~` path expansion in config** — `lib/config.py` now calls `.expanduser()` on all user-configured path keys (`resume_folder`, `leetcode_folder`, `data_folder`, `side_project_folders`, `fb_friends_folder`, `latex_resume_dir`), so `config.json` values written as `~/...` resolve correctly regardless of where `$HOME` lives (e.g. an external volume). `tools/setup.py` now writes `~`-prefixed paths via a `_to_tilde()` helper so any future `setup_workspace` call produces a portable config. `tests/test_server_exports.py` gains `test_reconfigure_expands_tilde_paths` verifying all six keys expand and none retain a literal `~`.
 
 ### Planned
 

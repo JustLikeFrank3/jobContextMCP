@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -124,7 +125,7 @@ def _load_openai_key(path: Path) -> str:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     except Exception:
         return ""
-    return str(cfg.get("openai_api_key") or "")
+    return str(cfg.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or "")
 
 
 def _embed_texts(texts: list[str], path: Path) -> list[list[float]]:

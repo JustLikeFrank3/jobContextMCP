@@ -196,6 +196,7 @@ get_personal_context = context.get_personal_context
 log_tone_sample = tone.log_tone_sample
 get_tone_profile = tone.get_tone_profile
 get_tone_profile_budgeted = tone.get_tone_profile_budgeted
+get_cover_letter_tone_profile_budgeted = tone.get_cover_letter_tone_profile_budgeted
 scan_materials_for_tone = tone.scan_materials_for_tone
 
 search_materials = rag.search_materials

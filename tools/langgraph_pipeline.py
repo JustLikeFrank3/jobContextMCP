@@ -57,6 +57,7 @@ from langgraph.graph import StateGraph, END
 
 from lib import config
 from lib.io import _load_master_context, _read
+from lib.openai_calls import create_chat_completion
 from tools.tone import get_tone_profile
 from tools.star import get_star_story_context
 from tools.generate import _infer_role_type, _RESUME_FORMAT_SPEC, _RESUME_SYSTEM
@@ -163,7 +164,9 @@ def draft_node(state: ResumeAgentState) -> dict:
         "Now write the resume. Output the raw .txt content only — no preamble, no commentary.",
     ]))
 
-    response = _get_client().chat.completions.create(
+    response = create_chat_completion(
+        _get_client(),
+        label="langgraph_draft",
         model=_model(),
         messages=[
             {"role": "system", "content": _RESUME_SYSTEM},
@@ -210,7 +213,9 @@ def review_node(state: ResumeAgentState) -> dict:
         Do NOT rewrite anything — only describe what needs to change.
     """)
 
-    response = _get_client().chat.completions.create(
+    response = create_chat_completion(
+        _get_client(),
+        label="langgraph_review",
         model=_model(),
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
@@ -250,7 +255,9 @@ def revise_node(state: ResumeAgentState) -> dict:
         {_RESUME_FORMAT_SPEC}
     """)
 
-    response = _get_client().chat.completions.create(
+    response = create_chat_completion(
+        _get_client(),
+        label="langgraph_revise",
         model=_model(),
         messages=[
             {

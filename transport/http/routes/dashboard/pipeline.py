@@ -551,8 +551,37 @@ async def pipeline_board() -> HTMLResponse:
 <section class='cards' id='summary'></section>
 <div class='bar'>
   <input id='q' class='search' placeholder='Filter company / role / status' style='min-width:260px;max-width:420px;flex:1' />
+  <button id='addJobBtn' onclick='openAddJob()' style='white-space:nowrap'>＋ Add Job</button>
 </div>
 <section class='list' id='list'></section>
+
+<!-- Add Job modal -->
+<div id='addJobOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:900;overflow-y:auto;padding:20px 12px'>
+  <div style='max-width:540px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:20px'>
+    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'>
+      <span style='font-weight:700;font-size:1.05rem'>Add Job</span>
+      <button onclick='closeAddJob()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px'>✕</button>
+    </div>
+    <label style='display:block;margin-bottom:12px'>
+      <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Company</div>
+      <input id='ajCompany' placeholder='e.g. Stripe' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.9rem' />
+    </label>
+    <label style='display:block;margin-bottom:12px'>
+      <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Role</div>
+      <input id='ajRole' placeholder='e.g. Senior Software Engineer' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.9rem' />
+    </label>
+    <label style='display:block;margin-bottom:16px'>
+      <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Job Description <span style='color:#556;font-weight:400'>(paste full text)</span></div>
+      <textarea id='ajJD' rows='10' placeholder='Paste the job description here…' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem;line-height:1.45;resize:vertical'></textarea>
+    </label>
+    <div style='display:flex;gap:10px;justify-content:flex-end'>
+      <button onclick='closeAddJob()'>Cancel</button>
+      <button id='ajSubmit' onclick='submitAddJob()' style='background:#1a3a6e;border-color:#3a5aae;color:#d0e4ff'>Queue &amp; Assess</button>
+    </div>
+    <div id='ajError' style='display:none;margin-top:10px;color:#ffaaaa;font-size:0.82rem'></div>
+  </div>
+</div>
+
 <script>
 const el = {
   summary: document.getElementById('summary'),
@@ -571,6 +600,45 @@ async function post(url, payload){
   if(!res.ok){ alert(`Request failed (${res.status})\n${txt}`); throw new Error(txt); }
   try { return JSON.parse(txt); } catch { return { ok: true, raw: txt }; }
 }
+
+function openAddJob(){
+  document.getElementById('ajCompany').value = '';
+  document.getElementById('ajRole').value = '';
+  document.getElementById('ajJD').value = '';
+  document.getElementById('ajError').style.display = 'none';
+  document.getElementById('addJobOverlay').style.display = 'block';
+  setTimeout(()=>document.getElementById('ajCompany').focus(), 50);
+}
+function closeAddJob(){ document.getElementById('addJobOverlay').style.display = 'none'; }
+async function submitAddJob(){
+  const company = document.getElementById('ajCompany').value.trim();
+  const role    = document.getElementById('ajRole').value.trim();
+  const jd      = document.getElementById('ajJD').value.trim();
+  const errEl   = document.getElementById('ajError');
+  if(!company || !role || !jd){
+    errEl.textContent = 'Company, role, and job description are all required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('ajSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Queueing…';
+  errEl.style.display = 'none';
+  try {
+    await post('/jobs/evaluate', { company, role, job_description: jd, source: 'dashboard_manual' });
+    closeAddJob();
+    await load();
+  } catch(e){
+    errEl.textContent = String(e);
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Queue & Assess';
+  }
+}
+document.getElementById('addJobOverlay').addEventListener('click', function(e){
+  if(e.target === this) closeAddJob();
+});
 
 function setBusy(on, message=''){
     busy = on;

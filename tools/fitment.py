@@ -4,6 +4,7 @@ import re
 
 from lib.io import _load_master_context
 from lib import config
+from lib.openai_calls import create_chat_completion
 from tools.interviews import get_interview_context
 
 _ASSESSMENT_SYSTEM = textwrap.dedent("""\
@@ -296,7 +297,9 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     ]).replace("\n\n\n", "\n\n")
 
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
+            label="fitment_assessment",
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},

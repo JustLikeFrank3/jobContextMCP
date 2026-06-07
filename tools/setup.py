@@ -151,6 +151,19 @@ def _master_resume_filename(name: str) -> str:
     return f"{_safe_name(name)} Resume - MASTER SOURCE.txt"
 
 
+def _to_tilde(p: Path) -> str:
+    """Convert an absolute path to ~/... form when it lives under $HOME.
+
+    Makes config.json portable across machines and mount points — the
+    stored value works as long as $HOME resolves correctly, regardless
+    of whether the home directory is on the boot volume or an external drive.
+    """
+    try:
+        return "~/" + str(p.relative_to(Path.home()))
+    except ValueError:
+        return str(p)
+
+
 def _build_config(
     name: str,
     email: str,
@@ -166,10 +179,10 @@ def _build_config(
     lc_problems_subdir = _LC_PROBLEMS_DIR.get(lang, "problems")
 
     cfg: dict = {
-        "resume_folder":    str(_RESUMES_ROOT),
-        "leetcode_folder":  str(_LEETCODE_ROOT),
-        "data_folder":      str(_HERE / "data"),
-        "side_project_folders": side_project_folders or [],
+        "resume_folder":    _to_tilde(_RESUMES_ROOT),
+        "leetcode_folder":  _to_tilde(_LEETCODE_ROOT),
+        "data_folder":      _to_tilde(_HERE / "data"),
+        "side_project_folders": [_to_tilde(Path(p).expanduser()) for p in (side_project_folders or [])],
 
         "master_resume_path":         f"01-Current-Optimized/{_master_resume_filename(name)}",
         "leetcode_cheatsheet_path":   "Algorithm_Cheatsheet.md",

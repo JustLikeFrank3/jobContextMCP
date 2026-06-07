@@ -21,6 +21,7 @@ existing evaluation pipeline.
 """
 
 import html as _html_mod
+import json as _json
 import re
 from urllib.parse import urlparse
 
@@ -28,6 +29,27 @@ import httpx
 
 from lib import config
 from tools.job_queue import queue_job as _queue_job
+
+
+# ── Exceptions ────────────────────────────────────────────────────────────────
+
+class LinkedInBlockedError(Exception):
+    """Raised when a LinkedIn URL can't be scraped.
+
+    LinkedIn returns HTTP 451 (Unavailable For Legal Reasons) to Jina Reader,
+    and its /jobs/view pages are usually behind a login wall for full JD
+    content.  Both the MCP scrape_job_url tool and the HTTP /jobs/ingest-url
+    route catch this so they can return a human-readable fallback message
+    rather than a generic HTTP error.
+    """
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        super().__init__(
+            f"LinkedIn blocks automated scraping for {url}. "
+            "Open the posting, copy the full job description text, "
+            "and paste it into Dashboard → Pipeline → Add Job."
+        )
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -47,8 +69,91 @@ def _strip_html(raw: str) -> str:
     text = _html_mod.unescape(text)
     return re.sub(r"\s+", " ", text).strip()
 
+
+def _is_linkedin_url(url: str) -> bool:
+    """Return True if *url* is a LinkedIn URL."""
+    return "linkedin.com" in (urlparse(url).hostname or "").lower()
+
+
+def _fetch_linkedin_direct(url: str) -> str:
+    """Attempt a direct fetch of a LinkedIn job page via JSON-LD / Open Graph.
+
+    LinkedIn blocks Jina (HTTP 451) but public job postings often include
+    server-rendered JSON-LD ``JobPosting`` blocks and ``og:`` meta tags that
+    are visible to a browser User-Agent without login.  Returns extracted
+    plain text on success, or an empty string if the page is gated/empty.
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        resp = httpx.get(url, headers=headers, timeout=_HTTP_TIMEOUT, follow_redirects=True)
+        if resp.status_code != 200:
+            return ""
+        html = resp.text
+
+        # ── JSON-LD JobPosting (richest source) ───────────────────────────────
+        for ld_raw in re.findall(
+            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            html,
+            re.DOTALL | re.IGNORECASE,
+        ):
+            try:
+                ld = _json.loads(ld_raw)
+                # Handle top-level array or @graph
+                nodes = ld if isinstance(ld, list) else ld.get("@graph", [ld])
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        continue
+                    if (node.get("@type") or "").strip().lower() != "jobposting":
+                        continue
+                    title = str(node.get("title") or "").strip()
+                    desc = _strip_html(str(node.get("description") or ""))
+                    company = ""
+                    org = node.get("hiringOrganization") or {}
+                    if isinstance(org, dict):
+                        company = str(org.get("name") or "").strip()
+                    parts: list[str] = []
+                    if title:
+                        parts.append(f"# {title}")
+                    if company:
+                        parts.append(f"at {company}")
+                    if desc:
+                        parts.append(desc)
+                    combined = "\n\n".join(parts)
+                    if len(combined) > 100:  # sanity check: real content present
+                        return combined
+            except Exception:
+                continue
+
+        # LinkedIn og: tags are unreliable — after URL expiry or a redirect,
+        # LinkedIn serves a jobs-search page whose og:description is something
+        # like "Today's top N jobs at Company…" rather than the actual JD.
+        # Skip the og: fallback for LinkedIn; only trust JSON-LD JobPosting.
+    except Exception:
+        pass
+    return ""
+
+
 def _fetch_jina(url: str) -> str:
-    """Return cleaned markdown text for *url* via Jina Reader."""
+    """Return cleaned markdown text for *url* via Jina Reader.
+
+    For LinkedIn URLs: Jina returns HTTP 451 (blocked for legal reasons).
+    Attempts a direct browser-UA fetch first (JSON-LD / og: tags).  Raises
+    :exc:`LinkedInBlockedError` if no usable content can be extracted.
+    """
+    if _is_linkedin_url(url):
+        fallback = _fetch_linkedin_direct(url)
+        if fallback.strip():
+            return fallback
+        raise LinkedInBlockedError(url)
+
     response = httpx.get(
         f"{_JINA_BASE}{url}",
         headers={"Accept": "text/plain"},
@@ -150,6 +255,8 @@ def scrape_job_url(url: str, auto_queue: bool = True) -> str:
     """
     try:
         text = _fetch_jina(url)
+    except LinkedInBlockedError as exc:
+        return str(exc)
     except httpx.HTTPStatusError as exc:
         return f"HTTP {exc.response.status_code} fetching {url}. The page may require login."
     except httpx.HTTPError as exc:

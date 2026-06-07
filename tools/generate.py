@@ -19,6 +19,7 @@ import textwrap
 
 from lib import config
 from lib.io import _load_master_context
+from lib.openai_calls import create_chat_completion
 from lib.story_retrieval import (
     RetrievalDiagnostics,
     estimate_tokens,
@@ -28,8 +29,12 @@ from lib.story_retrieval import (
 from tools.fitment import get_customization_strategy
 from tools.interviews import get_interview_context
 from tools.context import get_personal_context
-from tools.tone import get_tone_profile, get_tone_profile_budgeted
+from tools.tone import get_tone_profile, get_tone_profile_budgeted, get_cover_letter_tone_profile_budgeted
 from tools.resume import save_resume_txt, save_cover_letter_txt
+
+
+def _chat_completion_create(client, **kwargs):
+    return create_chat_completion(client, **kwargs)
 
 _NO_PERSONAL_STORIES = "No personal stories found"
 _PERSONAL_CONTEXT_HEADER = "──── PERSONAL CONTEXT ────\n"
@@ -81,10 +86,18 @@ def _filter_cross_company_hook_stories(stories: list[dict], company: str) -> tup
     A Home Depot childhood story is valid for Home Depot and poisonous for
     Workday. Project/leadership stories can still pass through; company-affinity
     stories require an exact company match.
+
+    Exception: stories tagged 'ai_role_hook' are intentionally cross-company
+    origin stories (e.g. Uncle Roy / Intellicorp) meant to serve as P1 hooks
+    for any AI role regardless of target company. They always pass through.
     """
     kept: list[dict] = []
     rejected_any = False
     for story in stories:
+        tags = {t.lower() for t in story.get("tags", [])}
+        if "ai_role_hook" in tags:
+            kept.append(story)
+            continue
         if _story_has_company_hook_tags(story) and not _story_matches_company(story, company):
             rejected_any = True
             continue
@@ -249,8 +262,8 @@ Full Name
      page. Lead with whatever is the STRONGEST match to this specific job description (the AI/RAG
      tooling, a side project, or performance work) and give it two sentences with verbatim
      metrics. Then add two more concrete artifacts, one sentence each, each carrying a real metric
-     verbatim from the master resume (for example the LiveVox latency work: 2.8ms web / 12.7ms
-     iOS render, 98% SLA). Close with one sentence on what they demonstrate together. Do not pad;
+    verbatim from the master resume (for example the LiveVox latency work: 2.8ms web / 12.7ms
+    iOS round-trip audio latency measured from microphone input to speaker output, 98% SLA). Close with one sentence on what they demonstrate together. Do not pad;
      every sentence carries a distinct fact.
    • Para 4: Closer. State the fit directly in Frank's own words, then invite a conversation.
      Short but not dismissive. Write the invite in his voice; do not paste a stock closing line.
@@ -451,13 +464,11 @@ def _assessment_context_block(company: str, role: str) -> str:
 
 def _is_ai_role(role: str, job_description: str) -> bool:
     text = f"{role}\n{job_description}".lower()
-    return any(
-        kw in text
-        for kw in (
-            "ai", "llm", "rag", "agent", "copilot", "machine learning",
-            "generative", "prompt", "model context protocol", "mcp",
-        )
-    )
+    return bool(re.search(
+        r"\b(ai|llm|rag|copilot|mcp|agent|agents|agentic|prompt|prompts)\b"
+        r"|machine learning|generative|model context protocol",
+        text,
+    ))
 
 
 def _cover_letter_narrative_plan(company: str, role: str, job_description: str) -> str:
@@ -479,12 +490,97 @@ def _cover_letter_narrative_plan(company: str, role: str, job_description: str) 
     if _is_ai_role(role, job_description):
         base.extend([
             f"- Narrative spine for {company}: current AI platform builder with production platform instincts.",
-            "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story marked 'PRIMARY COVER LETTER HOOK' explicitly tied to this company, use that personal/brand/childhood/fan story as the Para 1 hook — do not override it with the professional angle below. ONLY IF no such hook exists: open on the professional angle: AI tools are only useful when they become reliable platforms with memory, retrieval, workflow, and operational surfaces.",
-            "- Paragraph 2: make jobContextMCP the primary ownership story: active MCP/FastAPI platform, 77 tools, RAG/FAISS, LangGraph, dashboard/API surfaces, and live GitHub metrics from the portfolio block.",
+            "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story marked 'PRIMARY COVER LETTER HOOK' explicitly tied to this company, use that personal/brand/childhood/fan story as the Para 1 hook. "
+            "SECOND: if no company-specific hook exists, look for the Uncle Roy / Intellicorp story (tagged 'uncle-roy', 'ai-history', 'intellicorp' in PERSONAL CONTEXT) and use it as the Para 1 hook for this AI role. "
+            "Frame it directly: Uncle Roy built expert systems on Lisp at Intellicorp — KEE, first-generation AI work — through the eighties and nineties; he handed Frank one of the first Raspberry Pis off the factory line; "
+            "he passed before Frank went back to school, before any of this. There is a clear line from KEE to that Pi to the MCP server Frank maintains right now. "
+            "Write this in Frank's plain first-person voice, not as inspirational biography. Do not write 'igniting a passion', 'resonates deeply', 'led to my current role', or anything that sounds like a template. "
+            "Do not name jobContextMCP in Paragraph 1 if Paragraph 2 uses it; say 'the MCP server' or 'that server' in the hook. "
+            "Do not open with 'Growing up'; start with Uncle Roy or Intellicorp. "
+            "ONLY IF neither a company hook nor the Uncle Roy story is present in PERSONAL CONTEXT: open on the professional angle: AI tools are only useful when they become reliable platforms with memory, retrieval, workflow, and operational surfaces.",
+            "- Paragraph 2: make jobContextMCP the primary ownership story, but name it once, then use 'the server' or 'the project': active MCP/FastAPI platform, 77 tools, RAG/FAISS, LangGraph, dashboard/API surfaces, and live GitHub metrics from the portfolio block.",
             "- Paragraph 3: add supporting proof only: GM AI adoption (35%+), GM cloud/platform reliability (zero downtime / 98% SLA / Kafka), and one performance or full-stack project if it directly strengthens the role fit.",
             "- Do not lead with the Azure migration for an AI Platform role; use it as supporting platform reliability evidence.",
         ])
     return "\n".join(base)
+
+
+def _trim_lines_to_token_budget(lines: list[str], token_budget: int) -> str:
+    """Keep whole lines until a token budget is reached."""
+    kept: list[str] = []
+    for line in lines:
+        candidate = "\n".join(kept + [line]).strip()
+        if candidate and estimate_tokens(candidate) > token_budget:
+            break
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _load_cover_letter_master_context(role: str, job_description: str) -> str:
+    """Return a compact source-of-truth resume slice for cover letters.
+
+    Full `_load_master_context()` includes the master resume plus awards and peer
+    feedback. That is useful for fitment and interview prep, but it costs ~7.6K
+    tokens in cover-letter prompts and causes TPM 429s when the dashboard makes
+    multiple calls close together. Cover letters need verified facts and metrics,
+    not the full source archive, so this keeps only role/JD-relevant lines plus
+    recurring metric-bearing project bullets.
+    """
+    try:
+        raw = config.MASTER_RESUME.read_text(encoding="utf-8")
+    except Exception:
+        return _load_master_context()
+
+    query_terms = {
+        term.lower()
+        for term in re.findall(r"[A-Za-z][A-Za-z0-9+#.\-]{2,}", f"{role}\n{job_description}")
+    }
+    pinned_terms = {
+        "ai", "claude", "copilot", "agent", "agentic", "mcp", "model context",
+        "jobcontextmcp", "langgraph", "rag", "faiss", "embedding", "openai",
+        "fastapi", "python", "backend", "platform", "memory", "retrieval",
+        "azure", "container apps", "terraform", "postgresql", "redis", "kafka",
+        "oauth2", "msal", "sla", "zero downtime", "98%", "35%", "80%",
+        "77", "574", "livevox", "2.8ms", "12.7ms", "retrospicam",
+        "raspberry", "iot", "test coverage", "500k",
+    }
+    keep_terms = query_terms | pinned_terms
+
+    kept: list[str] = [
+        "COVER LETTER MASTER RESUME EXTRACT (verified facts only; full archive omitted to fit TPM limits):"
+    ]
+    previous_blank = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            previous_blank = True
+            continue
+
+        lower = stripped.lower()
+        is_structural = stripped in {
+            "CORE TECHNICAL SKILLS",
+            "RECENT PROJECT (Post-GM, January 2026)",
+            "PROFESSIONAL EXPERIENCE",
+            "Cloud Infrastructure Migration & Performance:",
+            "Distributed Systems & Architecture:",
+            "AI-Driven Innovation & Leadership:",
+            "Testing & Code Quality:",
+            "NOTABLE METRICS & ACHIEVEMENTS:",
+        }
+        is_skill_line = stripped.startswith((
+            "Languages & Frameworks:", "Cloud & Infrastructure:", "Backend:",
+            "AI & Innovation:", "Testing:", "Development Tools:",
+        ))
+        has_relevant_term = any(term in lower for term in keep_terms)
+        has_metric = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:%|ms|tools|passing tests|lines|weeks?|days?)\b", lower))
+
+        if is_structural or is_skill_line or has_relevant_term or has_metric:
+            if previous_blank and kept and kept[-1] != "":
+                kept.append("")
+            kept.append(stripped)
+            previous_blank = False
+
+    return _trim_lines_to_token_budget(kept, 2200)
 
 
 def _infer_role_type(role: str) -> str:
@@ -524,6 +620,21 @@ def _no_company_story_block(company: str) -> str:
 
 
 def _semantic_story_prefix(selected: list[dict], company: str) -> str:
+    # Check for a universal AI-role hook (e.g. Uncle Roy / Intellicorp) first.
+    # These pass the cross-company filter intentionally and carry their own label.
+    ai_role_hooks = [
+        s for s in selected
+        if "ai_role_hook" in {t.lower() for t in s.get("tags", [])}
+    ]
+    if ai_role_hooks:
+        return (
+            _PERSONAL_CONTEXT_HEADER +
+            "PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story): "
+            "The first story below is tagged 'ai_role_hook'. Use it as the Para 1 hook "
+            "for this AI role regardless of company. It is a universal engineering origin "
+            "story, not a company-specific brand hook. Open directly with the story; "
+            "do NOT say 'Growing up' or 'I have always been passionate about AI'.\n\n"
+        )
     if company and any(_story_has_company_hook_tags(s) for s in selected):
         return (
             _PERSONAL_CONTEXT_HEADER +
@@ -532,6 +643,24 @@ def _semantic_story_prefix(selected: list[dict], company: str) -> str:
             "company. Include one concrete detail, not a generic theme.\n\n"
         )
     return _no_company_story_block(company) + "\n\n"
+
+
+def _load_ai_role_hook_stories() -> list[dict]:
+    """Directly load stories tagged 'ai_role_hook' from disk.
+
+    Used to force-inject the Uncle Roy / origin story for AI roles regardless
+    of whether semantic retrieval ranked it high enough to include it.
+    """
+    try:
+        import json
+        with open(config.PERSONAL_CONTEXT_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [
+            s for s in data.get("stories", [])
+            if "ai_role_hook" in {t.lower() for t in s.get("tags", [])}
+        ]
+    except Exception:
+        return []
 
 
 def _ranked_personal_context_block(
@@ -562,6 +691,18 @@ def _ranked_personal_context_block(
         return _no_company_story_block(company), diag
     if not selected:
         return "", diag
+
+    # For AI roles: guarantee the ai_role_hook story is in the list and is first.
+    # Retrieval scoring can legitimately rank it below the cutoff; this bypass
+    # ensures it always reaches the model for AI role cover letters.
+    if semantic and _is_ai_role(role, job_description):
+        injected = _load_ai_role_hook_stories()
+        if injected:
+            selected_ids = {s.get("id") for s in selected}
+            new_hooks = [s for s in injected if s.get("id") not in selected_ids]
+            existing_hooks = [s for s in selected if "ai_role_hook" in {t.lower() for t in s.get("tags", [])}]
+            rest = [s for s in selected if "ai_role_hook" not in {t.lower() for t in s.get("tags", [])}]
+            selected = existing_hooks + new_hooks + rest
 
     prefix = _semantic_story_prefix(selected, company) if semantic else _PERSONAL_CONTEXT_HEADER
     return prefix + format_stories(selected), diag
@@ -723,8 +864,8 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     master = _load_master_context()
     portfolio_metrics = _portfolio_metrics_block()
     tone = get_tone_profile_budgeted(
-        token_budget=budgets["tone_token_budget"],
-        max_samples=budgets["max_tone_samples"],
+        token_budget=min(budgets["tone_token_budget"], 800),
+        max_samples=min(budgets["max_tone_samples"], 3),
     )
     strategy = get_customization_strategy(_infer_role_type(role))
     interview_block = get_interview_context(company=company, role=role)
@@ -773,11 +914,11 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     safety = budgets["safety_margin_tokens"]
     clean_job_description = _clean_job_description_for_prompt(company, role, job_description)
 
-    master = _load_master_context()
+    master = _load_cover_letter_master_context(role, clean_job_description)
     portfolio_metrics = _portfolio_metrics_block()
-    tone = get_tone_profile_budgeted(
-        token_budget=budgets["tone_token_budget"],
-        max_samples=budgets["max_tone_samples"],
+    tone = get_cover_letter_tone_profile_budgeted(
+        token_budget=max(budgets["tone_token_budget"], 1800),
+        max_samples=max(budgets["max_tone_samples"], 7),
     )
     strategy = get_customization_strategy(_infer_role_type(role))
     assessment_context = _assessment_context_block(company, role)
@@ -799,6 +940,13 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "VOICE COMES FIRST: the TONE PROFILE samples are the authority on how Frank sounds.\n"
         "Match their rhythm, sentence length, and register. If any structure rule below fights\n"
         "that voice, keep the voice. Write like the samples, not like a template.\n"
+        "The Uncle Roy hook must sound like Frank telling the truth plainly, not like a motivational\n"
+        "origin story. Keep the human thread, then pivot into engineering evidence.\n"
+        "PROJECT-NAME BUDGET: jobContextMCP should appear at most once in the body, ideally\n"
+        "in Paragraph 2. In Paragraph 1, say 'the MCP server' or 'that server' instead.\n"
+        "Avoid thesis-sentence sludge. Do not explain what the paragraph 'demonstrates',\n"
+        "'showcases', 'highlights', or 'aligns with'. State the artifact, the constraint,\n"
+        "the metric, and why it matters in plain English.\n"
         "\n"
         "STRUCTURE: exactly 4 paragraphs. Do not merge them. The word counts below are guidance,\n"
         "not quotas; say each point in as few words as it takes and never pad with filler.\n"
@@ -808,20 +956,29 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "target 380-430 words total. Reach it with substance (a second concrete project, a real\n"
         "constraint, a verbatim metric), never with adjectives or restated claims.\n"
         "\n"
-        "PARA 1 (~80-100 words): Hook. FIRST use the STRUCTURED FITMENT ASSESSMENT to identify\n"
-        "  the real professional angle for this company and role. Then check PERSONAL CONTEXT.\n"
-        "  Use a personal/brand/childhood/fan story ONLY if the block explicitly says PRIMARY\n"
-        "  COVER LETTER HOOK and explicitly ties that story to the target company. If the block\n"
-        "  says NO COMPANY-SPECIFIC PERSONAL STORY FOUND, do not invent one and do not borrow one\n"
-        "  from another company; open with a crisp professional hook grounded in the JD instead.\n"
-        "  Never use 'Growing up', childhood rituals, family shopping, fandom, Home Depot, or any\n"
-        "  other company-affinity story unless the story explicitly matches THIS target company.\n"
+        "PARA 1 (~80-100 words): Hook. FIRST check PERSONAL CONTEXT for a PRIMARY COVER LETTER HOOK.\n"
+        "  TWO cases where you MUST open with the personal story:\n"
+        "  (A) The block says 'PRIMARY COVER LETTER HOOK' and ties the story to THIS company — use it.\n"
+        "  (B) The block says 'PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story)' —\n"
+        "      this is the Uncle Roy / Intellicorp story. For AI roles it IS the correct P1 opener\n"
+        "      regardless of company. Open directly with it; do NOT say 'Growing up'.\n"
+        "      Start with Uncle Roy, Intellicorp, KEE, or the Raspberry Pi — not with a generic AI sentence.\n"
+        "      Write it in first person and in Frank's cadence: concrete, a little understated, no\n"
+        "      inspirational gloss. A good shape is: Uncle Roy did the old AI work; he handed me\n"
+        "      the Pi; there is a direct line from that to the MCP server I maintain now; this\n"
+        "      role is the same\n"
+        "      thread at production scale.\n"
+        "  If PERSONAL CONTEXT says NO COMPANY-SPECIFIC PERSONAL STORY FOUND, do not invent one;\n"
+        "  open with a crisp professional hook grounded in the JD instead.\n"
+        "  Never borrow a brand/childhood/fan story from another company (Home Depot, Coca-Cola, Ford)\n"
+        "  unless the block explicitly names this target company.\n"
         "  Follow with one or two concrete sentences on why THIS company/role, grounded in real\n"
         "  JD details and the assessment.\n"
         "\n"
         "PARA 2 (~120-150 words): Primary ownership story. One major example with concrete metrics\n"
         "  from the master resume. For AI/LLM/platform roles, make jobContextMCP the primary story\n"
-        "  unless the assessment says a different artifact is clearly stronger. Describe it as active\n"
+        "  unless the assessment says a different artifact is clearly stronger. Name it once, then\n"
+        "  use 'the server' or 'the project' for the rest of the paragraph. Describe it as active\n"
         "  work: 'I built and maintain jobContextMCP' or 'jobContextMCP currently...'. Make the\n"
         "  end-to-end ownership chain explicit. State facts cleanly; do not append a justifying clause\n"
         "  to every metric.\n"
@@ -830,7 +987,8 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  Lead with the STRONGEST match to this specific JD (the AI/RAG tooling, a side project, or\n"
         "  performance work) in two sentences with verbatim metrics, then add TWO more artifacts, one\n"
         "  sentence each, every one carrying a distinct real metric verbatim from the master resume\n"
-        "  (e.g. the LiveVox latency work: 2.8ms web / 12.7ms iOS render, 98% SLA). Close with one\n"
+        "  (e.g. the LiveVox latency work: 2.8ms web / 12.7ms iOS round-trip audio latency\n"
+        "  measured from microphone input to speaker output, 98% SLA). Close with one\n"
         "  sentence on what they demonstrate together. If jobContextMCP is used, clone/view traffic\n"
         "  MUST come from GITHUB PORTFOLIO METRICS, not stale clone counts in the master resume.\n"
         "  Phrase GitHub traffic naturally: 'currently shows X clones in the last 14 days' or 'has\n"
@@ -841,7 +999,7 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  conversation. Write a fresh invite in his voice; do NOT paste a stock closing line and do\n"
         "  NOT end with 'I look forward to hearing from you' or similar boilerplate.\n"
         "\n"
-        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong', 'aligns perfectly'.\n"
+        "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong', 'aligns perfectly', 'resonates deeply', 'resonates with', 'igniting a passion', 'led to my current role', 'showcases my ability', 'showcasing', 'highlights my capability', 'demonstrates my ability', 'mission aligns', 'aspirations', 'contribute to your success', 'best practices'.\n"
         "\n"
         "FINAL SELF-CHECK before you finish: count the words in the body (salutation through sign-off\n"
         "name). If it is under 380, you stopped too early. Go back into Para 2 and Para 3 and add\n"
@@ -996,6 +1154,56 @@ _BANNED_LEADIN_SUBS = [
 ]
 
 
+_CORPORATE_STYLE_SUBS = [
+    (
+        r"Your mission to enable collaboration between people and AI agents resonates with the work I've been doing, turning cognitive architectures into reliable, scalable platforms\.",
+        "Sema4.ai is working on the same problem I keep circling in my own work: how to turn agentic AI into something people can actually use, operate, and trust.",
+    ),
+    (
+        r"This project demonstrates my ability to translate AI capabilities into durable backend systems\.",
+        "That is the part I care about: turning AI capability into backend systems with state, retrieval, and operational surfaces.",
+    ),
+    (
+        r"The architecture follows FastAPI best practices, with tools organized into specialized modules\.",
+        "It is a FastAPI service with the tools split into focused modules instead of one giant prompt-shaped blob.",
+    ),
+    (
+        r"My work on LiveVox's cross-platform audio monitoring application achieved 2\.8ms latency on web and 12\.7ms on iPhone, showcasing elite-level performance optimization\.",
+        "On LiveVox's cross-platform audio monitoring application, I measured round-trip audio latency from microphone input to speaker output and got it to 2.8ms on web and 12.7ms on iPhone.",
+    ),
+    (
+        r"On LiveVox's cross-platform audio monitoring application, I got render latency to 2\.8ms on web and 12\.7ms on iPhone; that was performance work measured on real hardware, not a slide\.",
+        "On LiveVox's cross-platform audio monitoring application, I measured round-trip audio latency from microphone input to speaker output and got it to 2.8ms on web and 12.7ms on iPhone.",
+    ),
+    (
+        r"These projects highlight my capability to build robust systems that perform at scale\.",
+        "Different projects, same habit: make the thing work under real constraints.",
+    ),
+    (
+        r"Sema4\.ai's focus on transforming knowledge work aligns with my experience in building platforms that are not just intelligent but operable and reliable\.",
+        "That is what pulls me toward Sema4.ai: not AI as a demo, AI as something operable enough to sit inside real work.",
+    ),
+    (
+        r"I want a conversation to explore how my background can contribute to your Agent Platform's success\.",
+        "I want to talk through where that experience would be useful on the Agent Platform.",
+    ),
+]
+
+
+def _limit_jobcontextmcp_mentions(text: str, max_mentions: int = 1) -> str:
+    """Avoid turning the cover letter into a jobContextMCP drinking game."""
+    count = 0
+
+    def repl(match: re.Match) -> str:
+        nonlocal count
+        count += 1
+        if count <= max_mentions:
+            return match.group(0)
+        return "the server"
+
+    return re.sub(r"\bjobContextMCP\b", repl, text)
+
+
 def _sanitize_cover_letter_output(content: str) -> str:
     """Remove wrapper chatter so the saved file contains only the letter."""
     text = (content or "").strip()
@@ -1054,6 +1262,28 @@ def _sanitize_cover_letter_output(content: str) -> str:
     for pattern, repl in _BANNED_LEADIN_SUBS:
         cleaned = re.sub(pattern, repl, cleaned)
 
+    # Backstop for corporate template filler that can survive the prompt while
+    # still technically obeying the hook/story instructions. These substitutions
+    # preserve the factual claims but put them back into Frank's plainer cadence.
+    for pattern, repl in _CORPORATE_STYLE_SUBS:
+        cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
+
+    # The Uncle Roy hook should create the throughline without burning the
+    # project name before the ownership paragraph gets to use it.
+    cleaned = re.sub(
+        r"direct line from that to the jobContextMCP server",
+        "direct line from that to the MCP server",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"direct line from (?:KEE to )?that Pi to jobContextMCP",
+        lambda m: m.group(0).replace("jobContextMCP", "the MCP server"),
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = _limit_jobcontextmcp_mentions(cleaned, max_mentions=1)
+
     # Backstop for awkward/past-tense portfolio phrasing. GitHub reports clone
     # events; the project was not "cloned 371 times" as a completed event, and
     # jobContextMCP is an active project, not just a past artifact.
@@ -1074,6 +1304,37 @@ def _sanitize_cover_letter_output(content: str) -> str:
         r"currently shows \1 clones in the last 14 days",
         cleaned,
         flags=re.IGNORECASE,
+    )
+
+    # Enforce correct salutation — model sometimes uses a contact name it
+    # hallucinated from the JD or assessment. Always "Dear Hiring Manager,".
+    cleaned = re.sub(
+        r"^Dear [^\n,]+,",
+        "Dear Hiring Manager,",
+        cleaned,
+        flags=re.MULTILINE,
+    )
+
+    # Enforce canonical sign-off in the saved text. The LaTeX template supplies
+    # its own sign-off, but the TXT should be correct too.
+    cleaned = re.sub(
+        r"^(?:Kind regards|Regards|Best regards|Warm regards|Best|Sincerely|Respectfully),?\s*$",
+        "Kindest Regards,",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # Enforce correct sign-off — strip middle name and suffix.
+    cleaned = re.sub(
+        r"\bFrank\s+Vladmir\s+MacBride\s+III\b",
+        "Frank MacBride",
+        cleaned,
+    )
+    # Catch variants: "Regards, Frank V. MacBride" etc.
+    cleaned = re.sub(
+        r"\bFrank\s+V\.?\s+MacBride\b",
+        "Frank MacBride",
+        cleaned,
     )
 
     return cleaned.strip()
@@ -1107,11 +1368,15 @@ def _expand_cover_letter_if_short(
     """
     best = content
     count = _cover_letter_body_word_count(best)
-    for _ in range(2):
+    for _ in range(1):  # single expansion pass — avoids back-to-back 429s
         if count >= floor:
             return best
+        import time
+        time.sleep(3)  # brief pause so consecutive cover-letter calls don't stack
         try:
-            response = client.chat.completions.create(
+            response = _chat_completion_create(
+                client,
+                label="cover_letter_expand",
                 model=_model(),
                 messages=[
                     {"role": "system", "content": _COVER_LETTER_SYSTEM},
@@ -1181,7 +1446,9 @@ def generate_resume(
     # ── API call ──
     filename = output_filename or _safe_filename(company, role, "Resume")
     try:
-        response = client.chat.completions.create(
+        response = _chat_completion_create(
+            client,
+            label="resume_generate",
             model=_model(),
             messages=[
                 {"role": "system", "content": _RESUME_SYSTEM},
@@ -1252,7 +1519,9 @@ def generate_cover_letter(
     # ── API call ──
     filename = output_filename or _safe_filename(company, role, "Cover Letter")
     try:
-        response = client.chat.completions.create(
+        response = _chat_completion_create(
+            client,
+            label="cover_letter_generate",
             model=_model(),
             messages=[
                 {"role": "system", "content": _COVER_LETTER_SYSTEM},
@@ -1265,8 +1534,9 @@ def generate_cover_letter(
     except Exception as exc:
         return f"✗ OpenAI API error: {exc}\n\nFalling back to context package:\n\n{_context_fallback(_COVER_LETTER_SYSTEM, user_msg, 'generate_cover_letter')}"
 
-    # Option A page-fill backstop: re-prompt once if the body undershoots.
-    content = _expand_cover_letter_if_short(client, content, user_msg)
+    # Do not re-prompt for page fill here. The dashboard pipeline can generate
+    # resume + cover-letter calls back-to-back; resending the full cover-letter
+    # prompt for expansion was the main TPM-rate-limit trigger.
     content = _sanitize_cover_letter_output(content)
     save_result = save_cover_letter_txt(filename, content)
 

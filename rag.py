@@ -94,8 +94,8 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     cfg     = _load_config()
     oai     = _openai_client()
 
-    resume_folder   = Path(cfg["resume_folder"])
-    leetcode_folder = Path(cfg["leetcode_folder"])
+    resume_folder   = Path(cfg["resume_folder"]).expanduser()
+    leetcode_folder = Path(cfg["leetcode_folder"]).expanduser()
 
     # Gather all files to index
     file_groups: list[tuple[list[Path], str]] = []

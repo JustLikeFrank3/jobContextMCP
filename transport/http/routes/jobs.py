@@ -17,6 +17,7 @@ import httpx
 from services import JobAnalysisService
 from transport.http.auth import require_api_key
 from tools import job_scraper as _job_scraper
+from tools.job_scraper import LinkedInBlockedError as _LinkedInBlockedError
 from transport.http.models import (
     JobDecisionRequest,
     JobDecisionResponse,
@@ -67,6 +68,25 @@ async def ingest_url(req: JobIngestUrlRequest) -> JobIngestUrlResponse:
     """Scrape a job URL, queue it, and run fitment evaluation in one call."""
     try:
         text = _job_scraper._fetch_jina(req.url)
+    except _LinkedInBlockedError:
+        # LinkedIn blocks Jina and usually requires login for full JD content.
+        # Return 200 with a machine-readable status so iOS Shortcuts "Show
+        # Result" displays a friendly message instead of crashing on a 4xx.
+        return JobIngestUrlResponse(
+            url=req.url,
+            company="",
+            role="",
+            queued=False,
+            evaluated=False,
+            queue_status="linkedin_blocked",
+            fitment_context="",
+            notes=[
+                "LinkedIn blocks automated scraping (HTTP 451). "
+                "On your phone: tap \u22ef in LinkedIn, choose \u2018Copy link\u2019 or select all text "
+                "in the posting, then open the dashboard \u2192 Pipeline \u2192 \u2b50 Add Job and paste "
+                "the job description there.",
+            ],
+        )
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=400,

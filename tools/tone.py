@@ -5,6 +5,13 @@ from lib.io import _read, _load_json, _save_json
 from lib.helpers import _build_tone_sample_entry, _scan_dirs
 
 
+_NO_TONE_SAMPLES_MESSAGE = (
+    "No tone samples logged yet.\n"
+    "Use log_tone_sample() to ingest writing samples — cover letters, "
+    "messages, anything Frank actually wrote."
+)
+
+
 def log_tone_sample(
     text: str,
     source: str,
@@ -24,11 +31,7 @@ def get_tone_profile() -> str:
     samples = data.get("samples", [])
 
     if not samples:
-        return (
-            "No tone samples logged yet.\n"
-            "Use log_tone_sample() to ingest writing samples — cover letters, "
-            "messages, anything Frank actually wrote."
-        )
+        return _NO_TONE_SAMPLES_MESSAGE
 
     total_words = sum(s.get("word_count", 0) for s in samples)
     lines = [
@@ -125,11 +128,7 @@ def get_tone_profile_budgeted(
     data = _load_json(config.TONE_FILE, {"samples": []})
     samples = data.get("samples", [])
     if not samples:
-        return (
-            "No tone samples logged yet.\n"
-            "Use log_tone_sample() to ingest writing samples — cover letters, "
-            "messages, anything Frank actually wrote."
-        )
+        return _NO_TONE_SAMPLES_MESSAGE
 
     if token_budget <= 0 or max_samples <= 0:
         return ""
@@ -145,6 +144,72 @@ def get_tone_profile_budgeted(
         return ""
 
     # Restore chronological order for a natural read.
+    selected.sort(key=lambda s: s.get("id", 0))
+    return _format_tone_samples(selected, len(samples))
+
+
+def _cover_letter_tone_score(sample: dict) -> tuple:
+    """Return a priority score for samples that preserve Frank's cover-letter voice.
+
+    Newest-first selection can overfit to short outreach snippets. Cover letters need
+    the older high-signal samples that show how Frank connects a personal thread to
+    professional evidence without sounding like a corporate template.
+    """
+    source = (sample.get("source") or "").lower()
+    context = (sample.get("context") or "").lower()
+    text = (sample.get("text") or "").lower()
+    words = int(sample.get("word_count") or 0)
+
+    score = 0
+    if source.startswith("cover_letter"):
+        score += 100
+    if "strongest voice sample" in context or "target register" in context:
+        score += 80
+    if "unhinged professional bio" in source or "unhinged professional bio" in context:
+        score += 70
+    if "paved paths" in context or "engineering philosophy" in context:
+        score += 60
+    if "jobcontextmcp" in text and "actually sound like me" in text:
+        score += 45
+    if 80 <= words <= 400:
+        score += 20
+    if words < 40:
+        score -= 25
+
+    return (score, sample.get("id", 0))
+
+
+def get_cover_letter_tone_profile_budgeted(
+    token_budget: int = 1800,
+    max_samples: int = 7,
+) -> str:
+    """Return a tone profile optimized for cover-letter generation.
+
+    This keeps the bounded-token behavior of ``get_tone_profile_budgeted`` but
+    seeds the packer with high-signal cover-letter and narrative samples before
+    backfilling with recent writing. The goal is to preserve Frank's actual cover
+    letter register after retrieval surfaces a strong personal hook.
+    """
+    data = _load_json(config.TONE_FILE, {"samples": []})
+    samples = data.get("samples", [])
+    if not samples:
+        return _NO_TONE_SAMPLES_MESSAGE
+
+    if token_budget <= 0 or max_samples <= 0:
+        return ""
+
+    state = {"selected": [], "used": 0, "ids": set(), "sources": set()}
+    prioritized = sorted(samples, key=_cover_letter_tone_score, reverse=True)
+    _pack_tone_samples(prioritized, token_budget, max_samples, True, state)
+
+    recent = sorted(samples, key=lambda s: s.get("id", 0), reverse=True)
+    _pack_tone_samples(recent, token_budget, max_samples, True, state)
+    _pack_tone_samples(recent, token_budget, max_samples, False, state)
+
+    selected = state["selected"]
+    if not selected:
+        return ""
+
     selected.sort(key=lambda s: s.get("id", 0))
     return _format_tone_samples(selected, len(samples))
 

@@ -102,8 +102,14 @@ class TestScrapeJobUrl:
 
     def test_http_error_returns_friendly_message(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response(status_code=403))
-        result = srv.scrape_job_url("https://linkedin.com/jobs/view/12345")
+        result = srv.scrape_job_url("https://boards.greenhouse.io/stripe/jobs/12345")
         assert "403" in result or "login" in result.lower()
+
+    def test_linkedin_url_returns_blocked_message(self, isolated_server):
+        # LinkedIn URLs bypass Jina entirely and return a user-friendly message.
+        result = srv.scrape_job_url("https://www.linkedin.com/jobs/view/12345")
+        assert "linkedin" in result.lower()
+        assert "paste" in result.lower() or "dashboard" in result.lower()
 
     def test_empty_response_handled_gracefully(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response("   "))
