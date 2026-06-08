@@ -18,6 +18,7 @@ _FOLDERS = {
     "optimized_resumes": ("01-Current-Optimized", [".txt", ".docx"]),
     "cover_letters":     ("02-Cover-Letters",     [".txt", ".docx", ".pdf"]),
     "resume_pdfs":       ("03-Resume-PDFs",        [".pdf"]),
+  "cover_letter_pdfs": ("09-Cover-Letter-PDFs",  [".pdf"]),
     "job_assessments":   ("07-Job-Assessments",    [".md", ".pdf", ".txt"]),
     "interview_prep":    ("08-Interview-Prep-Docs",[".md", ".pdf", ".txt"]),
 }
@@ -86,6 +87,7 @@ def _materials_payload() -> dict:
         "optimized_resumes": folders.get("optimized_resumes", {}).get("count", 0),
         "cover_letters": folders.get("cover_letters", {}).get("count", 0),
         "resume_pdfs": folders.get("resume_pdfs", {}).get("count", 0),
+        "cover_letter_pdfs": folders.get("cover_letter_pdfs", {}).get("count", 0),
         "gap": len(untracked_files),
         "untracked_resume_files": untracked_files,
     }
@@ -138,7 +140,8 @@ async def materials_board() -> HTMLResponse:
   <section class="cards">
     <div class="card"><div class="k">Optimized Resumes</div><div class="v" id="v-opt">—</div></div>
     <div class="card"><div class="k">Cover Letters</div><div class="v" id="v-cl">—</div></div>
-    <div class="card"><div class="k">Output PDFs</div><div class="v" id="v-pdf">—</div></div>
+    <div class="card"><div class="k">Resume PDFs</div><div class="v" id="v-pdf">—</div></div>
+    <div class="card"><div class="k">Cover Letter PDFs</div><div class="v" id="v-cl-pdf">—</div></div>
     <div class="card"><div class="k">Tracked Applications</div><div class="v" id="v-tracked">—</div></div>
     <div class="card"><div class="k">Untracked Resumes</div><div class="v" id="v-gap">—</div></div>
   </section>
@@ -155,7 +158,8 @@ async def materials_board() -> HTMLResponse:
     const FOLDER_LABELS = {
       optimized_resumes: 'Optimized Resumes',
       cover_letters:     'Cover Letters',
-      resume_pdfs:       'Output PDFs',
+      resume_pdfs:       'Resume PDFs',
+      cover_letter_pdfs: 'Cover Letter PDFs',
       job_assessments:   'Job Assessments',
       interview_prep:    'Interview Prep',
     };
@@ -168,6 +172,7 @@ async def materials_board() -> HTMLResponse:
       document.getElementById('v-opt').textContent     = data.optimized_resumes;
       document.getElementById('v-cl').textContent      = data.cover_letters;
       document.getElementById('v-pdf').textContent     = data.resume_pdfs;
+      document.getElementById('v-cl-pdf').textContent  = data.cover_letter_pdfs;
       document.getElementById('v-tracked').textContent = data.tracked_applications;
       gapEl.textContent = data.gap;
       gapEl.className = 'v ' + (data.gap > 0 ? 'warn' : 'ok');

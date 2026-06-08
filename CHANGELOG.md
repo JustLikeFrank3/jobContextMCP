@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Cover-letter edit dialog** — each pipeline job card now exposes an **Edit Cover Letter** button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export checkbox. Backend routes: `POST /pipeline/read-cover-letter`, `POST /pipeline/edit-cover-letter`. Cover-letter options are injected into `_pipeline_payload()` as `cover_letter_options`; per-job `last_edited_cover_letter` and `suggested_edit_cover_letter` fields surface as pre-selected defaults.
+
+- **Cover-letter draft versioning** — Apply Edit no longer overwrites the source file. Each run writes `{stem}.edit1.tmp`, `.edit2.tmp`, … and the latest draft is used as input on subsequent edits. New routes: `POST /pipeline/open-cover-letter-draft` (reads latest draft back into modal), `POST /pipeline/accept-cover-letter-edit` (backs up source to `{stem}.bak`, promotes latest draft, deletes all `.editN.tmp` files), `POST /pipeline/cancel-cover-letter-edit` (deletes drafts, leaves source untouched). Overlay click-outside triggers draft cleanup.
+
+- **Dedicated `09-Cover-Letter-PDFs/` output folder** — cover-letter PDFs now route to `09-Cover-Letter-PDFs/` instead of `03-Resume-PDFs/`. New helper `_cover_letter_pdf_folder_name()` reads `config.cover_letter_pdfs_dir` (default `"09-Cover-Letter-PDFs"`). `_resolve_output_path` accepts a `folder_name` parameter; resume exports still use `03-Resume-PDFs`, cover-letter exports use the new folder. LaTeX exporter default `output_dir` updated accordingly. `setup.py` creates the folder on workspace init. `config.example.json` documents `"cover_letter_pdfs_dir": "09-Cover-Letter-PDFs"`. Materials dashboard exposes a Cover Letter PDFs folder card.
+
+- **NEEDS DECISION section in daily digest** — `get_daily_digest()` now reads `job_queue.json` and surfaces any `pending` or `evaluated` jobs in a **NEEDS DECISION** block (with fitment score when available). The top undecided item also appears in TODAY'S FOCUS. Previously the queue was completely invisible to the digest.
+
+- **Job queue cleanup on decide** — `decide_job("add")` and `decide_job("dismiss")` now remove the entry from `job_queue.json` entirely instead of soft-deleting with a status flag. The queue is a staging area only; decided jobs live in `status.json`. `_VALID_STATUSES` trimmed to `{"pending", "evaluated"}`.
+
+- **Cover-letter company hook routing** — `_cover_letter_narrative_plan()` now yields to a `PRIMARY COVER LETTER HOOK` from personal context when one exists for the target company, instead of unconditionally opening with the AI platform opener. A brand/childhood/fan story (Coca-Cola bottle collection, Home Depot Saturday ritual, etc.) is only surfaced if it explicitly matches the target company; cross-company hooks are filtered and replaced with a `NO COMPANY-SPECIFIC PERSONAL STORY FOUND` fallback.
+
+- **AI platform evidence surfacing** — `tools/fitment.py` now deterministically extracts MCP/RAG/LangGraph/OpenAI evidence from the master resume and injects it at the top of assessment prompts for AI Platform / Agent Platform roles. System prompt updated with an AI PLATFORM CALIBRATION RULE instructing the assessor not to call side-project AI platform experience "absent."
+
+- **`uncle Roy` relationship wording** — narrative plan now instructs the model to refer to "my uncle Roy" (not bare "Uncle Roy") on first reference. A sanitizer backstop applies `re.sub` to catch any model that ignores the prompt.
+
 - **Dashboard command-center README preview** — added the dashboard screenshot and expanded quick-start notes for the browser UI: Home/Daily Digest, Pipeline, Job Hunt, Materials, Rejections, Posts, Outreach, People, and Wellbeing views.
 - **LaTeX demo screenshots** — added fake-identity resume and cover-letter screenshots under `docs/` and embedded them in the README output preview.
 - **Dedicated dashboard Daily Digest page** — added the browser digest flow with `GET /dashboard/digest`, `POST /dashboard/digest/generate`, parsed briefing sections, timestamps, spinner/progress feedback, and same-data parity with the `get_daily_digest()` tool.

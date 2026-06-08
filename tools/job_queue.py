@@ -19,7 +19,7 @@ from tools.job_hunt import update_application
 from tools.fitment import run_job_assessment
 
 
-_VALID_STATUSES = {"pending", "evaluated", "added", "dismissed"}
+_VALID_STATUSES = {"pending", "evaluated"}
 
 _FITMENT_SCORE_RE = re.compile(r"##\s*FITMENT\s*SCORE\s*\n\s*(\d{1,2}/10)", re.IGNORECASE)
 
@@ -198,19 +198,14 @@ def decide_job(
             "Run evaluate_queued_job first."
         )
 
-    if job["status"] == "added":
-        return f"{company} — {role} was already added to the pipeline."
-
-    if job["status"] == "dismissed":
-        return f"{company} — {role} was already dismissed."
-
     # Commit decision
     job["decision_notes"] = notes or None
     job["fitment_score"] = fitment_score or job.get("fitment_score")
     job["decided_date"] = _now()
 
     if decision == "add":
-        job["status"] = "added"
+        # Remove from active queue — it now lives in status.json
+        data["jobs"] = [j for j in jobs if j is not job]
         _save_json(config.JOB_QUEUE_FILE, data)
         update_result = update_application(
             company=company,
@@ -220,8 +215,8 @@ def decide_job(
         )
         return f"Added {company} — {role} to pipeline as 'interested'.\n{update_result}"
 
-    # dismiss
-    job["status"] = "dismissed"
+    # dismiss — remove from queue, nothing lingers
+    data["jobs"] = [j for j in jobs if j is not job]
     _save_json(config.JOB_QUEUE_FILE, data)
     return f"Dismissed: {company} — {role}.{(' Reason: ' + notes) if notes else ''}"
 

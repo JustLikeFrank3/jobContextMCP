@@ -104,6 +104,8 @@ def test_ai_cover_letter_narrative_plan_uses_current_jobcontextmcp():
     assert "I built and maintain jobContextMCP" in plan
     assert "Do not lead with the Azure migration" in plan
     assert "never only as a completed past-tense artifact" in plan
+    assert "My uncle Roy" in plan
+    assert "readers do not know whose uncle he is" in plan
 
 
 def test_cover_letter_sanitizer_fixes_awkward_clone_phrasing():
@@ -153,6 +155,8 @@ Frank Vladmir MacBride III"""
     assert "how to turn agentic AI into something people can actually use" in cleaned
     assert "one giant prompt-shaped blob" in cleaned
     assert "measured round-trip audio latency from microphone input to speaker output" in cleaned
+    assert "My uncle Roy worked at Intellicorp" in cleaned
+    assert "\nUncle Roy worked" not in cleaned
     assert "direct line from that to the MCP server" in cleaned
     assert cleaned.count("jobContextMCP") == 1
     assert "Kindest Regards," in cleaned

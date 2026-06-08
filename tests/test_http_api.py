@@ -225,6 +225,8 @@ class TestDashboardEndpoints:
         assert "folders" in body
         assert "optimized_resumes" in body
         assert "cover_letters" in body
+        assert "cover_letter_pdfs" in body
+        assert "cover_letter_pdfs" in body["folders"]
         assert "tracked_applications" in body
         assert "gap" in body
         assert "untracked_resume_files" in body

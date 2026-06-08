@@ -1,22 +1,31 @@
 """Pipeline dashboard — queue + assessment + resume choice + cover letter + apply."""
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 from typing import Literal
 import re
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from lib import config
 from lib.io import _load_json, _load_master_context, _now, _save_json
+from lib.openai_calls import create_chat_completion
 from services import JobAnalysisService, ResumeService
+from tools.export import export_cover_letter_pdf, export_resume_pdf
+from tools.generate import _extract_cover_letter_body, _sanitize_cover_letter_output
 from tools.job_hunt import log_application_event, update_application
+from tools.latex_export import generate_cover_letter_latex
+from tools.resume import save_cover_letter_txt, save_resume_txt
 from transport.http.auth import require_api_key
 from .shared import html_page
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
+
+_COMPACT_TOKEN_RE = r"[^a-z0-9]+"
 
 
 class _JobActionRequest(BaseModel):
@@ -26,6 +35,41 @@ class _JobActionRequest(BaseModel):
     export_pipeline: Literal["html", "latex"] = "latex"
     notes: str = ""
     resume_name: str = ""
+
+
+class _ResumeReadRequest(BaseModel):
+    resume_name: str = Field(..., min_length=1)
+
+
+class _ResumeEditRequest(BaseModel):
+    job_id: int = Field(..., ge=1)
+    resume_name: str = Field(..., min_length=1)
+    instructions: str = Field(..., min_length=3)
+    output_filename: str = ""
+    export_pdf: bool = True
+
+
+class _CoverLetterReadRequest(BaseModel):
+    cover_letter_name: str = Field(..., min_length=1)
+
+
+class _CoverLetterEditRequest(BaseModel):
+    job_id: int = Field(..., ge=1)
+    cover_letter_name: str = Field(..., min_length=1)
+    draft_name: str = ""
+    instructions: str = Field(..., min_length=3)
+    output_filename: str = ""
+    export_pdf: bool = True
+    export_pipeline: Literal["html", "latex"] = "latex"
+
+
+class _CoverLetterAcceptRequest(BaseModel):
+    cover_letter_name: str = Field(..., min_length=1)
+    draft_name: str = Field(..., min_length=1)
+
+
+class _CoverLetterCancelRequest(BaseModel):
+    cover_letter_name: str = Field(..., min_length=1)
 
 
 def _load_queue_jobs() -> list[dict]:
@@ -65,6 +109,276 @@ def _list_resume_options() -> list[str]:
     available = {p.name for p in output_dir.glob("*.pdf")} if output_dir.exists() else set()
     ordered = [name for name in target_names if name in available]
     return ordered or target_names
+
+
+def _optimized_resume_dir() -> Path:
+    return config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+
+
+def _list_optimized_resume_options() -> list[str]:
+    directory = _optimized_resume_dir()
+    if not directory.exists():
+        return []
+    return [
+        f.name for f in sorted(
+            directory.glob("*.txt"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if "MASTER" not in f.name
+    ]
+
+
+def _cover_letter_dir() -> Path:
+    return config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+
+
+def _list_cover_letter_options() -> list[str]:
+    directory = _cover_letter_dir()
+    if not directory.exists():
+        return []
+    return [
+        f.name for f in sorted(
+            directory.glob("*.txt"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if "MASTER" not in f.name
+    ]
+
+
+def _resolve_optimized_resume(filename: str) -> Path:
+    directory = _optimized_resume_dir()
+    root = directory.resolve()
+    target = (directory / filename).resolve()
+    if root != target.parent and root not in target.parents:
+        raise HTTPException(status_code=404, detail="Invalid resume path")
+    if target.suffix.lower() != ".txt":
+        raise HTTPException(status_code=400, detail="Only optimized resume .txt files can be edited")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"Resume not found: {filename}")
+    return target
+
+
+def _resolve_cover_letter(filename: str) -> Path:
+    directory = _cover_letter_dir()
+    root = directory.resolve()
+    target = (directory / filename).resolve()
+    if root != target.parent and root not in target.parents:
+        raise HTTPException(status_code=404, detail="Invalid cover-letter path")
+    if target.suffix.lower() != ".txt":
+        raise HTTPException(status_code=400, detail="Only cover-letter .txt files can be edited")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"Cover letter not found: {filename}")
+    return target
+
+
+def _resolve_cover_letter_draft(filename: str) -> Path:
+    directory = _cover_letter_dir()
+    root = directory.resolve()
+    target = (directory / filename).resolve()
+    if root != target.parent and root not in target.parents:
+        raise HTTPException(status_code=404, detail="Invalid cover-letter draft path")
+    if target.suffix.lower() != ".tmp":
+        raise HTTPException(status_code=400, detail="Only cover-letter .tmp draft files can be read")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"Cover-letter draft not found: {filename}")
+    return target
+
+
+def _cover_letter_draft_pattern(source_name: str) -> re.Pattern:
+    source_stem = re.escape(Path(source_name).stem)
+    return re.compile(rf"^{source_stem}\.edit(?P<num>\d+)\.tmp$")
+
+
+def _list_cover_letter_drafts(source_name: str) -> list[Path]:
+    directory = _cover_letter_dir()
+    if not directory.exists():
+        return []
+    pattern = _cover_letter_draft_pattern(source_name)
+    drafts = [p for p in directory.glob(f"{Path(source_name).stem}.edit*.tmp") if pattern.match(p.name)]
+
+    def draft_number(path: Path) -> int:
+        match = pattern.match(path.name)
+        return int(match.group("num")) if match else 0
+
+    return sorted(drafts, key=draft_number)
+
+
+def _next_cover_letter_draft_path(source_name: str) -> Path:
+    directory = _cover_letter_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    pattern = _cover_letter_draft_pattern(source_name)
+    nums = [int(m.group("num")) for p in _list_cover_letter_drafts(source_name) if (m := pattern.match(p.name))]
+    next_num = (max(nums) + 1) if nums else 1
+    return directory / f"{Path(source_name).stem}.edit{next_num}.tmp"
+
+
+def _delete_cover_letter_drafts(source_name: str) -> int:
+    deleted = 0
+    for draft in _list_cover_letter_drafts(source_name):
+        draft.unlink(missing_ok=True)
+        deleted += 1
+    return deleted
+
+
+def _suggest_optimized_resume_for_job(job: dict, options: list[str]) -> str:
+    if not options:
+        return ""
+    last = (job.get("last_edited_resume") or "").strip()
+    if last in options:
+        return last
+
+    haystacks = [job.get("company", ""), job.get("role", "")]
+    tokens = [
+        re.sub(_COMPACT_TOKEN_RE, "", token.lower())
+        for text in haystacks
+        for token in re.findall(r"[A-Za-z0-9]+", text)
+        if len(token) >= 4
+    ]
+    for name in options:
+        compact = re.sub(_COMPACT_TOKEN_RE, "", name.lower())
+        if any(token and token in compact for token in tokens):
+            return name
+    return options[0]
+
+
+def _suggest_cover_letter_for_job(job: dict, options: list[str]) -> str:
+    if not options:
+        return ""
+    last = (job.get("last_edited_cover_letter") or "").strip()
+    if last in options:
+        return last
+
+    haystacks = [job.get("company", ""), job.get("role", "")]
+    tokens = [
+        re.sub(_COMPACT_TOKEN_RE, "", token.lower())
+        for text in haystacks
+        for token in re.findall(r"[A-Za-z0-9]+", text)
+        if len(token) >= 4
+    ]
+    for name in options:
+        compact = re.sub(_COMPACT_TOKEN_RE, "", name.lower())
+        if any(token and token in compact for token in tokens):
+            return name
+    return options[0]
+
+
+def _resume_edit_output_name(source_name: str, company: str, role: str, output_filename: str = "") -> str:
+    if output_filename.strip():
+        name = output_filename.strip()
+        return name if name.endswith(".txt") else f"{name}.txt"
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    source_stem = Path(source_name).stem
+    raw_suffix = f"{company}_{role}".strip("_") or "Edited"
+    suffix = re.sub(r"[^A-Za-z0-9]+", "_", raw_suffix).strip("_")
+    return f"{source_stem} - Edited {suffix}_{stamp}.txt"
+
+
+def _cover_letter_edit_output_name(source_name: str, company: str, role: str, output_filename: str = "") -> str:
+    if output_filename.strip():
+        name = output_filename.strip()
+        return name if name.endswith(".txt") else f"{name}.txt"
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    source_stem = Path(source_name).stem
+    raw_suffix = f"{company}_{role}".strip("_") or "Edited"
+    suffix = re.sub(r"[^A-Za-z0-9]+", "_", raw_suffix).strip("_")
+    return f"{source_stem} - Edited {suffix}_{stamp}.txt"
+
+
+def _build_resume_edit_messages(
+    *,
+    company: str,
+    role: str,
+    job_description: str,
+    current_resume: str,
+    instructions: str,
+) -> list[dict]:
+    system = (
+        "You are editing an existing resume, not regenerating from scratch. "
+        "Preserve the resume's structure, section order, formatting conventions, contact block, "
+        "and verified metrics unless the edit instructions explicitly say otherwise. "
+        "Apply only the requested changes. Do not invent employers, dates, tools, or metrics. "
+        "Output ONLY the full revised resume text. No markdown fences, no commentary."
+    )
+    user = "\n\n".join([
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION CONTEXT:\n{job_description[:5000]}",
+        f"CURRENT RESUME TEXT:\n{current_resume}",
+        f"EDIT INSTRUCTIONS:\n{instructions}",
+        "Return the complete revised resume text only.",
+    ])
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _build_cover_letter_edit_messages(
+    *,
+    company: str,
+    role: str,
+    job_description: str,
+    current_cover_letter: str,
+    instructions: str,
+) -> list[dict]:
+    system = (
+        "You are editing an existing cover letter, not regenerating from scratch. "
+        "Preserve Frank's plainspoken voice, the current contact block if present, the salutation, "
+        "and the 4-paragraph body structure unless the edit instructions explicitly say otherwise. "
+        "Apply only the requested changes. Do not invent employers, dates, tools, metrics, or claims. "
+        "Do not add a date block; the PDF template owns the printed date and signature. "
+        "Output ONLY the full revised cover-letter text. No markdown fences, no commentary."
+    )
+    user = "\n\n".join([
+        f"TARGET COMPANY: {company}",
+        f"TARGET ROLE: {role}",
+        f"JOB DESCRIPTION CONTEXT:\n{job_description[:5000]}",
+        f"CURRENT COVER LETTER TEXT:\n{current_cover_letter}",
+        f"EDIT INSTRUCTIONS:\n{instructions}",
+        "Return the complete revised cover-letter text only.",
+    ])
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _strip_model_wrapper(text: str) -> str:
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+    return cleaned
+
+
+def _material_href_for_pdf(path: Path | str | None) -> str:
+    if not path:
+        return ""
+    pdf_path = Path(path)
+    folder_key_by_name = {
+        config._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs"): "cover_letter_pdfs",
+        config._cfg.get("cover_letters_dir", "02-Cover-Letters"): "cover_letters",
+        "03-Resume-PDFs": "resume_pdfs",
+    }
+    folder_key = folder_key_by_name.get(pdf_path.parent.name)
+    if not folder_key:
+        return ""
+    return f"/dashboard/materials/file/{folder_key}/{quote(pdf_path.name, safe='')}"
+
+
+def _draft_href(path: Path | str | None) -> str:
+    if not path:
+        return ""
+    return f"/dashboard/pipeline/cover-letter-draft/{quote(Path(path).name, safe='')}"
+
+
+def _pdf_path_from_export_result(result: str) -> Path | None:
+    match = re.search(r"PDF exported:\s*(.+)$", result or "")
+    if not match:
+        return None
+    return Path(match.group(1).strip())
 
 
 def _recommend_resume(role: str, jd: str, options: list[str]) -> str:
@@ -350,6 +664,8 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
 def _pipeline_payload() -> dict:
     jobs = _load_queue_jobs()
     resume_options = _list_resume_options()
+    optimized_resume_options = _list_optimized_resume_options()
+    cover_letter_options = _list_cover_letter_options()
 
     payload_jobs = []
     for j in jobs:
@@ -370,11 +686,17 @@ def _pipeline_payload() -> dict:
             "assessment_detail": assessment_detail,
             "recommended_resume": _recommend_resume(role, j.get("jd", ""), resume_options),
             "selected_resume": j.get("selected_resume") or "",
+            "last_edited_resume": j.get("last_edited_resume") or "",
+            "suggested_edit_resume": _suggest_optimized_resume_for_job(j, optimized_resume_options),
+            "last_edited_cover_letter": j.get("last_edited_cover_letter") or "",
+            "suggested_edit_cover_letter": _suggest_cover_letter_for_job(j, cover_letter_options),
         })
 
     return {
         "total": len(payload_jobs),
         "resume_options": resume_options,
+        "optimized_resume_options": optimized_resume_options,
+        "cover_letter_options": cover_letter_options,
         "jobs": payload_jobs,
     }
 
@@ -472,6 +794,254 @@ async def pipeline_select_resume(req: _JobActionRequest) -> JSONResponse:
 
     _update_job(req.job_id, lambda j: j.update({"selected_resume": req.resume_name}))
     return JSONResponse({"ok": True, "job_id": req.job_id, "selected_resume": req.resume_name})
+
+
+@router.post(
+    "/pipeline/read-resume",
+    responses={
+        400: {"description": "Only optimized resume .txt files can be read"},
+        404: {"description": "Resume file not found"},
+    },
+)
+async def pipeline_read_resume(req: _ResumeReadRequest) -> JSONResponse:
+    path = _resolve_optimized_resume(req.resume_name)
+    return JSONResponse({
+        "ok": True,
+        "resume_name": path.name,
+        "content": path.read_text(encoding="utf-8"),
+    })
+
+
+@router.post(
+    "/pipeline/edit-resume",
+    responses={
+        400: {"description": "Invalid edit request"},
+        404: {"description": "Job id or resume file not found"},
+        502: {"description": "Model returned an invalid edit"},
+        503: {"description": "LLM client not configured"},
+    },
+)
+async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
+    job = _find_job(req.job_id)
+    source = _resolve_optimized_resume(req.resume_name)
+    current_resume = source.read_text(encoding="utf-8")
+    instructions = req.instructions.strip()
+    if not instructions:
+        raise HTTPException(status_code=400, detail="Edit instructions are required")
+
+    client, model = config.get_llm_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="OpenAI API key is not configured")
+
+    messages = _build_resume_edit_messages(
+        company=job.get("company", ""),
+        role=job.get("role", ""),
+        job_description=job.get("jd", ""),
+        current_resume=current_resume,
+        instructions=instructions,
+    )
+    response = create_chat_completion(
+        client,
+        label="resume_edit_dialog",
+        model=model or config._cfg.get("openai_model", "gpt-4o"),
+        messages=messages,
+        temperature=0.2,
+        max_tokens=3500,
+    )
+    edited = _strip_model_wrapper(response.choices[0].message.content or "")
+    if not edited:
+        raise HTTPException(status_code=502, detail="Model returned an empty edited resume")
+
+    output_name = _resume_edit_output_name(
+        source.name,
+        job.get("company", ""),
+        job.get("role", ""),
+        req.output_filename,
+    )
+    save_result = save_resume_txt(output_name, edited)
+    pdf_result = ""
+    if req.export_pdf:
+        pdf_result = export_resume_pdf(output_name)
+
+    _update_job(req.job_id, lambda j: j.update({"last_edited_resume": output_name}))
+
+    return JSONResponse({
+        "ok": True,
+        "job_id": req.job_id,
+        "source_resume": source.name,
+        "edited_resume": output_name,
+        "save_result": save_result,
+        "pdf_result": pdf_result,
+        "usage": {
+            "prompt_tokens": getattr(response.usage, "prompt_tokens", None) if response.usage else None,
+            "completion_tokens": getattr(response.usage, "completion_tokens", None) if response.usage else None,
+            "total_tokens": getattr(response.usage, "total_tokens", None) if response.usage else None,
+        },
+    })
+
+
+@router.post(
+    "/pipeline/read-cover-letter",
+    responses={
+        400: {"description": "Only cover-letter .txt files can be read"},
+        404: {"description": "Cover-letter file not found"},
+    },
+)
+async def pipeline_read_cover_letter(req: _CoverLetterReadRequest) -> JSONResponse:
+    path = _resolve_cover_letter(req.cover_letter_name)
+    return JSONResponse({
+        "ok": True,
+        "cover_letter_name": path.name,
+        "content": path.read_text(encoding="utf-8"),
+    })
+
+
+@router.get(
+    "/pipeline/cover-letter-draft/{draft_name:path}",
+    responses={
+        400: {"description": "Only cover-letter .tmp draft files can be opened"},
+        404: {"description": "Cover-letter draft not found"},
+    },
+)
+async def pipeline_cover_letter_draft(draft_name: str) -> FileResponse:
+    path = _resolve_cover_letter_draft(draft_name)
+    return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
+
+
+def _export_cover_letter_draft_html(draft_path: Path, role: str) -> str:
+    """Export a transient .tmp draft through the existing HTML exporter."""
+    temp_txt = draft_path.with_name(f"{draft_path.name}.txt")
+    try:
+        temp_txt.write_text(draft_path.read_text(encoding="utf-8"), encoding="utf-8")
+        return export_cover_letter_pdf(
+            temp_txt.name,
+            output_filename=f"{draft_path.stem}.pdf",
+            footer_tag=(role or "SOFTWARE ENGINEER").upper(),
+        )
+    finally:
+        temp_txt.unlink(missing_ok=True)
+
+
+@router.post(
+    "/pipeline/edit-cover-letter",
+    responses={
+        400: {"description": "Invalid edit request"},
+        404: {"description": "Job id or cover-letter file not found"},
+        502: {"description": "Model returned an invalid edit"},
+        503: {"description": "LLM client not configured"},
+    },
+)
+async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONResponse:
+    job = _find_job(req.job_id)
+    source = _resolve_cover_letter(req.cover_letter_name)
+    current_source = _resolve_cover_letter_draft(req.draft_name) if req.draft_name.strip() else source
+    current_cover_letter = current_source.read_text(encoding="utf-8")
+    instructions = req.instructions.strip()
+    if not instructions:
+        raise HTTPException(status_code=400, detail="Edit instructions are required")
+
+    client, model = config.get_llm_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="OpenAI API key is not configured")
+
+    messages = _build_cover_letter_edit_messages(
+        company=job.get("company", ""),
+        role=job.get("role", ""),
+        job_description=job.get("jd", ""),
+        current_cover_letter=current_cover_letter,
+        instructions=instructions,
+    )
+    response = create_chat_completion(
+        client,
+        label="cover_letter_edit_dialog",
+        model=model or config._cfg.get("openai_model", "gpt-4o"),
+        messages=messages,
+        temperature=0.2,
+        max_tokens=2500,
+    )
+    edited = _sanitize_cover_letter_output(_strip_model_wrapper(response.choices[0].message.content or ""))
+    if not edited:
+        raise HTTPException(status_code=502, detail="Model returned an empty edited cover letter")
+
+    draft_path = _next_cover_letter_draft_path(source.name)
+    draft_path.write_text(edited, encoding="utf-8")
+    save_result = f"✓ Cover letter draft saved: {draft_path}"
+    pdf_result = ""
+    pdf_href = ""
+    if req.export_pdf:
+        if req.export_pipeline == "latex":
+            body = _extract_cover_letter_body(edited) or edited
+            pdf_path = generate_cover_letter_latex(
+                body=body,
+                company=job.get("company", ""),
+                role=job.get("role", ""),
+                role_title=job.get("role", "") or "Full Stack Software Engineer",
+            )
+            pdf_result = f"✓ PDF exported: {pdf_path}"
+            pdf_href = _material_href_for_pdf(pdf_path)
+        else:
+            pdf_result = _export_cover_letter_draft_html(draft_path, job.get("role", ""))
+            pdf_href = _material_href_for_pdf(_pdf_path_from_export_result(pdf_result))
+
+    _update_job(req.job_id, lambda j: j.update({"last_edited_cover_letter": source.name}))
+
+    return JSONResponse({
+        "ok": True,
+        "job_id": req.job_id,
+        "source_cover_letter": source.name,
+        "edited_cover_letter": draft_path.name,
+        "draft_name": draft_path.name,
+        "draft_href": _draft_href(draft_path),
+        "draft_content": edited,
+        "save_result": save_result,
+        "pdf_result": pdf_result,
+        "pdf_href": pdf_href,
+        "export_pipeline": req.export_pipeline,
+        "usage": {
+            "prompt_tokens": getattr(response.usage, "prompt_tokens", None) if response.usage else None,
+            "completion_tokens": getattr(response.usage, "completion_tokens", None) if response.usage else None,
+            "total_tokens": getattr(response.usage, "total_tokens", None) if response.usage else None,
+        },
+    })
+
+
+@router.post(
+    "/pipeline/accept-cover-letter-edit",
+    responses={
+        400: {"description": "Invalid accept request"},
+        404: {"description": "Cover-letter file or draft not found"},
+    },
+)
+async def pipeline_accept_cover_letter_edit(req: _CoverLetterAcceptRequest) -> JSONResponse:
+    source = _resolve_cover_letter(req.cover_letter_name)
+    draft = _resolve_cover_letter_draft(req.draft_name)
+    if draft not in _list_cover_letter_drafts(source.name):
+        raise HTTPException(status_code=400, detail="Draft does not belong to this cover letter")
+
+    backup = source.with_name(f"{source.name}.bak")
+    backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    source.write_text(draft.read_text(encoding="utf-8"), encoding="utf-8")
+    deleted = _delete_cover_letter_drafts(source.name)
+    return JSONResponse({
+        "ok": True,
+        "cover_letter_name": source.name,
+        "backup_name": backup.name,
+        "deleted_drafts": deleted,
+        "href": f"/dashboard/materials/file/cover_letters/{quote(source.name, safe='')}",
+    })
+
+
+@router.post(
+    "/pipeline/cancel-cover-letter-edit",
+    responses={
+        400: {"description": "Only cover-letter .txt files can be cancelled"},
+        404: {"description": "Cover-letter file not found"},
+    },
+)
+async def pipeline_cancel_cover_letter_edit(req: _CoverLetterCancelRequest) -> JSONResponse:
+    source = _resolve_cover_letter(req.cover_letter_name)
+    deleted = _delete_cover_letter_drafts(source.name)
+    return JSONResponse({"ok": True, "cover_letter_name": source.name, "deleted_drafts": deleted})
 
 
 @router.post("/pipeline/queue-apply", responses={404: {"description": "Job id not found"}})
@@ -582,15 +1152,121 @@ async def pipeline_board() -> HTMLResponse:
   </div>
 </div>
 
+<!-- Edit Resume modal -->
+<div id='editResumeOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:910;overflow-y:auto;padding:18px 10px'>
+    <div style='max-width:1080px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px'>
+        <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px'>
+            <div>
+                <div style='font-weight:700;font-size:1.05rem'>Edit Resume</div>
+                <div id='erJobLabel' style='color:#8899bb;font-size:0.82rem;margin-top:3px'></div>
+            </div>
+            <button onclick='closeEditResume()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px'>✕</button>
+        </div>
+        <div style='display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);gap:12px'>
+            <div>
+                <div style='display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap'>
+                    <label style='flex:1;min-width:280px'>
+                        <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Source resume from Materials → Optimized Resumes</div>
+                        <select id='erResume' onchange='loadEditResumeSource()' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem'></select>
+                    </label>
+                    <button onclick='loadEditResumeSource()'>Reload</button>
+                </div>
+                <textarea id='erSource' rows='24' readonly style='width:100%;box-sizing:border-box;background:#07101e;border:1px solid #243452;border-radius:9px;padding:10px;color:#c8d8f4;font:0.78rem/1.42 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical'></textarea>
+            </div>
+            <div>
+                <label style='display:block;margin-bottom:10px'>
+                    <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Edit instructions</div>
+                    <textarea id='erInstructions' rows='12' placeholder='Example: Read the resume you have. Keep the format, but make the AI platform evidence stronger, reduce LiveVox to one bullet, and add LangGraph where it fits.' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem;line-height:1.45;resize:vertical'></textarea>
+                </label>
+                <label style='display:block;margin-bottom:12px'>
+                    <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Output filename <span style='color:#556;font-weight:400'>(optional)</span></div>
+                    <input id='erOutput' placeholder='Leave blank for "source - Edited company_role_timestamp.txt"' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem' />
+                </label>
+                <label style='display:flex;gap:8px;align-items:center;margin-bottom:16px;color:#c8d8f4;font-size:0.85rem'>
+                    <input id='erExportPdf' type='checkbox' checked /> Export PDF after save
+                </label>
+                <div style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
+                    <button onclick='closeEditResume()'>Cancel</button>
+                    <button id='erSubmit' onclick='submitEditResume()' style='background:#1a3a6e;border-color:#3a5aae;color:#d0e4ff'>Apply Edit</button>
+                </div>
+                <div id='erStatus' style='margin-top:12px;color:#aebcda;font-size:0.82rem;white-space:pre-wrap'></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Cover Letter modal -->
+<div id='editCoverLetterOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:915;overflow-y:auto;padding:18px 10px'>
+    <div style='max-width:1080px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px'>
+        <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px'>
+            <div>
+                <div style='font-weight:700;font-size:1.05rem'>Edit Cover Letter</div>
+                <div id='eclJobLabel' style='color:#8899bb;font-size:0.82rem;margin-top:3px'></div>
+            </div>
+            <button onclick='closeEditCoverLetter()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px'>✕</button>
+        </div>
+        <div style='display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);gap:12px'>
+            <div>
+                <div style='display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap'>
+                    <label style='flex:1;min-width:280px'>
+                        <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Source cover letter from Materials → Cover Letters</div>
+                        <select id='eclCoverLetter' onchange='loadEditCoverLetterSource()' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem'></select>
+                    </label>
+                    <button onclick='loadEditCoverLetterSource()'>Reload</button>
+                </div>
+                <textarea id='eclSource' rows='24' readonly style='width:100%;box-sizing:border-box;background:#07101e;border:1px solid #243452;border-radius:9px;padding:10px;color:#c8d8f4;font:0.78rem/1.42 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical'></textarea>
+            </div>
+            <div>
+                <label style='display:block;margin-bottom:10px'>
+                    <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Edit instructions</div>
+                    <textarea id='eclInstructions' rows='12' placeholder='Example: Read the cover letter you have. Keep the voice and structure, but make paragraph 2 less corporate, mention the LiveVox microphone-to-speaker latency, and export with LaTeX.' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem;line-height:1.45;resize:vertical'></textarea>
+                </label>
+                <label style='display:block;margin-bottom:12px'>
+                    <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>Output filename <span style='color:#556;font-weight:400'>(optional)</span></div>
+                    <input id='eclOutput' placeholder='Leave blank for "source - Edited company_role_timestamp.txt"' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem' />
+                </label>
+                <label style='display:block;margin-bottom:12px'>
+                    <div style='font-size:0.82rem;color:#8899bb;margin-bottom:5px'>PDF export pipeline</div>
+                    <select id='eclExportPipeline' style='width:100%;box-sizing:border-box;background:#0a1120;border:1px solid #2a3a5e;border-radius:8px;padding:9px 10px;color:#e0e8ff;font-size:0.85rem'>
+                        <option value='latex' selected>LaTeX / tectonic</option>
+                        <option value='html'>HTML / WeasyPrint</option>
+                    </select>
+                </label>
+                <label style='display:flex;gap:8px;align-items:center;margin-bottom:16px;color:#c8d8f4;font-size:0.85rem'>
+                    <input id='eclExportPdf' type='checkbox' checked /> Export PDF after save
+                </label>
+                <div style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
+                    <button onclick='closeEditCoverLetter()'>Cancel</button>
+                    <button id='eclSubmit' onclick='submitEditCoverLetter()' style='background:#1a3a6e;border-color:#3a5aae;color:#d0e4ff'>Apply Edit</button>
+                </div>
+                <div id='eclStatus' style='margin-top:12px;color:#aebcda;font-size:0.82rem;white-space:pre-wrap'></div>
+                <div id='eclResultActions' style='display:none;margin-top:12px;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
+                    <button onclick='closeEditCoverLetter()'>Close / Cancel</button>
+                    <button id='eclOpenDraft' onclick='openEditedCoverLetterDraft()' style='background:#1b2f55;border-color:#4a6fb3;color:#dce9ff'>Open Edited Letter</button>
+                    <button id='eclOpenPdf' onclick='openEditedCoverLetterPdf()' style='background:#123c2a;border-color:#2a8f62;color:#d7ffe9'>Open Edited PDF</button>
+                    <button id='eclAccept' onclick='acceptCoverLetterChanges()' style='background:#3d2f12;border-color:#a77a2a;color:#fff0c8'>Accept Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const el = {
   summary: document.getElementById('summary'),
   list: document.getElementById('list'),
   q: document.getElementById('q'),
 };
-let state = { jobs: [], resume_options: [], total: 0 };
+let state = { jobs: [], resume_options: [], optimized_resume_options: [], cover_letter_options: [], total: 0 };
 let busy = false;
 let busyMessage = '';
+let editJobId = null;
+let editCoverLetterJobId = null;
+let editCoverLetterSourceName = '';
+let editCoverLetterDraftName = '';
+let editCoverLetterDraftHref = '';
+let editCoverLetterPdfHref = '';
+let editCoverLetterAccepted = false;
 
 function esc(s){ return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 
@@ -640,6 +1316,183 @@ document.getElementById('addJobOverlay').addEventListener('click', function(e){
   if(e.target === this) closeAddJob();
 });
 
+function findJob(jobId){ return (state.jobs || []).find(j => Number(j.id) === Number(jobId)); }
+function closeEditResume(){ document.getElementById('editResumeOverlay').style.display = 'none'; editJobId = null; }
+async function openEditResume(jobId){
+    const job = findJob(jobId);
+    if(!job) return alert(`Job #${jobId} not found in current page state.`);
+    const options = state.optimized_resume_options || [];
+    if(!options.length) return alert('No optimized resume .txt files found in Materials. Generate or save a resume first.');
+    editJobId = jobId;
+    document.getElementById('erJobLabel').textContent = `#${job.id} · ${job.company} · ${job.role}`;
+    const sel = document.getElementById('erResume');
+    const preferred = job.last_edited_resume || job.suggested_edit_resume || options[0];
+    sel.innerHTML = options.map(name => `<option value='${esc(name)}' ${name === preferred ? 'selected' : ''}>${esc(name)}</option>`).join('');
+    document.getElementById('erInstructions').value = '';
+    document.getElementById('erOutput').value = '';
+    document.getElementById('erExportPdf').checked = true;
+    document.getElementById('erStatus').textContent = '';
+    document.getElementById('editResumeOverlay').style.display = 'block';
+    await loadEditResumeSource();
+    setTimeout(()=>document.getElementById('erInstructions').focus(), 50);
+}
+async function loadEditResumeSource(){
+    const name = document.getElementById('erResume').value;
+    if(!name) return;
+    document.getElementById('erSource').value = 'Loading resume…';
+    const res = await post('/dashboard/pipeline/read-resume', { resume_name: name });
+    document.getElementById('erSource').value = res.content || '';
+}
+async function submitEditResume(){
+    const instructions = document.getElementById('erInstructions').value.trim();
+    if(!instructions) return alert('Add edit instructions first.');
+    const btn = document.getElementById('erSubmit');
+    const status = document.getElementById('erStatus');
+    btn.disabled = true;
+    btn.textContent = 'Editing…';
+    status.textContent = 'Applying edit with the selected resume as source…';
+    try {
+        const res = await post('/dashboard/pipeline/edit-resume', {
+            job_id: editJobId,
+            resume_name: document.getElementById('erResume').value,
+            instructions,
+            output_filename: document.getElementById('erOutput').value.trim(),
+            export_pdf: document.getElementById('erExportPdf').checked,
+        });
+        status.textContent = `Saved: ${res.edited_resume}\n${res.pdf_result || ''}`;
+        await load();
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply Edit';
+    }
+}
+document.getElementById('editResumeOverlay').addEventListener('click', function(e){
+    if(e.target === this) closeEditResume();
+});
+
+async function cancelEditCoverLetterSession(){
+    if(editCoverLetterSourceName && editCoverLetterDraftName && !editCoverLetterAccepted){
+        try { await post('/dashboard/pipeline/cancel-cover-letter-edit', { cover_letter_name: editCoverLetterSourceName }); }
+        catch(e) { console.warn('Failed to clean cover-letter drafts', e); }
+    }
+}
+async function closeEditCoverLetter(){
+    await cancelEditCoverLetterSession();
+    document.getElementById('editCoverLetterOverlay').style.display = 'none';
+    editCoverLetterJobId = null;
+    editCoverLetterSourceName = '';
+    editCoverLetterDraftName = '';
+    editCoverLetterDraftHref = '';
+    editCoverLetterPdfHref = '';
+    editCoverLetterAccepted = false;
+}
+async function openEditCoverLetter(jobId){
+    const job = findJob(jobId);
+    if(!job) return alert(`Job #${jobId} not found in current page state.`);
+    const options = state.cover_letter_options || [];
+    if(!options.length) return alert('No cover-letter .txt files found in Materials. Generate a cover letter first.');
+    editCoverLetterJobId = jobId;
+    document.getElementById('eclJobLabel').textContent = `#${job.id} · ${job.company} · ${job.role}`;
+    const sel = document.getElementById('eclCoverLetter');
+    const preferred = job.last_edited_cover_letter || job.suggested_edit_cover_letter || options[0];
+    sel.innerHTML = options.map(name => `<option value='${esc(name)}' ${name === preferred ? 'selected' : ''}>${esc(name)}</option>`).join('');
+    editCoverLetterSourceName = preferred;
+    editCoverLetterDraftName = '';
+    editCoverLetterDraftHref = '';
+    editCoverLetterAccepted = false;
+    document.getElementById('eclInstructions').value = '';
+    document.getElementById('eclOutput').value = '';
+    document.getElementById('eclExportPipeline').value = 'latex';
+    document.getElementById('eclExportPdf').checked = true;
+    document.getElementById('eclStatus').textContent = '';
+    editCoverLetterPdfHref = '';
+    document.getElementById('eclResultActions').style.display = 'none';
+    document.getElementById('eclOpenDraft').disabled = true;
+    document.getElementById('eclOpenPdf').disabled = true;
+    document.getElementById('eclAccept').disabled = true;
+    document.getElementById('editCoverLetterOverlay').style.display = 'block';
+    await loadEditCoverLetterSource();
+    setTimeout(()=>document.getElementById('eclInstructions').focus(), 50);
+}
+async function loadEditCoverLetterSource(){
+    const name = document.getElementById('eclCoverLetter').value;
+    if(!name) return;
+    if(editCoverLetterDraftName && name !== editCoverLetterSourceName) await cancelEditCoverLetterSession();
+    editCoverLetterSourceName = name;
+    editCoverLetterDraftName = '';
+    editCoverLetterDraftHref = '';
+    editCoverLetterPdfHref = '';
+    editCoverLetterAccepted = false;
+    document.getElementById('eclResultActions').style.display = 'none';
+    document.getElementById('eclSource').value = 'Loading cover letter…';
+    const res = await post('/dashboard/pipeline/read-cover-letter', { cover_letter_name: name });
+    document.getElementById('eclSource').value = res.content || '';
+}
+async function submitEditCoverLetter(){
+    const instructions = document.getElementById('eclInstructions').value.trim();
+    if(!instructions) return alert('Add edit instructions first.');
+    const btn = document.getElementById('eclSubmit');
+    const status = document.getElementById('eclStatus');
+    btn.disabled = true;
+    btn.textContent = 'Editing…';
+    status.textContent = 'Applying edit with the selected cover letter as source…';
+    editCoverLetterPdfHref = '';
+    document.getElementById('eclResultActions').style.display = 'none';
+    try {
+        const res = await post('/dashboard/pipeline/edit-cover-letter', {
+            job_id: editCoverLetterJobId,
+            cover_letter_name: editCoverLetterSourceName || document.getElementById('eclCoverLetter').value,
+            draft_name: editCoverLetterDraftName,
+            instructions,
+            output_filename: document.getElementById('eclOutput').value.trim(),
+            export_pdf: document.getElementById('eclExportPdf').checked,
+            export_pipeline: document.getElementById('eclExportPipeline').value,
+        });
+        editCoverLetterDraftName = res.draft_name || res.edited_cover_letter || '';
+        editCoverLetterDraftHref = res.draft_href || '';
+        editCoverLetterPdfHref = res.pdf_href || '';
+        document.getElementById('eclSource').value = res.draft_content || document.getElementById('eclSource').value;
+        status.textContent = `Draft: ${editCoverLetterDraftName}\nPipeline: ${res.export_pipeline}\n${res.pdf_result || ''}\n\nOriginal file is unchanged until you click Accept Changes.`;
+        const draftBtn = document.getElementById('eclOpenDraft');
+        const openBtn = document.getElementById('eclOpenPdf');
+        const acceptBtn = document.getElementById('eclAccept');
+        draftBtn.disabled = !editCoverLetterDraftHref;
+        openBtn.disabled = !editCoverLetterPdfHref;
+        openBtn.textContent = editCoverLetterPdfHref ? 'Open Edited PDF' : 'No PDF to Open';
+        acceptBtn.disabled = !editCoverLetterDraftName;
+        document.getElementById('eclResultActions').style.display = 'flex';
+        await load();
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply Edit';
+    }
+}
+function openEditedCoverLetterDraft(){
+    if(!editCoverLetterDraftHref) return alert('No edited draft is available for this run.');
+    const win = window.open(editCoverLetterDraftHref, '_blank');
+    if(win) win.opener = null;
+}
+function openEditedCoverLetterPdf(){
+    if(!editCoverLetterPdfHref) return alert('No edited PDF is available for this run.');
+    const win = window.open(editCoverLetterPdfHref, '_blank');
+    if(win) win.opener = null;
+}
+async function acceptCoverLetterChanges(){
+    if(!editCoverLetterSourceName || !editCoverLetterDraftName) return alert('No draft is available to accept.');
+    const res = await post('/dashboard/pipeline/accept-cover-letter-edit', {
+        cover_letter_name: editCoverLetterSourceName,
+        draft_name: editCoverLetterDraftName,
+    });
+    editCoverLetterAccepted = true;
+    document.getElementById('eclStatus').textContent = `Accepted changes into: ${res.cover_letter_name}\nBackup: ${res.backup_name}\nTemporary drafts removed: ${res.deleted_drafts}`;
+    document.getElementById('eclAccept').disabled = true;
+    document.getElementById('eclOpenDraft').disabled = true;
+    await load();
+}
+document.getElementById('editCoverLetterOverlay').addEventListener('click', function(e){
+    if(e.target === this) closeEditCoverLetter();
+});
+
 function setBusy(on, message=''){
     busy = on;
     busyMessage = message;
@@ -675,6 +1528,14 @@ async function action(jobId, type){
                 const msg = String(res?.content || 'Resume generation failed.').split('\\n').slice(0, 8).join('\\n');
                 alert(`Resume generation did not produce files.\\n\\n${msg}`);
             }
+        }
+        if(type === 'edit-resume') {
+            await openEditResume(jobId);
+            return;
+        }
+        if(type === 'edit-cover-letter') {
+            await openEditCoverLetter(jobId);
+            return;
         }
         if(type === 'cl-latex') {
             setBusy(true, `Generating cover letter (LaTeX) for job #${jobId}...`);
@@ -772,8 +1633,10 @@ function render(){
         <button onclick='action(${j.id},"eval")' ${disabledEval}>${evalLabel}</button>
                 <button onclick='action(${j.id},"select")'>Use Existing</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
+                <button onclick='action(${j.id},"edit-resume")'>Edit Resume</button>
         <button onclick='action(${j.id},"cl-latex")'>Cover Letter (LaTeX)</button>
         <button onclick='action(${j.id},"cl-html")'>Cover Letter (HTML)</button>
+            <button onclick='action(${j.id},"edit-cover-letter")'>Edit Cover Letter</button>
         <button onclick='action(${j.id},"apply")' ${disabledApply}>Queue Apply</button>
         <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>

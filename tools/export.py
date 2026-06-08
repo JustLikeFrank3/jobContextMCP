@@ -7,7 +7,7 @@ export_resume_pdf(filename, footer_tag?, output_filename?)
 
 export_cover_letter_pdf(filename, output_filename?)
     Reads a .txt cover letter from 02-Cover-Letters/, parses it,
-    renders via cover_letter.html template, and writes a PDF to 03-Resume-PDFs/.
+    renders via cover_letter.html template, and writes a PDF to 09-Cover-Letter-PDFs/.
 """
 
 import re
@@ -916,14 +916,22 @@ def _render_pdf(template_name: str, data: dict, output_path: pathlib.Path) -> No
     weasyprint.HTML(string=html_str, base_url=str(TEMPLATES_DIR)).write_pdf(str(output_path))
 
 
-def _resolve_output_path(output_filename: str, default_stem: str) -> pathlib.Path:
+def _resolve_output_path(
+    output_filename: str,
+    default_stem: str,
+    folder_name: str = "03-Resume-PDFs",
+) -> pathlib.Path:
     resume_folder = pathlib.Path(config.RESUME_FOLDER)
-    pdf_dir = resume_folder / "03-Resume-PDFs"
+    pdf_dir = resume_folder / folder_name
     pdf_dir.mkdir(parents=True, exist_ok=True)
     fname = output_filename or (default_stem + ".pdf")
     if not fname.endswith(".pdf"):
         fname += ".pdf"
     return pdf_dir / fname
+
+
+def _cover_letter_pdf_folder_name() -> str:
+    return config._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
 
 
 # ── MCP TOOLS ─────────────────────────────────────────────────────────────
@@ -1017,7 +1025,7 @@ def export_cover_letter_pdf(
     data["footer_tag"] = footer_tag
 
     stem = source.stem
-    out = _resolve_output_path(output_filename, stem)
+    out = _resolve_output_path(output_filename, stem, _cover_letter_pdf_folder_name())
     _render_pdf("cover_letter.html", data, out)
     return f"✓ PDF exported: {out}"
 

@@ -48,8 +48,8 @@ def read_master_resume() -> str:
 
 def list_existing_materials(company: str = "") -> str:
     """List all existing resume and cover letter files. Optionally filter by company name to see materials for a specific target company."""
-    optimized_dir = config.RESUME_FOLDER / config._cfg["optimized_resumes_dir"]
-    cover_letter_dir = config.RESUME_FOLDER / config._cfg["cover_letters_dir"]
+    optimized_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+    cover_letter_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
 
     def _list_dir(d: Path, label: str) -> list[str]:
         if not d.exists():
@@ -73,7 +73,7 @@ def list_existing_materials(company: str = "") -> str:
 
 def read_existing_resume(filename: str) -> str:
     """Read the full text of an existing resume from 01-Current-Optimized/. Use list_existing_materials() to find available filenames."""
-    path = config.RESUME_FOLDER / config._cfg["optimized_resumes_dir"] / filename
+    path = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized") / filename
     if not path.exists():
         return f"Not found: {filename}\nUse list_existing_materials() to see available resumes."
     return _read(path)
@@ -81,7 +81,7 @@ def read_existing_resume(filename: str) -> str:
 
 def read_reference_file(filename: str) -> str:
     """Read a file from 06-Reference-Materials/ (e.g. template format, consolidated resume, skills variants, GM feedback). Pass the filename only — use list_existing_materials() to discover what's available."""
-    ref_dir = config.RESUME_FOLDER / config._cfg["reference_materials_dir"]
+    ref_dir = config.RESUME_FOLDER / config._cfg.get("reference_materials_dir", "06-Reference-Materials")
     path = ref_dir / filename
     if not path.exists():
         available = sorted(f.name for f in ref_dir.iterdir()) if ref_dir.exists() else []
@@ -106,7 +106,7 @@ def save_resume_txt(filename: str, content: str) -> str:
     """
     if not filename.endswith(".txt"):
         filename += ".txt"
-    out_dir = config.RESUME_FOLDER / config._cfg["optimized_resumes_dir"]
+    out_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / filename
     path.write_text(_unwrap(content), encoding="utf-8")
@@ -130,7 +130,7 @@ def save_cover_letter_txt(filename: str, content: str) -> str:
     """
     if not filename.endswith(".txt"):
         filename += ".txt"
-    out_dir = config.RESUME_FOLDER / config._cfg["cover_letters_dir"]
+    out_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / filename
     path.write_text(_unwrap(content), encoding="utf-8")
@@ -186,7 +186,7 @@ def resume_diff(file_a: str, file_b: str) -> str:
     removed = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
 
     summary = [
-        f"═══ RESUME DIFF ═══",
+        "═══ RESUME DIFF ═══",
         f"  From: {file_a}",
         f"  To:   {file_b}",
         f"  +{added} lines added  /  -{removed} lines removed",

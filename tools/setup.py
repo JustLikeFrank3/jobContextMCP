@@ -34,6 +34,7 @@ _RESUME_SUBDIRS = [
     "06-Reference-Materials",
     "07-Job-Assessments",
     "08-Interview-Prep-Docs",
+    "09-Cover-Letter-PDFs",
 ]
 
 _DATA_FILES = [

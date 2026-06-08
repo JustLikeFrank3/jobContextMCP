@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.9.x%20%E2%86%92%201.0-blue" alt="Version 0.9.x approaching 1.0"/>
-  <img src="https://img.shields.io/badge/tests-574%20passing-brightgreen" alt="574 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-591%20passing-brightgreen" alt="591 tests passing"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -35,7 +35,9 @@ If you're in the same situation, it's yours.
 
 ![JobContextMCP Dashboard v1](docs/jobContextMCP%20Dashboard%20v1.png)
 
-The browser dashboard turns the local MCP workspace into a job-search command center: daily digest, pipeline triage, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
+The browser dashboard turns the local MCP workspace into a job-search command center: daily digest (including a NEEDS DECISION section surfacing unevaluated queue items), pipeline triage, cover-letter edit dialog with LLM-powered revision and draft versioning, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
+
+**Edit Cover Letter** — each queued job card exposes an Edit button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export. Each edit run writes a versioned draft (`{stem}.edit1.tmp`, `.edit2.tmp`, …) so the source is never overwritten mid-session. After review: **Accept Changes** promotes the latest draft to canonical source (backing up the original to `{stem}.bak`) and cleans up all `.editN.tmp` files; **Cancel** deletes all drafts and leaves the source untouched.
 
 ### Generated documents
 
@@ -73,7 +75,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 |------|----------------------|
 | Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
 | Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
-| Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest, pipeline triage, queue assessment, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
+| Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
 | Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export, LaTeX/Tectonic cover letters |
 | Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
 | People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
@@ -808,8 +810,9 @@ The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_
 Data files the server reads at runtime (all resolved relative to `resume_folder` in `config.json`):
 - `01-Current-Optimized/` — master source resume + all customized versions
 - `02-Cover-Letters/` — cover letter `.txt` files
-- `03-Resume-PDFs/` — exported PDFs land here
+- `03-Resume-PDFs/` — exported resume PDFs land here
 - `06-Reference-Materials/` — resume template, award citations, peer feedback, skills variants
+- `09-Cover-Letter-PDFs/` — exported cover-letter PDFs land here (config key: `cover_letter_pdfs_dir`, default `"09-Cover-Letter-PDFs"`)
 
 ---
 

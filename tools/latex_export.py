@@ -184,7 +184,7 @@ def generate_cover_letter_latex(
         letter_date: Right-aligned date printed under the letterhead. Defaults
                  to today in 'Month D, YYYY' format when blank.
         output_dir:  Where to write the final PDF.  Defaults to the workspace
-                 03-Resume-PDFs folder so dashboard previews can find it.
+             cover-letter PDF folder so dashboard previews can find it.
         identity:    Optional contact/identity overrides for demo output.
                  Supported keys match _AUTHOR_DEFAULTS: name, phone, city,
                  email, linkedin, github. Defaults preserve Frank's data.
@@ -195,9 +195,11 @@ def generate_cover_letter_latex(
     latex_src = _latex_dir()
 
     if output_dir is None:
-        output_dir = cfg.RESUME_FOLDER / "03-Resume-PDFs"
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+        folder_name = cfg._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
+        final_output_dir = cfg.RESUME_FOLDER / folder_name
+    else:
+        final_output_dir = Path(output_dir)
+    final_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Build a safe filename slug
     slug = re.sub(r"[^A-Za-z0-9]+", "_", f"{company}_{role}").strip("_")
@@ -205,7 +207,7 @@ def generate_cover_letter_latex(
     today = date.today()
     dated = today.strftime("%Y%m%d")
     pdf_name = f"cover_letter_{slug}_{dated}.pdf"
-    final_pdf = output_dir / pdf_name
+    final_pdf = final_output_dir / pdf_name
 
     # Default the printed letter date to today (e.g. 'June 7, 2026'). Strip any
     # zero-padding on the day so it reads naturally.

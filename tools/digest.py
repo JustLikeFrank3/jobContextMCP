@@ -75,6 +75,11 @@ def _load_apps() -> list[dict]:
     return data.get("applications", [])
 
 
+def _load_queue() -> list[dict]:
+    data = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})
+    return data.get("jobs", [])
+
+
 def _load_rejections() -> list[dict]:
     data = _load_json(config.REJECTIONS_FILE, {"rejections": []})
     return data.get("rejections", [])
@@ -142,6 +147,7 @@ def get_daily_digest() -> str:
     rejections = _load_rejections()
     people = _load_people()
     health_entries = _load_health()
+    queue_jobs = _load_queue()
 
     # ── Filter: drop closed and long-dormant with nothing pending ─────────────
     active = [
@@ -165,6 +171,16 @@ def get_daily_digest() -> str:
     closed_count = sum(1 for a in apps if _is_closed(a))
     lines.append(f"  PIPELINE: {len(active)} active  /  {len(waiting)} in flight  /  {closed_count} closed")
     lines.append("")
+
+    # ── NEEDS DECISION: jobs in queue awaiting apply/dismiss ──────────────────
+    undecided = [j for j in queue_jobs if j.get("status") in ("pending", "evaluated")]
+    if undecided:
+        lines.append("  NEEDS DECISION  (apply or dismiss):")
+        for j in undecided:
+            status_label = j.get("status", "?").upper()
+            score = f"  score: {j['fitment_score']}" if j.get("fitment_score") else ""
+            lines.append(f"    [{status_label}] {j['company']} — {j['role']}{score}")
+        lines.append("")
 
     # ── ACTION: overdue follow-ups ────────────────────────────────────────────
     overdue = _check_overdue_followups(active)
@@ -246,6 +262,10 @@ def get_daily_digest() -> str:
     if needs_review and len(priorities) < 3:
         top = needs_review[0]
         priorities.append(f"Review: {top['company']} — {top['role']}")
+    if undecided and len(priorities) < 3:
+        top = undecided[0]
+        verb = "Apply to" if top.get("status") == "evaluated" else "Evaluate"
+        priorities.append(f"{verb}: {top['company']} — {top['role']}")
     if not priorities:
         if waiting:
             priorities.append(f"Check on {waiting[0]['company']} — {waiting[0]['role']}")

@@ -119,6 +119,28 @@ class TestPipelineData:
         body = http_client_noauth.get("/dashboard/pipeline/data").json()
         assert "MODERN" in body["jobs"][0]["recommended_resume"].upper()
 
+    def test_payload_includes_optimized_resume_options(self, http_client_noauth):
+        opt_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+        opt_dir.mkdir(parents=True, exist_ok=True)
+        (opt_dir / "Frank MacBride Resume - Stripe Staff Engineer.txt").write_text("resume", encoding="utf-8")
+        _seed_jobs([_job(id=11, company="Stripe", role="Staff Engineer")])
+
+        body = http_client_noauth.get("/dashboard/pipeline/data").json()
+
+        assert "Frank MacBride Resume - Stripe Staff Engineer.txt" in body["optimized_resume_options"]
+        assert body["jobs"][0]["suggested_edit_resume"] == "Frank MacBride Resume - Stripe Staff Engineer.txt"
+
+    def test_payload_includes_cover_letter_options(self, http_client_noauth):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "Frank MacBride Cover Letter - Stripe Staff Engineer.txt").write_text("letter", encoding="utf-8")
+        _seed_jobs([_job(id=13, company="Stripe", role="Staff Engineer")])
+
+        body = http_client_noauth.get("/dashboard/pipeline/data").json()
+
+        assert "Frank MacBride Cover Letter - Stripe Staff Engineer.txt" in body["cover_letter_options"]
+        assert body["jobs"][0]["suggested_edit_cover_letter"] == "Frank MacBride Cover Letter - Stripe Staff Engineer.txt"
+
 
 # /pipeline/select-resume
 
@@ -148,6 +170,261 @@ class TestSelectResume:
         assert r.json()["selected_resume"] == "Frank_MacBride_Resume_MODERN.pdf"
         saved = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})["jobs"][0]
         assert saved["selected_resume"] == "Frank_MacBride_Resume_MODERN.pdf"
+
+
+class TestResumeEditDialog:
+    def test_read_resume_returns_optimized_resume_text(self, http_client_noauth):
+        opt_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+        opt_dir.mkdir(parents=True, exist_ok=True)
+        (opt_dir / "base.txt").write_text("FRANK\nEXPERIENCE", encoding="utf-8")
+
+        r = http_client_noauth.post("/dashboard/pipeline/read-resume", json={"resume_name": "base.txt"})
+
+        assert r.status_code == 200
+        assert r.json()["content"] == "FRANK\nEXPERIENCE"
+
+    def test_edit_resume_saves_copy_and_updates_job(self, http_client_noauth, monkeypatch):
+        opt_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+        opt_dir.mkdir(parents=True, exist_ok=True)
+        (opt_dir / "base.txt").write_text("FRANK\nOLD BULLET", encoding="utf-8")
+        _seed_jobs([_job(id=12, company="Stripe", role="Staff Engineer")])
+
+        class FakeMessage:
+            content = "FRANK\nNEW BULLET"
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeUsage:
+            prompt_tokens = 10
+            completion_tokens = 5
+            total_tokens = 15
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = FakeUsage()
+
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(pl, "export_resume_pdf", lambda filename: f"✓ PDF exported: {filename}.pdf")
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/edit-resume",
+            json={
+                "job_id": 12,
+                "resume_name": "base.txt",
+                "instructions": "Replace old bullet with new bullet.",
+                "output_filename": "edited-stripe.txt",
+                "export_pdf": True,
+            },
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["edited_resume"] == "edited-stripe.txt"
+        assert (opt_dir / "edited-stripe.txt").read_text(encoding="utf-8") == "FRANK\nNEW BULLET"
+        saved = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})["jobs"][0]
+        assert saved["last_edited_resume"] == "edited-stripe.txt"
+
+
+class TestCoverLetterEditDialog:
+    def test_read_cover_letter_returns_cover_letter_text(self, http_client_noauth):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("Dear Hiring Manager,\n\nHello.", encoding="utf-8")
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/read-cover-letter",
+            json={"cover_letter_name": "base.txt"},
+        )
+
+        assert r.status_code == 200
+        assert r.json()["content"] == "Dear Hiring Manager,\n\nHello."
+
+    def test_edit_cover_letter_saves_copy_and_exports_latex(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("Dear Hiring Manager,\n\nOld body.", encoding="utf-8")
+        _seed_jobs([_job(id=14, company="Stripe", role="Staff Engineer")])
+
+        class FakeMessage:
+            content = "Dear Hiring Manager,\n\nNew body."
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeUsage:
+            prompt_tokens = 10
+            completion_tokens = 5
+            total_tokens = 15
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = FakeUsage()
+
+        called = {}
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(
+            pl,
+            "generate_cover_letter_latex",
+            lambda **kw: called.setdefault("latex", config.RESUME_FOLDER / "09-Cover-Letter-PDFs" / "edited.pdf"),
+        )
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/edit-cover-letter",
+            json={
+                "job_id": 14,
+                "cover_letter_name": "base.txt",
+                "instructions": "Replace old body with new body.",
+                "output_filename": "edited-stripe.txt",
+                "export_pdf": True,
+                "export_pipeline": "latex",
+            },
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["edited_cover_letter"] == "base.edit1.tmp"
+        assert body["draft_name"] == "base.edit1.tmp"
+        assert body["draft_href"] == "/dashboard/pipeline/cover-letter-draft/base.edit1.tmp"
+        assert body["export_pipeline"] == "latex"
+        assert "09-Cover-Letter-PDFs" in body["pdf_result"]
+        assert body["pdf_href"] == "/dashboard/materials/file/cover_letter_pdfs/edited.pdf"
+        assert called["latex"].name == "edited.pdf"
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "Dear Hiring Manager,\n\nOld body."
+        assert (cl_dir / "base.edit1.tmp").read_text(encoding="utf-8") == "Dear Hiring Manager,\n\nNew body."
+        saved = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})["jobs"][0]
+        assert saved["last_edited_cover_letter"] == "base.txt"
+
+        draft_page = http_client_noauth.get("/dashboard/pipeline/cover-letter-draft/base.edit1.tmp")
+        assert draft_page.status_code == 200
+        assert "New body" in draft_page.text
+
+    def test_edit_cover_letter_can_export_html(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("Dear Hiring Manager,\n\nOld body.", encoding="utf-8")
+        _seed_jobs([_job(id=15, company="Stripe", role="Staff Engineer")])
+
+        class FakeMessage:
+            content = "Dear Hiring Manager,\n\nNew HTML body."
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = None
+
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(
+            pl,
+            "export_cover_letter_pdf",
+            lambda filename, **kw: f"✓ PDF exported: {config.RESUME_FOLDER / '09-Cover-Letter-PDFs' / kw['output_filename']}",
+        )
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/edit-cover-letter",
+            json={
+                "job_id": 15,
+                "cover_letter_name": "base.txt",
+                "instructions": "Make it HTML exportable.",
+                "output_filename": "edited-html.txt",
+                "export_pdf": True,
+                "export_pipeline": "html",
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["export_pipeline"] == "html"
+        assert "09-Cover-Letter-PDFs" in r.json()["pdf_result"]
+        assert r.json()["draft_name"] == "base.edit1.tmp"
+        assert r.json()["pdf_href"] == "/dashboard/materials/file/cover_letter_pdfs/base.edit1.pdf"
+
+    def test_accept_cover_letter_promotes_latest_draft_and_cleans_up(self, http_client_noauth):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("draft 1", encoding="utf-8")
+        (cl_dir / "base.edit2.tmp").write_text("draft 2", encoding="utf-8")
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/accept-cover-letter-edit",
+            json={"cover_letter_name": "base.txt", "draft_name": "base.edit2.tmp"},
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["backup_name"] == "base.txt.bak"
+        assert body["deleted_drafts"] == 2
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "draft 2"
+        assert (cl_dir / "base.txt.bak").read_text(encoding="utf-8") == "original"
+        assert not (cl_dir / "base.edit1.tmp").exists()
+        assert not (cl_dir / "base.edit2.tmp").exists()
+
+    def test_cancel_cover_letter_edit_removes_drafts_without_touching_original(self, http_client_noauth):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("draft 1", encoding="utf-8")
+        (cl_dir / "base.edit2.tmp").write_text("draft 2", encoding="utf-8")
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/cancel-cover-letter-edit",
+            json={"cover_letter_name": "base.txt"},
+        )
+
+        assert r.status_code == 200
+        assert r.json()["deleted_drafts"] == 2
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "original"
+        assert not (cl_dir / "base.txt.bak").exists()
+        assert not (cl_dir / "base.edit1.tmp").exists()
+        assert not (cl_dir / "base.edit2.tmp").exists()
+
+    def test_subsequent_cover_letter_edit_uses_latest_draft(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("draft 1", encoding="utf-8")
+        _seed_jobs([_job(id=16, company="Stripe", role="Staff Engineer")])
+
+        captured = {}
+
+        class FakeMessage:
+            content = "draft 2"
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = None
+
+        def fake_chat(*args, **kwargs):
+            captured["prompt"] = kwargs["messages"][1]["content"]
+            return FakeResponse()
+
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", fake_chat)
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/edit-cover-letter",
+            json={
+                "job_id": 16,
+                "cover_letter_name": "base.txt",
+                "draft_name": "base.edit1.tmp",
+                "instructions": "Second pass.",
+                "export_pdf": False,
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["draft_name"] == "base.edit2.tmp"
+        assert "CURRENT COVER LETTER TEXT:\ndraft 1" in captured["prompt"]
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "original"
+        assert (cl_dir / "base.edit2.tmp").read_text(encoding="utf-8") == "draft 2"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

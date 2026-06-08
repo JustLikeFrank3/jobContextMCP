@@ -492,11 +492,11 @@ def _cover_letter_narrative_plan(company: str, role: str, job_description: str) 
             f"- Narrative spine for {company}: current AI platform builder with production platform instincts.",
             "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story marked 'PRIMARY COVER LETTER HOOK' explicitly tied to this company, use that personal/brand/childhood/fan story as the Para 1 hook. "
             "SECOND: if no company-specific hook exists, look for the Uncle Roy / Intellicorp story (tagged 'uncle-roy', 'ai-history', 'intellicorp' in PERSONAL CONTEXT) and use it as the Para 1 hook for this AI role. "
-            "Frame it directly: Uncle Roy built expert systems on Lisp at Intellicorp — KEE, first-generation AI work — through the eighties and nineties; he handed Frank one of the first Raspberry Pis off the factory line; "
+            "Frame it directly and identify the relationship for readers: 'My uncle Roy' built expert systems on Lisp at Intellicorp — KEE, first-generation AI work — through the eighties and nineties; he handed Frank one of the first Raspberry Pis off the factory line; "
             "he passed before Frank went back to school, before any of this. There is a clear line from KEE to that Pi to the MCP server Frank maintains right now. "
             "Write this in Frank's plain first-person voice, not as inspirational biography. Do not write 'igniting a passion', 'resonates deeply', 'led to my current role', or anything that sounds like a template. "
             "Do not name jobContextMCP in Paragraph 1 if Paragraph 2 uses it; say 'the MCP server' or 'that server' in the hook. "
-            "Do not open with 'Growing up'; start with Uncle Roy or Intellicorp. "
+            "Do not open with 'Growing up'; start with 'My uncle Roy' or Intellicorp. Never open by calling him only 'Uncle Roy' because readers do not know whose uncle he is. "
             "ONLY IF neither a company hook nor the Uncle Roy story is present in PERSONAL CONTEXT: open on the professional angle: AI tools are only useful when they become reliable platforms with memory, retrieval, workflow, and operational surfaces.",
             "- Paragraph 2: make jobContextMCP the primary ownership story, but name it once, then use 'the server' or 'the project': active MCP/FastAPI platform, 77 tools, RAG/FAISS, LangGraph, dashboard/API surfaces, and live GitHub metrics from the portfolio block.",
             "- Paragraph 3: add supporting proof only: GM AI adoption (35%+), GM cloud/platform reliability (zero downtime / 98% SLA / Kafka), and one performance or full-stack project if it directly strengthens the role fit.",
@@ -632,7 +632,7 @@ def _semantic_story_prefix(selected: list[dict], company: str) -> str:
             "PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story): "
             "The first story below is tagged 'ai_role_hook'. Use it as the Para 1 hook "
             "for this AI role regardless of company. It is a universal engineering origin "
-            "story, not a company-specific brand hook. Open directly with the story; "
+            "story, not a company-specific brand hook. Open directly with the story and identify him as 'my uncle Roy'; "
             "do NOT say 'Growing up' or 'I have always been passionate about AI'.\n\n"
         )
     if company and any(_story_has_company_hook_tags(s) for s in selected):
@@ -962,9 +962,11 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  (B) The block says 'PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story)' —\n"
         "      this is the Uncle Roy / Intellicorp story. For AI roles it IS the correct P1 opener\n"
         "      regardless of company. Open directly with it; do NOT say 'Growing up'.\n"
-        "      Start with Uncle Roy, Intellicorp, KEE, or the Raspberry Pi — not with a generic AI sentence.\n"
+        "      Start with 'My uncle Roy', Intellicorp, KEE, or the Raspberry Pi — not with a generic AI sentence.\n"
+        "      If you use Roy, identify the relationship as 'my uncle Roy' the first time; "
+        "do not write only 'Uncle Roy' because an outside reader lacks that context.\n"
         "      Write it in first person and in Frank's cadence: concrete, a little understated, no\n"
-        "      inspirational gloss. A good shape is: Uncle Roy did the old AI work; he handed me\n"
+        "      inspirational gloss. A good shape is: My uncle Roy did the old AI work; he handed me\n"
         "      the Pi; there is a direct line from that to the MCP server I maintain now; this\n"
         "      role is the same\n"
         "      thread at production scale.\n"
@@ -1267,6 +1269,16 @@ def _sanitize_cover_letter_output(content: str) -> str:
     # preserve the factual claims but put them back into Frank's plainer cadence.
     for pattern, repl in _CORPORATE_STYLE_SUBS:
         cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
+
+    # Readers do not know who Roy is unless the opener identifies the
+    # relationship. If the model starts cold with "Uncle Roy", make it
+    # first-person and contextual.
+    cleaned = re.sub(
+        r"(^|\n)(Uncle Roy\b)",
+        r"\1My uncle Roy",
+        cleaned,
+        count=1,
+    )
 
     # The Uncle Roy hook should create the throughline without burning the
     # project name before the ownership paragraph gets to use it.

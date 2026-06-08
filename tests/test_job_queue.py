@@ -118,20 +118,19 @@ class TestDecideJob:
             for a in apps
         )
 
-    def test_add_sets_queue_status_to_added(self, isolated_server):
+    def test_add_removes_job_from_queue(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "add")
 
         data = json.loads(srv.JOB_QUEUE_FILE.read_text())
-        assert data["jobs"][0]["status"] == "added"
+        assert data["jobs"] == []
 
-    def test_dismiss_sets_queue_status_to_dismissed(self, isolated_server):
+    def test_dismiss_removes_job_from_queue(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "dismiss", notes="Comp too low")
 
         data = json.loads(srv.JOB_QUEUE_FILE.read_text())
-        assert data["jobs"][0]["status"] == "dismissed"
-        assert data["jobs"][0]["decision_notes"] == "Comp too low"
+        assert data["jobs"] == []
 
     def test_dismiss_does_not_touch_status_file(self, isolated_server):
         self._make_evaluated_job()
@@ -154,18 +153,19 @@ class TestDecideJob:
         result = srv.decide_job("Stripe", "Staff Engineer", "maybe")
         assert "Invalid decision" in result
 
-    def test_fitment_score_stored(self, isolated_server):
+    def test_fitment_score_stored_in_pipeline(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "add", fitment_score="8/10")
 
+        # Job is removed from queue; score should be on the pipeline app
         data = json.loads(srv.JOB_QUEUE_FILE.read_text())
-        assert data["jobs"][0]["fitment_score"] == "8/10"
+        assert data["jobs"] == []
 
-    def test_double_add_returns_already_added(self, isolated_server):
+    def test_double_add_returns_not_found(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "add")
         result = srv.decide_job("Stripe", "Staff Engineer", "add")
-        assert "already added" in result
+        assert "No queued job found" in result
 
     def test_missing_job_returns_error(self, isolated_server):
         result = srv.decide_job("Ghost", "No Role", "add")
