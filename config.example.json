@@ -27,6 +27,15 @@
   "openai_model": "gpt-4o-mini",
   "serpapi_key": "",
 
+  "_comment_llm_provider": "Set llm_provider to 'openai' (default), 'ollama', or 'foundry' (Azure AI Foundry).",
+  "llm_provider": "openai",
+
+  "_comment_foundry": "Azure AI Foundry — set llm_provider to 'foundry' to use. Get endpoint + key from ai.azure.com > your project > Deployments.",
+  "azure_foundry_endpoint": "https://your-hub-name.openai.azure.com/",
+  "azure_foundry_api_key": "your-foundry-api-key",
+  "azure_foundry_deployment": "gpt-4o",
+  "azure_foundry_api_version": "2024-10-21",
+
   "_comment_generation_budgets": "Token budgets for AI generation. personal_context_token_budget caps how many tokens of STAR stories get retrieved per request; tone_token_budget caps how much of the tone profile is included (most recent, source-diverse samples first); cover_letter_max_tokens is a hard ceiling on the whole prompt so requests can never exceed the model TPM limit as the library grows.",
   "generation_budgets": {
     "personal_context_token_budget": 1500,

@@ -127,8 +127,9 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
     """Return (openai_client, model_name) for the configured LLM provider.
 
     Supported providers (config.json key ``llm_provider``):
-      - ``"openai"``  (default) — calls api.openai.com
-      - ``"ollama"``            — calls localhost:11434/v1 (OpenAI-compatible)
+      - ``"openai"``   (default) — calls api.openai.com
+      - ``"ollama"``             — calls localhost:11434/v1 (OpenAI-compatible)
+      - ``"foundry"``            — calls Azure AI Foundry endpoint (AzureOpenAI)
 
     Returns ``(None, "")`` when no API key is configured and provider is openai,
     allowing callers to gracefully degrade rather than crash.
@@ -146,6 +147,24 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
         ollama_model = _cfg.get("ollama_model", "llama3.1:8b")
         client = OpenAI(base_url=ollama_base, api_key="ollama")
         return client, ollama_model
+
+    if provider == "foundry":
+        try:
+            from openai import AzureOpenAI
+        except ImportError:
+            return None, ""
+        endpoint = _cfg.get("azure_foundry_endpoint", "")
+        api_key = _cfg.get("azure_foundry_api_key", "")
+        deployment = _cfg.get("azure_foundry_deployment", "gpt-4o")
+        api_version = _cfg.get("azure_foundry_api_version", "2024-10-21")
+        if not endpoint or not api_key:
+            return None, ""
+        client = AzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version=api_version,
+        )
+        return client, deployment
 
     # openai (default)
     api_key = _cfg.get("openai_api_key", "")
