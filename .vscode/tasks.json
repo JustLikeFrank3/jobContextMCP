@@ -1,0 +1,62 @@
+{
+    // ─────────────────────────────────────────────────────────────────────────
+    // VS Code tasks for jobContextMCP development.
+    //
+    // Invoke via Command Palette → "Tasks: Run Task" (⇧⌘P → start typing "run task").
+    // Or bind to a keyboard shortcut: Command Palette → "Preferences: Open Keyboard
+    // Shortcuts (JSON)" and add a binding for the "workbench.action.tasks.runTask"
+    // command with the task label as args.
+    //
+    // Tasks here are committed to the repo (.vscode/settings.json is the only
+    // gitignored .vscode file). Add anything generic enough to be useful to any
+    // contributor working on this codebase.
+    // ─────────────────────────────────────────────────────────────────────────
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Sync data from production (preview)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--dry-run"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Show what would change without touching files. Useful before running the real sync."
+        },
+        {
+            "label": "Sync data from production",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Pull fresh data/ from the production iCloud workspace and snapshot a backup. One-way: production → dev. Requires DATA_SYNC_SOURCE in .env."
+        },
+        {
+            "label": "Sync data from production (no backup, fast)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--yes", "--no-backup"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Same as above but skip the pre-sync tarball. Use only when you've just snapshotted moments ago."
+        }
+    ]
+}

@@ -791,6 +791,8 @@ Then:
 ./scripts/sync_data_from_production.sh --help      # usage
 ```
 
+Or from VS Code: **Command Palette → "Tasks: Run Task" → "Sync data from production"** (also: preview, or no-backup variants). Tasks are defined in [.vscode/tasks.json](.vscode/tasks.json).
+
 Dual benefit: dev tests run against current job-hunt state, AND the `backups/` folder accumulates timestamped tarballs of your data on non-cloud storage — a useful safety net since the canonical `data/` lives in iCloud.
 
 ---
