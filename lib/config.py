@@ -1,201 +1,252 @@
+"""
+Configuration loader for jobContextMCP.
+
+Reads config.json (or config.example.json as fallback) and exposes
+all path constants used across tools and server.py.
+"""
+from __future__ import annotations
+
 import json
-import os
 from pathlib import Path
+from typing import Any
 
-_HERE = Path(__file__).resolve().parent.parent
-_cfg: dict
+# ── locate config.json ────────────────────────────────────────────────────────
 
-
-RESUME_FOLDER: Path
-LEETCODE_FOLDER: Path
-SIDE_PROJECT_FOLDERS: list[Path]
-DATA_FOLDER: Path
-
-STATUS_FILE: Path
-HEALTH_LOG_FILE: Path
-PERSONAL_CONTEXT_FILE: Path
-TONE_FILE: Path
-SCAN_INDEX_FILE: Path
-PEOPLE_FILE: Path
-LINKEDIN_POSTS_FILE: Path
-REJECTIONS_FILE: Path
-INTERVIEWS_FILE: Path
-JOB_QUEUE_FILE: Path
-CONTACT_CROSSREF_FILE: Path
-LINKEDIN_CONNECTIONS_FILE: Path
-GITHUB_METRICS_FILE: Path
-FB_FRIENDS_FOLDER: Path | None
-
-MASTER_RESUME: Path
-LEETCODE_CHEATSHEET: Path
-QUICK_REFERENCE: Path
-
-RESUME_TEMPLATE_PNG: Path
-COVER_LETTER_TEMPLATE_PNG: Path
-TEMPLATE_FORMAT: Path
-GM_AWARDS: Path
-FEEDBACK_RECEIVED: Path
-SKILLS_SHORTER: Path
-JOB_ASSESSMENTS_FOLDER: Path
-INTERVIEW_PREP_FOLDER: Path
-LATEX_RESUME_DIR: Path | None
-
-SERPAPI_KEY: str
+_HERE = Path(__file__).parent.parent          # jobContextMCP/ root
+_CONFIG_PATH = _HERE / "config.json"
+_EXAMPLE_PATH = _HERE / "config.example.json"
 
 
 def _load_config() -> dict:
-    config_path = _HERE / "config.json"
-    if not config_path.exists():
-        fallback = _HERE / "config.example.json"
-        if fallback.exists():
-            return json.loads(fallback.read_text(encoding="utf-8"))
-        raise FileNotFoundError(
-            f"config.json not found at {config_path}\n"
-            "Copy config.example.json → config.json and fill in your paths."
-        )
-    return json.loads(config_path.read_text(encoding="utf-8"))
+    """Load config.json; fall back to config.example.json on missing file."""
+    for path in (_CONFIG_PATH, _EXAMPLE_PATH):
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return {}
 
 
-def _reconfigure(cfg: dict) -> None:
-    global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
-    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE, JOB_QUEUE_FILE
-    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, GITHUB_METRICS_FILE, FB_FRIENDS_FOLDER
-    global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
-    global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
-    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
-    global JOB_ASSESSMENTS_FOLDER, INTERVIEW_PREP_FOLDER, LATEX_RESUME_DIR
-    global SERPAPI_KEY
+# ── mutable config state ──────────────────────────────────────────────────────
 
-    _cfg = dict(cfg)
+_cfg: dict = _load_config()
 
-    RESUME_FOLDER = Path(cfg["resume_folder"]).expanduser()
-    LEETCODE_FOLDER = Path(cfg["leetcode_folder"]).expanduser()
-    # Support both legacy single string and new array format
-    _spf = cfg.get("side_project_folders") or cfg.get("side_project_folder")
-    if isinstance(_spf, list):
-        SIDE_PROJECT_FOLDERS = [Path(p).expanduser() for p in _spf]
-    else:
-        SIDE_PROJECT_FOLDERS = [Path(_spf).expanduser()] if _spf else []
-    DATA_FOLDER = Path(cfg["data_folder"]).expanduser()
+# ── derived path helpers ──────────────────────────────────────────────────────
 
-    STATUS_FILE = DATA_FOLDER / "status.json"
-    HEALTH_LOG_FILE = DATA_FOLDER / "mental_health_log.json"
-    PERSONAL_CONTEXT_FILE = DATA_FOLDER / "personal_context.json"
-    TONE_FILE = DATA_FOLDER / "tone_samples.json"
-    SCAN_INDEX_FILE = DATA_FOLDER / "scan_index.json"
-    PEOPLE_FILE = DATA_FOLDER / "people.json"
-    LINKEDIN_POSTS_FILE = DATA_FOLDER / "linkedin_posts.json"
-    REJECTIONS_FILE = DATA_FOLDER / "rejections.json"
-    INTERVIEWS_FILE = DATA_FOLDER / "interviews.json"
-    JOB_QUEUE_FILE = DATA_FOLDER / "job_queue.json"
-    CONTACT_CROSSREF_FILE = DATA_FOLDER / "contact_crossref.json"
-    LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
-    GITHUB_METRICS_FILE = DATA_FOLDER / "github_metrics.json"
-    _fb_raw = cfg.get("fb_friends_folder", "")
-    FB_FRIENDS_FOLDER = Path(_fb_raw).expanduser() if _fb_raw else None
-
-    JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
-    INTERVIEW_PREP_FOLDER = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
-    _latex_dir = cfg.get("latex_resume_dir", "")
-    LATEX_RESUME_DIR = Path(_latex_dir).expanduser() if _latex_dir else None
-
-    MASTER_RESUME = RESUME_FOLDER / cfg["master_resume_path"]
-    LEETCODE_CHEATSHEET = LEETCODE_FOLDER / cfg.get("leetcode_cheatsheet_path", "Algorithm_Cheatsheet.md")
-    QUICK_REFERENCE = LEETCODE_FOLDER / cfg.get("quick_reference_path", "Interview_Quick_Reference.md")
-
-    RESUME_TEMPLATE_PNG = RESUME_FOLDER / cfg.get("resume_template_png", "06-Reference-Materials/resume_template.png")
-    COVER_LETTER_TEMPLATE_PNG = RESUME_FOLDER / cfg.get("cover_letter_template_png", "06-Reference-Materials/cover_letter_template.png")
-    TEMPLATE_FORMAT = RESUME_FOLDER / cfg.get("template_format_path", "06-Reference-Materials/Template Format.txt")
-    GM_AWARDS = RESUME_FOLDER / cfg.get("gm_awards_path", "06-Reference-Materials/Awards.txt")
-    FEEDBACK_RECEIVED = RESUME_FOLDER / cfg.get("feedback_received_path", "06-Reference-Materials/Feedback.txt")
-    SKILLS_SHORTER = RESUME_FOLDER / cfg.get("skills_shorter_path", "06-Reference-Materials/Skills Shorter.txt")
-
-    SERPAPI_KEY = cfg.get("serpapi_key", "")
-
-    LLM_PROVIDER = cfg.get("llm_provider", "openai")
-    OLLAMA_BASE_URL = cfg.get("ollama_base_url", "http://localhost:11434/v1")
-    OLLAMA_MODEL = cfg.get("ollama_model", "llama3.1:8b")
+def _p(key: str, fallback: str = "") -> Path:
+    """Resolve a config key to an absolute Path."""
+    raw = _cfg.get(key, fallback)
+    if not raw:
+        return Path(fallback) if fallback else Path()
+    return Path(raw).expanduser()
 
 
-def get_llm_client(task: str = ""):
-    """Return (client, model_name) for whichever provider is configured.
+def _resume_path(relative_key: str, fallback: str = "") -> Path:
+    """Join RESUME_FOLDER with a config-specified relative path."""
+    rel = _cfg.get(relative_key, fallback)
+    if not rel:
+        return RESUME_FOLDER / fallback
+    return RESUME_FOLDER / rel
 
-    llm_provider = "ollama"  → points the OpenAI SDK at the local Ollama server.
-                               No real API key needed; we pass a dummy string.
-    llm_provider = "openai"  → normal OpenAI cloud call (default).
 
-    The OpenAI Python SDK is compatible with any OpenAI-spec server, so Ollama
-    works by just swapping base_url and model name — no other code changes needed.
+# ── primary folder paths ──────────────────────────────────────────────────────
+
+RESUME_FOLDER: Path = _p("resume_folder")
+LEETCODE_FOLDER: Path = _p("leetcode_folder")
+DATA_FOLDER: Path = _p("data_folder")
+FB_FRIENDS_FOLDER: Path = _p("fb_friends_folder")
+
+SIDE_PROJECT_FOLDERS: list[Path] = [
+    Path(p).expanduser() for p in _cfg.get("side_project_folders", [])
+]
+
+LATEX_RESUME_DIR: Path = _p("latex_resume_dir")
+
+# ── data file paths ───────────────────────────────────────────────────────────
+
+STATUS_FILE: Path               = DATA_FOLDER / "status.json"
+HEALTH_LOG_FILE: Path           = DATA_FOLDER / "mental_health_log.json"
+PERSONAL_CONTEXT_FILE: Path     = DATA_FOLDER / "personal_context.json"
+TONE_FILE: Path                 = DATA_FOLDER / "tone_samples.json"
+SCAN_INDEX_FILE: Path           = DATA_FOLDER / "scan_index.json"
+PEOPLE_FILE: Path               = DATA_FOLDER / "people.json"
+LINKEDIN_POSTS_FILE: Path       = DATA_FOLDER / "linkedin_posts.json"
+REJECTIONS_FILE: Path           = DATA_FOLDER / "rejections.json"
+INTERVIEWS_FILE: Path           = DATA_FOLDER / "interviews.json"
+CONTACT_CROSSREF_FILE: Path     = DATA_FOLDER / "contact_crossref.json"
+LINKEDIN_CONNECTIONS_FILE: Path = DATA_FOLDER / "linkedin_connections.json"
+GITHUB_METRICS_FILE: Path       = DATA_FOLDER / "github_metrics.json"
+JOB_QUEUE_FILE: Path            = DATA_FOLDER / "job_queue.json"
+
+# ── resume / reference file paths ────────────────────────────────────────────
+
+MASTER_RESUME: Path = _resume_path("master_resume_path",
+                                   "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt")
+
+LEETCODE_CHEATSHEET: Path = (
+    LEETCODE_FOLDER / _cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")
+    if _cfg.get("leetcode_folder")
+    else Path()
+)
+
+QUICK_REFERENCE: Path = (
+    LEETCODE_FOLDER / _cfg.get("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md")
+    if _cfg.get("leetcode_folder")
+    else Path()
+)
+
+RESUME_TEMPLATE_PNG: Path     = _resume_path("resume_template_png",
+                                              "06-Reference-Materials/resume_template.png")
+COVER_LETTER_TEMPLATE_PNG: Path = _resume_path("cover_letter_template_png",
+                                                "06-Reference-Materials/cover_letter_template.png")
+TEMPLATE_FORMAT: Path         = _resume_path("template_format_path",
+                                              "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
+GM_AWARDS: Path               = _resume_path("gm_awards_path",
+                                              "06-Reference-Materials/GM Recognition Awards.txt")
+FEEDBACK_RECEIVED: Path       = _resume_path("feedback_received_path",
+                                              "06-Reference-Materials/Feedback_Received.txt")
+SKILLS_SHORTER: Path          = _resume_path("skills_shorter_path",
+                                              "06-Reference-Materials/Skills - 10% Shorter.txt")
+
+# ── folder paths derived from resume_folder ──────────────────────────────────
+
+INTERVIEW_PREP_FOLDER: Path = RESUME_FOLDER / _cfg.get("interview_prep_docs_dir",
+                                                         "08-Interview-Prep-Docs")
+JOB_ASSESSMENTS_FOLDER: Path = RESUME_FOLDER / _cfg.get("job_assessments_dir",
+                                                          "07-Job-Assessments")
+
+# ── misc ──────────────────────────────────────────────────────────────────────
+
+SERPAPI_KEY: str = _cfg.get("serpapi_key", "")
+
+
+# ── LLM client factory ────────────────────────────────────────────────────────
+
+def get_llm_client(task: str = "") -> tuple[Any, str]:
+    """Return (openai_client, model_name) for the configured LLM provider.
+
+    Supported providers (config.json key ``llm_provider``):
+      - ``"openai"``  (default) — calls api.openai.com
+      - ``"ollama"``            — calls localhost:11434/v1 (OpenAI-compatible)
+
+    Returns ``(None, "")`` when no API key is configured and provider is openai,
+    allowing callers to gracefully degrade rather than crash.
     """
     try:
         from openai import OpenAI
     except ImportError:
-        return None, None
+        return None, ""
 
-    cfg = _load_config()
-    provider = cfg.get("llm_provider", "openai")
+    provider = _cfg.get("llm_provider", "openai").lower()
+    model = _cfg.get("openai_model", "gpt-4o-mini")
 
     if provider == "ollama":
-        base_url = cfg.get("ollama_base_url", "http://localhost:11434/v1")
-        model = cfg.get("ollama_model", "llama3.1:8b")
-        if task == "assessment":
-            model = cfg.get("ollama_model_assessment", model)
-        client = OpenAI(base_url=base_url, api_key="ollama")
-        return client, model
+        ollama_base = _cfg.get("ollama_base_url", "http://localhost:11434/v1")
+        ollama_model = _cfg.get("ollama_model", "llama3.1:8b")
+        client = OpenAI(base_url=ollama_base, api_key="ollama")
+        return client, ollama_model
 
-    # default: openai
-    key = cfg.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
-    if not key or key.startswith("sk-..."):
-        return None, None
-    model = cfg.get("openai_model", "gpt-4o")
-    if task == "assessment":
-        model = cfg.get("openai_model_assessment", model)
-    client = OpenAI(api_key=key)
+    # openai (default)
+    api_key = _cfg.get("openai_api_key", "")
+    if not api_key:
+        return None, ""
+    client = OpenAI(api_key=api_key)
     return client, model
 
 
-# ── Generation token budgets ────────────────────────────────────────────────
-
-_DEFAULT_GENERATION_BUDGETS = {
-    "personal_context_token_budget": 1500,
-    "max_personal_stories": 8,
-    "tone_token_budget": 1500,
-    "max_tone_samples": 6,
-    "cover_letter_max_tokens": 12000,
-    "resume_max_tokens": 12000,
-    "safety_margin_tokens": 500,
-}
-
+# ── generation budget helper ──────────────────────────────────────────────────
 
 def get_generation_budgets() -> dict:
-    """Return generation token budgets, merging config over built-in defaults.
-
-    Centralizes the hard limits that keep generation prompts under the model
-    TPM ceiling regardless of how large personal_context.json grows.
-    """
-    budgets = dict(_DEFAULT_GENERATION_BUDGETS)
-    configured = _cfg.get("generation_budgets", {}) if isinstance(_cfg, dict) else {}
-    if isinstance(configured, dict):
-        for k, v in configured.items():
-            if isinstance(v, int) and v >= 0:
-                budgets[k] = v
-    return budgets
-
-
-def get_github_metrics_config() -> dict:
-    """Return the github_metrics config block (username + repos to track).
-
-    Shape: {"username": str, "repos": [str, ...]}. Repo entries may be either
-    bare names (combined with username) or full "owner/name" slugs.
-    """
-    block = _cfg.get("github_metrics", {}) if isinstance(_cfg, dict) else {}
-    if not isinstance(block, dict):
-        return {"username": "", "repos": []}
-    return {
-        "username": block.get("username", ""),
-        "repos": list(block.get("repos", []) or []),
+    """Return token/count budgets for AI generation calls."""
+    defaults = {
+        "personal_context_token_budget": 1500,
+        "max_personal_stories": 8,
+        "tone_token_budget": 1500,
+        "max_tone_samples": 6,
+        "cover_letter_max_tokens": 12000,
+        "resume_max_tokens": 12000,
+        "safety_margin_tokens": 500,
     }
+    configured = _cfg.get("generation_budgets", {})
+    return {**defaults, **configured}
 
 
-_reconfigure(_load_config())
+# ── reconfigure (called by server._reconfigure and tests) ────────────────────
+
+def _reconfigure(cfg: dict) -> None:
+    """Replace all module-level path constants from a new config dict.
+
+    Called by server._reconfigure() and by the test suite's isolated_server
+    fixture to redirect all file I/O to a temporary directory.
+    """
+    global _cfg
+    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
+    global FB_FRIENDS_FOLDER, LATEX_RESUME_DIR
+    global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE
+    global SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
+    global INTERVIEWS_FILE, CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE
+    global GITHUB_METRICS_FILE, JOB_QUEUE_FILE
+    global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
+    global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
+    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
+    global INTERVIEW_PREP_FOLDER, JOB_ASSESSMENTS_FOLDER
+    global SERPAPI_KEY
+
+    _cfg = cfg
+
+    def _rp(key: str, fallback: str = "") -> Path:
+        raw = cfg.get(key, fallback)
+        return Path(raw).expanduser() if raw else Path(fallback)
+
+    RESUME_FOLDER   = _rp("resume_folder")
+    LEETCODE_FOLDER = _rp("leetcode_folder")
+    DATA_FOLDER     = _rp("data_folder")
+    FB_FRIENDS_FOLDER = _rp("fb_friends_folder")
+    LATEX_RESUME_DIR  = _rp("latex_resume_dir")
+
+    SIDE_PROJECT_FOLDERS = [
+        Path(p).expanduser() for p in cfg.get("side_project_folders", [])
+    ]
+
+    # data files
+    STATUS_FILE               = DATA_FOLDER / "status.json"
+    HEALTH_LOG_FILE           = DATA_FOLDER / "mental_health_log.json"
+    PERSONAL_CONTEXT_FILE     = DATA_FOLDER / "personal_context.json"
+    TONE_FILE                 = DATA_FOLDER / "tone_samples.json"
+    SCAN_INDEX_FILE           = DATA_FOLDER / "scan_index.json"
+    PEOPLE_FILE               = DATA_FOLDER / "people.json"
+    LINKEDIN_POSTS_FILE       = DATA_FOLDER / "linkedin_posts.json"
+    REJECTIONS_FILE           = DATA_FOLDER / "rejections.json"
+    INTERVIEWS_FILE           = DATA_FOLDER / "interviews.json"
+    CONTACT_CROSSREF_FILE     = DATA_FOLDER / "contact_crossref.json"
+    LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
+    GITHUB_METRICS_FILE       = DATA_FOLDER / "github_metrics.json"
+    JOB_QUEUE_FILE            = DATA_FOLDER / "job_queue.json"
+
+    def _res(key: str, fallback: str) -> Path:
+        return RESUME_FOLDER / cfg.get(key, fallback)
+
+    MASTER_RESUME       = _res("master_resume_path",
+                               "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt")
+    TEMPLATE_FORMAT     = _res("template_format_path",
+                               "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
+    GM_AWARDS           = _res("gm_awards_path",
+                               "06-Reference-Materials/GM Recognition Awards.txt")
+    FEEDBACK_RECEIVED   = _res("feedback_received_path",
+                               "06-Reference-Materials/Feedback_Received.txt")
+    SKILLS_SHORTER      = _res("skills_shorter_path",
+                               "06-Reference-Materials/Skills - 10% Shorter.txt")
+    RESUME_TEMPLATE_PNG = _res("resume_template_png",
+                               "06-Reference-Materials/resume_template.png")
+    COVER_LETTER_TEMPLATE_PNG = _res("cover_letter_template_png",
+                                     "06-Reference-Materials/cover_letter_template.png")
+
+    lc = LEETCODE_FOLDER
+    LEETCODE_CHEATSHEET = lc / cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md") if str(lc) else Path()
+    QUICK_REFERENCE     = lc / cfg.get("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md") if str(lc) else Path()
+
+    INTERVIEW_PREP_FOLDER  = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
+    JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
+
+    SERPAPI_KEY = cfg.get("serpapi_key", "")

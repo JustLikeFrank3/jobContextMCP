@@ -12,7 +12,6 @@ config.json
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
-scripts/
 
 # Personal PDFs / docs that may land in repo root
 /*.pdf
@@ -44,6 +43,7 @@ workspace/
 
 # macOS
 .DS_Store
+~/
 
 # VS Code user settings
 .vscode/settings.json

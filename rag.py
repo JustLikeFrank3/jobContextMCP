@@ -129,6 +129,12 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     ]
     file_groups.append((prep_files, "interview_prep"))
 
+    # Interview prep docs folder (08-Interview-Prep-Docs)
+    prep_docs_dir = resume_folder / "08-Interview-Prep-Docs"
+    if prep_docs_dir.exists():
+        prep_doc_files = list(prep_docs_dir.glob("*.txt")) + list(prep_docs_dir.glob("*.md"))
+        file_groups.append((prep_doc_files, "interview_prep"))
+
     # Job assessments (fitment analysis, notes on specific roles)
     assessments_dir = resume_folder / "07-Job-Assessments"
     if assessments_dir.exists():

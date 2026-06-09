@@ -262,8 +262,11 @@ The v0.7–v0.9 line turns the project from a stdio-only MCP server into a local
 A new `transport/http/` package exposes core capabilities over REST + Server-Sent Events for clients that don't speak MCP (mobile, browser, scripts, Open WebUI):
 
 ```bash
-# From the project root
-.venv/bin/uvicorn transport.http.main:app --host 0.0.0.0 --port 8765
+# From the project root (reads HOST / PORT / ENABLE_REMOTE / API_KEY from environment)
+PORT=8000 .venv/bin/python -m transport.http.main
+
+# LAN / Tailscale access
+ENABLE_REMOTE=true PORT=8000 .venv/bin/python -m transport.http.main
 ```
 
 Endpoints:
@@ -278,7 +281,7 @@ Endpoints:
 - `GET /personas` / `GET /personas/{name}` — list/inspect persona configs
 - `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
 - `GET /dashboard/` and focused `/dashboard/*` routes — browser/mobile UI over the same services
-- All write endpoints require `Authorization: Bearer <token>` when `JOBCONTEXTMCP_HTTP_TOKEN` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
+- All write endpoints require `Authorization: Bearer <token>` when `API_KEY` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
 
 ### Web dashboard quick start (local + phone)
 
@@ -294,22 +297,22 @@ The dashboard at `/dashboard/` is the visual layer over the same local data and 
 - **Wellbeing** — mood/energy logs, trend summaries, and job-search sustainability check-ins.
 - **Portfolio** — GitHub public repo stats and durable traffic snapshots for resume/STAR-ready project metrics.
 
-When `JOBCONTEXTMCP_HTTP_TOKEN` is configured, browser login uses the same token model as the HTTP API. `/dashboard/login` sets an HTTP-only `jc_session` cookie for the local dashboard, `/dashboard/logout` clears it, and API-style calls can still use `Authorization: Bearer <token>`. The auth provider reads settings fresh at request time so changing the token does not require stale in-memory state cleanup.
+When `API_KEY` is configured, browser login uses the same token model as the HTTP API. `/dashboard/login` sets an HTTP-only `jc_session` cookie for the local dashboard, `/dashboard/logout` clears it, and API-style calls can still use `Authorization: Bearer <token>`. The auth provider reads settings fresh at request time so changing the token does not require stale in-memory state cleanup.
 
 Use the helper script so you don't have to remember startup flags each time:
 
 ```bash
+# LAN / Tailscale access (prints your IPs on startup)
+bash scripts/start_server.sh
+
 # Local machine only
-scripts/dashboard.sh start-local
+PORT=8000 .venv/bin/python -m transport.http.main
 
-# LAN / phone access
-scripts/dashboard.sh start-lan
-
-# Check current URL + PID
-scripts/dashboard.sh status
+# Check what's running on port 8000
+lsof -i tcp:8000
 
 # Stop it
-scripts/dashboard.sh stop
+lsof -ti tcp:8000 | xargs kill
 ```
 
 When running in LAN mode, open:
@@ -321,7 +324,7 @@ http://<YOUR_MAC_LAN_IP>:8000/dashboard/
 Notes:
 - Mac and phone must be on the same Wi-Fi.
 - If browser can't connect, allow incoming connections for Terminal/Python in macOS Firewall.
-- If you expose LAN access, set `JOBCONTEXTMCP_HTTP_TOKEN` in your environment before running.
+- If you expose LAN access, set `API_KEY` in your environment before running.
 - For AI/LLM/RAG roles, the pipeline can recommend the Modern/AI resume variant and pass that selection through to cover-letter title/export settings.
 
 ### iOS Share Sheet shortcut setup
@@ -342,10 +345,10 @@ For jobs without an Apply button or with a broken ATS link, the Pipeline page ha
 
 Prerequisites:
 
-1. Start the dashboard in LAN mode on your Mac:
+1. Start the dashboard in LAN / Tailscale mode on your Mac:
 
   ```bash
-  scripts/dashboard.sh start-lan
+  bash scripts/start_server.sh
   ```
 
 2. Confirm your phone can open the dashboard URL printed by the script, for example:
@@ -354,7 +357,7 @@ Prerequisites:
   http://192.168.68.66:8000/dashboard/
   ```
 
-3. If `JOBCONTEXTMCP_HTTP_TOKEN` is set, keep that token handy. The shortcut must send the same bearer token as the dashboard/API.
+3. If `API_KEY` is set, keep that token handy. The shortcut must send the same bearer token as the dashboard/API.
 
 Create the Shortcut:
 
@@ -369,7 +372,7 @@ Create the Shortcut:
   - Method: `POST`
   - Headers:
     - `Content-Type`: `application/json`
-    - `Authorization`: `Bearer <JOBCONTEXTMCP_HTTP_TOKEN>` *(only if auth is enabled)*
+    - `Authorization`: `Bearer <API_KEY>` *(only if auth is enabled)*
   - Request Body: `JSON`
   - JSON fields:
     - `url`: the output of **Get URLs from Input**
@@ -388,10 +391,10 @@ Usage:
 
 Troubleshooting:
 
-- If the shortcut returns `401`, the `Authorization` header is missing or the token does not match `JOBCONTEXTMCP_HTTP_TOKEN`.
-- If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running with `start-lan`, and macOS Firewall allows Python/Terminal incoming connections.
+- If the shortcut returns `401`, the `Authorization` header is missing or the token does not match `API_KEY`.
+- If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running (`bash scripts/start_server.sh`), and macOS Firewall allows Python/Terminal incoming connections.
 - If `/jobs/ingest-url` returns a LinkedIn-blocked message, you shared the LinkedIn URL instead of the ATS URL. Tap Apply on the LinkedIn page first to get to the employer's site, then share.
-- If the Mac changes networks, the LAN IP can change. Run `scripts/dashboard.sh status` and update the Shortcut URL.
+- If the Mac changes networks, the LAN IP can change. Run `lsof -i tcp:8000` to confirm the server is up and re-check the IP printed at startup.
 
 ### Persona configs
 
@@ -972,7 +975,7 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 
 ### v0.7 *(shipped)*
 
-- **HTTP + SSE transport** (`transport/http/`) — FastAPI app exposing `/health`, `/context/session`, `/resumes/generate[/stream]`, `/jobs`, `/personas`, `/workflows[/{name}[/stream]]`. Optional bearer-token auth via `JOBCONTEXTMCP_HTTP_TOKEN`. Lets the iPad (or any HTTP client) drive the server without an MCP shim.
+- **HTTP + SSE transport** (`transport/http/`) — FastAPI app exposing `/health`, `/context/session`, `/resumes/generate[/stream]`, `/jobs`, `/personas`, `/workflows[/{name}[/stream]]`. Optional bearer-token auth via `API_KEY` env var. Lets the iPad (or any HTTP client) drive the server without an MCP shim.
 - **LangGraph resume workflow** (`workflows/langgraph/resume_graph.py`) — `load_context → draft → review → (revise → review){0..N} → output` with per-node SSE progress streaming through `services/workflow_service.py`.
 - **Persona configs** (`services/persona_service.py`, `data/personas/*.json`) — bundled `default` / `executive_polish` / `faang_technical` / `startup_founder` presets; user overrides via `<data_folder>/personas/`. Persona-aware `generate_resume()` and `/resumes/generate`.
 - **`get_github_stats(username)`** — public GitHub profile + top non-fork repos via stdlib urllib; offline stub for tests via `JOBCONTEXTMCP_OFFLINE=1`.
