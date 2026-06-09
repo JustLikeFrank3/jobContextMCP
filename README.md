@@ -547,7 +547,7 @@ After changing `MCP_MODE`, reload the MCP server in VS Code: **Command Palette �
 
 > ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If tools behave flakily, open that global file and remove any duplicate `jobContextMCP` entry.
 
-> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` and `run_mcp.sh` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` and `scripts/run_mcp.sh` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
 
 ##### Claude Desktop
 

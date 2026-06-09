@@ -5,7 +5,7 @@
   "servers": {
     "jobContextMCP": {
       "type": "stdio",
-      "command": "${workspaceFolder}/run_mcp.sh",
+      "command": "${workspaceFolder}/scripts/run_mcp.sh",
       "args": [],
       "cwd": "${workspaceFolder}"
     }

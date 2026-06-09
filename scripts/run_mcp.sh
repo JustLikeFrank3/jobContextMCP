@@ -12,12 +12,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Load .env if present (silently — do not abort if missing)
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
+if [[ -f "$REPO_ROOT/.env" ]]; then
     set -a
     # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/.env"
+    source "$REPO_ROOT/.env"
     set +a
 fi
 
@@ -25,10 +26,10 @@ MCP_MODE="${MCP_MODE:-docker}"
 
 case "$MCP_MODE" in
     local)
-        exec "$SCRIPT_DIR/.venv/bin/python3" "$SCRIPT_DIR/server.py"
+        exec "$REPO_ROOT/.venv/bin/python3" "$REPO_ROOT/server.py"
         ;;
     docker)
-        exec docker compose -f "$SCRIPT_DIR/docker-compose.yml" run --rm -i jobcontextmcp
+        exec docker compose -f "$REPO_ROOT/docker-compose.yml" run --rm -i jobcontextmcp
         ;;
     *)
         echo "run_mcp.sh: unknown MCP_MODE='$MCP_MODE'. Valid values: docker, local" >&2
