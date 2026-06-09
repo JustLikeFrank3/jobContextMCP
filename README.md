@@ -534,11 +534,20 @@ This means automation scripts, cron jobs, and CI pipelines can consume the same 
 
 ##### VS Code + GitHub Copilot *(recommended — zero extra config)*
 
-`.vscode/mcp.json` is already committed and uses `${workspaceFolder}` relative paths. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no extra configuration needed.
+`.vscode/mcp.json` is already committed. It points to `run_mcp.sh`, a small dispatcher that reads `MCP_MODE` from `.env` and starts either Docker or the local `.venv` — so you never need to edit the JSON file to switch modes.
+
+**Switch modes in `.env`:**
+
+```dotenv
+MCP_MODE=docker   # docker compose run --rm -i jobcontextmcp  (default)
+MCP_MODE=local    # .venv/bin/python3 server.py  (faster iteration, no rebuild)
+```
+
+After changing `MCP_MODE`, reload the MCP server in VS Code: **Command Palette → MCP: List Servers → restart jobContextMCP**.
 
 > ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If tools behave flakily, open that global file and remove any duplicate `jobContextMCP` entry.
 
-> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` and `run_mcp.sh` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
 
 ##### Claude Desktop
 
@@ -634,6 +643,9 @@ Add to `~/.config/zed/settings.json` under `"context_servers"`:
 #### Docker — stdio (Claude Desktop)
 
 If you built with Docker, point Claude Desktop at the container instead of a local Python process.
+
+> **VS Code users:** `run_mcp.sh` handles this automatically based on `MCP_MODE` in `.env` — no manual JSON editing needed. The instructions below are for Claude Desktop and other clients that don't read `.env`.
+
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json

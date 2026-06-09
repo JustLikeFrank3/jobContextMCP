@@ -19,11 +19,24 @@ from lib.io import _save_json
 
 _HERE = Path(__file__).resolve().parent.parent  # repo root
 
-# ── Workspace layout (all relative to repo root) ──────────────────────────────
+# ── Workspace layout — derived from config so Docker volumes are respected ────
+# Use lazy helpers so we always read the live config values rather than
+# snapshotting them at import time (config may not be loaded yet).
 
+def _resumes_root() -> Path:
+    """Resume workspace root — honours config.RESUME_FOLDER (e.g. /workspace in Docker)."""
+    return config.RESUME_FOLDER
+
+def _leetcode_root() -> Path:
+    """LeetCode workspace root — honours config.LEETCODE_FOLDER."""
+    return config.LEETCODE_FOLDER
+
+def _data_dir() -> Path:
+    """Data directory — honours config.DATA_FOLDER."""
+    return config.DATA_FOLDER
+
+# Kept only for _build_config which constructs a brand-new config.json
 _WORKSPACE_ROOT = _HERE / "workspace"
-_RESUMES_ROOT   = _WORKSPACE_ROOT / "resumes"
-_LEETCODE_ROOT  = _WORKSPACE_ROOT / "leetcode"
 
 _RESUME_SUBDIRS = [
     "01-Current-Optimized",
@@ -255,18 +268,18 @@ def check_workspace() -> str:
     lines.append("")
 
     # Resume folder subdirs
+    resumes_root = _resumes_root()
     lines.append("── Resume workspace ──")
     for subdir in _RESUME_SUBDIRS:
-        p = _RESUMES_ROOT / subdir
-        lines.append(f"  {'✓' if p.exists() else '✗'} workspace/resumes/{subdir}/")
+        p = resumes_root / subdir
+        lines.append(f"  {'✓' if p.exists() else '✗'} {resumes_root}/{subdir}/")
 
     # Master resume
     lines.append("")
     lines.append("── Master resume ──")
     if config_path.exists():
         try:
-            cfg = json.loads(config_path.read_text(encoding="utf-8"))
-            mr = _RESUMES_ROOT / cfg.get("master_resume_path", "")
+            mr = config.MASTER_RESUME
             if mr.exists():
                 word_count = len(mr.read_text(encoding="utf-8", errors="replace").split())
                 lines.append(f"  ✓ {mr.name} ({word_count} words)")
@@ -281,30 +294,31 @@ def check_workspace() -> str:
     lines.append("")
 
     # LeetCode
+    lc_root = _leetcode_root()
     lines.append("── LeetCode workspace ──")
-    lc_exists = _LEETCODE_ROOT.exists()
-    lines.append(f"  {'✓' if lc_exists else '✗'} workspace/leetcode/")
+    lc_exists = lc_root.exists()
+    lines.append(f"  {'✓' if lc_exists else '✗'} {lc_root}/")
     if lc_exists:
-        cheat = _LEETCODE_ROOT / "Algorithm_Cheatsheet.md"
-        qref  = _LEETCODE_ROOT / "Interview_Quick_Reference.md"
-        lines.append(f"  {'✓' if cheat.exists() else '✗'} Algorithm_Cheatsheet.md")
-        lines.append(f"  {'✓' if qref.exists() else '✗'} Interview_Quick_Reference.md")
+        cheat = config.LEETCODE_CHEATSHEET
+        qref  = config.QUICK_REFERENCE
+        lines.append(f"  {'✓' if cheat.exists() else '✗'} {cheat.name}")
+        lines.append(f"  {'✓' if qref.exists() else '✗'} {qref.name}")
 
     lines.append("")
 
     # Data files
     lines.append("── Data files ──")
-    data_dir = _HERE / "data"
+    data_dir = _data_dir()
     for fname in _DATA_FILES:
         p = data_dir / fname
-        lines.append(f"  {'✓' if p.exists() else '✗'} data/{fname}")
+        lines.append(f"  {'✓' if p.exists() else '✗'} {data_dir}/{fname}")
 
     lines.append("")
 
     # Summary
     missing_config    = not config_path.exists()
     missing_data      = any(not (data_dir / f).exists() for f in _DATA_FILES)
-    missing_workspace = not _RESUMES_ROOT.exists() or not _LEETCODE_ROOT.exists()
+    missing_workspace = not resumes_root.exists() or not lc_root.exists()
 
     if not missing_config and not missing_data and not missing_workspace:
         lines.append("✓ Workspace looks complete. Call get_session_context() to begin.")
@@ -371,59 +385,63 @@ def setup_workspace(
     created: list[str] = []
     skipped: list[str] = []
 
-    def _mark(path: Path, label: str, was_created: bool) -> None:
+    def _mark(label: str, was_created: bool) -> None:
         (created if was_created else skipped).append(label)
+
+    # Resolve live paths from config (respects Docker volume mounts)
+    resumes_root = _resumes_root()
+    lc_root      = _leetcode_root()
+    data_dir     = _data_dir()
 
     # 1. Resume folder subdirs
     for subdir in _RESUME_SUBDIRS:
-        p = _RESUMES_ROOT / subdir
+        p = resumes_root / subdir
         if not p.exists():
             p.mkdir(parents=True, exist_ok=True)
-            _mark(p, f"workspace/resumes/{subdir}/", True)
+            _mark(f"{resumes_root}/{subdir}/", True)
         else:
-            _mark(p, f"workspace/resumes/{subdir}/", False)
+            _mark(f"{resumes_root}/{subdir}/", False)
 
     # 2. Master resume
     mr_filename = _master_resume_filename(name)
-    mr_path = _RESUMES_ROOT / "01-Current-Optimized" / mr_filename
+    mr_path = resumes_root / "01-Current-Optimized" / mr_filename
     if not mr_path.exists():
         mr_path.write_text(master_resume_content.strip(), encoding="utf-8")
-        _mark(mr_path, f"01-Current-Optimized/{mr_filename}", True)
+        _mark(f"01-Current-Optimized/{mr_filename}", True)
     else:
-        _mark(mr_path, f"01-Current-Optimized/{mr_filename} (already exists — not overwritten)", False)
+        _mark(f"01-Current-Optimized/{mr_filename} (already exists — not overwritten)", False)
 
     # 3. LeetCode workspace
     lc_problems_subdir = _LC_PROBLEMS_DIR[lang]
-    lc_problems_dir = _LEETCODE_ROOT / lc_problems_subdir
+    lc_problems_dir = lc_root / lc_problems_subdir
     if not lc_problems_dir.exists():
         lc_problems_dir.mkdir(parents=True, exist_ok=True)
-        _mark(lc_problems_dir, f"workspace/leetcode/{lc_problems_subdir}/", True)
+        _mark(f"{lc_root}/{lc_problems_subdir}/", True)
     else:
-        _mark(lc_problems_dir, f"workspace/leetcode/{lc_problems_subdir}/", False)
+        _mark(f"{lc_root}/{lc_problems_subdir}/", False)
 
     # Stub problem file
     stub_fname, stub_content = _LC_STUB[lang]
     stub_path = lc_problems_dir / stub_fname
     if not stub_path.exists():
         stub_path.write_text(stub_content, encoding="utf-8")
-        _mark(stub_path, f"workspace/leetcode/{lc_problems_subdir}/{stub_fname}", True)
+        _mark(f"{lc_root}/{lc_problems_subdir}/{stub_fname}", True)
     else:
-        _mark(stub_path, f"workspace/leetcode/{lc_problems_subdir}/{stub_fname}", False)
+        _mark(f"{lc_root}/{lc_problems_subdir}/{stub_fname}", False)
 
     # Cheatsheet + quick reference stubs
     for fname, content in [
         ("Algorithm_Cheatsheet.md", _CHEATSHEET_STUB),
         ("Interview_Quick_Reference.md", _QUICK_REF_STUB),
     ]:
-        p = _LEETCODE_ROOT / fname
+        p = lc_root / fname
         if not p.exists():
             p.write_text(content, encoding="utf-8")
-            _mark(p, f"workspace/leetcode/{fname}", True)
+            _mark(f"{lc_root}/{fname}", True)
         else:
-            _mark(p, f"workspace/leetcode/{fname}", False)
+            _mark(f"{lc_root}/{fname}", False)
 
     # 4. Data files
-    data_dir = _HERE / "data"
     data_dir.mkdir(exist_ok=True)
     seeds = _seed_data(name)
     for fname in _DATA_FILES:
@@ -435,9 +453,9 @@ def setup_workspace(
                 shutil.copy(example, p)
             else:
                 _save_json(p, seeds.get(fname, {}))
-            _mark(p, f"data/{fname}", True)
+            _mark(f"{data_dir}/{fname}", True)
         else:
-            _mark(p, f"data/{fname}", False)
+            _mark(f"{data_dir}/{fname}", False)
 
     # 5. config.json
     config_path = _HERE / "config.json"
@@ -456,12 +474,12 @@ def setup_workspace(
         config_path.write_text(
             json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        _mark(config_path, "config.json", True)
+        _mark("config.json", True)
         # Reload live config so tools work immediately
         from lib.config import _reconfigure
         _reconfigure(cfg)
     else:
-        _mark(config_path, "config.json (already exists — not overwritten)", False)
+        _mark("config.json (already exists — not overwritten)", False)
 
     # ── Report ────────────────────────────────────────────────────────────────
     lines = ["═══ WORKSPACE SETUP COMPLETE ═══", ""]

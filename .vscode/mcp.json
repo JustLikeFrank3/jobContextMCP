@@ -1,9 +1,12 @@
 {
+  // MCP_MODE in .env controls dispatch: docker (default) or local
+  // MCP_MODE=docker → docker compose run --rm -i jobcontextmcp
+  // MCP_MODE=local  → .venv/bin/python3 server.py
   "servers": {
     "jobContextMCP": {
       "type": "stdio",
-      "command": ".venv/bin/python3",
-      "args": ["server.py"],
+      "command": "${workspaceFolder}/run_mcp.sh",
+      "args": [],
       "cwd": "${workspaceFolder}"
     }
   }
