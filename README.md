@@ -430,12 +430,30 @@ Pick **one** of the two approaches below. Docker is recommended for sharing with
 
 #### Option A — Local Python
 
+> Requires **Python 3.10+** (the `mcp` package floor). **3.12 recommended** to match the [Dockerfile](Dockerfile) and guarantee wheel availability for `numpy`, `weasyprint`, and the rest of the native-extension dependencies.
+
 ```bash
 git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+
+# macOS: install Python 3.12 via Homebrew if you don't already have it
+brew install python@3.12
+
+# Create the venv with an EXPLICIT 3.12 binary — don't rely on bare `python3`,
+# which on a stock macOS box is Apple's Command Line Tools 3.9.6 and will fail
+# on `mcp>=1.3.0` (requires Python >=3.10).
+/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+
+# Smoke test: confirm the server imports cleanly and registers all tools
+.venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
+# Expected: OK, 77 tools
 ```
+
+> ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.
+
+> **PDF export native libs (optional, macOS):** WeasyPrint needs Cairo, Pango, and GDK-Pixbuf at runtime. Install with `brew install cairo pango gdk-pixbuf libffi`. You can skip this if you only use Docker for PDF export — the Dockerfile installs these inside the container. All other tools work without these libs; only `export_resume_pdf` and `export_cover_letter_pdf` will fail.
 
 #### Option B — Docker
 
@@ -682,6 +700,98 @@ MCP_TRANSPORT=streamable-http docker compose up
 
 Then connect to `http://localhost:8000/sse` (SSE) or `http://localhost:8000/mcp` (streamable-http).
 Control the port via `MCP_PORT` in `.env`.
+
+---
+
+### 2b. Local development workflow
+
+If you're adding tools, modifying services, or debugging — run in `local` mode. Docker is the right call for sharing, releases, and CI; it's the wrong call for iteration. A `docker compose build` after every code change is ~30s of friction per loop. A local-venv restart is ~0.5s.
+
+#### The dispatcher: `scripts/run_mcp.sh`
+
+[`.vscode/mcp.json`](.vscode/mcp.json) always points at [`scripts/run_mcp.sh`](scripts/run_mcp.sh). That script reads `MCP_MODE` from [`.env`](.env.example) and dispatches to either Docker or your local venv. CLI/inherited env vars take precedence over `.env`, so you can override ad-hoc without editing the file:
+
+```bash
+MCP_MODE=local  ./scripts/run_mcp.sh   # forces local, ignoring .env
+MCP_MODE=docker ./scripts/run_mcp.sh   # forces docker, ignoring .env
+```
+
+The script also auto-resolves the venv path — it tries `.venv/bin/python3` first, then falls back to `.venv.nosync/bin/python3` (the iCloud "don't sync" suffix convention) so the same script works whether your repo lives on an iCloud-synced or external volume.
+
+#### Flip to local for development
+
+In `.env`:
+
+```dotenv
+MCP_MODE=local
+```
+
+Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 77 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
+
+#### What's live vs. baked-in
+
+[`docker-compose.yml`](docker-compose.yml) bind-mounts `./data` and `./config.json` into the container, so **data changes (JSON state, RAG index, embeddings) are live in both modes**. But the Python source is `COPY .`'d into the image at [Dockerfile build time](Dockerfile), so **code changes in Docker mode require a rebuild** before they take effect.
+
+| Mode | Code changes | Data changes | Restart cycle |
+|---|---|---|---|
+| `local` | Live on MCP restart | Live (same files) | Restart MCP server in VS Code (~0.5s) |
+| `docker` | Requires image rebuild | Live (bind-mounted) | `docker compose build jobcontextmcp` + restart MCP server (~30s+) |
+
+For a fast inner loop while developing tools, services, or transport code: stay in `local`, restart between edits, and only flip to `docker` for release-validation smoke tests.
+
+#### Validate the Docker image before tagging a release
+
+Before cutting a release tag or publishing the image, smoke-test it end-to-end:
+
+```bash
+# Flip to docker temporarily
+sed -i '' 's/^MCP_MODE=local$/MCP_MODE=docker/' .env
+docker compose build jobcontextmcp
+# Restart MCP server in VS Code → confirm `Discovered N tools` matches local mode
+# Optionally run a few critical tool calls (get_job_hunt_status, check_workspace, etc.)
+
+# Flip back to local for continued development
+sed -i '' 's/^MCP_MODE=docker$/MCP_MODE=local/' .env
+```
+
+Other clients (Claude Desktop, automation scripts, CI pipelines) read straight from the published image — `MCP_MODE` only affects the VS Code dispatcher.
+
+#### Verify mode parity
+
+A quick sanity check that local and Docker register the same tool set:
+
+```bash
+.venv/bin/python3 -c "import server; print('local:', len(server.mcp._tool_manager.list_tools()))"
+docker compose run --rm jobcontextmcp python3 -c "import server; print('docker:', len(server.mcp._tool_manager.list_tools()))"
+# Both should print the same count
+```
+
+If the counts diverge, the most likely cause is uncommitted code changes (local sees them; Docker image doesn't until you rebuild).
+
+#### Sync data from a separate production workspace
+
+If you maintain TWO clones — a production one (e.g. in iCloud) where you actually use the tool for job hunting, and a separate dev clone for code changes — you'll want fresh data in the dev clone before testing features against real state. [`scripts/sync_data_from_production.sh`](scripts/sync_data_from_production.sh) handles this.
+
+It's a one-way `rsync` (production → dev) wrapped with safety rails: pre-sync tarball snapshot to [`backups/`](backups), dry-run mode, confirmation prompt, refusal to sync if source and destination resolve to the same path, refusal to sync from an empty source, automatic pruning of old backups, and an exclude list for `.DS_Store` / `.bak*` clutter. Code, config, and workspace files are never touched — only `data/`.
+
+Configure the source in [`.env`](.env.example):
+
+```dotenv
+DATA_SYNC_SOURCE=/absolute/path/to/production/jobContextMCP/data
+BACKUP_RETENTION=10
+```
+
+Then:
+
+```bash
+./scripts/sync_data_from_production.sh --dry-run   # preview
+./scripts/sync_data_from_production.sh             # snapshot + sync (prompts)
+./scripts/sync_data_from_production.sh --yes       # snapshot + sync (no prompt; for cron/launchd)
+./scripts/sync_data_from_production.sh --no-backup # skip snapshot (faster, riskier)
+./scripts/sync_data_from_production.sh --help      # usage
+```
+
+Dual benefit: dev tests run against current job-hunt state, AND the `backups/` folder accumulates timestamped tarballs of your data on non-cloud storage — a useful safety net since the canonical `data/` lives in iCloud.
 
 ---
 
