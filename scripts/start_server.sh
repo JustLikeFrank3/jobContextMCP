@@ -28,7 +28,10 @@ cd "$REPO_DIR"
 
 # Load .env if present (API_KEY, CORS_ORIGINS, etc.)
 if [[ -f .env ]]; then
-    set -a; source .env; set +a
+    set -a
+    # shellcheck source=/dev/null
+    source .env
+    set +a
 fi
 
 exec env ENABLE_REMOTE=true PORT="${PORT}" \
