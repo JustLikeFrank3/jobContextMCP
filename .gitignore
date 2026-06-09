@@ -41,6 +41,9 @@ docs/branding/banner/jobcontextmcp-wingdings.svg
 # Generated workspace (created by setup_workspace(); contains user data)
 workspace/
 
+# Local backup tarballs (pre-migration snapshots, ad-hoc safety nets)
+backups/
+
 # macOS
 .DS_Store
 ~/
