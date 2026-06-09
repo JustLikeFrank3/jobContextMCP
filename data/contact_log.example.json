@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Jane Doe",
+    "role": "Senior Engineering Manager @ Example Corp",
+    "source": "LinkedIn comment",
+    "context": "Engaged on a post about open-source tooling; replied with a thoughtful technical question.",
+    "date": "2026-01-15",
+    "impressions": 240,
+    "reply": false,
+    "notes": "Potential influencer — not yet contacted directly."
+  }
+]

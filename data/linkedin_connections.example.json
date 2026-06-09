@@ -1,14 +1,14 @@
-# ── data/linkedin_connections.example.json ───────────────────────────────────
-# Copy this to data/linkedin_connections.json.
-# Export from LinkedIn: Settings > Data Privacy > Get a copy of your data > Connections.
-# data/linkedin_connections.json is gitignored — your real data stays private.
 {
   "metadata": {
     "source": "LinkedIn Connections Export",
-    "exported": "YYYY-MM-DD",
+    "exported": "2026-01-01",
     "total": 0,
     "facebook_crossref_ready": true,
-    "note": "Populate with your LinkedIn connections CSV export, parsed into this structure."
+    "note": "Populate from LinkedIn Settings > Data Privacy > Get a copy of your data > Connections.",
+    "facebook_crossref_done": false,
+    "facebook_matches": 0,
+    "total_linkedin": 0,
+    "facebook_crossref_date": null
   },
   "connections": [
     {

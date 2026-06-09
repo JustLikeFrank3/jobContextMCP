@@ -1,6 +1,14 @@
-# ── data/rejections.example.json ─────────────────────────────────────────────
-# Copy this to data/rejections.json to track rejections and pattern analysis.
-# data/rejections.json is gitignored — your real data stays private.
 {
-  "rejections": []
+  "rejections": [
+    {
+      "id": 1,
+      "company": "Example Corp",
+      "role": "Senior Software Engineer",
+      "stage": "phone_screen",
+      "reason": "Not enough recent experience with target stack",
+      "notes": "Recruiter was friendly; left door open for future roles.",
+      "date": "2026-01-15",
+      "logged_at": "2026-01-15T16:30:00"
+    }
+  ]
 }
