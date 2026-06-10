@@ -191,6 +191,21 @@ def get_generation_budgets() -> dict:
     return {**defaults, **configured}
 
 
+def get_github_metrics_config() -> dict:
+    """Return the github_metrics config block (username + repos to track).
+
+    Shape: {"username": str, "repos": [str, ...]}. Repo entries may be either
+    bare names (combined with username) or full "owner/name" slugs.
+    """
+    block = _cfg.get("github_metrics", {}) if isinstance(_cfg, dict) else {}
+    if not isinstance(block, dict):
+        return {"username": "", "repos": []}
+    return {
+        "username": block.get("username", ""),
+        "repos": list(block.get("repos", []) or []),
+    }
+
+
 # ── reconfigure (called by server._reconfigure and tests) ────────────────────
 
 def _reconfigure(cfg: dict) -> None:
