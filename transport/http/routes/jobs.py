@@ -66,7 +66,7 @@ async def evaluate(req: JobEvaluateRequest) -> JobEvaluateResponse:
 )
 async def ingest_url(req: JobIngestUrlRequest) -> JobIngestUrlResponse:
     """Scrape a job URL, queue it, and run fitment evaluation in one call."""
-    req = req.model_copy(update={"url": req.url.strip()})
+    req = req.model_copy(update={"url": "".join(c for c in req.url if c.isprintable()).strip()})
     try:
         text = _job_scraper._fetch_jina(req.url)
     except _LinkedInBlockedError:
