@@ -80,6 +80,7 @@ async def ingest_url(req: JobIngestUrlRequest) -> JobIngestUrlResponse:
             evaluated=False,
             queue_status="linkedin_blocked",
             fitment_context="",
+            message="⚠️ LinkedIn blocked — share the ATS URL instead (tap Apply first)",
             notes=[
                 "LinkedIn blocks automated scraping (HTTP 451). "
                 "On your phone: tap \u22ef in LinkedIn, choose \u2018Copy link\u2019 or select all text "
@@ -128,6 +129,7 @@ async def ingest_url(req: JobIngestUrlRequest) -> JobIngestUrlResponse:
         queue_status=result.queue_status,
         fitment_context=result.fitment_context,
         notes=notes,
+        message=f"{result.role} @ {result.company} ({result.queue_status})",
     )
 
 

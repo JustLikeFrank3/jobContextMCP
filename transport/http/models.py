@@ -60,6 +60,7 @@ class JobIngestUrlResponse(BaseModel):
     queue_status: str
     fitment_context: str
     notes: list[str] = Field(default_factory=list)
+    message: str = ""
 
 
 class JobDecisionRequest(BaseModel):
