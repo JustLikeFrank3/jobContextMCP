@@ -160,7 +160,11 @@ def _fetch_jina(url: str) -> str:
         timeout=_HTTP_TIMEOUT,
         follow_redirects=True,
     )
-    response.raise_for_status()
+    # Jina sometimes returns 4xx with a full body (e.g. Coca-Cola careers returns
+    # 400 but the complete JD is in the response text). Only raise if the body is
+    # empty — otherwise use whatever content we got.
+    if not response.text.strip():
+        response.raise_for_status()
     return response.text
 
 
