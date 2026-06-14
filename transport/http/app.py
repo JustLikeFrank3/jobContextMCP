@@ -8,9 +8,11 @@ calls the same factory.
 """
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
@@ -61,5 +63,21 @@ def create_app() -> FastAPI:
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
     app.include_router(dashboard_router)
+
+    # ── Static icon routes (suppress browser-auto 404s) ──────────────────────
+    _static = Path(__file__).parent / "static"
+    _PNG = "image/png"
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        return FileResponse(_static / "favicon.ico", media_type=_PNG)
+
+    @app.get("/apple-touch-icon.png", include_in_schema=False)
+    async def apple_touch_icon():
+        return FileResponse(_static / "apple-touch-icon.png", media_type=_PNG)
+
+    @app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+    async def apple_touch_icon_precomposed():
+        return FileResponse(_static / "apple-touch-icon-precomposed.png", media_type=_PNG)
 
     return app
