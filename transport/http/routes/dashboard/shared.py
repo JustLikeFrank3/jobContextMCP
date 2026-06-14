@@ -124,6 +124,7 @@ def html_page(title: str, active_tab: str, subtitle: str, extra_css: str, body: 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContextMCP — {title}</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" />
   <style>{BASE_CSS}{extra_css}</style>
   {_auth_header_js()}
 </head>
