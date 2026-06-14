@@ -72,12 +72,9 @@ def create_app() -> FastAPI:
     async def favicon():
         return FileResponse(_static / "favicon.ico", media_type=_PNG)
 
-    @app.get("/apple-touch-icon.png", include_in_schema=False)
-    async def apple_touch_icon():
+    @app.get("/apple-touch-icon{_:path}.png", include_in_schema=False)
+    async def apple_touch_icon(_: str):
+        """Catch all apple-touch-icon variants iOS requests (sized, precomposed, etc.)."""
         return FileResponse(_static / "apple-touch-icon.png", media_type=_PNG)
-
-    @app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
-    async def apple_touch_icon_precomposed():
-        return FileResponse(_static / "apple-touch-icon-precomposed.png", media_type=_PNG)
 
     return app
