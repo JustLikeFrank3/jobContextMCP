@@ -1,6 +1,11 @@
 import json
+import os
 import datetime
 from pathlib import Path
+
+# When USE_SQLITE=1 (or true/yes), _load_json reads from SQLite instead of JSON.
+# Writes still go to JSON; run scripts/migrate_to_sqlite.py to re-sync.
+_USE_SQLITE: bool = os.environ.get("USE_SQLITE", "").strip().lower() in ("1", "true", "yes")
 
 
 def _read(path: Path) -> str:
@@ -11,6 +16,13 @@ def _read(path: Path) -> str:
 
 
 def _load_json(path: Path, default):
+    if _USE_SQLITE:
+        from lib.io_sqlite import load_from_sqlite, SQLITE_NO_HANDLER
+        result = load_from_sqlite(path, default)
+        if result is not SQLITE_NO_HANDLER:
+            return result
+        # Unmapped file — fall through to JSON below
+
     try:
         if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))

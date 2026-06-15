@@ -14,7 +14,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
+
+# Ensure project root is on sys.path when the script is run directly
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from lib.db import normalize_event_type
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -34,13 +42,27 @@ CREATE TABLE applications (
     contact      TEXT,
     notes        TEXT,
     applied_date TEXT,
-    last_updated TEXT    NOT NULL DEFAULT ''
+    last_updated TEXT,
+    location     TEXT,
+    date_applied TEXT,
+    req_number   TEXT,
+    comp         TEXT     -- JSON object
 );
 
 CREATE TABLE application_events (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    type           TEXT    NOT NULL,
+    type           TEXT    NOT NULL
+                           CHECK (type IN (
+                               'applied','contact_update','follow_up_sent',
+                               'hiring_manager_contact','interview_completed',
+                               'interview_scheduled','note','outreach_sent',
+                               'phone_screen','recruiter_contact',
+                               'referral_confirmed','referral_identified',
+                               'referral_submitted','rejected',
+                               'reply_received','reply_sent'
+                           )),
+    raw_type       TEXT,    -- original value before normalization
     notes          TEXT,
     date           TEXT
 );
@@ -259,8 +281,9 @@ def _applications(cur: sqlite3.Cursor) -> tuple[int, int]:
         cur.execute(
             """
             INSERT INTO applications
-                (company, role, status, next_steps, contact, notes, applied_date, last_updated)
-            VALUES (?,?,?,?,?,?,?,?)
+                (company, role, status, next_steps, contact, notes, applied_date, last_updated,
+                 location, date_applied, req_number, comp)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 app.get("company", ""),
@@ -270,14 +293,19 @@ def _applications(cur: sqlite3.Cursor) -> tuple[int, int]:
                 app.get("contact"),
                 app.get("notes"),
                 app.get("applied_date"),
-                app.get("last_updated") or "",
+                app.get("last_updated") or None,
+                app.get("location"),
+                app.get("date_applied"),
+                app.get("req_number"),
+                _j(app.get("comp")),
             ),
         )
         app_id = cur.lastrowid
         for ev in app.get("events", []):
+            raw_type = ev.get("type", "note")
             cur.execute(
-                "INSERT INTO application_events (application_id, type, notes, date) VALUES (?,?,?,?)",
-                (app_id, ev.get("type", ""), ev.get("notes"), ev.get("date")),
+                "INSERT INTO application_events (application_id, type, raw_type, notes, date) VALUES (?,?,?,?,?)",
+                (app_id, normalize_event_type(raw_type), raw_type, ev.get("notes"), ev.get("date")),
             )
             n_events += 1
         n_apps += 1
