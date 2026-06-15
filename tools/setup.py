@@ -193,8 +193,8 @@ def _build_config(
     lc_problems_subdir = _LC_PROBLEMS_DIR.get(lang, "problems")
 
     cfg: dict = {
-        "resume_folder":    _to_tilde(_RESUMES_ROOT),
-        "leetcode_folder":  _to_tilde(_LEETCODE_ROOT),
+        "resume_folder":    _to_tilde(_resumes_root()),
+        "leetcode_folder":  _to_tilde(_leetcode_root()),
         "data_folder":      _to_tilde(_HERE / "data"),
         "side_project_folders": [_to_tilde(Path(p).expanduser()) for p in (side_project_folders or [])],
 
