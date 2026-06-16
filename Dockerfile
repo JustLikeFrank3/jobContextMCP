@@ -37,6 +37,11 @@ COPY --from=builder /install /usr/local
 # Copy application source
 COPY . .
 
+# Entrypoint selects server mode via START_MODE env var:
+#   START_MODE=mcp  (default) → python server.py       (Claude Desktop / MCP clients)
+#   START_MODE=http           → python -m transport.http.main  (AKS / REST / dashboard)
+RUN chmod +x scripts/docker-entrypoint.sh
+
 # Runtime volumes (mounted by user)
 #   /workspace  → resume_folder  (your local resumes directory)
 #   /leetcode   → leetcode_folder
@@ -50,6 +55,7 @@ EXPOSE 8000
 ENV MCP_TRANSPORT=stdio
 ENV MCP_HOST=0.0.0.0
 ENV MCP_PORT=8000
+ENV START_MODE=mcp
 
 # ── OCI image labels ──────────────────────────────────────────────────────────
 LABEL org.opencontainers.image.title="jobContextMCP"
@@ -59,4 +65,4 @@ LABEL org.opencontainers.image.source="https://github.com/JustLikeFrank3/jobCont
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.version="0.6.0"
 
-CMD ["python", "server.py"]
+ENTRYPOINT ["scripts/docker-entrypoint.sh"]

@@ -32,7 +32,13 @@ def _load_json(path: Path, default):
 
 
 def _save_json(path: Path, data) -> None:
+    if _USE_SQLITE:
+        from lib.io_sqlite import save_to_sqlite
+        save_to_sqlite(path, data)  # upsert to SQLite; no-op for unmapped files
+    # Always write JSON too (dual-write): keeps JSON in sync as audit trail
+    # and handles unmapped files + hbdi_profile which are not in SQLite.
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 

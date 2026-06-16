@@ -1,12 +1,16 @@
 """
-lib/io_sqlite.py — SQLite-backed drop-in readers for _load_json().
+lib/io_sqlite.py — SQLite-backed drop-in readers and writers for _load_json() / _save_json().
 
-Each handler returns the EXACT same dict shape the original JSON file returned,
-so every existing tool works unmodified when USE_SQLITE=1 is set.
+Each load handler returns the EXACT same dict shape the original JSON file
+returned, so every existing tool works unmodified when USE_SQLITE=1 is set.
 
-Write path is intentionally out of scope for the prototype: _save_json still
-writes to JSON, and the migration script (scripts/migrate_to_sqlite.py) is
-idempotent so a re-run after any write keeps the DB in sync.
+Each save handler accepts the same dict _save_json() would write to disk and
+upserts it into the appropriate SQLite table(s).
+
+Write strategy: DUAL-WRITE — _save_json() updates SQLite AND the JSON file.
+This keeps the JSON files as a human-readable audit trail and ensures unmapped
+files (scan_index.json, github_metrics.json, etc.) and singleton blobs like
+hbdi_profile are never silently lost. Phase 2 will drop the JSON write path.
 """
 from __future__ import annotations
 
@@ -304,3 +308,319 @@ def load_from_sqlite(path: Path, default: Any) -> Any:
     except Exception:
         # DB missing or corrupt — fall back gracefully
         return default
+
+
+# ── Save helpers ───────────────────────────────────────────────────────────────
+
+def _js(val: Any) -> str | None:
+    """Serialize val to compact JSON string for storage; strings and None pass through."""
+    if val is None or isinstance(val, str):
+        return val
+    return json.dumps(val, ensure_ascii=False, separators=(",", ":"))
+
+
+# ── Per-file save handlers ─────────────────────────────────────────────────────
+
+def _save_status(con, data: dict) -> None:
+    from lib.db import normalize_event_type
+    for app in data.get("applications", []):
+        company = app.get("company", "")
+        role    = app.get("role", "")
+        row = con.execute(
+            "SELECT id FROM applications WHERE company=? AND role=?", (company, role)
+        ).fetchone()
+        if row:
+            app_id = row["id"]
+            con.execute(
+                """
+                UPDATE applications SET
+                    status=?, next_steps=?, contact=?, notes=?,
+                    applied_date=?, last_updated=?,
+                    location=?, date_applied=?, req_number=?, comp=?
+                WHERE id=?
+                """,
+                (
+                    app.get("status"), app.get("next_steps"), app.get("contact"),
+                    app.get("notes"), app.get("applied_date"), app.get("last_updated") or None,
+                    app.get("location"), app.get("date_applied"), app.get("req_number"),
+                    _js(app.get("comp")), app_id,
+                ),
+            )
+        else:
+            con.execute(
+                """
+                INSERT INTO applications
+                    (company, role, status, next_steps, contact, notes,
+                     applied_date, last_updated, location, date_applied, req_number, comp)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    company, role,
+                    app.get("status", "pre-application"),
+                    app.get("next_steps"), app.get("contact"), app.get("notes"),
+                    app.get("applied_date"), app.get("last_updated") or None,
+                    app.get("location"), app.get("date_applied"),
+                    app.get("req_number"), _js(app.get("comp")),
+                ),
+            )
+            app_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Events are append-only — insert only those beyond the existing count
+        existing = con.execute(
+            "SELECT COUNT(*) FROM application_events WHERE application_id=?", (app_id,)
+        ).fetchone()[0]
+        for ev in (app.get("events") or [])[existing:]:
+            raw = ev.get("type", "note")
+            con.execute(
+                "INSERT INTO application_events"
+                "  (application_id, type, raw_type, notes, date) VALUES (?,?,?,?,?)",
+                (app_id, normalize_event_type(raw), raw, ev.get("notes"), ev.get("date")),
+            )
+
+
+def _save_job_queue(con, data: dict) -> None:
+    for j in data.get("jobs", []):
+        con.execute(
+            """
+            INSERT INTO job_queue
+                (id, company, role, jd, source, added_date, status,
+                 fitment_score, decision_notes, decided_date)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                company=excluded.company, role=excluded.role, jd=excluded.jd,
+                source=excluded.source, added_date=excluded.added_date,
+                status=excluded.status, fitment_score=excluded.fitment_score,
+                decision_notes=excluded.decision_notes, decided_date=excluded.decided_date
+            """,
+            (
+                j.get("id"), j.get("company", ""), j.get("role", ""),
+                j.get("jd"), j.get("source"), j.get("added_date"),
+                j.get("status", "pending"), j.get("fitment_score"),
+                j.get("decision_notes"), j.get("decided_date"),
+            ),
+        )
+
+
+def _save_people(con, data: dict) -> None:
+    for p in data.get("people", []):
+        con.execute(
+            """
+            INSERT INTO people
+                (id, timestamp, name, relationship, company, context,
+                 tags, contact_info, outreach_status, notes, last_updated)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                timestamp=excluded.timestamp, name=excluded.name,
+                relationship=excluded.relationship, company=excluded.company,
+                context=excluded.context, tags=excluded.tags,
+                contact_info=excluded.contact_info,
+                outreach_status=excluded.outreach_status,
+                notes=excluded.notes, last_updated=excluded.last_updated
+            """,
+            (
+                p.get("id"), p.get("timestamp"), p.get("name", ""),
+                p.get("relationship"), p.get("company"), p.get("context"),
+                _js(p.get("tags")), p.get("contact_info"),
+                p.get("outreach_status"), p.get("notes"), p.get("last_updated"),
+            ),
+        )
+
+
+def _save_interviews(con, data: dict) -> None:
+    for iv in data.get("interviews", []):
+        con.execute(
+            """
+            INSERT INTO interviews
+                (id, timestamp, company, role, interview_date, interview_type,
+                 interview_format, interviewer, interviewer_role, duration_minutes,
+                 self_rating, what_landed, what_didnt, verbatim_quotes,
+                 surfaced_priorities, process_details, comp_signals,
+                 follow_up_commitments, tags, notes, last_updated)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                timestamp=excluded.timestamp, company=excluded.company,
+                role=excluded.role, interview_date=excluded.interview_date,
+                interview_type=excluded.interview_type,
+                interview_format=excluded.interview_format,
+                interviewer=excluded.interviewer,
+                interviewer_role=excluded.interviewer_role,
+                duration_minutes=excluded.duration_minutes,
+                self_rating=excluded.self_rating,
+                what_landed=excluded.what_landed, what_didnt=excluded.what_didnt,
+                verbatim_quotes=excluded.verbatim_quotes,
+                surfaced_priorities=excluded.surfaced_priorities,
+                process_details=excluded.process_details,
+                comp_signals=excluded.comp_signals,
+                follow_up_commitments=excluded.follow_up_commitments,
+                tags=excluded.tags, notes=excluded.notes,
+                last_updated=excluded.last_updated
+            """,
+            (
+                iv.get("id"), iv.get("timestamp"),
+                iv.get("company", ""), iv.get("role", ""),
+                iv.get("interview_date"), iv.get("interview_type"),
+                iv.get("interview_format"), iv.get("interviewer"),
+                iv.get("interviewer_role"), iv.get("duration_minutes"),
+                iv.get("self_rating"),
+                _js(iv.get("what_landed")), _js(iv.get("what_didnt")),
+                _js(iv.get("verbatim_quotes")), _js(iv.get("surfaced_priorities")),
+                iv.get("process_details"), iv.get("comp_signals"),
+                _js(iv.get("follow_up_commitments")), _js(iv.get("tags")),
+                iv.get("notes"), iv.get("last_updated"),
+            ),
+        )
+
+
+def _save_rejections(con, data: dict) -> None:
+    for r in data.get("rejections", []):
+        con.execute(
+            """
+            INSERT INTO rejections
+                (id, company, role, stage, reason, notes, date, logged_at, contact)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                company=excluded.company, role=excluded.role,
+                stage=excluded.stage, reason=excluded.reason,
+                notes=excluded.notes, date=excluded.date,
+                logged_at=excluded.logged_at, contact=excluded.contact
+            """,
+            (
+                r.get("id"), r.get("company", ""), r.get("role", ""),
+                r.get("stage"), r.get("reason"), r.get("notes"),
+                r.get("date"), r.get("logged_at"), r.get("contact"),
+            ),
+        )
+
+
+def _save_tone(con, data: dict) -> None:
+    for s in data.get("samples", []):
+        con.execute(
+            """
+            INSERT INTO tone_samples
+                (id, timestamp, source, context, text, word_count)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                timestamp=excluded.timestamp, source=excluded.source,
+                context=excluded.context, text=excluded.text,
+                word_count=excluded.word_count
+            """,
+            (
+                s.get("id"), s.get("timestamp"), s.get("source"),
+                s.get("context"), s.get("text", ""), s.get("word_count"),
+            ),
+        )
+
+
+def _save_health_log(con, data: dict) -> None:
+    # health_log uses AUTOINCREMENT — insert new entries only (idempotent by timestamp)
+    for e in data.get("entries", []):
+        ts = e.get("timestamp", "")
+        exists = con.execute(
+            "SELECT 1 FROM health_log WHERE timestamp=?", (ts,)
+        ).fetchone()
+        if not exists:
+            con.execute(
+                "INSERT INTO health_log"
+                "  (timestamp, date, mood, energy, productive, notes)"
+                "  VALUES (?,?,?,?,?,?)",
+                (
+                    ts, e.get("date", ""), e.get("mood"),
+                    e.get("energy"), 1 if e.get("productive") else 0, e.get("notes"),
+                ),
+            )
+
+
+def _save_linkedin_posts(con, data: dict) -> None:
+    for p in data.get("posts", []):
+        con.execute(
+            """
+            INSERT INTO linkedin_posts
+                (id, timestamp, posted_date, source, title, url,
+                 hashtags, context, links, metrics, audience_highlights)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                timestamp=excluded.timestamp, posted_date=excluded.posted_date,
+                source=excluded.source, title=excluded.title, url=excluded.url,
+                hashtags=excluded.hashtags, context=excluded.context,
+                links=excluded.links, metrics=excluded.metrics,
+                audience_highlights=excluded.audience_highlights
+            """,
+            (
+                p.get("id"), p.get("timestamp"), p.get("posted_date"),
+                p.get("source"), p.get("title"), p.get("url"),
+                _js(p.get("hashtags")), p.get("context"),
+                _js(p.get("links")), _js(p.get("metrics")),
+                _js(p.get("audience_highlights")),
+            ),
+        )
+
+
+def _save_personal_context(con, data: dict) -> None:
+    for s in data.get("stories", []):
+        con.execute(
+            """
+            INSERT INTO stories (id, timestamp, title, story, tags, people)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                timestamp=excluded.timestamp, title=excluded.title,
+                story=excluded.story, tags=excluded.tags, people=excluded.people
+            """,
+            (
+                s.get("id"), s.get("timestamp"),
+                s.get("title", ""), s.get("story", ""),
+                _js(s.get("tags")), _js(s.get("people")),
+            ),
+        )
+    for s in data.get("star_stories", []):
+        con.execute(
+            """
+            INSERT INTO star_stories
+                (id, title, tags, situation, task, action, result,
+                 metric_bullets, framing_hints, source, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                title=excluded.title, tags=excluded.tags,
+                situation=excluded.situation, task=excluded.task,
+                action=excluded.action, result=excluded.result,
+                metric_bullets=excluded.metric_bullets,
+                framing_hints=excluded.framing_hints,
+                source=excluded.source, notes=excluded.notes
+            """,
+            (
+                s.get("id"), s.get("title", ""), _js(s.get("tags")),
+                s.get("situation"), s.get("task"), s.get("action"),
+                s.get("result"), _js(s.get("metric_bullets")),
+                _js(s.get("framing_hints")), s.get("source"), s.get("notes"),
+            ),
+        )
+    # hbdi_profile is a singleton config blob — not stored in SQLite.
+    # The JSON write path in _save_json handles it via dual-write.
+
+
+# ── Save dispatch table ────────────────────────────────────────────────────────
+
+_SAVE_HANDLERS: dict[str, Any] = {
+    "status.json":            _save_status,
+    "job_queue.json":         _save_job_queue,
+    "people.json":            _save_people,
+    "interviews.json":        _save_interviews,
+    "rejections.json":        _save_rejections,
+    "tone_samples.json":      _save_tone,
+    "mental_health_log.json": _save_health_log,
+    "linkedin_posts.json":    _save_linkedin_posts,
+    "personal_context.json":  _save_personal_context,
+}
+
+
+def save_to_sqlite(path: Path, data: Any) -> None:
+    """
+    Upsert data into the appropriate SQLite table(s) for the given file path.
+
+    No-op for unmapped files (caller should still write JSON for those).
+    Raises on SQLite errors — silent data loss is worse than a visible failure.
+    """
+    handler = _SAVE_HANDLERS.get(path.name)
+    if handler is None:
+        return
+    with get_connection() as con:
+        handler(con, data)

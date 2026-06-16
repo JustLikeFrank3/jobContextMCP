@@ -494,3 +494,123 @@ def test_unmapped_file_falls_through_to_json(monkeypatch, tmp_path):
     from lib.io import _load_json
     result = _load_json(sentinel, {"scanned": {}})
     assert result["scanned"].get("sentinel") is True
+
+
+# ── 6. Write round-trips ───────────────────────────────────────────────────────
+
+def _make_db(tmp_path) -> "Path":
+    """Create a fresh empty SQLite DB seeded with the full schema."""
+    import sqlite3, sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from scripts.migrate_to_sqlite import _SCHEMA
+    db = tmp_path / "test.db"
+    con = sqlite3.connect(db)
+    con.executescript(_SCHEMA)
+    con.commit()
+    con.close()
+    return db
+
+
+def test_save_then_load_new_application(monkeypatch, tmp_path):
+    """Writing a new application via save_to_sqlite is readable back via load_from_sqlite."""
+    import lib.config as config
+    import lib.db as db_mod
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+
+    data = {
+        "last_updated": "2026-06-15 12:00",
+        "applications": [
+            {
+                "company": "Nimble Gravity",
+                "role": "AI Architect",
+                "status": "phone_screen",
+                "next_steps": "Follow up Wednesday",
+                "contact": "Josephine De Graft-Johnson",
+                "notes": "Strong fitment — AI platform, Azure, MCP",
+                "applied_date": None,
+                "last_updated": "2026-06-15",
+                "events": [
+                    {"type": "recruiter_contact", "notes": "Initial outreach", "date": "2026-06-10"},
+                    {"type": "phone_screen", "notes": "Completed screen", "date": "2026-06-15"},
+                ],
+            }
+        ],
+    }
+
+    save_to_sqlite(tmp_path / "status.json", data)
+
+    result = load_from_sqlite(tmp_path / "status.json", {})
+    assert result is not None
+    apps = result.get("applications", [])
+    assert len(apps) == 1
+    app = apps[0]
+    assert app["company"] == "Nimble Gravity"
+    assert app["role"] == "AI Architect"
+    assert app["status"] == "phone_screen"
+    assert app["contact"] == "Josephine De Graft-Johnson"
+    assert len(app["events"]) == 2
+    assert app["events"][0]["type"] == "recruiter_contact"
+    assert app["events"][1]["type"] == "phone_screen"
+
+
+def test_save_then_load_health_entry(monkeypatch, tmp_path):
+    """New health log entry is readable back after save."""
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "HEALTH_LOG_FILE", tmp_path / "mental_health_log.json")
+
+    data = {"entries": [
+        {"timestamp": "2026-06-15T09:00:00", "date": "2026-06-15",
+         "mood": "focused", "energy": 8, "productive": True, "notes": "Good day"},
+    ]}
+
+    save_to_sqlite(tmp_path / "mental_health_log.json", data)
+    # Second save is idempotent (same timestamp should not duplicate)
+    save_to_sqlite(tmp_path / "mental_health_log.json", data)
+
+    result = load_from_sqlite(tmp_path / "mental_health_log.json", {})
+    entries = result.get("entries", [])
+    assert len(entries) == 1
+    assert entries[0]["mood"] == "focused"
+    assert entries[0]["productive"] is True
+
+
+def test_save_event_append_only(monkeypatch, tmp_path):
+    """Events are only appended on subsequent saves \u2014 no duplicates."""
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "STATUS_FILE", tmp_path / "status.json")
+    monkeypatch.setattr(config, "HEALTH_LOG_FILE", tmp_path / "mental_health_log.json")
+
+    base = {
+        "last_updated": "2026-06-15",
+        "applications": [{
+            "company": "Acme", "role": "SWE", "status": "applied",
+            "events": [{"type": "applied", "notes": "submitted", "date": "2026-06-01"}],
+        }],
+    }
+
+    # First save
+    save_to_sqlite(tmp_path / "status.json", base)
+
+    # Second save with one additional event
+    base["applications"][0]["events"].append(
+        {"type": "recruiter_contact", "notes": "recruiter called", "date": "2026-06-05"}
+    )
+    save_to_sqlite(tmp_path / "status.json", base)
+
+    result = load_from_sqlite(tmp_path / "status.json", {})
+    assert len(result["applications"][0]["events"]) == 2
