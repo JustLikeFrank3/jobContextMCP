@@ -7,6 +7,7 @@ all path constants used across tools and server.py.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +141,8 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
         return None, ""
 
     provider = _cfg.get("llm_provider", "openai").lower()
+    # LLM_PROVIDER env var overrides config.json (used in AKS / Docker deployments)
+    provider = os.environ.get("LLM_PROVIDER", provider).lower()
     model = _cfg.get("openai_model", "gpt-4o-mini")
 
     if provider == "ollama":
@@ -154,7 +157,8 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
         except ImportError:
             return None, ""
         endpoint = _cfg.get("azure_foundry_endpoint", "")
-        api_key = _cfg.get("azure_foundry_api_key", "")
+        # LLM_API_KEY env var overrides config.json azure_foundry_api_key
+        api_key = os.environ.get("LLM_API_KEY") or _cfg.get("azure_foundry_api_key", "")
         deployment = _cfg.get("azure_foundry_deployment", "gpt-4o")
         api_version = _cfg.get("azure_foundry_api_version", "2024-10-21")
         if not endpoint or not api_key:
@@ -167,7 +171,8 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
         return client, deployment
 
     # openai (default)
-    api_key = _cfg.get("openai_api_key", "")
+    # LLM_API_KEY env var overrides config.json openai_api_key
+    api_key = os.environ.get("LLM_API_KEY") or _cfg.get("openai_api_key", "")
     if not api_key:
         return None, ""
     client = OpenAI(api_key=api_key)

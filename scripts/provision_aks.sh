@@ -26,6 +26,7 @@ AKS_RG="${AKS_RG:-jcmcp-rg}"
 AKS_CLUSTER="${AKS_CLUSTER:-jcmcp-aks}"
 ACR_NAME="${ACR_NAME:-jcmcpacr}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-jcmcpstore}"
+NODE_VM_SIZE="${NODE_VM_SIZE:-Standard_D2s_v3}"
 LOCATION="${LOCATION:-eastus}"
 NAMESPACE="jcmcp"
 WORKLOAD_ID_NAME="jcmcp-workload-id"
@@ -37,6 +38,7 @@ echo " Resource Group    : $AKS_RG"
 echo " AKS Cluster       : $AKS_CLUSTER"
 echo " ACR               : ${ACR_NAME}.azurecr.io"
 echo " Storage Account   : $STORAGE_ACCOUNT"
+echo " Node VM Size      : $NODE_VM_SIZE"
 echo " Location          : $LOCATION"
 echo "============================================"
 
@@ -111,16 +113,20 @@ echo "   container 'workspace' ready"
 # ── 5. AKS cluster ────────────────────────────────────────────────────────────
 echo ""
 echo ">> AKS cluster (this takes ~8 min)..."
-az aks create \
-  --resource-group "$AKS_RG" \
-  --name "$AKS_CLUSTER" \
-  --node-count 1 \
-  --node-vm-size Standard_B2s \
-  --enable-oidc-issuer \
-  --enable-workload-identity \
-  --attach-acr "$ACR_NAME" \
-  --generate-ssh-keys \
-  --output none 2>/dev/null || true
+if az aks show --resource-group "$AKS_RG" --name "$AKS_CLUSTER" --output none 2>/dev/null; then
+  echo "   cluster already exists — skipping create"
+else
+  az aks create \
+    --resource-group "$AKS_RG" \
+    --name "$AKS_CLUSTER" \
+    --node-count 1 \
+    --node-vm-size "$NODE_VM_SIZE" \
+    --enable-oidc-issuer \
+    --enable-workload-identity \
+    --attach-acr "$ACR_NAME" \
+    --generate-ssh-keys \
+    --output none
+fi
 echo "   cluster ready"
 
 OIDC_ISSUER=$(az aks show --resource-group "$AKS_RG" --name "$AKS_CLUSTER" \
@@ -164,21 +170,75 @@ kubectl create serviceaccount "$SERVICE_ACCOUNT_NAME" --namespace "$NAMESPACE" \
 kubectl annotate serviceaccount "$SERVICE_ACCOUNT_NAME" --namespace "$NAMESPACE" \
   --overwrite azure.workload.identity/client-id="$IDENTITY_CLIENT_ID"
 
-# ── 8. OpenAI API key → k8s Secret ───────────────────────────────────────────
+# ── 8. LLM provider selection ────────────────────────────────────────────────
 echo ""
-if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-  read -rsp "Enter OPENAI_API_KEY: " OPENAI_API_KEY; echo ""
+echo ">> LLM provider setup..."
+
+if [[ -z "${LLM_PROVIDER:-}" ]]; then
+  echo "   Choose LLM provider:"
+  echo "     1) openai   — api.openai.com"
+  echo "     2) foundry  — Azure AI Foundry (recommended if you have a deployment)"
+  echo "     3) ollama   — local Ollama endpoint (no API key needed)"
+  read -rp "   Enter choice [1/2/3, default=2]: " provider_choice
+  case "${provider_choice:-2}" in
+    1) LLM_PROVIDER="openai" ;;
+    3) LLM_PROVIDER="ollama" ;;
+    *) LLM_PROVIDER="foundry" ;;
+  esac
 fi
+echo "   Provider: $LLM_PROVIDER"
+
+LLM_API_KEY=""
+FOUNDRY_ENDPOINT=""
+FOUNDRY_DEPLOYMENT="gpt-4o"
+FOUNDRY_API_VERSION="2024-10-21"
+
+case "$LLM_PROVIDER" in
+  foundry)
+    if [[ -z "${AZURE_FOUNDRY_ENDPOINT:-}" ]]; then
+      read -rp "   Azure Foundry endpoint (e.g. https://YOUR-HUB.openai.azure.com/): " FOUNDRY_ENDPOINT
+    else
+      FOUNDRY_ENDPOINT="$AZURE_FOUNDRY_ENDPOINT"
+    fi
+    if [[ -z "${AZURE_FOUNDRY_DEPLOYMENT:-}" ]]; then
+      read -rp "   Deployment name [default: gpt-4o]: " dep_input
+      FOUNDRY_DEPLOYMENT="${dep_input:-gpt-4o}"
+    else
+      FOUNDRY_DEPLOYMENT="$AZURE_FOUNDRY_DEPLOYMENT"
+    fi
+    if [[ -z "${LLM_API_KEY:-}" ]]; then
+      read -rsp "   Azure Foundry API key: " LLM_API_KEY; echo ""
+    fi
+    ;;
+  openai)
+    if [[ -z "${LLM_API_KEY:-}" ]]; then
+      read -rsp "   OpenAI API key: " LLM_API_KEY; echo ""
+    fi
+    ;;
+  ollama)
+    echo "   No API key needed for Ollama."
+    ;;
+esac
+
 kubectl create secret generic jcmcp-app-secrets \
   --namespace "$NAMESPACE" \
-  --from-literal=openai_api_key="$OPENAI_API_KEY" \
+  --from-literal=llm_provider="$LLM_PROVIDER" \
+  --from-literal=llm_api_key="$LLM_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# ── 9. Apply static k8s manifests ────────────────────────────────────────────
+# ── 9. Apply k8s manifests (fill LLM placeholders in configmap) ──────────────
 echo ""
 echo ">> Applying Kubernetes manifests..."
 kubectl apply -f k8s/pvc.yaml
-kubectl apply -f k8s/configmap.yaml
+
+# Fill configmap template placeholders with resolved values
+sed \
+  -e "s|__LLM_PROVIDER__|${LLM_PROVIDER}|g" \
+  -e "s|__FOUNDRY_ENDPOINT__|${FOUNDRY_ENDPOINT}|g" \
+  -e "s|__FOUNDRY_DEPLOYMENT__|${FOUNDRY_DEPLOYMENT}|g" \
+  -e "s|__FOUNDRY_API_VERSION__|${FOUNDRY_API_VERSION}|g" \
+  k8s/configmap.yaml | kubectl apply -f -
+
 kubectl apply -f k8s/service.yaml
 
 # ── 10. Build + push image, deploy ───────────────────────────────────────────
@@ -200,6 +260,9 @@ export STORAGE_ACCOUNT="$STORAGE_ACCOUNT"
 export NAMESPACE="$NAMESPACE"
 export TENANT_ID="$TENANT_ID"
 export IDENTITY_CLIENT_ID="$IDENTITY_CLIENT_ID"
+export LLM_PROVIDER="$LLM_PROVIDER"
+export FOUNDRY_ENDPOINT="$FOUNDRY_ENDPOINT"
+export FOUNDRY_DEPLOYMENT="$FOUNDRY_DEPLOYMENT"
 ENVEOF
 echo "   wrote .env.deploy"
 

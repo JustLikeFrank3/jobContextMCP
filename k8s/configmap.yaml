@@ -28,6 +28,9 @@ data:
       "resume_template_png":       "06-Reference-Materials/resume_template.png",
       "cover_letter_template_png": "06-Reference-Materials/cover_letter_template.png",
       "openai_model":              "gpt-4o",
-      "llm_provider":              "openai"
+      "llm_provider":              "__LLM_PROVIDER__",
+      "azure_foundry_endpoint":    "__FOUNDRY_ENDPOINT__",
+      "azure_foundry_deployment":  "__FOUNDRY_DEPLOYMENT__",
+      "azure_foundry_api_version": "__FOUNDRY_API_VERSION__"
     }
   storage_account: "jcmcpstore"
