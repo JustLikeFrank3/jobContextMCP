@@ -18,6 +18,7 @@ services:
     # ── Secrets / model config ──────────────────────────────────────────────
     environment:
       USE_SQLITE: ${USE_SQLITE:-1}
+      SQLITE_ONLY: ${SQLITE_ONLY:-0}
       MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
       MCP_HOST: ${MCP_HOST:-0.0.0.0}
       MCP_PORT: ${MCP_PORT:-8000}

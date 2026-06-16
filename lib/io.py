@@ -4,8 +4,11 @@ import datetime
 from pathlib import Path
 
 # When USE_SQLITE=1 (or true/yes), _load_json reads from SQLite instead of JSON.
-# Writes still go to JSON; run scripts/migrate_to_sqlite.py to re-sync.
+# By default writes go to BOTH SQLite and JSON (dual-write audit trail).
+# Set SQLITE_ONLY=1 to disable JSON writes once SQLite is the sole source of
+# truth (e.g. in production AKS where the JSON files are not used).
 _USE_SQLITE: bool = os.environ.get("USE_SQLITE", "").strip().lower() in ("1", "true", "yes")
+_SQLITE_ONLY: bool = os.environ.get("SQLITE_ONLY", "").strip().lower() in ("1", "true", "yes")
 
 
 def _read(path: Path) -> str:
@@ -35,10 +38,14 @@ def _save_json(path: Path, data) -> None:
     if _USE_SQLITE:
         from lib.io_sqlite import save_to_sqlite
         save_to_sqlite(path, data)  # upsert to SQLite; no-op for unmapped files
-    # Always write JSON too (dual-write): keeps JSON in sync as audit trail
-    # and handles unmapped files + hbdi_profile which are not in SQLite.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Dual-write JSON unless SQLITE_ONLY=1.  Always write for unmapped files
+    # (contact_crossref, linkedin_connections, rag_index, scan_index, etc.)
+    # because those have no SQLite handler regardless of the flag.
+    from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
+    is_mapped = path.name in _SAVE_HANDLERS
+    if not (_USE_SQLITE and _SQLITE_ONLY and is_mapped):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _now() -> str:

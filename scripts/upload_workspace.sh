@@ -101,6 +101,44 @@ if [[ -n "$LEETCODE_FOLDER" ]]; then
   done < <(jq -r '[keys[] | select(startswith("leetcode_cheatsheet") or startswith("quick_reference"))] | .[]' "$CONFIG_FILE")
 fi
 
+# Bulk-upload all workspace subdirectories (source materials + all generated artifacts).
+# This gives AKS a complete workspace on first seed, and keeps blob current so the
+# pod sidecar has a full baseline after any pod replacement or scale event.
+echo ""
+echo ">> Uploading all workspace directories (complete sync)..."
+WORKSPACE_DIRS=(
+  "01-Current-Optimized"
+  "02-Cover-Letters"
+  "03-Resume-PDFs"
+  "04-Archived-Resumes"
+  "05-Research"
+  "06-Reference-Materials"
+  "07-Job-Assessments"
+  "08-Interview-Prep-Docs"
+  "09-Cover-Letter-PDFs"
+)
+for dir in "${WORKSPACE_DIRS[@]}"; do
+  local_dir="$RESUME_FOLDER/$dir"
+  if [[ ! -d "$local_dir" ]]; then
+    echo "   SKIP (not found): $dir/"
+    continue
+  fi
+  file_count=$(find "$local_dir" -type f | wc -l | tr -d ' ')
+  if [[ "$file_count" -eq 0 ]]; then
+    echo "   SKIP (empty): $dir/"
+    continue
+  fi
+  az storage blob upload-batch \
+    --account-name "$STORAGE_ACCOUNT" \
+    --account-key "$ACCT_KEY" \
+    --source "$local_dir" \
+    --destination workspace \
+    --destination-path "$dir" \
+    --overwrite true \
+    --output none
+  echo "   OK: $dir/ ($file_count files)"
+done
+
 # Verify
 echo ""
 echo ">> Verifying uploaded blobs..."
@@ -114,9 +152,9 @@ az storage blob list \
 echo ""
 echo "============================================"
 echo " Upload complete."
-echo " The init container will seed these to"
-echo " /app/data/workspace/ on next pod start."
+echo " Init container seeds the full workspace from blob on pod start."
+echo " Sidecar syncs generated artifacts + DB back to blob every 15 min."
 echo ""
-echo " To restart the pod and re-seed:"
+echo " To restart the pod and pick up the new workspace:"
 echo "   kubectl rollout restart deployment/jcmcp -n jcmcp"
 echo "============================================"

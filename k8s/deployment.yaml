@@ -37,33 +37,22 @@ spec:
                 --tenant "$AZURE_TENANT_ID" \
                 --output none
               mkdir -p /app/data/workspace/01-Current-Optimized
+              mkdir -p /app/data/workspace/02-Cover-Letters
+              mkdir -p /app/data/workspace/03-Resume-PDFs
+              mkdir -p /app/data/workspace/04-Archived-Resumes
+              mkdir -p /app/data/workspace/05-Research
               mkdir -p /app/data/workspace/06-Reference-Materials
               mkdir -p /app/data/workspace/07-Job-Assessments
               mkdir -p /app/data/workspace/08-Interview-Prep-Docs
-              mkdir -p /app/data/workspace/02-Cover-Letters
+              mkdir -p /app/data/workspace/09-Cover-Letter-PDFs
               mkdir -p /app/data/workspace/leetcode
-              # Always sync workspace files (read-only reference materials).
+              # Sync all workspace files from blob: source materials + all generated artifacts.
+              # Side effect: db/jobcontextmcp.db lands in /app/data/workspace/db/ — harmless,
+              # the app reads from /app/data/jobcontextmcp.db (seeded separately below).
               az storage blob download-batch \
                 --account-name "${STORAGE_ACCOUNT}" \
                 --source workspace \
                 --destination /app/data/workspace \
-                --pattern "01-Current-Optimized/*" \
-                --overwrite true \
-                --auth-mode login \
-                --output none
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --destination /app/data/workspace \
-                --pattern "06-Reference-Materials/*" \
-                --overwrite true \
-                --auth-mode login \
-                --output none
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --destination /app/data/workspace \
-                --pattern "leetcode/*" \
                 --overwrite true \
                 --auth-mode login \
                 --output none
@@ -101,6 +90,8 @@ spec:
             - name: START_MODE
               value: "http"
             - name: USE_SQLITE
+              value: "1"
+            - name: SQLITE_ONLY
               value: "1"
             - name: ENABLE_REMOTE
               value: "true"
@@ -145,6 +136,60 @@ spec:
               mountPath: /app/config.json
               subPath: config.json
               readOnly: true
+        - name: workspace-sync
+          image: mcr.microsoft.com/azure-cli:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Workspace sync sidecar ready. Syncing every 15 min."
+              while true; do
+                sleep 900
+                az login \
+                  --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                  --service-principal \
+                  -u "$AZURE_CLIENT_ID" \
+                  --tenant "$AZURE_TENANT_ID" \
+                  --output none 2>/dev/null
+                az storage blob upload-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source /app/data/workspace \
+                  --destination workspace \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none \
+                  && echo "[$(date -u +%H:%M:%SZ)] workspace sync OK" \
+                  || echo "[$(date -u +%H:%M:%SZ)] workspace sync FAILED"
+                if [ -f /app/data/jobcontextmcp.db ] && [ -s /app/data/jobcontextmcp.db ]; then
+                  az storage blob upload \
+                    --account-name "${STORAGE_ACCOUNT}" \
+                    --container-name workspace \
+                    --name "db/jobcontextmcp.db" \
+                    --file /app/data/jobcontextmcp.db \
+                    --auth-mode login \
+                    --overwrite true \
+                    --output none \
+                    && echo "[$(date -u +%H:%M:%SZ)] db sync OK" \
+                    || echo "[$(date -u +%H:%M:%SZ)] db sync FAILED"
+                fi
+              done
+          env:
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-config
+                  key: storage_account
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
       volumes:
         - name: data
           persistentVolumeClaim:
