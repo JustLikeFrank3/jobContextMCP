@@ -68,7 +68,7 @@ class TestRunJobAssessmentPersona:
         fake_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
         fake_client.chat.completions.create.return_value = fake_response
 
-        with patch("openai.OpenAI", return_value=fake_client):
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
             out = srv.run_job_assessment(
                 "Stripe", "Staff Engineer", JD,
                 persona="faang_technical", auto_save=False,
@@ -92,7 +92,7 @@ class TestRunJobAssessmentPersona:
         fake_response.usage = MagicMock(prompt_tokens=80, completion_tokens=40)
         fake_client.chat.completions.create.return_value = fake_response
 
-        with patch("openai.OpenAI", return_value=fake_client):
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
             srv.run_job_assessment("Stripe", "Staff Engineer", JD, auto_save=False)
 
         system_msg = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]

@@ -6,6 +6,33 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **SQLite persistence layer** — `lib/db.py` connection helper + `scripts/migrate_to_sqlite.py` migration script. All pipeline data (71 applications, 119 events, 30 queue items, 112 people, 11 interviews, 10 rejections, 126 tone samples, 250 LinkedIn connections, 1178 contact crossref rows) migrated to `jobcontextmcp.db`. Enabled via `USE_SQLITE=1` env var; JSON files remain as fallback.
+- **Dual-write io layer** — `lib/io_sqlite.py` adapter. All reads route through SQLite when `USE_SQLITE=1`; all writes go to both SQLite and JSON simultaneously. 9 load + 9 save handlers with full round-trip test coverage.
+- **Sync-delete on save** — `_save_job_queue`, `_save_status`, and `_save_people` now delete stale rows from SQLite after upsert so dismissed/removed entries don't persist indefinitely. Guarded against empty-list wipe.
+- **Canonical event type normalization** — `EVENT_TYPE_MAP` (41 raw strings → 16 canonical types) + `normalize_event_type()` in `lib/db.py` so legacy event strings stored in JSON survive migration without data loss.
+- **AKS deployment manifests** — `k8s/` directory: `pvc.yaml` (5Gi Azure Premium SSD), `configmap.yaml` (non-sensitive config.json for container), `deployment.yaml` (init container + main container), `service.yaml` (ClusterIP). Cluster live: `jcmcp-aks`, eastus, `Standard_D2s_v3`, 1 node.
+- **Init container workspace seeding** — `seed-workspace` init container logs in via federated token (`az login --federated-token`), downloads workspace blobs from Azure Blob Storage (`jcmcpstore`), and seeds `jobcontextmcp.db` from `workspace/db/` on first boot only (preserves runtime writes across restarts).
+- **One-shot idempotent provisioner** — `scripts/provision_aks.sh` creates/checks all Azure infrastructure (resource group, ACR, Storage Account, AKS cluster, workload identity, federated credential, role assignments, k8s namespace + SA, secrets, ConfigMap, PVC, Service) and builds + pushes the container image. Safe to re-run.
+- **Config-driven workspace uploader** — `scripts/upload_workspace.sh` reads `resume_folder`/`leetcode_folder` from `config.json` and uploads all `*_path` keys to Blob Storage. Works for any user's config without hardcoded paths.
+- **Provider-agnostic LLM** — `lib/config.get_llm_client()` respects `LLM_PROVIDER` env var (openai / foundry / ollama). `LLM_API_KEY` overrides the provider-specific key. Ollama needs no key. Provider and model injected into k8s Secret via `provision_aks.sh`.
+- **Keyless Azure AI Foundry auth** — Foundry provider uses `DefaultAzureCredential` + `get_bearer_token_provider` when no API key is set. Workload identity in AKS, `az login` locally. Zero secrets in production. `azure-identity>=1.15.0` added to `requirements.txt`.
+
+### Fixed
+
+- **`_save_json` double write** — `path.write_text(...)` was called twice in sequence; second call was redundant and masked partial-write errors.
+- **Init container `az login` missing** — workload identity injects `AZURE_FEDERATED_TOKEN_FILE` but `az cli` still requires an explicit `az login --federated-token` before `--auth-mode login` blob ops work.
+- **Init container `--overwrite false` error on existing files** — PVC retains files across restarts; changed to `--overwrite true` so workspace sync always reflects Blob state.
+- **Stale DB guard triggering on 0-byte file** — existence check now also verifies non-empty size before skipping seed.
+- **`TestRunJobAssessmentPersona` patch target stale** — tests were patching `openai.OpenAI` directly; patched `lib.config.get_llm_client` instead to match the provider-agnostic refactor.
+
+### Tests
+
+- 627 passing (was 591 before this branch). 36 new SQLite round-trip + sync-delete tests in `tests/test_sqlite_migration.py`.
+
+---
+
+### Added
+
 - **Cover-letter edit dialog** — each pipeline job card now exposes an **Edit Cover Letter** button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export checkbox. Backend routes: `POST /pipeline/read-cover-letter`, `POST /pipeline/edit-cover-letter`. Cover-letter options are injected into `_pipeline_payload()` as `cover_letter_options`; per-job `last_edited_cover_letter` and `suggested_edit_cover_letter` fields surface as pre-selected defaults.
 
 - **Cover-letter draft versioning** — Apply Edit no longer overwrites the source file. Each run writes `{stem}.edit1.tmp`, `.edit2.tmp`, … and the latest draft is used as input on subsequent edits. New routes: `POST /pipeline/open-cover-letter-draft` (reads latest draft back into modal), `POST /pipeline/accept-cover-letter-edit` (backs up source to `{stem}.bak`, promotes latest draft, deletes all `.editN.tmp` files), `POST /pipeline/cancel-cover-letter-edit` (deletes drafts, leaves source untouched). Overlay click-outside triggers draft cleanup.

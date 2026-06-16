@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.9.x%20%E2%86%92%201.0-blue" alt="Version 0.9.x approaching 1.0"/>
-  <img src="https://img.shields.io/badge/tests-591%20passing-brightgreen" alt="591 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-625%20passing-brightgreen" alt="625 tests passing"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -13,7 +13,7 @@
 
 A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
 
-Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, local JSON data stores, optional OpenAI/Ollama generation, WeasyPrint/LaTeX export paths, and a mobile-friendly dashboard.
+Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint/LaTeX export paths, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
 > **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 77 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
@@ -80,6 +80,8 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
 | People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
 | Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
+| Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. |
+| Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container, ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). One-shot `provision_aks.sh` idempotent provisioner. |
 | Transports | MCP stdio, MCP SSE/streamable HTTP via Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
 
 ---
@@ -128,13 +130,15 @@ graph TB
 
   subgraph FILES["Local gitignored workspace"]
     CONFIG["config.json"]
-    DATA["Data JSON files\nstatus, people, interviews, posts\nrejections, health, tone, stories"]
+    SQLITE["SQLite — jobcontextmcp.db\n71 applications, events, people, tone\ninterviews, queue, rejections, posts"]
+    DATA["JSON fallback files\n(dual-write, same schema as SQLite)"]
     MATERIALS["Resume folder\n01-Current-Optimized to 08-Interview-Prep-Docs"]
     INDEX["RAG / scan / portfolio metric caches"]
     PROJECTS["LeetCode + side projects"]
   end
 
   SERVICES --> CONFIG
+  TOOLS --> SQLITE
   TOOLS --> DATA
   TOOLS --> MATERIALS
   TOOLS --> INDEX
