@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jcmcp
+  namespace: jcmcp
+spec:
+  selector:
+    app: jcmcp
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  # ClusterIP for now — access via kubectl port-forward during demo.
+  # Change to LoadBalancer (or add an Ingress) for persistent external access.
+  type: ClusterIP

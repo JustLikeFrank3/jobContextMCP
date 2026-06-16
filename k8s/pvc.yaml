@@ -1,0 +1,20 @@
+# Persistent Volume Claim — single Azure Disk that holds everything:
+#   /app/data/jobcontextmcp.db   (SQLite)
+#   /app/data/*.json             (JSON audit trail / unmapped files)
+#   /app/data/workspace/         (resume_folder — writable generated outputs)
+#
+# Static reference files (master resume, awards, etc.) are seeded into
+# /app/data/workspace/ by the init container on first boot, sourced from
+# Azure Key Vault via the CSI driver (see secret-provider-class.yaml).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jcmcp-data
+  namespace: jcmcp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: managed-premium  # Azure Premium SSD — change to managed-csi for Standard
+  resources:
+    requests:
+      storage: 5Gi
