@@ -257,6 +257,7 @@ sed \
   -e "s|__FOUNDRY_ENDPOINT__|${FOUNDRY_ENDPOINT}|g" \
   -e "s|__FOUNDRY_DEPLOYMENT__|${FOUNDRY_DEPLOYMENT}|g" \
   -e "s|__FOUNDRY_API_VERSION__|${FOUNDRY_API_VERSION}|g" \
+  -e "s|__STORAGE_ACCOUNT__|${STORAGE_ACCOUNT}|g" \
   k8s/configmap.yaml | kubectl apply -f -
 
 kubectl apply -f k8s/service.yaml

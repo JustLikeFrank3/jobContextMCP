@@ -96,26 +96,27 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(personas_routes.router)
     app.include_router(dashboard_router)
 
-    # ── MCP Streamable HTTP transport (optional) ─────────────────────────────
-    # The FastMCP Starlette app registers its handler at the path /mcp
-    # internally.  Mounting at "" (no prefix stripping) passes the full
-    # request path through so /mcp matches.  All FastAPI routes registered
-    # above take priority; this acts as a catch-all only for unmatched paths.
-    if mcp_starlette is not None:
-        app.mount("", mcp_starlette)
-        _logger.info("MCP Streamable HTTP transport mounted at /mcp")
-
     # ── Static icon routes (suppress browser-auto 404s) ──────────────────────
+    # Must be registered BEFORE the catch-all MCP mount below, or the mount
+    # intercepts these paths first.
     _static = Path(__file__).parent / "static"
-    _PNG = "image/png"
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():
-        return FileResponse(_static / "favicon.ico", media_type=_PNG)
+        return FileResponse(_static / "favicon.ico", media_type="image/x-icon")
 
     @app.get("/apple-touch-icon{_:path}.png", include_in_schema=False)
     async def apple_touch_icon(_: str):
         """Catch all apple-touch-icon variants iOS requests (sized, precomposed, etc.)."""
-        return FileResponse(_static / "apple-touch-icon.png", media_type=_PNG)
+        return FileResponse(_static / "apple-touch-icon.png", media_type="image/png")
+
+    # ── MCP Streamable HTTP transport (optional, catch-all — must be last) ────
+    # The FastMCP Starlette app registers its handler at the path /mcp
+    # internally.  Mounting at "" (no prefix stripping) passes the full
+    # request path through so /mcp matches.  Registered last so all FastAPI
+    # routes above take priority; unmatched paths fall through to the MCP app.
+    if mcp_starlette is not None:
+        app.mount("", mcp_starlette)
+        _logger.info("MCP Streamable HTTP transport mounted at /mcp")
 
     return app

@@ -34,4 +34,4 @@ data:
       "azure_foundry_api_version": "__FOUNDRY_API_VERSION__",
       "azure_foundry_scope":       "https://ai.azure.com/.default"
     }
-  storage_account: "jcmcpstore"
+  storage_account: "__STORAGE_ACCOUNT__"

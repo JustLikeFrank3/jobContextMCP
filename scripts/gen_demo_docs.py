@@ -152,15 +152,21 @@ def main() -> None:
     saved_resume = save_resume_txt(resume_filename, FAKE_RESUME)
     print(f"  saved: {saved_resume}")
 
-    resume_pdf = generate_resume_latex(
-        resume_text=FAKE_RESUME,
-        company=DEMO_COMPANY,
-        role=DEMO_ROLE,
-        role_title=DEMO_ROLE,
-        output_filename="Demo Nobody MacFakename - Aperture AI Engineer.pdf",
-        identity=DEMO_IDENTITY,
-    )
-    print(f"  pdf (LaTeX): {resume_pdf}")
+    try:
+        resume_pdf = generate_resume_latex(
+            resume_text=FAKE_RESUME,
+            company=DEMO_COMPANY,
+            role=DEMO_ROLE,
+            role_title=DEMO_ROLE,
+            output_filename="Demo Nobody MacFakename - Aperture AI Engineer.pdf",
+            identity=DEMO_IDENTITY,
+        )
+        print(f"  pdf (LaTeX): {resume_pdf}")
+    except (RuntimeError, FileNotFoundError) as exc:
+        print(f"  LaTeX resume pipeline unavailable ({exc}), falling back to HTML/weasyprint…")
+        from tools.export import export_resume_pdf
+        html_resume_pdf = export_resume_pdf(resume_filename)
+        print(f"  pdf (HTML): {html_resume_pdf}")
 
     print("\n─── Generating demo cover letter (LaTeX) ───")
     cl_filename = DEMO_COVER_LETTER_FILENAME
