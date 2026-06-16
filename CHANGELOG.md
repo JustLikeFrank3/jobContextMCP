@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **MCP Streamable HTTP transport** — `transport/http/app.py` `create_app(mcp=None)` factory builds `mcp.streamable_http_app()` and mounts it at `""` (not `"/mcp"`) so the sub-app's internal `/mcp` route resolves correctly. `asynccontextmanager lifespan` drives `mcp_starlette.router.lifespan_context()` to initialize `StreamableHTTPSessionManager`. Logs `"MCP Streamable HTTP transport mounted at /mcp"` on startup. Verified: `POST /mcp` returns `HTTP 200 text/event-stream`, `mcp-session-id` header, and `protocolVersion: 2025-03-26` on initialize handshake.
+- **`transport/http/config.py` port validation** — `_env_port()` helper validates `os.environ.get("PORT")` is non-empty and `.isdigit()` before `int()` conversion. Prevents `ValueError` crash when `PORT=""` leaks from `start_server.sh` into pytest.
+- **`.vscode/mcp.json` AKS entry** — second server `jobContextMCP-aks` of type `http` pointing at `http://localhost:8099/mcp`. Connects VS Code to the live AKS pod over Streamable HTTP via `kubectl port-forward svc/jcmcp 8099:80 -n jcmcp`.
 - **SQLite persistence layer** — `lib/db.py` connection helper + `scripts/migrate_to_sqlite.py` migration script. All pipeline data (71 applications, 119 events, 30 queue items, 112 people, 11 interviews, 10 rejections, 126 tone samples, 250 LinkedIn connections, 1178 contact crossref rows) migrated to `jobcontextmcp.db`. Enabled via `USE_SQLITE=1` env var; JSON files remain as fallback.
 - **Dual-write io layer** — `lib/io_sqlite.py` adapter. All reads route through SQLite when `USE_SQLITE=1`; all writes go to both SQLite and JSON simultaneously. 9 load + 9 save handlers with full round-trip test coverage.
 - **Sync-delete on save** — `_save_job_queue`, `_save_status`, and `_save_people` now delete stale rows from SQLite after upsert so dismissed/removed entries don't persist indefinitely. Guarded against empty-list wipe.

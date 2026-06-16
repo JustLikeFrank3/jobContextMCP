@@ -82,7 +82,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
 | Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. |
 | Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container, ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). One-shot `provision_aks.sh` idempotent provisioner. |
-| Transports | MCP stdio, MCP SSE/streamable HTTP via Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
+| Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
 
 ---
 
@@ -570,6 +570,31 @@ After changing `MCP_MODE`, reload the MCP server in VS Code: **Command Palette �
 > ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If tools behave flakily, open that global file and remove any duplicate `jobContextMCP` entry.
 
 > **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` and `scripts/run_mcp.sh` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+
+##### VS Code + AKS (Streamable HTTP)
+
+The committed `.vscode/mcp.json` also includes a second server entry (`jobContextMCP-aks`) that connects to the server running in AKS over the MCP Streamable HTTP transport (`protocolVersion: 2025-03-26`). This requires a `kubectl` port-forward to be active:
+
+```bash
+kubectl port-forward svc/jcmcp 8099:80 -n jcmcp &
+```
+
+Then in VS Code: **Command Palette → MCP: List Servers → jobContextMCP-aks → Start** (or Restart).
+
+Verify the AKS pod is healthy before connecting:
+
+```bash
+kubectl get pods -n jcmcp          # should show 1/1 Running
+curl http://localhost:8099/health  # {"status":"ok","version":"0.7.0-dev",...}
+```
+
+The port-forward is a local tunnel only — nothing is exposed publicly. When you're done, kill it:
+
+```bash
+pkill -f "port-forward svc/jcmcp"
+```
+
+The AKS deployment uses SQLite (`USE_SQLITE=1`), workload identity for keyless Azure AI Foundry auth, and seeds `jobcontextmcp.db` from Azure Blob Storage on first boot. See `k8s/` and `scripts/provision_aks.sh` for the full infrastructure.
 
 ##### Claude Desktop
 
