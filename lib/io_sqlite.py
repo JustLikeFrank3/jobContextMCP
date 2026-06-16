@@ -377,9 +377,26 @@ def _save_status(con, data: dict) -> None:
                 (app_id, normalize_event_type(raw), raw, ev.get("notes"), ev.get("date")),
             )
 
+    # Sync-delete: remove applications (and their events via CASCADE) that are
+    # no longer in the incoming dataset.  Guard against accidental full wipe.
+    seen_pairs = [(a.get("company", ""), a.get("role", "")) for a in data.get("applications", [])]
+    if seen_pairs:
+        existing_rows = con.execute(
+            "SELECT id, company, role FROM applications"
+        ).fetchall()
+        pair_set = {(c, r) for c, r in seen_pairs}
+        stale_ids = [
+            r["id"] for r in existing_rows
+            if (r["company"], r["role"]) not in pair_set
+        ]
+        for stale_id in stale_ids:
+            con.execute("DELETE FROM applications WHERE id=?", (stale_id,))
+
 
 def _save_job_queue(con, data: dict) -> None:
-    for j in data.get("jobs", []):
+    jobs = data.get("jobs", [])
+    incoming_ids: list = [j.get("id") for j in jobs if j.get("id") is not None]
+    for j in jobs:
         con.execute(
             """
             INSERT INTO job_queue
@@ -399,10 +416,20 @@ def _save_job_queue(con, data: dict) -> None:
                 j.get("decision_notes"), j.get("decided_date"),
             ),
         )
+    # Sync-delete: remove rows no longer in the incoming dataset (e.g. dismissed jobs).
+    # Guard: only run when the incoming list is non-empty to prevent accidental full wipe.
+    if incoming_ids:
+        placeholders = ",".join("?" * len(incoming_ids))
+        con.execute(
+            f"DELETE FROM job_queue WHERE id NOT IN ({placeholders})",
+            incoming_ids,
+        )
 
 
 def _save_people(con, data: dict) -> None:
-    for p in data.get("people", []):
+    people = data.get("people", [])
+    incoming_ids: list = [p.get("id") for p in people if p.get("id") is not None]
+    for p in people:
         con.execute(
             """
             INSERT INTO people
@@ -423,6 +450,13 @@ def _save_people(con, data: dict) -> None:
                 _js(p.get("tags")), p.get("contact_info"),
                 p.get("outreach_status"), p.get("notes"), p.get("last_updated"),
             ),
+        )
+    # Sync-delete: remove people no longer in the incoming dataset.
+    if incoming_ids:
+        placeholders = ",".join("?" * len(incoming_ids))
+        con.execute(
+            f"DELETE FROM people WHERE id NOT IN ({placeholders})",
+            incoming_ids,
         )
 
 

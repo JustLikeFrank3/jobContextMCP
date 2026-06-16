@@ -614,3 +614,92 @@ def test_save_event_append_only(monkeypatch, tmp_path):
 
     result = load_from_sqlite(tmp_path / "status.json", {})
     assert len(result["applications"][0]["events"]) == 2
+
+
+def test_save_job_queue_sync_delete(monkeypatch, tmp_path):
+    """Dismissed jobs (removed from data) are deleted from the job_queue table."""
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "JOB_QUEUE_FILE", tmp_path / "job_queue.json")
+
+    queue = {
+        "jobs": [
+            {"id": 1, "company": "Alpha", "role": "SWE", "status": "pending"},
+            {"id": 2, "company": "Beta",  "role": "SWE", "status": "evaluated"},
+        ]
+    }
+    save_to_sqlite(tmp_path / "job_queue.json", queue)
+
+    # Dismiss job 2 — remove it from the list
+    queue["jobs"] = [j for j in queue["jobs"] if j["id"] != 2]
+    save_to_sqlite(tmp_path / "job_queue.json", queue)
+
+    result = load_from_sqlite(tmp_path / "job_queue.json", {})
+    ids = [j["id"] for j in result["jobs"]]
+    assert ids == [1], f"Expected only job 1, got {ids}"
+
+
+def test_save_status_sync_delete(monkeypatch, tmp_path):
+    """Applications removed from status data are deleted from SQLite (with events via CASCADE)."""
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "STATUS_FILE", tmp_path / "status.json")
+
+    data = {
+        "last_updated": "2026-06-15",
+        "applications": [
+            {"company": "Keep Co", "role": "SWE", "status": "applied",
+             "events": [{"type": "applied", "notes": "submitted", "date": "2026-06-01"}]},
+            {"company": "Drop Co", "role": "SWE", "status": "rejected",
+             "events": [{"type": "rejection", "notes": "no fit", "date": "2026-06-10"}]},
+        ],
+    }
+    save_to_sqlite(tmp_path / "status.json", data)
+
+    # Remove Drop Co from the list
+    data["applications"] = [a for a in data["applications"] if a["company"] != "Drop Co"]
+    save_to_sqlite(tmp_path / "status.json", data)
+
+    result = load_from_sqlite(tmp_path / "status.json", {})
+    companies = [a["company"] for a in result["applications"]]
+    assert "Drop Co" not in companies, f"Drop Co should be deleted, got {companies}"
+    assert "Keep Co" in companies
+
+
+def test_save_people_sync_delete(monkeypatch, tmp_path):
+    """People removed from people data are deleted from SQLite."""
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "PEOPLE_FILE", tmp_path / "people.json")
+
+    people_data = {
+        "people": [
+            {"id": 101, "name": "Alice", "relationship": "recruiter"},
+            {"id": 102, "name": "Bob",   "relationship": "contact"},
+        ]
+    }
+    save_to_sqlite(tmp_path / "people.json", people_data)
+
+    # Remove Bob
+    people_data["people"] = [p for p in people_data["people"] if p["id"] != 102]
+    save_to_sqlite(tmp_path / "people.json", people_data)
+
+    result = load_from_sqlite(tmp_path / "people.json", {})
+    names = [p["name"] for p in result["people"]]
+    assert "Bob" not in names, f"Bob should be deleted, got {names}"
+    assert "Alice" in names
