@@ -1,19 +1,17 @@
 {
-  // MCP_MODE in .env controls dispatch: docker (default) or local
-  // MCP_MODE=docker → docker compose run --rm -i jobcontextmcp
-  // MCP_MODE=local  → .venv/bin/python3 server.py
+  // jobContextMCP: connects to the server running in AKS via
+  // Streamable HTTP. Requires port-forward to be active —
+  // use the "AKS port-forward" task (Tasks: Run Task → AKS port-forward).
   //
-  // jobContextMCP-aks: connects to the server running in AKS via
-  // Streamable HTTP. Requires port-forward to be active:
-  //   kubectl port-forward svc/jcmcp 8099:80 -n jcmcp
+  // To switch back to local stdio for development, replace with:
+  //   "jobContextMCP": {
+  //     "type": "stdio",
+  //     "command": "${workspaceFolder}/scripts/run_mcp.sh",
+  //     "args": [],
+  //     "cwd": "${workspaceFolder}"
+  //   }
   "servers": {
     "jobContextMCP": {
-      "type": "stdio",
-      "command": "${workspaceFolder}/scripts/run_mcp.sh",
-      "args": [],
-      "cwd": "${workspaceFolder}"
-    },
-    "jobContextMCP-aks": {
       "type": "http",
       "url": "http://localhost:8099/mcp"
     }

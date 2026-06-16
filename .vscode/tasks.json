@@ -57,6 +57,33 @@
                 "clear": true
             },
             "detail": "Same as above but skip the pre-sync tarball. Use only when you've just snapshotted moments ago."
+        },
+        {
+            "label": "AKS port-forward",
+            "type": "shell",
+            "command": "kubectl port-forward svc/jcmcp 8099:80 -n jcmcp",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^(Forwarding from)",
+                    "file": 1,
+                    "line": 1,
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Forwarding from",
+                    "endsPattern": "Forwarding from"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Port-forward AKS jcmcp service to localhost:8099. Required for the MCP HTTP server. Runs in background."
         }
     ]
 }
