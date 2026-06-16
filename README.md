@@ -80,8 +80,8 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
 | People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
 | Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
-| Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. |
-| Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container, ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). One-shot `provision_aks.sh` idempotent provisioner. |
+| Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
+| Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
 | Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
 
 ---
@@ -128,13 +128,19 @@ graph TB
     SETUP["Workspace setup + diagnostics"]
   end
 
-  subgraph FILES["Local gitignored workspace"]
+  subgraph FILES["Storage (local stdio mode)"]
     CONFIG["config.json"]
     SQLITE["SQLite — jobcontextmcp.db\n71 applications, events, people, tone\ninterviews, queue, rejections, posts"]
     DATA["JSON fallback files\n(dual-write, same schema as SQLite)"]
-    MATERIALS["Resume folder\n01-Current-Optimized to 08-Interview-Prep-Docs"]
+    MATERIALS["Resume folder\n01-Current-Optimized to 09-Cover-Letter-PDFs"]
     INDEX["RAG / scan / portfolio metric caches"]
     PROJECTS["LeetCode + side projects"]
+  end
+
+  subgraph AKS_FILES["Storage (AKS mode)"]
+    AKS_DB["SQLite on PVC — jobcontextmcp.db\nauthoritative when USE_SQLITE=1"]
+    AKS_WS["PVC workspace — /app/data/workspace/\n01-Current-Optimized to 09-Cover-Letter-PDFs"]
+    BLOB["Azure Blob Storage — jcmcpstore/workspace\nSidecar syncs PVC → blob every 15 min"]
   end
 
   SERVICES --> CONFIG
@@ -143,6 +149,9 @@ graph TB
   TOOLS --> MATERIALS
   TOOLS --> INDEX
   TOOLS --> PROJECTS
+  TOOLS --> AKS_DB
+  TOOLS --> AKS_WS
+  AKS_WS --> BLOB
 ```
 
 ### End-to-End: Mobile/Dashboard Pipeline Flow
@@ -573,18 +582,36 @@ After changing `MCP_MODE`, reload the MCP server in VS Code: **Command Palette �
 
 ##### VS Code + AKS (Streamable HTTP)
 
-The committed `.vscode/mcp.json` also includes a second server entry (`jobContextMCP-aks`) that connects to the server running in AKS over the MCP Streamable HTTP transport (`protocolVersion: 2025-03-26`). This requires a `kubectl` port-forward to be active:
+The committed `.vscode/mcp.json` includes a second server entry that connects to the server running in AKS over the MCP Streamable HTTP transport (`protocolVersion: 2025-03-26`). To use it, swap the stdio entry for the HTTP entry (or keep both and pick at session start):
+
+```jsonc
+// .vscode/mcp.json — AKS HTTP mode
+{
+  "servers": {
+    "jobContextMCP": {
+      "type": "http",
+      "url": "http://localhost:8099/mcp"
+    }
+  }
+}
+```
+
+This requires a `kubectl` port-forward to be active. The easiest way is the built-in VS Code task:
+
+**Command Palette → Tasks: Run Task → AKS port-forward**
+
+Or run it manually:
 
 ```bash
 kubectl port-forward svc/jcmcp 8099:80 -n jcmcp &
 ```
 
-Then in VS Code: **Command Palette → MCP: List Servers → jobContextMCP-aks → Start** (or Restart).
+Then in VS Code: **Command Palette → MCP: Restart Server**.
 
 Verify the AKS pod is healthy before connecting:
 
 ```bash
-kubectl get pods -n jcmcp          # should show 1/1 Running
+kubectl get pods -n jcmcp          # should show 2/2 Running (main + workspace-sync sidecar)
 curl http://localhost:8099/health  # {"status":"ok","version":"0.7.0-dev",...}
 ```
 
@@ -594,7 +621,7 @@ The port-forward is a local tunnel only — nothing is exposed publicly. When yo
 pkill -f "port-forward svc/jcmcp"
 ```
 
-The AKS deployment uses SQLite (`USE_SQLITE=1`), workload identity for keyless Azure AI Foundry auth, and seeds `jobcontextmcp.db` from Azure Blob Storage on first boot. See `k8s/` and `scripts/provision_aks.sh` for the full infrastructure.
+The AKS deployment uses `USE_SQLITE=1` and `SQLITE_ONLY=1` (skips JSON writes for mapped tables), workload identity for keyless Azure AI Foundry auth, and seeds `jobcontextmcp.db` from Azure Blob Storage on first boot. A `workspace-sync` sidecar container runs alongside the main server and pushes all workspace files and the SQLite DB back to Blob Storage every 15 minutes — so data survives pod replacement without any manual backup. See `k8s/` and `scripts/provision_aks.sh` for the full infrastructure.
 
 ##### Claude Desktop
 
