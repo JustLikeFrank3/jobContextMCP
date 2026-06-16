@@ -799,6 +799,76 @@ Or from VS Code: **Command Palette → "Tasks: Run Task" → "Sync data from pro
 
 Dual benefit: dev tests run against current job-hunt state, AND the `backups/` folder accumulates timestamped tarballs of your data on non-cloud storage — a useful safety net since the canonical `data/` lives in iCloud.
 
+#### Enabling SQLite (optional but recommended)
+
+By default the server reads and writes JSON files under `data/`. A SQLite layer is available and used in the AKS deployment — all reads come from `jobcontextmcp.db`; all writes go to both SQLite and JSON simultaneously, so you can roll back to JSON at any time.
+
+One-time migration from existing JSON:
+
+```bash
+.venv/bin/python scripts/migrate_to_sqlite.py
+# Expected: ✅ Done — 2077 rows, 1.3 MB → jobcontextmcp.db
+```
+
+Enable in `.env`:
+
+```dotenv
+USE_SQLITE=1
+```
+
+With `USE_SQLITE=1`, all 9 data collections (applications, people, job queue, interviews, rejections, tone samples, LinkedIn posts/connections, contact log, contact crossref) read from SQLite. All saves dual-write to both stores — no data loss if you revert.
+
+---
+
+### Option C — AKS (Azure Kubernetes Service)
+
+The `k8s/` directory contains production Kubernetes manifests and a one-shot idempotent provisioner for running the HTTP server (dashboard + REST API) on Azure Kubernetes Service. The MCP stdio server continues to run locally via `run_mcp.sh`; AKS hosts the dashboard and REST endpoints.
+
+**Prerequisites:** Azure CLI (`az`), `kubectl`, an active Azure subscription.
+
+```bash
+# 1. Log in
+az login
+
+# 2. Migrate local JSON data to SQLite (produces data/jobcontextmcp.db)
+.venv/bin/python scripts/migrate_to_sqlite.py
+
+# 3. Upload workspace files to Blob Storage
+./scripts/upload_workspace.sh
+
+# 4. Provision all Azure infrastructure and deploy
+#    Idempotent — safe to re-run at any time.
+export LLM_PROVIDER=foundry
+export AZURE_FOUNDRY_ENDPOINT=https://your-resource.services.ai.azure.com
+export AZURE_FOUNDRY_DEPLOYMENT=gpt-4.1-mini
+./scripts/provision_aks.sh
+```
+
+`provision_aks.sh` creates or no-ops on: resource group, Azure Container Registry, Storage Account, AKS cluster (OIDC issuer + workload identity), managed identity, federated credential, RBAC role assignments, k8s namespace, ServiceAccount, Secrets, ConfigMap, PVC, ClusterIP Service. Builds and pushes the Docker image to ACR. Writes `.env.deploy` with all resolved resource IDs.
+
+On each pod start, the `seed-workspace` init container authenticates via workload identity federated token (no API keys in the pod), syncs workspace files from Blob Storage, and seeds `jobcontextmcp.db` from Blob on first boot only — runtime writes are preserved across restarts.
+
+**LLM provider options:**
+
+| Provider | Auth | API key required? |
+|---|---|---|
+| `openai` | `OPENAI_API_KEY` in k8s Secret | Yes |
+| `foundry` | `DefaultAzureCredential` via workload identity | No |
+| `ollama` | Self-hosted endpoint URL | No |
+
+**Verify a live deployment:**
+
+```bash
+kubectl get pods -n jcmcp
+kubectl port-forward svc/jcmcp 8099:80 -n jcmcp
+
+curl http://localhost:8099/health
+# {"status":"ok","service":"jobContextMCP","version":"0.7.0-dev",...}
+
+curl http://localhost:8099/dashboard/job-hunt/data \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['applications']), 'applications from SQLite')"
+```
+
 ---
 
 ### 3. First-session setup via chat

@@ -31,6 +31,8 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.9.x] — feat/dashboard-digest-ollama
+
 ### Added
 
 - **Cover-letter edit dialog** — each pipeline job card now exposes an **Edit Cover Letter** button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export checkbox. Backend routes: `POST /pipeline/read-cover-letter`, `POST /pipeline/edit-cover-letter`. Cover-letter options are injected into `_pipeline_payload()` as `cover_letter_options`; per-job `last_edited_cover_letter` and `suggested_edit_cover_letter` fields surface as pre-selected defaults.
