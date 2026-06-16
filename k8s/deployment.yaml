@@ -28,19 +28,59 @@ spec:
             - |
               set -e
               echo "Seeding workspace from Blob Storage..."
+              # Workload identity: federated token file is injected by the webhook.
+              # az CLI needs an explicit login before --auth-mode login works.
+              az login \
+                --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                --service-principal \
+                -u "$AZURE_CLIENT_ID" \
+                --tenant "$AZURE_TENANT_ID" \
+                --output none
               mkdir -p /app/data/workspace/01-Current-Optimized
               mkdir -p /app/data/workspace/06-Reference-Materials
               mkdir -p /app/data/workspace/07-Job-Assessments
               mkdir -p /app/data/workspace/08-Interview-Prep-Docs
               mkdir -p /app/data/workspace/02-Cover-Letters
               mkdir -p /app/data/workspace/leetcode
+              # Always sync workspace files (read-only reference materials).
               az storage blob download-batch \
                 --account-name "${STORAGE_ACCOUNT}" \
                 --source workspace \
                 --destination /app/data/workspace \
-                --overwrite false \
+                --pattern "01-Current-Optimized/*" \
+                --overwrite true \
                 --auth-mode login \
                 --output none
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --destination /app/data/workspace \
+                --pattern "06-Reference-Materials/*" \
+                --overwrite true \
+                --auth-mode login \
+                --output none
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --destination /app/data/workspace \
+                --pattern "leetcode/*" \
+                --overwrite true \
+                --auth-mode login \
+                --output none
+              # Seed DB only on first boot — preserve runtime writes across restarts.
+              if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
+                echo "No DB found — seeding from Blob..."
+                az storage blob download \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --container-name workspace \
+                  --name "db/jobcontextmcp.db" \
+                  --file /app/data/jobcontextmcp.db \
+                  --auth-mode login \
+                  --output none
+                echo "DB seeded."
+              else
+                echo "DB already exists — skipping seed."
+              fi
               echo "Seed complete."
           env:
             - name: STORAGE_ACCOUNT
@@ -53,7 +93,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: jcmcp
-          image: <ACR_NAME>.azurecr.io/jcmcp:<IMAGE_TAG>
+          image: jcmcpacr.azurecr.io/jcmcp:d006f54
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
