@@ -5,10 +5,16 @@ logs a startup warning if API_KEY is not configured.
 
 Tests import `create_app()` directly; the uvicorn entry point in main.py
 calls the same factory.
+
+Pass an initialised FastMCP instance as `mcp` to also mount the MCP
+Streamable HTTP transport at /mcp (used in http / AKS mode so VS Code
+can connect to the remote server via type:"http" in mcp.json).
 """
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,13 +29,38 @@ from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
 
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
 
 _logger = logging.getLogger(__name__)
 
 
-def create_app() -> FastAPI:
-    """Build and return the FastAPI app for the HTTP transport."""
+def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
+    """Build and return the FastAPI app for the HTTP transport.
+
+    Args:
+        mcp: Optional FastMCP instance. When provided, the MCP Streamable
+             HTTP transport is mounted at /mcp so AI clients can connect
+             via ``type: "http"`` in mcp.json.
+    """
     settings = get_settings()
+
+    # ── Build MCP Starlette sub-app first (lazy-inits the session manager) ───
+    # Must happen before the lifespan closure captures it.
+    mcp_starlette = mcp.streamable_http_app() if mcp is not None else None
+
+    # ── Lifespan: drive MCP session manager alongside FastAPI startup ─────────
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        if mcp_starlette is not None:
+            # The Starlette sub-app carries its own lifespan that initialises
+            # the StreamableHTTPSessionManager task group.  We must enter it
+            # here; FastAPI does NOT propagate lifespan into mounted sub-apps.
+            async with mcp_starlette.router.lifespan_context(mcp_starlette):
+                yield
+        else:
+            yield
 
     app = FastAPI(
         title="jobContextMCP HTTP API",
@@ -39,6 +70,7 @@ def create_app() -> FastAPI:
             "Open WebUI clients. The stdio MCP server is unaffected."
         ),
         version="0.7.0-dev",
+        lifespan=lifespan,
     )
 
     if settings.cors_origins:
@@ -63,6 +95,15 @@ def create_app() -> FastAPI:
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
     app.include_router(dashboard_router)
+
+    # ── MCP Streamable HTTP transport (optional) ─────────────────────────────
+    # The FastMCP Starlette app registers its handler at the path /mcp
+    # internally.  Mounting at "" (no prefix stripping) passes the full
+    # request path through so /mcp matches.  All FastAPI routes registered
+    # above take priority; this acts as a catch-all only for unmatched paths.
+    if mcp_starlette is not None:
+        app.mount("", mcp_starlette)
+        _logger.info("MCP Streamable HTTP transport mounted at /mcp")
 
     # ── Static icon routes (suppress browser-auto 404s) ──────────────────────
     _static = Path(__file__).parent / "static"

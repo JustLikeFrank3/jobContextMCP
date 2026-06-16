@@ -11,6 +11,7 @@ import logging
 
 import uvicorn
 
+import server as _server  # noqa: F401 — registers all MCP tools as a side-effect
 from transport.http.app import create_app
 from transport.http.config import get_settings
 
@@ -21,7 +22,7 @@ logging.basicConfig(
 )
 
 
-app = create_app()
+app = create_app(mcp=_server.mcp)
 
 
 def main() -> None:
