@@ -150,6 +150,26 @@ az role assignment create \
   --output none 2>/dev/null || true
 echo "   Storage Blob Data Reader granted to workload identity"
 
+# Grant workload identity access to call the Foundry/OpenAI deployment
+# (only wired when provider is foundry — no-op for openai/ollama)
+if [[ "${LLM_PROVIDER:-}" == "foundry" && -n "${FOUNDRY_ENDPOINT:-}" ]]; then
+  FOUNDRY_RESOURCE_NAME=$(echo "$FOUNDRY_ENDPOINT" | sed 's|https://||;s|\..*||')
+  FOUNDRY_RESOURCE_ID=$(az cognitiveservices account show \
+    --name "$FOUNDRY_RESOURCE_NAME" \
+    --query id -o tsv 2>/dev/null || echo "")
+  if [[ -n "$FOUNDRY_RESOURCE_ID" ]]; then
+    az role assignment create \
+      --assignee-object-id "$IDENTITY_OBJECT_ID" \
+      --assignee-principal-type ServicePrincipal \
+      --role "Cognitive Services User" \
+      --scope "$FOUNDRY_RESOURCE_ID" \
+      --output none 2>/dev/null || true
+    echo "   Cognitive Services User granted to workload identity on $FOUNDRY_RESOURCE_NAME"
+  else
+    echo "   WARN: Could not find Foundry resource '$FOUNDRY_RESOURCE_NAME' — grant role manually"
+  fi
+fi
+
 # Federated credential — lets the k8s SA assume the managed identity
 az identity federated-credential create \
   --name "jcmcp-federated" \
@@ -196,19 +216,19 @@ FOUNDRY_API_VERSION="2024-10-21"
 case "$LLM_PROVIDER" in
   foundry)
     if [[ -z "${AZURE_FOUNDRY_ENDPOINT:-}" ]]; then
-      read -rp "   Azure Foundry endpoint (e.g. https://YOUR-HUB.openai.azure.com/): " FOUNDRY_ENDPOINT
+      read -rp "   Azure Foundry endpoint (e.g. https://YOUR-RESOURCE.services.ai.azure.com): " FOUNDRY_ENDPOINT
     else
       FOUNDRY_ENDPOINT="$AZURE_FOUNDRY_ENDPOINT"
     fi
     if [[ -z "${AZURE_FOUNDRY_DEPLOYMENT:-}" ]]; then
-      read -rp "   Deployment name [default: gpt-4o]: " dep_input
-      FOUNDRY_DEPLOYMENT="${dep_input:-gpt-4o}"
+      read -rp "   Deployment name [default: gpt-4.1-mini]: " dep_input
+      FOUNDRY_DEPLOYMENT="${dep_input:-gpt-4.1-mini}"
     else
       FOUNDRY_DEPLOYMENT="$AZURE_FOUNDRY_DEPLOYMENT"
     fi
-    if [[ -z "${LLM_API_KEY:-}" ]]; then
-      read -rsp "   Azure Foundry API key: " LLM_API_KEY; echo ""
-    fi
+    # Foundry uses DefaultAzureCredential (workload identity in AKS, az login locally)
+    # No API key needed — leave LLM_API_KEY empty.
+    echo "   Auth: DefaultAzureCredential (no API key required)"
     ;;
   openai)
     if [[ -z "${LLM_API_KEY:-}" ]]; then

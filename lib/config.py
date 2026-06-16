@@ -156,18 +156,36 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
             from openai import AzureOpenAI
         except ImportError:
             return None, ""
-        endpoint = _cfg.get("azure_foundry_endpoint", "")
-        # LLM_API_KEY env var overrides config.json azure_foundry_api_key
-        api_key = os.environ.get("LLM_API_KEY") or _cfg.get("azure_foundry_api_key", "")
-        deployment = _cfg.get("azure_foundry_deployment", "gpt-4o")
-        api_version = _cfg.get("azure_foundry_api_version", "2024-10-21")
-        if not endpoint or not api_key:
+        # Strip trailing /openai/v1 if present — AzureOpenAI adds its own path
+        endpoint = _cfg.get("azure_foundry_endpoint", "").rstrip("/")
+        if endpoint.endswith("/openai/v1"):
+            endpoint = endpoint[: -len("/openai/v1")]
+        deployment = _cfg.get("azure_foundry_deployment", "gpt-4.1-mini")
+        api_version = _cfg.get("azure_foundry_api_version", "2025-01-01-preview")
+        if not endpoint:
             return None, ""
-        client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=api_key,
-            api_version=api_version,
-        )
+        # Prefer explicit key (local dev / non-Azure CI). If absent, fall back to
+        # DefaultAzureCredential — works automatically in AKS via workload identity
+        # and locally via `az login`. No secret needed in production.
+        api_key = os.environ.get("LLM_API_KEY") or _cfg.get("azure_foundry_api_key", "")
+        if api_key:
+            client = AzureOpenAI(
+                azure_endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version,
+            )
+        else:
+            try:
+                from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            except ImportError:
+                return None, ""
+            scope = _cfg.get("azure_foundry_scope", "https://ai.azure.com/.default")
+            token_provider = get_bearer_token_provider(DefaultAzureCredential(), scope)
+            client = AzureOpenAI(
+                azure_endpoint=endpoint,
+                azure_ad_token_provider=token_provider,
+                api_version=api_version,
+            )
         return client, deployment
 
     # openai (default)

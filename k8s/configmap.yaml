@@ -27,10 +27,11 @@ data:
       "skills_shorter_path":       "06-Reference-Materials/Skills - 10% Shorter.txt",
       "resume_template_png":       "06-Reference-Materials/resume_template.png",
       "cover_letter_template_png": "06-Reference-Materials/cover_letter_template.png",
-      "openai_model":              "gpt-4o",
+      "openai_model":              "gpt-4.1-mini",
       "llm_provider":              "__LLM_PROVIDER__",
       "azure_foundry_endpoint":    "__FOUNDRY_ENDPOINT__",
       "azure_foundry_deployment":  "__FOUNDRY_DEPLOYMENT__",
-      "azure_foundry_api_version": "__FOUNDRY_API_VERSION__"
+      "azure_foundry_api_version": "__FOUNDRY_API_VERSION__",
+      "azure_foundry_scope":       "https://ai.azure.com/.default"
     }
   storage_account: "jcmcpstore"
