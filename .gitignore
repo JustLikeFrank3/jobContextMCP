@@ -56,3 +56,4 @@ docs/jobContextMCP-FullDocs/02_monetization_strategy.md
 
 # Personalized Copilot instructions (use copilot-instructions.example.md as the public template)
 .github/copilot-instructions.md
+.env.deploy

@@ -6,9 +6,9 @@ metadata:
   labels:
     app: jcmcp
 spec:
-  replicas: 1                  # ReadWriteOnce PVC — must stay at 1
+  replicas: 1
   strategy:
-    type: Recreate             # Required with RWO disk — no rolling update
+    type: Recreate
   selector:
     matchLabels:
       app: jcmcp
@@ -16,46 +16,41 @@ spec:
     metadata:
       labels:
         app: jcmcp
-        azure.workload.identity/use: "true"   # Workload Identity binding
+        azure.workload.identity/use: "true"
     spec:
       serviceAccountName: jcmcp-workload-sa
-
-      # ── Init container ────────────────────────────────────────────────────
-      # Copies static workspace files from Key Vault CSI mount into the
-      # writable PVC on first boot. Uses cp -n (no-clobber) so hand-edited
-      # files on the PVC are never overwritten on pod restart.
       initContainers:
         - name: seed-workspace
-          image: busybox:1.36
+          image: mcr.microsoft.com/azure-cli:latest
           command:
             - sh
             - -c
             - |
               set -e
-              echo "Seeding workspace from Key Vault..."
-              # Create directory structure if missing
+              echo "Seeding workspace from Blob Storage..."
               mkdir -p /app/data/workspace/01-Current-Optimized
               mkdir -p /app/data/workspace/06-Reference-Materials
               mkdir -p /app/data/workspace/07-Job-Assessments
               mkdir -p /app/data/workspace/08-Interview-Prep-Docs
               mkdir -p /app/data/workspace/02-Cover-Letters
               mkdir -p /app/data/workspace/leetcode
-              # Copy each file — -n means skip if already present
-              for f in /app/secrets/*; do
-                rel="${f#/app/secrets/}"
-                dest="/app/data/workspace/${rel}"
-                mkdir -p "$(dirname "$dest")"
-                cp -n "$f" "$dest" && echo "  seeded: $rel" || echo "  exists: $rel"
-              done
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --destination /app/data/workspace \
+                --overwrite false \
+                --auth-mode login \
+                --output none
               echo "Seed complete."
+          env:
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-config
+                  key: storage_account
           volumeMounts:
-            - name: workspace-secrets   # Key Vault CSI — read-only
-              mountPath: /app/secrets
-              readOnly: true
-            - name: data                # PVC — writable
+            - name: data
               mountPath: /app/data
-
-      # ── Main container ────────────────────────────────────────────────────
       containers:
         - name: jcmcp
           image: <ACR_NAME>.azurecr.io/jcmcp:<IMAGE_TAG>
@@ -69,7 +64,6 @@ spec:
               value: "1"
             - name: ENABLE_REMOTE
               value: "true"
-            # Secrets injected from k8s Secret (created via scripts/seed_keyvault.sh)
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -101,25 +95,10 @@ spec:
               mountPath: /app/config.json
               subPath: config.json
               readOnly: true
-            # CSI volume must also be mounted on the main container to keep
-            # the SecretProviderClass active (driver requirement).
-            - name: workspace-secrets
-              mountPath: /app/secrets
-              readOnly: true
-
-      # ── Volumes ───────────────────────────────────────────────────────────
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: jcmcp-data
-
         - name: config
           configMap:
             name: jcmcp-config
-
-        - name: workspace-secrets
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: jcmcp-workspace-files
