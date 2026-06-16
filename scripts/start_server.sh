@@ -10,19 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-PORT="${1:-8000}"
-
-# Get Tailscale IP for display
-TS_IP="$(tailscale ip --4 2>/dev/null)" || { echo "WARNING: Tailscale not running — LAN only"; TS_IP="(unavailable)"; }
-
-echo "Starting jobContextMCP..."
-echo "  Tailscale : http://${TS_IP}:${PORT}"
-echo "  Local     : http://127.0.0.1:${PORT}"
-echo ""
-
-# Kill anything already on the port
-lsof -ti tcp:"${PORT}" | xargs -r kill 2>/dev/null || true
-sleep 0.5
+_CLI_PORT="${1:-}"  # capture CLI arg before .env load
 
 cd "$REPO_DIR"
 
@@ -33,6 +21,19 @@ if [[ -f .env ]]; then
     source .env
     set +a
 fi
+
+# CLI arg always wins over .env PORT; fall back to .env PORT, then 8000
+PORT="${_CLI_PORT:-${PORT:-8000}}"
+TS_IP="$(tailscale ip --4 2>/dev/null)" || { echo "WARNING: Tailscale not running — LAN only"; TS_IP="(unavailable)"; }
+
+echo "Starting jobContextMCP..."
+echo "  Tailscale : http://${TS_IP}:${PORT}"
+echo "  Local     : http://127.0.0.1:${PORT}"
+echo ""
+
+# Kill anything already on the port
+lsof -ti tcp:"${PORT}" | xargs -r kill 2>/dev/null || true
+sleep 0.5
 
 exec env ENABLE_REMOTE=true PORT="${PORT}" \
     .venv.nosync/bin/python -m transport.http.main

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
@@ -95,6 +95,12 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
     app.include_router(dashboard_router)
+
+    # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
+    # catch-all mount below doesn't intercept it before FastAPI can redirect.
+    @app.get("/dashboard", include_in_schema=False)
+    async def _dashboard_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/dashboard/")
 
     # ── Static icon routes (suppress browser-auto 404s) ──────────────────────
     # Must be registered BEFORE the catch-all MCP mount below, or the mount
