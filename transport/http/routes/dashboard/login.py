@@ -1,17 +1,30 @@
 """Dashboard login routes for browser-based auth.
 
-Provides a simple API-key form that sets an HTTP-only cookie (`jc_session`) so
-mobile Safari / browser sessions can access protected dashboard routes without
-manually sending Authorization headers.
+Two modes depending on the active AuthProvider:
+
+  ApiKeyAuthProvider — shows an API key form; sets jc_session cookie on
+    successful submit.
+
+  EntraAuthProvider  — GET /login redirects straight to Entra PKCE;
+    GET /callback exchanges the auth code for a token and sets jc_session.
 """
 from __future__ import annotations
 
+import hashlib
+import os
+import secrets
 from typing import Annotated
+from urllib.parse import urlencode
 
+import httpx
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from transport.http.security import get_auth_provider
+from transport.http.security import EntraAuthProvider, get_auth_provider
+
+_SERVER_BASE = os.environ.get(
+    "SERVER_BASE_URL", "https://jobcontextmcp.eastus.cloudapp.azure.com"
+)
 
 router = APIRouter()
 
@@ -26,8 +39,35 @@ def _safe_next(next_url: str | None) -> str:
 
 
 @router.get("/login")
-async def dashboard_login_page(next: str = _DASHBOARD_ROOT) -> HTMLResponse:
+async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) -> HTMLResponse | RedirectResponse:
   provider = get_auth_provider()
+
+  # Entra mode: skip the form, go straight to PKCE
+  if isinstance(provider, EntraAuthProvider):
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    verifier = secrets.token_urlsafe(64)
+    import base64
+    challenge_b64 = base64.urlsafe_b64encode(
+      hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    params = urlencode({
+      "client_id": client_id,
+      "response_type": "code",
+      "redirect_uri": f"{_SERVER_BASE}/dashboard/callback",
+      "scope": f"api://{client_id}/access openid profile",
+      "response_mode": "query",
+      "code_challenge": challenge_b64,
+      "code_challenge_method": "S256",
+      "state": next,
+    })
+    auth_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize?{params}"
+    resp = RedirectResponse(url=auth_url, status_code=302)
+    # Store verifier in a short-lived cookie for the callback
+    resp.set_cookie("pkce_verifier", verifier, httponly=True, samesite="lax",
+                    secure=request.url.scheme == "https", max_age=600, path="/")
+    return resp
+
   if not provider.auth_enabled:
     return HTMLResponse(
       '<!doctype html><meta charset="utf-8"><title>Dashboard Login</title>'
@@ -131,3 +171,65 @@ async def dashboard_logout() -> RedirectResponse:
     resp = RedirectResponse(url=_LOGIN_PATH, status_code=303)
     resp.delete_cookie("jc_session", path="/")
     return resp
+
+
+@router.get("/callback")
+async def dashboard_entra_callback(
+    request: Request,
+    code: str = "",
+    state: str = _DASHBOARD_ROOT,
+    error: str = "",
+) -> RedirectResponse | HTMLResponse:
+    """Handle Entra PKCE callback, exchange code for token, set jc_session cookie."""
+    if error:
+        return HTMLResponse(
+            f'<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
+            f'<h2>Login failed</h2><p>{error}</p>'
+            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            status_code=400,
+        )
+
+    verifier = request.cookies.get("pkce_verifier", "")
+    if not code or not verifier:
+        return RedirectResponse(url=_LOGIN_PATH, status_code=302)
+
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(token_url, data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "redirect_uri": f"{_SERVER_BASE}/dashboard/callback",
+            "code_verifier": verifier,
+            "scope": f"api://{client_id}/access openid profile",
+        })
+
+    if resp.status_code != 200:
+        return HTMLResponse(
+            '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
+            '<h2>Token exchange failed</h2>'
+            f'<pre>{resp.text[:400]}</pre>'
+            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            status_code=400,
+        )
+
+    tokens = resp.json()
+    access_token = tokens.get("access_token", "")
+
+    next_url = _safe_next(state)
+    redirect = RedirectResponse(url=next_url, status_code=303)
+    secure = request.url.scheme == "https"
+    redirect.set_cookie(
+        key="jc_session",
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        max_age=60 * 60,  # 1h — matches Entra token lifetime
+        path="/",
+    )
+    redirect.delete_cookie("pkce_verifier", path="/")
+    return redirect

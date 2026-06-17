@@ -34,6 +34,8 @@ _PUBLIC_PATHS = frozenset({
     "/.well-known/oauth-authorization-server",
     "/health",
     "/callback",
+    "/dashboard/login",
+    "/dashboard/callback",
 })
 
 # ---------------------------------------------------------------------------
