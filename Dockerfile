@@ -19,7 +19,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Weasyprint runtime dependencies (Cairo, Pango, GDK-Pixbuf, fonts)
-# + TeX Live for LaTeX → PDF compilation (pdflatex)
+# + curl to fetch the tectonic installer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
@@ -30,11 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi8 \
     shared-mime-info \
     fonts-liberation \
-    texlive-latex-base \
-    texlive-latex-recommended \
-    texlive-fonts-recommended \
-    texlive-latex-extra \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install tectonic (self-contained LaTeX engine, ~10MB vs ~400MB for texlive)
+RUN curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.16.9/tectonic-0.16.9-x86_64-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/tectonic \
+    && tectonic --version
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
