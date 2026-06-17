@@ -19,6 +19,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Weasyprint runtime dependencies (Cairo, Pango, GDK-Pixbuf, fonts)
+# + TeX Live for LaTeX → PDF compilation (pdflatex)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
@@ -29,6 +30,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi8 \
     shared-mime-info \
     fonts-liberation \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-fonts-recommended \
+    texlive-latex-extra \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
