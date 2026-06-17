@@ -15,6 +15,7 @@ import re
 
 from lib import config
 from lib.io import _load_json, _save_json, _now
+from lib.db import get_connection
 from tools.job_hunt import update_application
 from tools.fitment import run_job_assessment
 
@@ -165,6 +166,17 @@ def evaluate_queued_job(company: str, role: str, persona: str = "") -> str:
 
 
 
+def _delete_from_db(job_id: int) -> None:
+    """Explicitly remove a decided job from the SQLite job_queue table.
+    Called after add/dismiss decisions since _save_job_queue is upsert-only."""
+    try:
+        with get_connection() as con:
+            con.execute("DELETE FROM job_queue WHERE id = ?", (job_id,))
+    except Exception:
+        # DB not configured or schema missing (e.g. pure JSON mode) — silently skip.
+        pass
+
+
 def decide_job(
     company: str,
     role: str,
@@ -205,8 +217,10 @@ def decide_job(
 
     if decision == "add":
         # Remove from active queue — it now lives in status.json
+        job_id = job.get("id")
         data["jobs"] = [j for j in jobs if j is not job]
         _save_json(config.JOB_QUEUE_FILE, data)
+        _delete_from_db(job_id)
         update_result = update_application(
             company=company,
             role=role,
@@ -216,8 +230,10 @@ def decide_job(
         return f"Added {company} — {role} to pipeline as 'interested'.\n{update_result}"
 
     # dismiss — remove from queue, nothing lingers
+    job_id = job.get("id")
     data["jobs"] = [j for j in jobs if j is not job]
     _save_json(config.JOB_QUEUE_FILE, data)
+    _delete_from_db(job_id)
     return f"Dismissed: {company} — {role}.{(' Reason: ' + notes) if notes else ''}"
 
 

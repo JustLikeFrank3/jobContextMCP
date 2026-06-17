@@ -15,10 +15,13 @@ hbdi_profile are never silently lost. Phase 2 will drop the JSON write path.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from lib.db import get_connection
+from lib import config
 
 
 # ── JSON column helper ─────────────────────────────────────────────────────────
@@ -86,16 +89,17 @@ def _load_job_queue(con) -> dict:
     return {
         "jobs": [
             {
-                "id":             r["id"],
-                "company":        r["company"],
-                "role":           r["role"],
-                "jd":             r["jd"],
-                "source":         r["source"],
-                "added_date":     r["added_date"],
-                "status":         r["status"],
-                "fitment_score":  r["fitment_score"],
-                "decision_notes": r["decision_notes"],
-                "decided_date":   r["decided_date"],
+                "id":               r["id"],
+                "company":          r["company"],
+                "role":             r["role"],
+                "jd":               r["jd"],
+                "source":           r["source"],
+                "added_date":       r["added_date"],
+                "status":           r["status"],
+                "fitment_score":    r["fitment_score"],
+                "fitment_context":  r["fitment_context"],
+                "decision_notes":   r["decision_notes"],
+                "decided_date":     r["decided_date"],
             }
             for r in rows
         ]
@@ -395,35 +399,80 @@ def _save_status(con, data: dict) -> None:
 
 def _save_job_queue(con, data: dict) -> None:
     jobs = data.get("jobs", [])
-    incoming_ids: list = [j.get("id") for j in jobs if j.get("id") is not None]
+    # Upsert incoming jobs inside the DB transaction. Do NOT perform a
+    # destructive sync-delete here — deletes should be explicit operations.
     for j in jobs:
         con.execute(
             """
             INSERT INTO job_queue
                 (id, company, role, jd, source, added_date, status,
-                 fitment_score, decision_notes, decided_date)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                 fitment_score, fitment_context, decision_notes, decided_date)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
                 company=excluded.company, role=excluded.role, jd=excluded.jd,
                 source=excluded.source, added_date=excluded.added_date,
                 status=excluded.status, fitment_score=excluded.fitment_score,
+                fitment_context=excluded.fitment_context,
                 decision_notes=excluded.decision_notes, decided_date=excluded.decided_date
             """,
             (
                 j.get("id"), j.get("company", ""), j.get("role", ""),
                 j.get("jd"), j.get("source"), j.get("added_date"),
                 j.get("status", "pending"), j.get("fitment_score"),
-                j.get("decision_notes"), j.get("decided_date"),
+                j.get("fitment_context"), j.get("decision_notes"), j.get("decided_date"),
             ),
         )
-    # Sync-delete: remove rows no longer in the incoming dataset (e.g. dismissed jobs).
-    # Guard: only run when the incoming list is non-empty to prevent accidental full wipe.
-    if incoming_ids:
-        placeholders = ",".join("?" * len(incoming_ids))
-        con.execute(
-            f"DELETE FROM job_queue WHERE id NOT IN ({placeholders})",
-            incoming_ids,
-        )
+
+    # After committing the DB changes, export the canonical job_queue to JSON
+    # as an atomic replica for human inspection and safe backups. This keeps
+    # the DB as the single source of truth while preserving the dual-write
+    # audit trail the project currently expects.
+    # Build the jobs list from the DB to ensure consistent shape.
+    rows = con.execute("SELECT * FROM job_queue ORDER BY id").fetchall()
+    out = {
+        "jobs": [
+            {
+                "id":               r["id"],
+                "company":          r["company"],
+                "role":             r["role"],
+                "jd":               r["jd"],
+                "source":           r["source"],
+                "added_date":       r["added_date"],
+                "status":           r["status"],
+                "fitment_score":    r["fitment_score"],
+                "fitment_context":  r["fitment_context"],
+                "decision_notes":   r["decision_notes"],
+                "decided_date":     r["decided_date"],
+            }
+            for r in rows
+        ]
+    }
+
+    # Atomic write to the configured JOB_QUEUE_FILE
+    job_file: Path = config.JOB_QUEUE_FILE
+    try:
+        job_file.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix="job_queue.", dir=str(job_file.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(out, fh, ensure_ascii=False, indent=2)
+                fh.flush(); os.fsync(fh.fileno())
+            os.replace(tmp_path, str(job_file))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+    except Exception:
+        # JSON replica write failure should not break the DB commit path.
+        # Surface a log-worthy warning for operators.
+        try:
+            import logging
+
+            logging.exception("Failed to write job_queue JSON replica")
+        except Exception:
+            pass
 
 
 def _save_people(con, data: dict) -> None:

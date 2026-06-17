@@ -68,16 +68,17 @@ CREATE TABLE application_events (
 );
 
 CREATE TABLE job_queue (
-    id             INTEGER PRIMARY KEY,
-    company        TEXT    NOT NULL,
-    role           TEXT    NOT NULL,
-    jd             TEXT,
-    source         TEXT,
-    added_date     TEXT,
-    status         TEXT    DEFAULT 'pending',
-    fitment_score  REAL,
-    decision_notes TEXT,
-    decided_date   TEXT
+    id              INTEGER PRIMARY KEY,
+    company         TEXT    NOT NULL,
+    role            TEXT    NOT NULL,
+    jd              TEXT,
+    source          TEXT,
+    added_date      TEXT,
+    status          TEXT    DEFAULT 'pending',
+    fitment_score   TEXT,
+    fitment_context TEXT,
+    decision_notes  TEXT,
+    decided_date    TEXT
 );
 
 CREATE TABLE people (
@@ -318,15 +319,15 @@ def _job_queue(cur: sqlite3.Cursor) -> int:
         """
         INSERT OR REPLACE INTO job_queue
             (id, company, role, jd, source, added_date, status,
-             fitment_score, decision_notes, decided_date)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+             fitment_score, fitment_context, decision_notes, decided_date)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """,
         [
             (
                 r.get("id"), r.get("company", ""), r.get("role", ""),
                 r.get("jd"), r.get("source"), r.get("added_date"),
                 r.get("status", "pending"), r.get("fitment_score"),
-                r.get("decision_notes"), r.get("decided_date"),
+                r.get("fitment_context"), r.get("decision_notes"), r.get("decided_date"),
             )
             for r in rows
         ],
