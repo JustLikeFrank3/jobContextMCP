@@ -38,7 +38,7 @@ def _safe_next(next_url: str | None) -> str:
     return _DASHBOARD_ROOT
 
 
-@router.get("/login")
+@router.get("/login", response_model=None)
 async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) -> HTMLResponse | RedirectResponse:
   provider = get_auth_provider()
 
