@@ -140,6 +140,16 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
+            - name: ENTRA_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: entra_tenant_id
+            - name: ENTRA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: entra_client_id
           resources:
             requests:
               cpu: "50m"

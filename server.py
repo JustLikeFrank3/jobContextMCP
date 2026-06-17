@@ -310,8 +310,32 @@ if __name__ == "__main__":
 
     transport = os.getenv("MCP_TRANSPORT", "stdio")
     if transport in ("sse", "streamable-http"):
-        mcp.run(
-            transport=transport,
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.middleware import Middleware
+        from starlette.responses import JSONResponse as _JSONResponse
+        from starlette.routing import Mount, Route
+
+        from lib.auth import EntraAuthMiddleware, oauth_discovery_json
+
+        def _oauth_discovery(request):  # noqa: ANN001
+            return _JSONResponse(oauth_discovery_json())
+
+        mcp_app = mcp.streamable_http_app()
+
+        app = Starlette(
+            routes=[
+                Route(
+                    "/.well-known/oauth-authorization-server",
+                    _oauth_discovery,
+                ),
+                Mount("/", app=mcp_app),
+            ],
+            middleware=[Middleware(EntraAuthMiddleware)],
+        )
+
+        uvicorn.run(
+            app,
             host=os.getenv("MCP_HOST", "0.0.0.0"),
             port=int(os.getenv("MCP_PORT", "8000")),
         )
