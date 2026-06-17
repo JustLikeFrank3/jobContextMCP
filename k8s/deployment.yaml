@@ -66,6 +66,16 @@ spec:
                 --overwrite true \
                 --auth-mode login \
                 --output none && echo "Personas seeded." || echo "No personas in blob (skipping)."
+              # Seed LaTeX support files for cover letter PDF generation.
+              mkdir -p /app/data/workspace/frank-resume-latex
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --pattern "frank-resume-latex/*" \
+                --destination /app/data/workspace \
+                --overwrite true \
+                --auth-mode login \
+                --output none && echo "LaTeX support files seeded." || echo "No LaTeX files in blob (skipping)."
               # Seed DB only on first boot — preserve runtime writes across restarts.
               if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
                 echo "No DB found — seeding from Blob..."
