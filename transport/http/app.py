@@ -129,7 +129,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
   </main>
 </body>
 </html>"""
-                return HTMLResponse(html.replace("__BANNER_SVG__", banner_svg()))
+        return HTMLResponse(html.replace("__BANNER_SVG__", banner_svg()))
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
     # catch-all mount below doesn't intercept it before FastAPI can redirect.
