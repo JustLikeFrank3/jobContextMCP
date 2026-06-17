@@ -173,7 +173,7 @@ async def dashboard_logout() -> RedirectResponse:
     return resp
 
 
-@router.get("/callback")
+@router.get("/callback", response_model=None)
 async def dashboard_entra_callback(
     request: Request,
     code: str = "",
