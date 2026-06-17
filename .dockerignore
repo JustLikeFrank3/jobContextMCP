@@ -31,9 +31,6 @@ workspace/
 # Tests (not needed in image)
 tests/
 
-# Docs / branding
-docs/
-
 # Temp / debug files
 *.log
 /tmp/
