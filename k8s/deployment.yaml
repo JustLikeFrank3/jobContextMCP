@@ -76,6 +76,16 @@ spec:
                 --overwrite true \
                 --auth-mode login \
                 --output none && echo "LaTeX support files seeded." || echo "No LaTeX files in blob (skipping)."
+              # Restore JSON data files from blob on every boot (people, contacts, interviews, etc.).
+              # These are written by MCP tools at runtime and must survive pod restarts.
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --pattern "data/*.json" \
+                --destination /app/data \
+                --overwrite true \
+                --auth-mode login \
+                --output none && echo "JSON data files restored." || echo "No JSON data in blob (skipping)."
               # Seed DB only on first boot — preserve runtime writes across restarts.
               if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
                 echo "No DB found — seeding from Blob..."
@@ -181,6 +191,16 @@ spec:
                   --output none \
                   && echo "[$(date -u +%H:%M:%SZ)] workspace sync OK" \
                   || echo "[$(date -u +%H:%M:%SZ)] workspace sync FAILED"
+                az storage blob upload-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source /app/data \
+                  --destination workspace/data \
+                  --pattern "*.json" \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none \
+                  && echo "[$(date -u +%H:%M:%SZ)] data JSON sync OK" \
+                  || echo "[$(date -u +%H:%M:%SZ)] data JSON sync FAILED"
                 if [ -f /app/data/jobcontextmcp.db ] && [ -s /app/data/jobcontextmcp.db ]; then
                   az storage blob upload \
                     --account-name "${STORAGE_ACCOUNT}" \
