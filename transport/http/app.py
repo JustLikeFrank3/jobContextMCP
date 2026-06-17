@@ -28,6 +28,7 @@ from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
+from transport.http.routes.dashboard.assets import banner_svg
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -98,19 +99,20 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def _root_login_entry() -> HTMLResponse:
-        return HTMLResponse(
-            """<!doctype html>
+        html = """<!doctype html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
   <title>jobContextMCP</title>
   <style>
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center;
            background: #0b1220; color: #e6edf7;
            font-family: Inter, Arial, sans-serif; }
-    .card { width: min(440px, 92vw); background: #111a2b; border: 1px solid #23324d;
+        .card { width: min(560px, 92vw); background: #111a2b; border: 1px solid #23324d;
             border-radius: 14px; padding: 24px; text-align: center; }
+        .banner-wrap { width: 100%; max-width: 420px; margin: 0 auto 10px; }
+        .banner-wrap svg { width: 100%; height: auto; display: block; }
     h1 { margin: 0 0 10px; font-size: 1.25rem; }
     p { margin: 0 0 16px; color: #9aa8bf; line-height: 1.45; }
     .btn { display: inline-block; text-decoration: none; font-weight: 700;
@@ -120,13 +122,14 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 </head>
 <body>
   <main class=\"card\">
-    <h1>jobContextMCP</h1>
+                <div class=\"banner-wrap\">__BANNER_SVG__</div>
+        <h1>Secure Dashboard Access</h1>
     <p>Sign in to access the dashboard.</p>
     <a class=\"btn\" href=\"/dashboard/login\">Log in</a>
   </main>
 </body>
 </html>"""
-        )
+                return HTMLResponse(html.replace("__BANNER_SVG__", banner_svg()))
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
     # catch-all mount below doesn't intercept it before FastAPI can redirect.

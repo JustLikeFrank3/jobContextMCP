@@ -60,11 +60,13 @@ def validate_token(token: str) -> dict:
     """
     client = _get_jwks_client()
     signing_key = client.get_signing_key_from_jwt(token)
+    allowed_audiences = [CLIENT_ID, f"api://{CLIENT_ID}"]
+
     claims = jwt.decode(
         token,
         signing_key.key,
         algorithms=["RS256"],
-        audience=CLIENT_ID,
+        audience=allowed_audiences,
         options={"verify_iss": False},
     )
     return claims
