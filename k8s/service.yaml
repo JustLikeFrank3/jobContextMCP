@@ -10,6 +10,7 @@ spec:
     - name: http
       port: 80
       targetPort: 8000
-  # ClusterIP for now — access via kubectl port-forward during demo.
-  # Change to LoadBalancer (or add an Ingress) for persistent external access.
-  type: ClusterIP
+  # LoadBalancer provisions an Azure public IP — no port-forward needed.
+  # The IP will appear under EXTERNAL-IP after: kubectl get svc -n jcmcp
+  # Lock it down via API_KEY in the secret / .env if exposed publicly.
+  type: LoadBalancer
