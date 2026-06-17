@@ -18,7 +18,10 @@ Tools provided:
   - Outreach drafting and contacts management (v4)
   - LinkedIn post tracking with engagement metrics (v4.8)
 """
+import os
+
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from lib import config
 from lib.config import _load_config
@@ -121,8 +124,16 @@ def _reconfigure(cfg: dict) -> None:
 _sync_config_exports()
 
 
+# When running behind a reverse proxy (ENABLE_REMOTE=true), disable the MCP SDK's
+# localhost-only DNS rebinding check.  The proxy (nginx-ingress + TLS) is the
+# security boundary; the SDK check just blocks legitimate remote connections.
+_transport_security: TransportSecuritySettings | None = None
+if os.getenv("ENABLE_REMOTE", "false").lower() in ("1", "true", "yes"):
+    _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
 mcp = FastMCP(
     "jobContextMCP",
+    transport_security=_transport_security,
     instructions=(
         "You are Frank MacBride's personal job search assistant. "
         "You have direct filesystem access to his resume materials, job hunt status, "
