@@ -52,8 +52,12 @@ jobs:
 
       - name: Deploy new image
         run: |
-          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
-            ${{ env.K8S_CONTAINER }}=${{ env.IMAGE }}:${{ github.sha }} \
-            -n ${{ env.K8S_NAMESPACE }}
+          # Substitute placeholders and apply the full manifest so env/secret
+          # changes in deployment.yaml are picked up on every deploy — not just
+          # the image tag.
+          ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
+            k8s/deployment.yaml | \
+            kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
           kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
             -n ${{ env.K8S_NAMESPACE }} --timeout=120s
