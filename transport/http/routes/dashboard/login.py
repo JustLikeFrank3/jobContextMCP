@@ -195,12 +195,23 @@ async def dashboard_entra_callback(
 
     tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
     client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    client_secret = os.environ.get("ENTRA_CLIENT_SECRET", "")
     token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+
+    if not client_secret:
+        return HTMLResponse(
+            '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
+            '<h2>Server auth not configured</h2>'
+            '<p>ENTRA_CLIENT_SECRET is missing in runtime configuration.</p>'
+            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            status_code=500,
+        )
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(token_url, data={
             "grant_type": "authorization_code",
             "client_id": client_id,
+          "client_secret": client_secret,
             "code": code,
             "redirect_uri": f"{_SERVER_BASE}/dashboard/callback",
             "code_verifier": verifier,

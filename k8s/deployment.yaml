@@ -150,6 +150,11 @@ spec:
                 secretKeyRef:
                   name: jcmcp-app-secrets
                   key: entra_client_id
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: entra_client_secret
           resources:
             requests:
               cpu: "50m"

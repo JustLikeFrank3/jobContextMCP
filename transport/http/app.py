@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
@@ -95,6 +95,38 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
     app.include_router(dashboard_router)
+
+    @app.get("/", include_in_schema=False)
+    async def _root_login_entry() -> HTMLResponse:
+        return HTMLResponse(
+            """<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+  <title>jobContextMCP</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+           background: #0b1220; color: #e6edf7;
+           font-family: Inter, Arial, sans-serif; }
+    .card { width: min(440px, 92vw); background: #111a2b; border: 1px solid #23324d;
+            border-radius: 14px; padding: 24px; text-align: center; }
+    h1 { margin: 0 0 10px; font-size: 1.25rem; }
+    p { margin: 0 0 16px; color: #9aa8bf; line-height: 1.45; }
+    .btn { display: inline-block; text-decoration: none; font-weight: 700;
+           color: #0b1220; background: #3FA8A8; border-radius: 10px;
+           padding: 10px 14px; }
+  </style>
+</head>
+<body>
+  <main class=\"card\">
+    <h1>jobContextMCP</h1>
+    <p>Sign in to access the dashboard.</p>
+    <a class=\"btn\" href=\"/dashboard/login\">Log in</a>
+  </main>
+</body>
+</html>"""
+        )
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
     # catch-all mount below doesn't intercept it before FastAPI can redirect.
