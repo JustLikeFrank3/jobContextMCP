@@ -102,7 +102,7 @@ spec:
             - name: USE_SQLITE
               value: "1"
             - name: SQLITE_ONLY
-              value: "0              https://github.com/JustLikeFrank3/jobContextMCP/actions"
+              value: "0"
             - name: ENABLE_REMOTE
               value: "true"
             # LLM_PROVIDER overrides llm_provider in config.json.
