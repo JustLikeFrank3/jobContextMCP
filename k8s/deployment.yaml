@@ -92,7 +92,7 @@ spec:
             - name: USE_SQLITE
               value: "1"
             - name: SQLITE_ONLY
-              value: "1"
+              value: "0              https://github.com/JustLikeFrank3/jobContextMCP/actions"
             - name: ENABLE_REMOTE
               value: "true"
             # LLM_PROVIDER overrides llm_provider in config.json.
@@ -112,7 +112,7 @@ spec:
                   optional: true
           resources:
             requests:
-              cpu: "250m"
+              cpu: "50m"
               memory: "512Mi"
             limits:
               cpu: "1000m"
@@ -182,7 +182,7 @@ spec:
                   key: storage_account
           resources:
             requests:
-              cpu: "10m"
+              cpu: "5m"
               memory: "64Mi"
             limits:
               cpu: "200m"
