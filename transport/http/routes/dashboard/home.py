@@ -62,6 +62,7 @@ async def dashboard_home() -> HTMLResponse:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContextMCP — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233FA8A8'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='ui-sans-serif,sans-serif' font-weight='700' font-size='19' fill='%230b1220'%3EJ%3C/text%3E%3C/svg%3E" />
   <style>
     :root {{
       --bg: #0b1220; --panel: #111a2b; --muted: #9aa8bf;
