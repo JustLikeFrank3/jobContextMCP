@@ -68,9 +68,16 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         session = request.cookies.get("jc_session")
         user = provider.authenticate_request(authorization, session)
 
+        # Resolve the OID to route to: prefer the JWT claim, fall back to
+        # ENTRA_OWNER_OID for API-key / admin sessions.
+        oid: str | None = None
         if user and user.id and user.id != "admin":
-            # All authenticated users (including owner) get their own data dir.
-            data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / user.id
+            oid = user.id
+        elif user and user.id == "admin":
+            oid = owner_oid  # route API-key sessions to the owner's data dir
+
+        if oid:
+            data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / oid
             provision_user_data(data_dir)
             token = set_data_folder(data_dir)
             try:
