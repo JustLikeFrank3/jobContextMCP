@@ -921,7 +921,7 @@ def _resolve_output_path(
     default_stem: str,
     folder_name: str = "03-Resume-PDFs",
 ) -> pathlib.Path:
-    resume_folder = pathlib.Path(config.RESUME_FOLDER)
+    resume_folder = config.get_active_workspace_folder()
     pdf_dir = resume_folder / folder_name
     pdf_dir.mkdir(parents=True, exist_ok=True)
     fname = output_filename or (default_stem + ".pdf")
@@ -952,7 +952,7 @@ def export_resume_pdf(
     Returns:
         Path to the generated PDF.
     """
-    resume_folder = pathlib.Path(config.RESUME_FOLDER)
+    resume_folder = config.get_active_workspace_folder()
     opt_dir = resume_folder / "01-Current-Optimized"
 
     # Resolve filename
@@ -1004,7 +1004,7 @@ def export_cover_letter_pdf(
     Returns:
         Path to the generated PDF.
     """
-    resume_folder = pathlib.Path(config.RESUME_FOLDER)
+    resume_folder = config.get_active_workspace_folder()
     cl_dir = resume_folder / "02-Cover-Letters"
 
     if not filename.endswith(".txt"):

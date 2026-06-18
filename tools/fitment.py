@@ -227,7 +227,8 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    folder = config.JOB_ASSESSMENTS_FOLDER
+    _assessments_folder = config.get_active_workspace_folder() / config._cfg.get("job_assessments_dir", "07-Job-Assessments")
+    folder = _assessments_folder
     if source:
         # Sanitise source into a safe folder name
         safe_source = source.strip().replace("/", "-").replace("\\", "-")
@@ -237,7 +238,7 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(cleaned, encoding="utf-8")
 
-    relative = target.relative_to(config.JOB_ASSESSMENTS_FOLDER)
+    relative = target.relative_to(_assessments_folder)
     return f"\u2713 Saved job assessment: {relative}"
 
 

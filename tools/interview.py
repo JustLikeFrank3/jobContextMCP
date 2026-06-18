@@ -68,7 +68,8 @@ def generate_interview_prep_context(
 
 def get_existing_prep_file(company: str) -> str:
     """Find and return all existing interview prep files for a given company — searches across both the Resume 2025 and LeetCode folders for files containing the company name and prep/interview/call/assessment keywords."""
-    search_roots = [config.RESUME_FOLDER, config.LEETCODE_FOLDER, config.INTERVIEW_PREP_FOLDER]
+    _ws = config.get_active_workspace_folder()
+    search_roots = [_ws, config.LEETCODE_FOLDER, _ws / config._cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")]
     seen: set = set()
     matches = []
     for root in search_roots:
@@ -104,7 +105,7 @@ def save_interview_prep(company: str, content: str, filename: str = "") -> str:
     # Strip trailing whitespace per line; preserve intentional blank lines
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    target = config.INTERVIEW_PREP_FOLDER
+    target = config.get_active_workspace_folder() / config._cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
     target.mkdir(parents=True, exist_ok=True)
     dest = target / filename
     dest.write_text(cleaned, encoding="utf-8")
