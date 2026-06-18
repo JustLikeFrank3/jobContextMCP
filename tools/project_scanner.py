@@ -81,6 +81,8 @@ _TECH_KEYWORDS: dict[str, list[str]] = {
     "FastMCP":                       ["fastmcp"],
     "WeasyPrint / PDF generation":   ["weasyprint"],
     "RAG / semantic search":         ["rag", "faiss", "sentence_transformers", "text-embedding"],
+    "SQLite / aiosqlite":            ["sqlite", "aiosqlite"],
+    "Microsoft Entra ID (PKCE/OIDC)": ["entra", "pkce", "oidc", "msal", "workload identity", "workload.identity"],
 }
 
 
@@ -138,6 +140,10 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
                     tech_found.add("WeasyPrint / PDF generation")
                 if "faiss" in text or "sentence_transformers" in text or "text-embedding" in text:
                     tech_found.add("RAG / semantic search")
+                if "sqlite" in text or "aiosqlite" in text:
+                    tech_found.add("SQLite / aiosqlite")
+                if "entra" in text or "pkce" in text or "oidc" in text or "msal" in text:
+                    tech_found.add("Microsoft Entra ID (PKCE/OIDC)")
             elif ext in (".ts", ".tsx", ".js", ".jsx"):
                 tech_found.add("TypeScript/JavaScript")
                 if "react-native" in text or "react native" in text:
@@ -154,6 +160,9 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
                 tech_found.add("Docker Compose")
             elif ext in (".tf", ".tfvars"):
                 tech_found.add("Terraform IaC")
+            elif ext in (".yaml", ".yml"):
+                if "workload.identity" in text or "entra" in text or "oidc" in text:
+                    tech_found.add("Microsoft Entra ID (PKCE/OIDC)")
 
     return tech_found, file_count
 
@@ -257,6 +266,12 @@ def scan_project_for_skills() -> str:
         lines.append("  • Implemented PDF generation pipeline from plain .txt via WeasyPrint HTML/CSS templates")
     if "RAG / semantic search" in all_tech:
         lines.append("  • Built RAG semantic search layer over resume materials using text embeddings")
+    if "SQLite / aiosqlite" in all_tech:
+        lines.append("  • Replaced JSON flat-file storage with SQLite (aiosqlite) for concurrent-safe, "
+                     "multi-user data persistence in production")
+    if "Microsoft Entra ID (PKCE/OIDC)" in all_tech:
+        lines.append("  • Implemented Microsoft Entra ID PKCE/OIDC authentication with per-user data isolation, "
+                     "B2B guest invitations, and workload identity on AKS")
 
     return "\n".join(lines)
 
