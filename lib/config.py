@@ -122,6 +122,30 @@ JOB_ASSESSMENTS_FOLDER: Path = RESUME_FOLDER / _cfg.get("job_assessments_dir",
 SERPAPI_KEY: str = _cfg.get("serpapi_key", "")
 
 
+# ── Per-request workspace folder resolution ───────────────────────────────────
+# In production (AKS) RESUME_FOLDER = DATA_FOLDER / "workspace".
+# When a per-user data folder override is active (UserDataContextMiddleware),
+# the user's workspace lives at override / "workspace" — mirroring the same
+# relative layout so all derived paths stay correct.
+
+def get_active_workspace_folder() -> Path:
+    """Return the workspace folder for the current request.
+
+    Uses the per-request DATA_FOLDER ContextVar when set (non-owner user),
+    otherwise falls back to the global RESUME_FOLDER.
+    """
+    from lib.user_context import get_data_folder_override
+    override = get_data_folder_override()
+    if override is not None:
+        return override / "workspace"
+    return RESUME_FOLDER
+
+
+def get_active_workspace_path(relative: str) -> Path:
+    """Join get_active_workspace_folder() with a relative path fragment."""
+    return get_active_workspace_folder() / relative
+
+
 # ── LLM client factory ────────────────────────────────────────────────────────
 
 def get_llm_client(task: str = "") -> tuple[Any, str]:

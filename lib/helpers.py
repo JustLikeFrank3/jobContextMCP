@@ -76,14 +76,15 @@ def _build_tone_sample_entry(samples: list, text: str, source: str, context: str
 
 
 def _scan_dirs(category: str) -> list:
+    ws = config.get_active_workspace_folder()
     mapping: dict = {
-        "cover_letters": [config.RESUME_FOLDER / "02-Cover-Letters"],
-        "resumes": [config.RESUME_FOLDER / "01-Current-Optimized"],
-        "misc": [config.RESUME_FOLDER],
+        "cover_letters": [ws / "02-Cover-Letters"],
+        "resumes": [ws / "01-Current-Optimized"],
+        "misc": [ws],
         "all": [
-            config.RESUME_FOLDER / "02-Cover-Letters",
-            config.RESUME_FOLDER / "01-Current-Optimized",
-            config.RESUME_FOLDER,
+            ws / "02-Cover-Letters",
+            ws / "01-Current-Optimized",
+            ws,
         ],
     }
-    return mapping.get(category.lower(), [config.RESUME_FOLDER / "02-Cover-Letters"])
+    return mapping.get(category.lower(), [ws / "02-Cover-Letters"])
