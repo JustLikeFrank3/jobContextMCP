@@ -61,6 +61,7 @@ FB_FRIENDS_FOLDER: Path = _p("fb_friends_folder")
 SIDE_PROJECT_FOLDERS: list[Path] = [
     Path(p).expanduser() for p in _cfg.get("side_project_folders", [])
 ]
+SIDE_PROJECT_REPOS: list[str] = _cfg.get("side_project_repos", [])
 
 LATEX_RESUME_DIR: Path = _p("latex_resume_dir")
 
@@ -262,7 +263,7 @@ def _reconfigure(cfg: dict) -> None:
     fixture to redirect all file I/O to a temporary directory.
     """
     global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
+    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, SIDE_PROJECT_REPOS, DATA_FOLDER
     global FB_FRIENDS_FOLDER, LATEX_RESUME_DIR
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE
     global SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
@@ -289,6 +290,7 @@ def _reconfigure(cfg: dict) -> None:
     SIDE_PROJECT_FOLDERS = [
         Path(p).expanduser() for p in cfg.get("side_project_folders", [])
     ]
+    SIDE_PROJECT_REPOS = cfg.get("side_project_repos", [])
 
     # data files
     STATUS_FILE               = DATA_FOLDER / "status.json"

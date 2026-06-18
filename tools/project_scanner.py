@@ -1,5 +1,7 @@
 import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from lib import config
@@ -21,6 +23,27 @@ def _git_pull(folder: Path) -> str:
         return f"warning: {output}"
     except subprocess.TimeoutExpired:
         return "skipped: git pull timed out (>20s)"
+    except FileNotFoundError:
+        return "skipped: git not found in PATH"
+    except Exception as e:
+        return f"skipped: {e}"
+
+
+def _clone_repo(url: str, dest: Path) -> str:
+    """Shallow-clone a git repo URL into dest. Returns a one-line status string."""
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth=1", url, str(dest)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode == 0:
+            return "cloned ok"
+        return f"warning: {output}"
+    except subprocess.TimeoutExpired:
+        return "skipped: clone timed out (>60s)"
     except FileNotFoundError:
         return "skipped: git not found in PATH"
     except Exception as e:
@@ -134,21 +157,44 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
 def scan_project_for_skills() -> str:
     """Scan all configured side-project directories (side_project_folders in config.json) and detect technologies used. Pulls latest changes from git before scanning each. Reports newly detected skills not yet on the master resume so they can be added."""
     folders = config.SIDE_PROJECT_FOLDERS
-    if not folders:
-        return "No side project folders configured. Add 'side_project_folders' (array) to config.json."
+    repos = getattr(config, "SIDE_PROJECT_REPOS", [])
+
+    if not folders and not repos:
+        return "No side project folders or repos configured. Add 'side_project_folders' or 'side_project_repos' to config.json."
 
     missing = [str(f) for f in folders if not f.exists()]
-    if missing:
+    if missing and not repos:
         return "Side project folder(s) not found:\n" + "\n".join(f"  {m}" for m in missing)
 
     all_tech: set[str] = set()
     per_project: list[tuple[str, set[str], int, str]] = []  # (name, tech, file_count, pull_status)
+    tmp_dirs: list[Path] = []
 
-    for folder in folders:
-        pull_status = _git_pull(folder)
-        tech, file_count = _scan_folder(folder)
-        all_tech |= tech
-        per_project.append((folder.name, tech, file_count, pull_status))
+    try:
+        for folder in folders:
+            if not folder.exists():
+                per_project.append((folder.name, set(), 0, "skipped: folder not found"))
+                continue
+            pull_status = _git_pull(folder)
+            tech, file_count = _scan_folder(folder)
+            all_tech |= tech
+            per_project.append((folder.name, tech, file_count, pull_status))
+
+        for url in repos:
+            repo_name = url.rstrip("/").split("/")[-1]
+            tmp = Path(tempfile.mkdtemp(prefix=f"jcmcp_scan_{repo_name}_"))
+            tmp_dirs.append(tmp)
+            clone_status = _clone_repo(url, tmp)
+            if clone_status.startswith(("skipped", "warning")):
+                per_project.append((repo_name, set(), 0, clone_status))
+                continue
+            tech, file_count = _scan_folder(tmp)
+            all_tech |= tech
+            per_project.append((repo_name, tech, file_count, clone_status))
+
+    finally:
+        for tmp in tmp_dirs:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     resume_text = _load_master_context().lower()
 

@@ -21,11 +21,11 @@ Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQL
 
 ## TL;DR
 
-JobContextMCP is an AI-powered career operating system that gives AI assistants persistent memory of your job search.
+JobContextMCP gives AI assistants access to structured job-search context that persists across sessions.
 
-Instead of re-explaining your resume, applications, interview history, outreach, and portfolio every session, the platform provides structured context through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
+Instead of re-explaining your resume, applications, interview history, outreach, and portfolio every session, the platform provides that context through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
 
-**What's in the box:**
+Available as a local MCP server, local dashboard, or cloud-hosted multi-user deployment on Azure AKS.
 
 | | |
 |---|---|

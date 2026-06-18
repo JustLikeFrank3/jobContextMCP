@@ -32,6 +32,12 @@ data:
       "azure_foundry_endpoint":    "__FOUNDRY_ENDPOINT__",
       "azure_foundry_deployment":  "__FOUNDRY_DEPLOYMENT__",
       "azure_foundry_api_version": "__FOUNDRY_API_VERSION__",
-      "azure_foundry_scope":       "https://ai.azure.com/.default"
+      "azure_foundry_scope":       "https://ai.azure.com/.default",
+      "side_project_repos": [
+        "https://github.com/JustLikeFrank3/jobContextMCP",
+        "https://github.com/JustLikeFrank3/RetrosPiCam",
+        "https://github.com/JustLikeFrank3/LiveVox",
+        "https://github.com/JustLikeFrank3/LiveVoxNative"
+      ]
     }
   storage_account: "__STORAGE_ACCOUNT__"
