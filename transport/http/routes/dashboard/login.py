@@ -168,7 +168,25 @@ async def dashboard_login_submit(
 
 @router.post("/logout")
 async def dashboard_logout(request: Request) -> RedirectResponse:
-    resp = RedirectResponse(url=_LOGIN_PATH, status_code=303)
+    provider = get_auth_provider()
+
+    if isinstance(provider, EntraAuthProvider):
+        # Redirect to Entra's end-session endpoint so the SSO session is
+        # cleared server-side.  Without this, hitting /login again bounces
+        # straight back through PKCE and the user is re-authed silently.
+        # post_logout_redirect_uri must be registered as an allowed logout
+        # redirect URI in the Entra app registration.
+        tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+        post_logout_uri = f"{_SERVER_BASE}/dashboard/login"
+        params = urlencode({"post_logout_redirect_uri": post_logout_uri})
+        redirect_url = (
+            f"https://login.microsoftonline.com/{tenant_id}"
+            f"/oauth2/v2.0/logout?{params}"
+        )
+    else:
+        redirect_url = _LOGIN_PATH
+
+    resp = RedirectResponse(url=redirect_url, status_code=303)
     resp.delete_cookie(
         "jc_session",
         path="/",
