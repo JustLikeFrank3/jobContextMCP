@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     shared-mime-info \
     fonts-liberation \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install tectonic (self-contained LaTeX engine, ~10MB vs ~400MB for texlive)
