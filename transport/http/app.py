@@ -27,6 +27,7 @@ from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
 from transport.http.routes import jobs as jobs_routes
+from transport.http.routes import oauth as oauth_routes
 from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
@@ -144,6 +145,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
             "Do not enable remote bind (ENABLE_REMOTE=true) in this state."
         )
 
+    app.include_router(oauth_routes.router)   # must be before MCP catch-all
     app.include_router(health_routes.router)
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
