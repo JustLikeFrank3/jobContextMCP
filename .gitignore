@@ -1,5 +1,7 @@
-# User-specific configuration (contains your private paths)
+# User-specific configuration (contains your private paths, API keys, etc.)
+# config.example.json is the committed template; all real configs are ignored.
 config.json
+config.*.json
 
 # Docker environment file (contains API keys and local paths)
 .env
@@ -9,6 +11,7 @@ config.json
 !/data/*.example.json
 /data/Connections.csv
 /data/*.bak*
+/data_dev
 
 # Personal utility scripts (may contain real stories, paths, or data)
 _log_stories.py
@@ -56,8 +59,3 @@ docs/jobContextMCP-FullDocs/02_monetization_strategy.md
 
 # Personalized Copilot instructions (use copilot-instructions.example.md as the public template)
 .github/copilot-instructions.md
-.env.deploy
-
-# Local SQLite DB and dev data snapshots (personal data — never commit)
-data/jobcontextmcp.db
-data_dev/
