@@ -73,6 +73,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 
 | Area | Included capabilities |
 |------|----------------------|
+| Authentication + multi-user | Entra ID OAuth2 PKCE browser login for AKS-hosted dashboard; JWT validation (v1/v2 audience); per-user data isolation via `ContextVar` — each guest gets their own SQLite DB, workspace folder, and JSON partition; owner OID routes to full corpus; auto-provisioning with placeholder resume on first login; logout button on all dashboard pages |
 | Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
 | Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
 | Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
@@ -82,7 +83,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
 | Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
 | Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
-| Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, dashboard routes, LangGraph workflow streaming |
+| Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, Entra-authenticated dashboard routes, LangGraph workflow streaming |
 
 ---
 
@@ -91,18 +92,17 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 ```mermaid
 graph TB
   subgraph CLIENTS["Clients"]
-    COPILOT["GitHub Copilot / Claude / Cursor / Windsurf / Zed"]
+    COPILOT["GitHub Copilot / Claude / Cursor / Windsurf / Zed\nMCP stdio or Streamable HTTP"]
     CLI["cli.py / cron / launchd / scripts"]
-    DASH["Web Dashboard"]
-    PHONE["Phone / iPad over LAN or tunnel"]
-    HTTPCLIENT["HTTP / SSE clients"]
+    DASH["Browser — Entra PKCE login\ndashboard + pipeline"]
+    HTTPCLIENT["HTTP / REST / SSE clients"]
   end
 
-  COPILOT -->|"MCP stdio / SSE / streamable-http"| MCP["FastMCP server"]
+  COPILOT -->|"MCP stdio / streamable-http"| MCP["FastMCP server"]
   CLI -->|"direct tool registry"| TOOLS
-  DASH -->|"FastAPI routes"| HTTP["HTTP API + dashboard router"]
-  PHONE -->|"browser + token cookie"| HTTP
-  HTTPCLIENT -->|"REST / SSE"| HTTP
+  DASH -->|"PKCE flow → jc_session cookie"| ENTRA["Entra ID auth middleware\nJWT validate · oid extraction\nContextVar data routing"]
+  HTTPCLIENT -->|"REST / SSE"| HTTP["HTTP API + dashboard router"]
+  ENTRA --> HTTP
 
   HTTP --> SERVICES
   MCP --> TOOLS
@@ -112,9 +112,9 @@ graph TB
     PERSONA["Persona service"]
     WORKFLOW["LangGraph workflow service"]
     RAG["RAG / semantic search"]
-    LLM["OpenAI / Ollama adapters"]
+    LLM["OpenAI / Ollama / Azure AI Foundry"]
     PDF["HTML + LaTeX PDF export"]
-    AUTH["Token + dashboard session auth"]
+    PROV["User provisioning\nauto-create on first Entra login"]
   end
 
   subgraph TOOLS["77 MCP / CLI tools"]
@@ -130,7 +130,7 @@ graph TB
 
   subgraph FILES["Storage (local stdio mode)"]
     CONFIG["config.json"]
-    SQLITE["SQLite — jobcontextmcp.db\n71 applications, events, people, tone\ninterviews, queue, rejections, posts"]
+    SQLITE["SQLite — jobcontextmcp.db\napplications, events, people, tone\ninterviews, queue, rejections, posts"]
     DATA["JSON fallback files\n(dual-write, same schema as SQLite)"]
     MATERIALS["Resume folder\n01-Current-Optimized to 09-Cover-Letter-PDFs"]
     INDEX["RAG / scan / portfolio metric caches"]
@@ -138,8 +138,8 @@ graph TB
   end
 
   subgraph AKS_FILES["Storage (AKS mode)"]
-    AKS_DB["SQLite on PVC — jobcontextmcp.db\nauthoritative when USE_SQLITE=1"]
-    AKS_WS["PVC workspace — /app/data/workspace/\n01-Current-Optimized to 09-Cover-Letter-PDFs"]
+    AKS_OWNER["Owner corpus — /app/data/\nFull SQLite DB + workspace (ENTRA_OWNER_OID)"]
+    AKS_USERS["Per-user partitions — /app/data/users/{oid}/\nIsolated SQLite + workspace per guest\nAuto-provisioned with placeholder resume"]
     BLOB["Azure Blob Storage — jcmcpstore/workspace\nSidecar syncs PVC → blob every 15 min"]
   end
 
@@ -149,9 +149,35 @@ graph TB
   TOOLS --> MATERIALS
   TOOLS --> INDEX
   TOOLS --> PROJECTS
-  TOOLS --> AKS_DB
-  TOOLS --> AKS_WS
-  AKS_WS --> BLOB
+  TOOLS --> AKS_OWNER
+  TOOLS --> AKS_USERS
+  ENTRA --> AKS_USERS
+  AKS_OWNER --> BLOB
+  AKS_USERS --> BLOB
+```
+
+### Entra ID Login Flow (AKS dashboard)
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Landing as Landing Page (/)
+    participant Entra as Microsoft Entra ID
+    participant MW as UserDataContextMiddleware
+    participant Store as User Data Partition
+
+    Browser->>Landing: GET /
+    Landing-->>Browser: Banner + Sign In button (PKCE challenge generated)
+    Browser->>Entra: Redirect → /authorize?code_challenge=...
+    Entra-->>Browser: Auth code (after Microsoft login)
+    Browser->>MW: GET /dashboard/callback?code=...
+    MW->>Entra: POST /token (code + verifier + client_secret)
+    Entra-->>MW: JWT access token (contains oid claim)
+    MW->>MW: validate_token() — accept CLIENT_ID or api://CLIENT_ID audience
+    MW->>Store: provision_user_data(oid) — idempotent\ncreate SQLite DB + workspace dirs + placeholder resume
+    MW-->>Browser: Set jc_session cookie → redirect /dashboard/
+
+    note over MW,Store: Owner OID → /app/data/ (full corpus)\nAll others → /app/data/users/{oid}/ (isolated)
 ```
 
 ### End-to-End: Mobile/Dashboard Pipeline Flow
@@ -163,34 +189,36 @@ sequenceDiagram
     participant API as FastAPI HTTP Layer
     participant Tools as MCP Tool Layer
     participant LLM as OpenAI, Ollama, or Copilot Fallback
-    participant Files as Local gitignored files
+    participant Store as Data Partition (ContextVar-scoped)
+
+    note over API,Store: ContextVar set by UserDataContextMiddleware per request\nOwner → /app/data/  ·  Guest → /app/data/users/{oid}/
 
     You->>UI: Paste or queue job description
     UI->>API: POST /jobs/queue
     API->>Tools: queue_job(company, role, jd, source)
-    Tools->>Files: Save pending queue item
+    Tools->>Store: Save pending queue item
 
     You->>UI: Open Pipeline and click Assess
     UI->>API: Evaluate queued job by id, company, or role
     API->>Tools: evaluate_queued_job or run_job_assessment
-    Tools->>Files: Load resume, stories, tone, interviews, pipeline
+    Tools->>Store: Load resume, stories, tone, interviews, pipeline
     Tools->>LLM: Optional persona-aware assessment
     LLM-->>Tools: Score, gaps, angles, recommendation
-    Tools->>Files: Save assessment and mark evaluated
+    Tools->>Store: Save assessment and mark evaluated
     Tools-->>UI: Fitment card with recommendation
 
     You->>UI: Choose resume variant and generate materials
     UI->>API: Generate resume or cover letter
     API->>Tools: generate_resume or generate_cover_letter
-    Tools->>Files: Read master resume, tone, stories, selected variant
+    Tools->>Store: Read master resume, tone, stories, selected variant
     Tools->>LLM: Generate or return Copilot-ready context package
-    Tools->>Files: Save text output
-    Tools->>Files: Export WeasyPrint or LaTeX PDF
+    Tools->>Store: Save text output
+    Tools->>Store: Export WeasyPrint or LaTeX PDF
 
     You->>UI: Add to pipeline or dismiss
     UI->>API: Decide queued job
     API->>Tools: decide_job add or dismiss
-    Tools->>Files: Update status.json and immutable event log
+    Tools->>Store: Update pipeline and immutable event log
     Tools-->>UI: Pipeline state, generated files, next action
 ```
 
@@ -615,6 +643,8 @@ kubectl get pods -n jcmcp          # should show 2/2 Running (main + workspace-s
 curl http://localhost:8099/health  # {"status":"ok","version":"0.7.0-dev",...}
 ```
 
+> **Dashboard access (Entra auth):** The `/dashboard/` routes on the AKS pod require Entra ID login. Open `http://localhost:8099/` in a browser — you'll see the landing page with a **Sign In** button that triggers the PKCE flow. After login the dashboard is fully accessible. MCP tool calls over the HTTP transport do not require dashboard auth — they go directly to `/mcp`.
+
 The port-forward is a local tunnel only — nothing is exposed publicly. When you're done, kill it:
 
 ```bash
@@ -921,7 +951,69 @@ curl http://localhost:8099/dashboard/job-hunt/data \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['applications']), 'applications from SQLite')"
 ```
 
----
+#### Entra ID authentication (AKS dashboard)
+
+The AKS-hosted dashboard uses Microsoft Entra ID (formerly Azure AD) for browser-based login. Any Microsoft account user can be invited as a B2B guest; each guest gets their own isolated data partition on first login (blank SQLite DB + full workspace tree + placeholder resume).
+
+**Required Entra app registration settings:**
+
+| Setting | Value |
+|---|---|
+| `signInAudience` | `AzureADMyOrg` (single-tenant) |
+| Redirect URI | `https://<your-domain>/dashboard/callback` (or `http://localhost:8099/dashboard/callback` for port-forward) |
+| `accessTokenAcceptedVersion` | `null` (v1 tokens) or `2` (v2 tokens) — auth layer accepts both |
+| Client secret | Rotate via **Azure Portal → App registrations → Certificates & secrets** |
+
+**Important:** creating the app registration does NOT automatically create the service principal in your tenant. Run this once after registration:
+
+```bash
+az ad sp create --id <CLIENT_ID>
+```
+
+Without this step, token exchange returns `AADSTS7000229 service principal not found`.
+
+**Patch the k8s secret and rotate credentials:**
+
+```bash
+# Patch all Entra values into the secret at once
+kubectl create secret generic jcmcp-app-secrets \
+  --from-literal=entra_client_id=<CLIENT_ID> \
+  --from-literal=entra_tenant_id=<TENANT_ID> \
+  --from-literal=entra_client_secret=<CLIENT_SECRET> \
+  --from-literal=entra_redirect_uri=https://<your-domain>/dashboard/callback \
+  --from-literal=entra_owner_oid=<YOUR_ENTRA_OID> \
+  -n jcmcp --dry-run=client -o yaml | kubectl apply -f -
+
+# Rolling restart to pick up the new secret
+kubectl rollout restart deployment/jcmcp -n jcmcp
+kubectl rollout status deployment/jcmcp -n jcmcp
+```
+
+**Invite a guest user:**
+
+```bash
+az rest --method POST \
+  --uri "https://graph.microsoft.com/v1.0/invitations" \
+  --headers "Content-Type=application/json" \
+  --body '{
+    "invitedUserEmailAddress": "guest@example.com",
+    "inviteRedirectUrl": "https://<your-domain>/dashboard/login",
+    "sendInvitationMessage": true
+  }'
+```
+
+The guest must accept the Entra invitation before their first login. After acceptance their data partition is auto-provisioned on first dashboard visit — no manual `setup_workspace()` required.
+
+**Per-user data isolation:**
+
+| User | Data path | Rule |
+|---|---|---|
+| Service owner (`ENTRA_OWNER_OID`) | `/app/data/` | Full corpus; all tools, pipeline, and generated materials |
+| Any other authenticated user | `/app/data/users/{entra_oid}/` | Isolated SQLite DB + workspace; placeholder resume seeded on first login |
+
+The `UserDataContextMiddleware` handles routing transparently — tools and dashboard routes read and write the caller's partition with no code changes required.
+
+
 
 ### 3. First-session setup via chat
 
@@ -1251,15 +1343,23 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 - **`get_portfolio_metrics()`** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones.
 - **Portfolio analytics for applications** — durable project evidence can feed resumes, STAR stories, and interview prep without hand-copying GitHub traffic screenshots.
 
-### Approaching v1.0
+### v1.0 *(in progress)*
 
-The remaining work before 1.0 is stabilization rather than a major feature reset:
+The v1.0 line completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform:
 
-- Normalize README/tool counts and generated docs around `77` tools.
-- Harden dashboard pipeline edge cases and empty-state UX.
-- Keep MCP, CLI, HTTP, and dashboard behavior aligned through shared service calls.
-- Expand smoke tests around dashboard flows, exports, queue decisions, and portfolio snapshots.
-- Lock the public setup path for fresh users: clone, setup, dashboard, first generated application.
+- **Entra ID browser authentication** — full PKCE OAuth2 login flow for the AKS-hosted dashboard; JWT validation (v1 + v2 audiences); secure `jc_session` cookie; logout from every page.
+- **Per-user data isolation** — each authenticated user (guest or tenant member) gets their own isolated SQLite DB, workspace folder tree, and JSON partition. The service owner routes to the full corpus; everyone else is scoped to `/app/data/users/{oid}/`. Auto-provisioned on first login with a placeholder resume so the setup flow works immediately.
+- **Root landing page** — browser-friendly `/` with project banner and Sign In CTA, replacing the bare 404.
+- **MCP Streamable HTTP transport (`2025-03-26`)** — VS Code + GitHub Copilot (and any HTTP MCP client) can connect to the live AKS pod over the standard transport via `kubectl port-forward`.
+- **SQLite + dual-write persistence** — all pipeline writes go to both SQLite and JSON; reads come from SQLite when `USE_SQLITE=1`; `SQLITE_ONLY=1` skips JSON for production AKS.
+- **AKS production deployment** — fully automated `provision_aks.sh`, workspace-sync sidecar, workload identity, Azure Blob Storage backup, ConfigMap-driven config.
+
+### Beyond v1.0
+
+- Public setup path hardening for fresh users (clone → setup → dashboard → first application).
+- Normalize tool counts and generated docs.
+- Harden dashboard edge cases and empty-state UX.
+- `POST /jobs/ingest` — single-blob mobile intake (no per-field prompts).
 
 ---
 
