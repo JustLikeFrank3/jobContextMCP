@@ -355,14 +355,6 @@ az rest --method POST \
 4. Their data partition is auto-provisioned on first login — placeholder resume, blank pipeline, empty SQLite DB.
 5. They can now call any MCP tool (via their AI client over the HTTP transport) and their data is fully isolated from the service owner.
 
-**Accepted guest accounts:**
-
-| Guest | Email | Status |
-|-------|-------|--------|
-| Shannon Murdie | shannonmurdie@yahoo.com | Invited (pending acceptance) |
-| Randi MacBride | randi.macbride@gmail.com | Invited (pending acceptance) |
-| Max Batki | max.batki@gmail.com | Invited (pending acceptance) |
-
 ---
 
 ## Troubleshooting
