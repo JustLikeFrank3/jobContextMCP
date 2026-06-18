@@ -5,6 +5,12 @@ on:
     branches:
       - qa
       - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: 'qa'
 
 env:
   ACR: jcmcpacr.azurecr.io
