@@ -27,63 +27,30 @@ spec:
             - -c
             - |
               set -e
-              echo "Seeding workspace from Blob Storage..."
+              echo "Seeding tenant data from Blob Storage..."
               # Workload identity: federated token file is injected by the webhook.
-              # az CLI needs an explicit login before --auth-mode login works.
               az login \
                 --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
                 --service-principal \
                 -u "$AZURE_CLIENT_ID" \
                 --tenant "$AZURE_TENANT_ID" \
                 --output none
-              mkdir -p /app/data/workspace/01-Current-Optimized
-              mkdir -p /app/data/workspace/02-Cover-Letters
-              mkdir -p /app/data/workspace/03-Resume-PDFs
-              mkdir -p /app/data/workspace/04-Archived-Resumes
-              mkdir -p /app/data/workspace/05-Research
-              mkdir -p /app/data/workspace/06-Reference-Materials
-              mkdir -p /app/data/workspace/07-Job-Assessments
-              mkdir -p /app/data/workspace/08-Interview-Prep-Docs
-              mkdir -p /app/data/workspace/09-Cover-Letter-PDFs
-              mkdir -p /app/data/workspace/leetcode
-              # Sync all workspace files from blob: source materials + all generated artifacts.
-              # Side effect: db/jobcontextmcp.db lands in /app/data/workspace/db/ — harmless,
-              # the app reads from /app/data/jobcontextmcp.db (seeded separately below).
+              # Restore all tenant data in one operation.
+              # Blob layout: workspace/users/{oid}/workspace/...
+              #                           users/{oid}/jobcontextmcp.db
+              #                           users/{oid}/*.json
+              # Restored to:  /app/data/users/{oid}/workspace/...
+              #                           users/{oid}/jobcontextmcp.db
+              #                           users/{oid}/*.json
+              mkdir -p /app/data/users
               az storage blob download-batch \
                 --account-name "${STORAGE_ACCOUNT}" \
                 --source workspace \
-                --destination /app/data/workspace \
-                --overwrite true \
-                --auth-mode login \
-                --output none
-              # Safety: remove any self-referential subdirs downloaded from corrupted blob paths.
-              # These are created when upload-batch ran from the wrong source dir, causing
-              # paths like data/workspace/data/workspace/... to accumulate in blob storage.
-              rm -rf /app/data/workspace/data /app/data/workspace/workspace 2>/dev/null || true
-              # Seed personas on every boot (small, static config files — always safe to overwrite).
-              mkdir -p /app/data/personas
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "personas/*" \
+                --pattern "users/*" \
                 --destination /app/data \
                 --overwrite true \
                 --auth-mode login \
-                --output none && echo "Personas seeded." || echo "No personas in blob (skipping)."
-              # Seed DB only on first boot — preserve runtime writes across restarts.
-              if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
-                echo "No DB found — seeding from Blob..."
-                az storage blob download \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --container-name workspace \
-                  --name "db/jobcontextmcp.db" \
-                  --file /app/data/jobcontextmcp.db \
-                  --auth-mode login \
-                  --output none
-                echo "DB seeded."
-              else
-                echo "DB already exists — skipping seed."
-              fi
+                --output none && echo "Tenant data restored." || echo "No tenant data in blob yet (first boot)."
               echo "Seed complete."
           env:
             - name: STORAGE_ACCOUNT
@@ -163,7 +130,7 @@ spec:
             - -c
             - |
               set -e
-              echo "Workspace sync sidecar ready. Syncing every 15 min."
+              echo "Tenant sync sidecar ready. Syncing every 15 min."
               while true; do
                 sleep 900
                 az login \
@@ -172,29 +139,22 @@ spec:
                   -u "$AZURE_CLIENT_ID" \
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
-                # Safety: remove any self-referential subdirs before uploading.
-                # Prevents re-uploading corrupted data/workspace/... paths to blob.
-                rm -rf /app/data/workspace/data /app/data/workspace/workspace 2>/dev/null || true
-                az storage blob upload-batch \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --source /app/data/workspace \
-                  --destination workspace \
-                  --overwrite true \
-                  --auth-mode login \
-                  --output none \
-                  && echo "[$(date -u +%H:%M:%SZ)] workspace sync OK" \
-                  || echo "[$(date -u +%H:%M:%SZ)] workspace sync FAILED"
-                if [ -f /app/data/jobcontextmcp.db ] && [ -s /app/data/jobcontextmcp.db ]; then
-                  az storage blob upload \
+                # Sync all tenants in one operation.
+                # Source: /app/data/users/{oid}/...
+                # Dest:   workspace/users/{oid}/...
+                if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                  az storage blob upload-batch \
                     --account-name "${STORAGE_ACCOUNT}" \
-                    --container-name workspace \
-                    --name "db/jobcontextmcp.db" \
-                    --file /app/data/jobcontextmcp.db \
-                    --auth-mode login \
+                    --source /app/data/users \
+                    --destination workspace \
+                    --destination-path users \
                     --overwrite true \
+                    --auth-mode login \
                     --output none \
-                    && echo "[$(date -u +%H:%M:%SZ)] db sync OK" \
-                    || echo "[$(date -u +%H:%M:%SZ)] db sync FAILED"
+                    && echo "[$(date -u +%H:%M:%SZ)] tenant sync OK" \
+                    || echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
+                else
+                  echo "[$(date -u +%H:%M:%SZ)] no tenant data to sync yet"
                 fi
               done
           env:

@@ -293,6 +293,19 @@ def provision_user_data(data_dir: Path) -> None:
     resume_file = data_dir / "workspace" / "01-Current-Optimized" / "Resume - MASTER SOURCE.txt"
     resume_file.write_text(_PLACEHOLDER_RESUME, encoding="utf-8")
 
+    # Seed all *.example.json files from the global DATA_FOLDER root into the
+    # user's data dir.  Strip the ".example" suffix so tools find the files by
+    # their normal names (status.json, people.json, etc.).  This gives every new
+    # user a valid empty-but-parseable JSON file for each data type, preventing
+    # silent fallback to another user's data.
+    global_data_dir = data_dir.parent.parent  # DATA_FOLDER/users/{oid} → DATA_FOLDER
+    for example_file in sorted(global_data_dir.glob("*.example.json")):
+        dest = data_dir / example_file.name.replace(".example.json", ".json")
+        if not dest.exists():
+            import shutil
+            shutil.copy2(example_file, dest)
+            _log.debug("Seeded %s → %s", example_file.name, dest)
+
     # Blank SQLite DB with full schema
     db_file = data_dir / "jobcontextmcp.db"
     con = sqlite3.connect(str(db_file))
