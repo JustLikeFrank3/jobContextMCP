@@ -20,6 +20,11 @@ env:
   K8S_NAMESPACE: jcmcp
   K8S_DEPLOYMENT: jcmcp
   K8S_CONTAINER: jcmcp
+  LLM_PROVIDER: foundry
+  FOUNDRY_ENDPOINT: https://jobcontextmcp-resource.services.ai.azure.com
+  FOUNDRY_DEPLOYMENT: gpt-4.1-mini
+  FOUNDRY_API_VERSION: 2025-01-01-preview
+  STORAGE_ACCOUNT: jcmcpstore
 
 jobs:
   build-and-deploy:
@@ -58,10 +63,16 @@ jobs:
 
       - name: Deploy new image
         run: |
-          # Substitute placeholders and apply the full manifest so env/secret
-          # changes in deployment.yaml are picked up on every deploy — not just
-          # the image tag.
+          # Substitute placeholders and apply configmap + deployment so all
+          # changes are picked up on every deploy — not just the image tag.
           ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          sed \
+            -e "s|__LLM_PROVIDER__|${{ env.LLM_PROVIDER }}|g" \
+            -e "s|__FOUNDRY_ENDPOINT__|${{ env.FOUNDRY_ENDPOINT }}|g" \
+            -e "s|__FOUNDRY_DEPLOYMENT__|${{ env.FOUNDRY_DEPLOYMENT }}|g" \
+            -e "s|__FOUNDRY_API_VERSION__|${{ env.FOUNDRY_API_VERSION }}|g" \
+            -e "s|__STORAGE_ACCOUNT__|${{ env.STORAGE_ACCOUNT }}|g" \
+            k8s/configmap.yaml | kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
           sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
             k8s/deployment.yaml | \
             kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
