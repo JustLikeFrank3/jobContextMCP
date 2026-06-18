@@ -177,7 +177,7 @@ async def dashboard_logout(request: Request) -> RedirectResponse:
         # post_logout_redirect_uri must be registered as an allowed logout
         # redirect URI in the Entra app registration.
         tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
-        post_logout_uri = f"{_SERVER_BASE}/dashboard/login"
+        post_logout_uri = f"{_SERVER_BASE}/"
         params = urlencode({"post_logout_redirect_uri": post_logout_uri})
         redirect_url = (
             f"https://login.microsoftonline.com/{tenant_id}"
