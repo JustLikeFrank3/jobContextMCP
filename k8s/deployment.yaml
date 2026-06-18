@@ -56,6 +56,10 @@ spec:
                 --overwrite true \
                 --auth-mode login \
                 --output none
+              # Safety: remove any self-referential subdirs downloaded from corrupted blob paths.
+              # These are created when upload-batch ran from the wrong source dir, causing
+              # paths like data/workspace/data/workspace/... to accumulate in blob storage.
+              rm -rf /app/data/workspace/data /app/data/workspace/workspace 2>/dev/null || true
               # Seed personas on every boot (small, static config files — always safe to overwrite).
               mkdir -p /app/data/personas
               az storage blob download-batch \
@@ -66,26 +70,6 @@ spec:
                 --overwrite true \
                 --auth-mode login \
                 --output none && echo "Personas seeded." || echo "No personas in blob (skipping)."
-              # Seed LaTeX support files for cover letter PDF generation.
-              mkdir -p /app/data/workspace/frank-resume-latex
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "frank-resume-latex/*" \
-                --destination /app/data/workspace \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "LaTeX support files seeded." || echo "No LaTeX files in blob (skipping)."
-              # Restore JSON data files from blob on every boot (people, contacts, interviews, etc.).
-              # These are written by MCP tools at runtime and must survive pod restarts.
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "data/*.json" \
-                --destination /app/data \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "JSON data files restored." || echo "No JSON data in blob (skipping)."
               # Seed DB only on first boot — preserve runtime writes across restarts.
               if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
                 echo "No DB found — seeding from Blob..."
@@ -125,6 +109,12 @@ spec:
               value: "0"
             - name: ENABLE_REMOTE
               value: "true"
+            # ENTRA_OWNER_OID: the owner's Entra object ID. When set, the
+            # UserDataContextMiddleware is active: the owner uses the global
+            # /app/data/ partition; every other authenticated user gets their
+            # own isolated partition at /app/data/users/{oid}/.
+            - name: ENTRA_OWNER_OID
+              value: "e3bf1aa8-da07-44a0-8884-33fd820c6d2d"
             # LLM_PROVIDER overrides llm_provider in config.json.
             # LLM_API_KEY is used as the API key regardless of provider
             # (openai_api_key for openai, azure_foundry_api_key for foundry).
@@ -140,26 +130,6 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
-            - name: ENTRA_TENANT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: entra_tenant_id
-            - name: ENTRA_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: entra_client_id
-            - name: ENTRA_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: entra_client_secret
-            - name: ENTRA_OWNER_OID
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: entra_owner_oid
           resources:
             requests:
               cpu: "50m"
@@ -202,6 +172,9 @@ spec:
                   -u "$AZURE_CLIENT_ID" \
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
+                # Safety: remove any self-referential subdirs before uploading.
+                # Prevents re-uploading corrupted data/workspace/... paths to blob.
+                rm -rf /app/data/workspace/data /app/data/workspace/workspace 2>/dev/null || true
                 az storage blob upload-batch \
                   --account-name "${STORAGE_ACCOUNT}" \
                   --source /app/data/workspace \
@@ -211,16 +184,6 @@ spec:
                   --output none \
                   && echo "[$(date -u +%H:%M:%SZ)] workspace sync OK" \
                   || echo "[$(date -u +%H:%M:%SZ)] workspace sync FAILED"
-                az storage blob upload-batch \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --source /app/data \
-                  --destination workspace/data \
-                  --pattern "*.json" \
-                  --overwrite true \
-                  --auth-mode login \
-                  --output none \
-                  && echo "[$(date -u +%H:%M:%SZ)] data JSON sync OK" \
-                  || echo "[$(date -u +%H:%M:%SZ)] data JSON sync FAILED"
                 if [ -f /app/data/jobcontextmcp.db ] && [ -s /app/data/jobcontextmcp.db ]; then
                   az storage blob upload \
                     --account-name "${STORAGE_ACCOUNT}" \
