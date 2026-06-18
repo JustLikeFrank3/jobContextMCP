@@ -112,7 +112,7 @@ def _list_resume_options() -> list[str]:
 
 
 def _optimized_resume_dir() -> Path:
-    return config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+    return config.get_active_workspace_folder() / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
 
 
 def _list_optimized_resume_options() -> list[str]:
@@ -130,7 +130,7 @@ def _list_optimized_resume_options() -> list[str]:
 
 
 def _cover_letter_dir() -> Path:
-    return config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+    return config.get_active_workspace_folder() / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
 
 
 def _list_cover_letter_options() -> list[str]:

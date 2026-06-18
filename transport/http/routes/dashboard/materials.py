@@ -25,7 +25,7 @@ _FOLDERS = {
 
 
 def _workspace_base() -> Path:
-    return config.RESUME_FOLDER
+    return config.get_active_workspace_folder()
 
 
 def _scan_folders() -> dict:
