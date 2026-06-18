@@ -127,8 +127,15 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
     Parameters
     ----------
     path : override the default db_path() — useful for tests pointing at data_dev/.
+           When omitted, the per-request user context (lib.user_context) is
+           checked first, then db_path() is used as the final fallback.
     """
-    resolved = path or db_path()
+    if path is not None:
+        resolved = path
+    else:
+        from lib.user_context import get_data_folder_override
+        override = get_data_folder_override()
+        resolved = (override / "jobcontextmcp.db") if override else db_path()
     con = sqlite3.connect(resolved)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")

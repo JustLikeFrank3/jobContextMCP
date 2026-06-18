@@ -1,0 +1,260 @@
+"""Provision a fresh per-user data directory on first login.
+
+Called once per user when they first authenticate.  Subsequent calls are
+no-ops (idempotent — guarded by data_dir.exists()).
+
+Creates:
+    <data_dir>/                 — user data root under DATA_FOLDER/users/{oid}/
+    <data_dir>/jobcontextmcp.db — blank SQLite DB with the full app schema
+    <data_dir>/workspace/       — workspace directory tree (empty, ready for blob sync)
+
+The DDL here must be kept in sync with scripts/migrate_to_sqlite.py (_SCHEMA).
+Uses IF NOT EXISTS throughout so re-running against an existing DB is safe.
+"""
+from __future__ import annotations
+
+import logging
+import sqlite3
+from pathlib import Path
+
+_log = logging.getLogger(__name__)
+
+# ── Schema DDL ─────────────────────────────────────────────────────────────────
+# Must stay in sync with scripts/migrate_to_sqlite.py.
+# Uses IF NOT EXISTS so applying to an existing DB is idempotent.
+_SCHEMA_SQL = """
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS applications (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    company      TEXT    NOT NULL,
+    role         TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'pre-application',
+    next_steps   TEXT,
+    contact      TEXT,
+    notes        TEXT,
+    applied_date TEXT,
+    last_updated TEXT,
+    location     TEXT,
+    date_applied TEXT,
+    req_number   TEXT,
+    comp         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS application_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    type           TEXT    NOT NULL
+                           CHECK (type IN (
+                               'applied','contact_update','follow_up_sent',
+                               'hiring_manager_contact','interview_completed',
+                               'interview_scheduled','note','outreach_sent',
+                               'phone_screen','recruiter_contact',
+                               'referral_confirmed','referral_identified',
+                               'referral_submitted','rejected',
+                               'reply_received','reply_sent'
+                           )),
+    raw_type       TEXT,
+    notes          TEXT,
+    date           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS job_queue (
+    id              INTEGER PRIMARY KEY,
+    company         TEXT    NOT NULL,
+    role            TEXT    NOT NULL,
+    jd              TEXT,
+    source          TEXT,
+    added_date      TEXT,
+    status          TEXT    DEFAULT 'pending',
+    fitment_score   TEXT,
+    fitment_context TEXT,
+    decision_notes  TEXT,
+    decided_date    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS people (
+    id              INTEGER PRIMARY KEY,
+    timestamp       TEXT,
+    name            TEXT    NOT NULL,
+    relationship    TEXT,
+    company         TEXT,
+    context         TEXT,
+    tags            TEXT,
+    contact_info    TEXT,
+    outreach_status TEXT,
+    notes           TEXT,
+    last_updated    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS interviews (
+    id                    INTEGER PRIMARY KEY,
+    timestamp             TEXT,
+    company               TEXT    NOT NULL,
+    role                  TEXT    NOT NULL,
+    interview_date        TEXT,
+    interview_type        TEXT,
+    interview_format      TEXT,
+    interviewer           TEXT,
+    interviewer_role      TEXT,
+    duration_minutes      INTEGER,
+    self_rating           INTEGER,
+    what_landed           TEXT,
+    what_didnt            TEXT,
+    verbatim_quotes       TEXT,
+    surfaced_priorities   TEXT,
+    process_details       TEXT,
+    comp_signals          TEXT,
+    follow_up_commitments TEXT,
+    tags                  TEXT,
+    notes                 TEXT,
+    last_updated          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS rejections (
+    id        INTEGER PRIMARY KEY,
+    company   TEXT    NOT NULL,
+    role      TEXT    NOT NULL,
+    stage     TEXT,
+    reason    TEXT,
+    notes     TEXT,
+    date      TEXT,
+    logged_at TEXT,
+    contact   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tone_samples (
+    id         INTEGER PRIMARY KEY,
+    timestamp  TEXT,
+    source     TEXT,
+    context    TEXT,
+    text       TEXT    NOT NULL,
+    word_count INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS health_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp  TEXT    NOT NULL,
+    date       TEXT    NOT NULL,
+    mood       TEXT,
+    energy     INTEGER,
+    productive INTEGER,
+    notes      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_posts (
+    id                  INTEGER PRIMARY KEY,
+    timestamp           TEXT,
+    posted_date         TEXT,
+    source              TEXT,
+    title               TEXT,
+    url                 TEXT,
+    hashtags            TEXT,
+    context             TEXT,
+    links               TEXT,
+    metrics             TEXT,
+    audience_highlights TEXT
+);
+
+CREATE TABLE IF NOT EXISTS stories (
+    id        INTEGER PRIMARY KEY,
+    timestamp TEXT,
+    title     TEXT    NOT NULL,
+    story     TEXT    NOT NULL,
+    tags      TEXT,
+    people    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS star_stories (
+    id             TEXT    PRIMARY KEY,
+    title          TEXT    NOT NULL,
+    tags           TEXT,
+    situation      TEXT,
+    task           TEXT,
+    action         TEXT,
+    result         TEXT,
+    metric_bullets TEXT,
+    framing_hints  TEXT,
+    source         TEXT,
+    notes          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_connections (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name           TEXT,
+    last_name            TEXT,
+    full_name            TEXT,
+    full_name_normalized TEXT,
+    linkedin_url         TEXT,
+    email                TEXT,
+    company              TEXT,
+    position             TEXT,
+    connected_on         TEXT,
+    facebook_match       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contact_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT,
+    role        TEXT,
+    source      TEXT,
+    context     TEXT,
+    date        TEXT,
+    impressions INTEGER,
+    reply       INTEGER,
+    notes       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contact_crossref (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    canonical_name TEXT    NOT NULL,
+    normalized     TEXT,
+    platforms      TEXT,
+    platform_count INTEGER,
+    signals        TEXT,
+    action_hints   TEXT
+);
+"""
+
+_WORKSPACE_SUBDIRS = [
+    "workspace/01-Current-Optimized",
+    "workspace/02-Cover-Letters",
+    "workspace/03-Resume-PDFs",
+    "workspace/04-Archived-Resumes",
+    "workspace/05-Research",
+    "workspace/06-Reference-Materials",
+    "workspace/07-Job-Assessments",
+    "workspace/08-Interview-Prep-Docs",
+    "workspace/09-Cover-Letter-PDFs",
+    "workspace/leetcode",
+    "personas",
+]
+
+
+def provision_user_data(data_dir: Path) -> None:
+    """Create the per-user data folder and blank SQLite DB if they don't exist yet.
+
+    Idempotent — exits immediately if data_dir already exists.
+    Thread/process safe because mkdir(exist_ok=True) is atomic on POSIX.
+    """
+    if data_dir.exists():
+        return
+
+    _log.info("Provisioning new user data dir: %s", data_dir)
+
+    # Directory tree
+    data_dir.mkdir(parents=True, exist_ok=True)
+    for sub in _WORKSPACE_SUBDIRS:
+        (data_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # Blank SQLite DB with full schema
+    db_file = data_dir / "jobcontextmcp.db"
+    con = sqlite3.connect(str(db_file))
+    try:
+        con.executescript(_SCHEMA_SQL)
+        con.commit()
+    finally:
+        con.close()
+
+    _log.info("User data provisioned at %s", data_dir)

@@ -12,6 +12,7 @@ can connect to the remote server via type:"http" in mcp.json).
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
@@ -19,6 +20,8 @@ from typing import TYPE_CHECKING, AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
@@ -35,6 +38,46 @@ if TYPE_CHECKING:
 
 
 _logger = logging.getLogger(__name__)
+
+
+class UserDataContextMiddleware(BaseHTTPMiddleware):
+    """Starlette middleware that routes each authenticated request to the
+    requesting user's own data partition under DATA_FOLDER/users/{oid}/.
+
+    Gated by the ENTRA_OWNER_OID env var:
+      - Not set  → no-op (single-user mode, existing behaviour preserved).
+      - Set       → owner OID uses the global DATA_FOLDER unchanged;
+                   every other authenticated OID gets DATA_FOLDER/users/{oid}/,
+                   provisioned on first access.
+    """
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        owner_oid = os.environ.get("ENTRA_OWNER_OID", "").strip()
+        if not owner_oid:
+            # Feature not yet configured — preserve existing behaviour.
+            return await call_next(request)
+
+        from transport.http.security import get_auth_provider
+        from lib.user_context import set_data_folder, reset_data_folder
+        from lib.user_provisioning import provision_user_data
+        import lib.config as _cfg_module
+
+        provider = get_auth_provider()
+        authorization = request.headers.get("Authorization")
+        session = request.cookies.get("jc_session")
+        user = provider.authenticate_request(authorization, session)
+
+        if user and user.id and user.id not in ("admin", owner_oid):
+            # Non-owner authenticated user → isolate to their data dir.
+            data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / user.id
+            provision_user_data(data_dir)
+            token = set_data_folder(data_dir)
+            try:
+                return await call_next(request)
+            finally:
+                reset_data_folder(token)
+
+        return await call_next(request)
 
 
 def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
@@ -73,6 +116,10 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         version="0.7.0-dev",
         lifespan=lifespan,
     )
+
+    # Per-user data isolation — no-op unless ENTRA_OWNER_OID is set.
+    # Registered first so it sits inside CORS (CORS must be outermost).
+    app.add_middleware(UserDataContextMiddleware)
 
     if settings.cors_origins:
         app.add_middleware(

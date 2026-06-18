@@ -11,6 +11,26 @@ _USE_SQLITE: bool = os.environ.get("USE_SQLITE", "").strip().lower() in ("1", "t
 _SQLITE_ONLY: bool = os.environ.get("SQLITE_ONLY", "").strip().lower() in ("1", "true", "yes")
 
 
+def _resolve_data_path(path: Path) -> Path:
+    """Reroute a DATA_FOLDER-relative path to the per-request user data dir.
+
+    When a UserDataContextMiddleware has set an override (non-owner login),
+    any path that lives under the global DATA_FOLDER is transparently redirected
+    to the user's own partition.  Paths outside DATA_FOLDER (workspace files,
+    config, etc.) are returned unchanged.
+    """
+    from lib.user_context import get_data_folder_override
+    override = get_data_folder_override()
+    if override is None:
+        return path
+    import lib.config as _config
+    try:
+        relative = path.relative_to(_config.DATA_FOLDER)
+        return override / relative
+    except ValueError:
+        return path
+
+
 def _read(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -19,6 +39,7 @@ def _read(path: Path) -> str:
 
 
 def _load_json(path: Path, default):
+    path = _resolve_data_path(path)
     if _USE_SQLITE:
         from lib.io_sqlite import load_from_sqlite, SQLITE_NO_HANDLER
         result = load_from_sqlite(path, default)
@@ -35,6 +56,7 @@ def _load_json(path: Path, default):
 
 
 def _save_json(path: Path, data) -> None:
+    path = _resolve_data_path(path)
     if _USE_SQLITE:
         from lib.io_sqlite import save_to_sqlite
         save_to_sqlite(path, data)  # upsert to SQLite; no-op for unmapped files
