@@ -45,10 +45,11 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
     requesting user's own data partition under DATA_FOLDER/users/{oid}/.
 
     Gated by the ENTRA_OWNER_OID env var:
-      - Not set  → no-op (single-user mode, existing behaviour preserved).
-      - Set       → owner OID uses the global DATA_FOLDER unchanged;
-                   every other authenticated OID gets DATA_FOLDER/users/{oid}/,
-                   provisioned on first access.
+      - Not set  → no-op (single-user / local dev mode, existing behaviour preserved).
+      - Set       → ALL authenticated users, including the owner, are routed to
+                   DATA_FOLDER/users/{oid}/, provisioned on first access.
+                   ENTRA_OWNER_OID is retained for admin/dashboard privilege
+                   checks but no longer controls filesystem routing.
     """
 
     async def dispatch(self, request: StarletteRequest, call_next):
@@ -67,8 +68,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         session = request.cookies.get("jc_session")
         user = provider.authenticate_request(authorization, session)
 
-        if user and user.id and user.id not in ("admin", owner_oid):
-            # Non-owner authenticated user → isolate to their data dir.
+        if user and user.id and user.id != "admin":
+            # All authenticated users (including owner) get their own data dir.
             data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / user.id
             provision_user_data(data_dir)
             token = set_data_folder(data_dir)

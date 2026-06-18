@@ -27,79 +27,30 @@ spec:
             - -c
             - |
               set -e
-              echo "Seeding workspace from Blob Storage..."
+              echo "Seeding tenant data from Blob Storage..."
               # Workload identity: federated token file is injected by the webhook.
-              # az CLI needs an explicit login before --auth-mode login works.
               az login \
                 --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
                 --service-principal \
                 -u "$AZURE_CLIENT_ID" \
                 --tenant "$AZURE_TENANT_ID" \
                 --output none
-              mkdir -p /app/data/workspace/01-Current-Optimized
-              mkdir -p /app/data/workspace/02-Cover-Letters
-              mkdir -p /app/data/workspace/03-Resume-PDFs
-              mkdir -p /app/data/workspace/04-Archived-Resumes
-              mkdir -p /app/data/workspace/05-Research
-              mkdir -p /app/data/workspace/06-Reference-Materials
-              mkdir -p /app/data/workspace/07-Job-Assessments
-              mkdir -p /app/data/workspace/08-Interview-Prep-Docs
-              mkdir -p /app/data/workspace/09-Cover-Letter-PDFs
-              mkdir -p /app/data/workspace/leetcode
-              # Sync all workspace files from blob: source materials + all generated artifacts.
-              # Side effect: db/jobcontextmcp.db lands in /app/data/workspace/db/ — harmless,
-              # the app reads from /app/data/jobcontextmcp.db (seeded separately below).
+              # Restore all tenant data in one operation.
+              # Blob layout: workspace/users/{oid}/workspace/...
+              #                           users/{oid}/jobcontextmcp.db
+              #                           users/{oid}/*.json
+              # Restored to:  /app/data/users/{oid}/workspace/...
+              #                           users/{oid}/jobcontextmcp.db
+              #                           users/{oid}/*.json
+              mkdir -p /app/data/users
               az storage blob download-batch \
                 --account-name "${STORAGE_ACCOUNT}" \
                 --source workspace \
-                --destination /app/data/workspace \
-                --overwrite true \
-                --auth-mode login \
-                --output none
-              # Seed personas on every boot (small, static config files — always safe to overwrite).
-              mkdir -p /app/data/personas
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "personas/*" \
+                --pattern "users/*" \
                 --destination /app/data \
                 --overwrite true \
                 --auth-mode login \
-                --output none && echo "Personas seeded." || echo "No personas in blob (skipping)."
-              # Seed LaTeX support files for cover letter PDF generation.
-              mkdir -p /app/data/workspace/frank-resume-latex
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "frank-resume-latex/*" \
-                --destination /app/data/workspace \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "LaTeX support files seeded." || echo "No LaTeX files in blob (skipping)."
-              # Restore JSON data files from blob on every boot (people, contacts, interviews, etc.).
-              # These are written by MCP tools at runtime and must survive pod restarts.
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "data/*.json" \
-                --destination /app/data \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "JSON data files restored." || echo "No JSON data in blob (skipping)."
-              # Seed DB only on first boot — preserve runtime writes across restarts.
-              if [ ! -f /app/data/jobcontextmcp.db ] || [ ! -s /app/data/jobcontextmcp.db ]; then
-                echo "No DB found — seeding from Blob..."
-                az storage blob download \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --container-name workspace \
-                  --name "db/jobcontextmcp.db" \
-                  --file /app/data/jobcontextmcp.db \
-                  --auth-mode login \
-                  --output none
-                echo "DB seeded."
-              else
-                echo "DB already exists — skipping seed."
-              fi
+                --output none && echo "Tenant data restored." || echo "No tenant data in blob yet (first boot)."
               echo "Seed complete."
           env:
             - name: STORAGE_ACCOUNT
@@ -112,7 +63,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: jcmcp
-          image: <ACR_NAME>.azurecr.io/jcmcp:<IMAGE_TAG>
+          image: jcmcpacr.azurecr.io/jcmcp:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -125,21 +76,6 @@ spec:
               value: "0"
             - name: ENABLE_REMOTE
               value: "true"
-            # LLM_PROVIDER overrides llm_provider in config.json.
-            # LLM_API_KEY is used as the API key regardless of provider
-            # (openai_api_key for openai, azure_foundry_api_key for foundry).
-            # Ollama needs no key — leave LLM_API_KEY secret blank.
-            - name: LLM_PROVIDER
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: llm_provider
-            - name: LLM_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: jcmcp-app-secrets
-                  key: llm_api_key
-                  optional: true
             - name: ENTRA_TENANT_ID
               valueFrom:
                 secretKeyRef:
@@ -155,11 +91,29 @@ spec:
                 secretKeyRef:
                   name: jcmcp-app-secrets
                   key: entra_client_secret
+            # ENTRA_OWNER_OID: the owner's Entra object ID. Controls tenant
+            # routing — all users (including owner) go to /app/data/users/{oid}/.
+            # Used for admin/dashboard privilege checks.
             - name: ENTRA_OWNER_OID
               valueFrom:
                 secretKeyRef:
                   name: jcmcp-app-secrets
                   key: entra_owner_oid
+            # LLM_PROVIDER overrides llm_provider in config.json.
+            # LLM_API_KEY is used as the API key regardless of provider
+            # (openai_api_key for openai, azure_foundry_api_key for foundry).
+            # Ollama needs no key — leave LLM_API_KEY secret blank.
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: llm_provider
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: llm_api_key
+                  optional: true
           resources:
             requests:
               cpu: "50m"
@@ -193,7 +147,7 @@ spec:
             - -c
             - |
               set -e
-              echo "Workspace sync sidecar ready. Syncing every 15 min."
+              echo "Tenant sync sidecar ready. Syncing every 15 min."
               while true; do
                 sleep 900
                 az login \
@@ -202,36 +156,22 @@ spec:
                   -u "$AZURE_CLIENT_ID" \
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
-                az storage blob upload-batch \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --source /app/data/workspace \
-                  --destination workspace \
-                  --overwrite true \
-                  --auth-mode login \
-                  --output none \
-                  && echo "[$(date -u +%H:%M:%SZ)] workspace sync OK" \
-                  || echo "[$(date -u +%H:%M:%SZ)] workspace sync FAILED"
-                az storage blob upload-batch \
-                  --account-name "${STORAGE_ACCOUNT}" \
-                  --source /app/data \
-                  --destination workspace/data \
-                  --pattern "*.json" \
-                  --overwrite true \
-                  --auth-mode login \
-                  --output none \
-                  && echo "[$(date -u +%H:%M:%SZ)] data JSON sync OK" \
-                  || echo "[$(date -u +%H:%M:%SZ)] data JSON sync FAILED"
-                if [ -f /app/data/jobcontextmcp.db ] && [ -s /app/data/jobcontextmcp.db ]; then
-                  az storage blob upload \
+                # Sync all tenants in one operation.
+                # Source: /app/data/users/{oid}/...
+                # Dest:   workspace/users/{oid}/...
+                if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                  az storage blob upload-batch \
                     --account-name "${STORAGE_ACCOUNT}" \
-                    --container-name workspace \
-                    --name "db/jobcontextmcp.db" \
-                    --file /app/data/jobcontextmcp.db \
-                    --auth-mode login \
+                    --source /app/data/users \
+                    --destination workspace \
+                    --destination-path users \
                     --overwrite true \
+                    --auth-mode login \
                     --output none \
-                    && echo "[$(date -u +%H:%M:%SZ)] db sync OK" \
-                    || echo "[$(date -u +%H:%M:%SZ)] db sync FAILED"
+                    && echo "[$(date -u +%H:%M:%SZ)] tenant sync OK" \
+                    || echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
+                else
+                  echo "[$(date -u +%H:%M:%SZ)] no tenant data to sync yet"
                 fi
               done
           env:
