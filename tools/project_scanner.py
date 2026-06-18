@@ -29,11 +29,15 @@ def _git_pull(folder: Path) -> str:
         return f"skipped: {e}"
 
 
-def _clone_repo(url: str, dest: Path) -> str:
+def _clone_repo(url: str, dest: Path, branch: str = "") -> str:
     """Shallow-clone a git repo URL into dest. Returns a one-line status string."""
     try:
+        cmd = ["git", "clone", "--depth=1"]
+        if branch:
+            cmd += ["--branch", branch]
+        cmd += [url, str(dest)]
         result = subprocess.run(
-            ["git", "clone", "--depth=1", url, str(dest)],
+            cmd,
             capture_output=True,
             text=True,
             timeout=60,
@@ -180,17 +184,24 @@ def scan_project_for_skills() -> str:
             all_tech |= tech
             per_project.append((folder.name, tech, file_count, pull_status))
 
-        for url in repos:
+        for entry in repos:
+            if isinstance(entry, dict):
+                url = entry.get("url", "")
+                branch = entry.get("branch", "")
+            else:
+                url = entry
+                branch = ""
             repo_name = url.rstrip("/").split("/")[-1]
+            label = f"{repo_name}@{branch}" if branch else repo_name
             tmp = Path(tempfile.mkdtemp(prefix=f"jcmcp_scan_{repo_name}_"))
             tmp_dirs.append(tmp)
-            clone_status = _clone_repo(url, tmp)
+            clone_status = _clone_repo(url, tmp, branch)
             if clone_status.startswith(("skipped", "warning")):
-                per_project.append((repo_name, set(), 0, clone_status))
+                per_project.append((label, set(), 0, clone_status))
                 continue
             tech, file_count = _scan_folder(tmp)
             all_tech |= tech
-            per_project.append((repo_name, tech, file_count, clone_status))
+            per_project.append((label, tech, file_count, clone_status))
 
     finally:
         for tmp in tmp_dirs:

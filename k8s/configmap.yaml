@@ -34,7 +34,7 @@ data:
       "azure_foundry_api_version": "__FOUNDRY_API_VERSION__",
       "azure_foundry_scope":       "https://ai.azure.com/.default",
       "side_project_repos": [
-        "https://github.com/JustLikeFrank3/jobContextMCP",
+        {"url": "https://github.com/JustLikeFrank3/jobContextMCP", "branch": "qa"},
         "https://github.com/JustLikeFrank3/RetrosPiCam",
         "https://github.com/JustLikeFrank3/LiveVox",
         "https://github.com/JustLikeFrank3/LiveVoxNative"
