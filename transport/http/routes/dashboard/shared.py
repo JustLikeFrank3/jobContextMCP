@@ -74,6 +74,12 @@ BASE_CSS = """
   .card .v.warn { color: var(--warn); }
   .card .v.ok   { color: var(--ok); }
   .card .v.danger { color: var(--danger); }
+  .logout-btn {
+    background: none; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--muted); font-size: 0.78rem; padding: 6px 12px; cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .logout-btn:hover { color: var(--danger); border-color: var(--danger); }
   .section-title { font-size: 0.96rem; color: #d7e3f8; letter-spacing: 0.25px; margin: 16px 0 10px; }
   .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; }
   .search {
@@ -113,7 +119,9 @@ def page_header(title: str, subtitle: str = "") -> str:
       <div class="brand-logo">{logo_svg()}</div>
       <div><h1>{title}</h1>{sub}</div>
     </div>
-    <span class="pill">feat/dashboard-ui</span>
+    <form method="post" action="/dashboard/logout" style="margin:0">
+      <button class="logout-btn" type="submit">Sign out</button>
+    </form>
   </header>"""
 
 
