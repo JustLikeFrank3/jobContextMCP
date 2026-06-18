@@ -138,13 +138,13 @@ _TECH_REGISTRY: list[dict] = [
     # ── AI / ML ────────────────────────────────────────────────────────────────
     {"label": "RAG / semantic search",       "resume_kw": ["rag", "faiss", "sentence_transformers", "text-embedding"],
                                                                                                               "exts": [".py"],               "content": ["faiss", "sentence_transformers", "text-embedding"]},
-    {"label": "LangChain",                   "resume_kw": ["langchain"],                                     "exts": [".py", ".ts"],        "content": ["langchain"]},
+    {"label": "LangChain",                   "resume_kw": ["langchain"],                                     "exts": [".py", ".ts"],        "content": ["from langchain import", "import langchain", "langchain_"]},  # require import-level usage
     {"label": "OpenAI API",                  "resume_kw": ["openai"],                                        "exts": [".py", ".ts", ".js"], "content": ["openai"]},
     {"label": "Anthropic / Claude API",      "resume_kw": ["anthropic", "claude"],                           "exts": [".py", ".ts", ".js"], "content": ["anthropic", "claude"]},
     {"label": "Hugging Face / Transformers", "resume_kw": ["hugging face", "huggingface", "transformers"],   "exts": [".py"],               "content": ["transformers", "from_pretrained", "huggingface"]},
     {"label": "PyTorch",                     "resume_kw": ["pytorch"],                                       "exts": [".py"],               "content": ["import torch", "torch.nn"]},
     {"label": "TensorFlow / Keras",          "resume_kw": ["tensorflow", "keras"],                           "exts": [".py"],               "content": ["tensorflow", "keras"]},
-    {"label": "scikit-learn",                "resume_kw": ["scikit", "sklearn"],                             "exts": [".py"],               "content": ["sklearn", "scikit"]},
+    {"label": "scikit-learn",                "resume_kw": ["scikit", "sklearn"],                             "exts": [".py"],               "content": ["from sklearn import", "import sklearn", "sklearn."]},  # require import-level usage
     {"label": "Model Context Protocol (MCP)","resume_kw": ["model context protocol", "mcp server", "fastmcp"],
                                                                                                               "exts": [".py"],               "content": ["fastmcp", "mcp.tool"]},
     {"label": "FastMCP",                     "resume_kw": ["fastmcp"],                                       "exts": [".py"],               "content": ["fastmcp"]},
@@ -210,11 +210,16 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
     skip_dirs = {".git", "__pycache__", "node_modules", "venv", ".venv", "env", ".expo", "build", "dist"}
     skip_exts = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".tar", ".gz",
                  ".db", ".lock", ".whl", ".pyc", ".ico", ".ttf", ".woff", ".woff2"}
+    # Skip the scanner itself — its _TECH_REGISTRY contains every term as string literals,
+    # which would cause every technology in the registry to register as a false positive.
+    skip_files = {"project_scanner.py"}
 
     for root, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
 
         for fname in files:
+            if fname.lower() in skip_files:
+                continue
             fpath = Path(root) / fname
             ext = fpath.suffix.lower()
             fname_lower = fname.lower()
