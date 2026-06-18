@@ -19,6 +19,29 @@ Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQL
 
 ---
 
+## TL;DR
+
+JobContextMCP is an AI-powered career operating system that gives AI assistants persistent memory of your job search.
+
+Instead of re-explaining your resume, applications, interview history, outreach, and portfolio every session, the platform provides structured context through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
+
+**What's in the box:**
+
+| | |
+|---|---|
+| 77 MCP tools | Resume + cover letter generation |
+| 625 passing tests | Job fitment analysis with persona lenses |
+| SQLite persistence + JSON fallback | Interview prep + debrief logging |
+| Local RAG semantic search | Outreach + relationship tracking |
+| Azure AKS deployment | Microsoft Entra ID authentication |
+| Multi-user isolated workspaces | Web dashboard (pipeline, digest, materials) |
+
+**Works with:** GitHub Copilot · VS Code · Claude Desktop · Cursor · Windsurf · Zed · HTTP clients · CLI automation
+
+Originally built to solve my own job search after being laid off. Now evolving into a multi-user platform.
+
+---
+
 ## Why I Built This
 
 I got laid off and started using AI assistants to manage my job search. Every new session started from zero. I was re-explaining my resume, my pipeline, which companies I'd already talked to, what my STAR stories were, how I was holding up. The context overhead was brutal on top of everything else.
