@@ -129,7 +129,7 @@ _TECH_REGISTRY: list[dict] = [
     # ── Infrastructure as Code ─────────────────────────────────────────────────
     {"label": "Terraform IaC",               "resume_kw": ["terraform"],                                     "exts": [".tf", ".tfvars"]},
     {"label": "Pulumi",                      "resume_kw": ["pulumi"],                                        "exts": [".py", ".ts"],        "content": ["pulumi"]},
-    {"label": "Ansible",                     "resume_kw": ["ansible"],                                       "exts": [".yml", ".yaml"],     "content": ["ansible", "become: true", "- hosts:"]},
+    {"label": "Ansible",                     "resume_kw": ["ansible"],                                       "exts": [".yml", ".yaml"],     "content": ["ansible"]},  # require 'ansible' keyword; '- hosts:' alone fires on K8s ingress
     {"label": "GitHub Actions",              "resume_kw": ["github actions"],                                "exts": [".yml", ".yaml"],     "content": ["github.com/actions", "runs-on:"]},
     # ── Messaging & streaming ──────────────────────────────────────────────────
     {"label": "Apache Kafka",                "resume_kw": ["kafka"],                                         "exts": [".py", ".java", ".go", ".ts", ".yml", ".yaml"], "content": ["kafka"]},
@@ -210,9 +210,9 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
     skip_dirs = {".git", "__pycache__", "node_modules", "venv", ".venv", "env", ".expo", "build", "dist"}
     skip_exts = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".tar", ".gz",
                  ".db", ".lock", ".whl", ".pyc", ".ico", ".ttf", ".woff", ".woff2"}
-    # Skip the scanner itself — its _TECH_REGISTRY contains every term as string literals,
-    # which would cause every technology in the registry to register as a false positive.
-    skip_files = {"project_scanner.py"}
+    # Skip files that list technology names as template/demo strings rather than using them.
+    # project_scanner.py has _TECH_REGISTRY; gen_demo_docs.py has hardcoded tech-name strings.
+    skip_files = {"project_scanner.py", "gen_demo_docs.py"}
 
     for root, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
