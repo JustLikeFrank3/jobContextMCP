@@ -307,7 +307,8 @@ def provision_user_data(data_dir: Path) -> None:
             _log.debug("Seeded %s → %s", example_file.name, dest)
 
     # Blank SQLite DB with full schema
-    db_file = data_dir / "jobcontextmcp.db"
+    (data_dir / "db").mkdir(parents=True, exist_ok=True)
+    db_file = data_dir / "db" / "jobcontextmcp.db"
     con = sqlite3.connect(str(db_file))
     try:
         con.executescript(_SCHEMA_SQL)

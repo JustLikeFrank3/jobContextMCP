@@ -114,7 +114,7 @@ def normalize_event_type(raw: str) -> str:
 
 def db_path() -> Path:
     """Return the path to the SQLite database, derived from config DATA_FOLDER."""
-    return Path(str(_cfg.DATA_FOLDER)) / "jobcontextmcp.db"
+    return Path(str(_cfg.DATA_FOLDER)) / "db" / "jobcontextmcp.db"
 
 
 @contextmanager
@@ -135,7 +135,7 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
     else:
         from lib.user_context import get_data_folder_override
         override = get_data_folder_override()
-        resolved = (override / "jobcontextmcp.db") if override else db_path()
+        resolved = (override / "db" / "jobcontextmcp.db") if override else db_path()
     con = sqlite3.connect(resolved)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
