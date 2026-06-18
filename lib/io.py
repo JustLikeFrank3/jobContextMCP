@@ -80,10 +80,21 @@ def _load_master_context() -> str:
     Use this everywhere instead of bare _read(config.MASTER_RESUME) so that
     recognition quotes and peer feedback are always available to the AI when
     drafting resumes, cover letters, fitment assessments, and interview prep.
+
+    Respects the per-request workspace ContextVar so non-owner users get their
+    own resume file rather than the global MASTER_RESUME path.
     """
     from lib import config  # local import avoids circular dependency
 
-    parts = [_read(config.MASTER_RESUME)]
+    # Dynamically resolve master resume path for the current user.
+    ws = config.get_active_workspace_folder()
+    # Scan for any *MASTER SOURCE.txt in 01-Current-Optimized first;
+    # fall back to the global config path if none found.
+    optimized_dir = ws / "01-Current-Optimized"
+    candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
+    master_path = candidates[0] if candidates else config.MASTER_RESUME
+
+    parts = [_read(master_path)]
 
     awards_text = _read(config.GM_AWARDS)
     if not awards_text.startswith("[Error"):

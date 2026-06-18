@@ -231,6 +231,46 @@ _WORKSPACE_SUBDIRS = [
     "personas",
 ]
 
+# Placeholder master resume written on first provision.
+# The workspace setup flow (via chat) will overwrite this with the real content.
+_PLACEHOLDER_RESUME = """\
+NEW USER — RESUME NOT YET CONFIGURED
+======================================
+
+This is a placeholder. To set up your resume:
+  1. Start a chat with the jobContextMCP assistant.
+  2. Say: "Let's set up my workspace. Here is my resume:"
+  3. Paste your resume text.
+
+The assistant will guide you through the full workspace setup:
+  - Master resume
+  - Tone samples
+  - Personal context & STAR stories
+  - LinkedIn posts
+  - Interview history
+
+NAME:       [Your Full Name]
+LOCATION:   [City, State]
+EMAIL:      [your@email.com]
+LINKEDIN:   [linkedin.com/in/yourprofile]
+
+SUMMARY
+-------
+[Add your professional summary here]
+
+EXPERIENCE
+----------
+[Add your work history here]
+
+SKILLS
+------
+[Add your skills here]
+
+EDUCATION
+---------
+[Add your education here]
+"""
+
 
 def provision_user_data(data_dir: Path) -> None:
     """Create the per-user data folder and blank SQLite DB if they don't exist yet.
@@ -247,6 +287,11 @@ def provision_user_data(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     for sub in _WORKSPACE_SUBDIRS:
         (data_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # Placeholder master resume — gives tools something to read on first login.
+    # Overwritten when user completes workspace setup via chat.
+    resume_file = data_dir / "workspace" / "01-Current-Optimized" / "Resume - MASTER SOURCE.txt"
+    resume_file.write_text(_PLACEHOLDER_RESUME, encoding="utf-8")
 
     # Blank SQLite DB with full schema
     db_file = data_dir / "jobcontextmcp.db"
