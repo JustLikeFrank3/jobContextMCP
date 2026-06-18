@@ -167,9 +167,15 @@ async def dashboard_login_submit(
 
 
 @router.post("/logout")
-async def dashboard_logout() -> RedirectResponse:
+async def dashboard_logout(request: Request) -> RedirectResponse:
     resp = RedirectResponse(url=_LOGIN_PATH, status_code=303)
-    resp.delete_cookie("jc_session", path="/")
+    resp.delete_cookie(
+        "jc_session",
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
     return resp
 
 
