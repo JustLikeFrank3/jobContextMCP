@@ -16,6 +16,7 @@ def _get_contact_defaults() -> dict:
     """Read contact defaults from config.json 'contact' block. Falls back to empty strings.
     config.json is gitignored — put your real contact info there, not in source."""
     c = config.get_contact_info()
+    c = config._cfg.get("contact", {})
     return {
         "phone": c.get("phone", ""),
         "email": c.get("email", ""),
@@ -29,6 +30,7 @@ def _get_contact_defaults() -> dict:
 # ── HELPERS ──────────────────────────────────────────────────────────────
 
 _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 _DATE_WORD_RE = re.compile(
     r"\b(January|February|March|April|May|June|July|August|September|"
     r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
@@ -777,6 +779,7 @@ def _parse_resume_txt(text: str) -> dict:
 
     return {
         "name": name or tag_name or config.get_contact_name(""),
+        "name": name or tag_name or config._cfg.get("contact", {}).get("name", ""),
         "contact": contact,
         "tagline": tagline,
         "synopsis": synopsis,
@@ -799,6 +802,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
     # Name is the very first non-blank, non-contact line.
     # Fall back to config-driven default (set "name" in config.json "contact" block).
     derived_name = config.get_contact_name("")
+    derived_name = config._cfg.get("contact", {}).get("name", "")
     for line in lines:
         s = line.strip()
         if s and "@" not in s and not _PHONE_RE.search(s) and not _LINKEDIN_RE.search(s):
@@ -812,6 +816,8 @@ def _parse_cover_letter_txt(text: str) -> dict:
     in_body = False
     _contact_first = config.get_contact_name("").split()
     _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "(?!)"
+    _contact_first = (config._cfg.get("contact", {}).get("name", "") or "").split()
+    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "Frank"
     header_re = re.compile(rf"^({_first_name_pat}|\+1|\d{{3}}|www\.|linkedin)", re.I)
     for line in lines:
         s = line.strip()
@@ -858,6 +864,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
         paragraphs.append(" ".join(current))
 
     # Split a closing like "Kindest Regards, Frank MacBride" that got
+    # Split a closing like "Kindest Regards, Frank Vladmir MacBride III" that got
     # merged into one paragraph because there was no blank line between the salutation
     # and the signature in the .txt output.
     _closing_res = [
@@ -876,6 +883,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
 
     # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
     _full_name = config.get_contact_name("")
+    _full_name = config._cfg.get("contact", {}).get("name", "") or ""
     if _full_name:
         _sign_first = re.escape(_full_name.split()[0])
         sign_re = re.compile(rf"^{_sign_first}\s+\S", re.I)
@@ -892,3 +900,4 @@ def _parse_cover_letter_txt(text: str) -> dict:
         "contact": contact,
         "paragraphs": paragraphs,
     }
+
