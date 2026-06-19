@@ -69,6 +69,15 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         session = request.cookies.get("jc_session")
         user = provider.authenticate_request(authorization, session)
 
+        # Diagnostic logging — helps trace auth failures in production.
+        _logger.info(
+            "auth: path=%s has_bearer=%s has_session=%s user=%s",
+            request.url.path,
+            bool(authorization),
+            bool(session),
+            user.id if user else "None",
+        )
+
         # Resolve the OID to route to: prefer the JWT claim, fall back to
         # ENTRA_OWNER_OID for API-key / admin sessions.
         oid: str | None = None
@@ -78,6 +87,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             oid = owner_oid  # route API-key sessions to the owner's data dir
 
         if oid:
+            _logger.info("auth: routing to tenant oid=%s path=%s", oid, request.url.path)
             data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / oid
             provision_user_data(data_dir)
             token = set_data_folder(data_dir)
