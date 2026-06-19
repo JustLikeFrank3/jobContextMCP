@@ -179,6 +179,21 @@ graph TB
   AKS_USERS --> BLOB
 ```
 
+### Module structure
+
+| Module | Contents |
+|--------|----------|
+| `server.py` | FastMCP server — tool registration, startup, config sync |
+| `tools/generate.py` | Resume + cover letter generation logic |
+| `tools/generate_prompts.py` | Format-spec and system-prompt string constants |
+| `tools/export.py` | PDF rendering + MCP tool wrappers |
+| `lib/resume_parser.py` | `.txt` → structured-dict parsers (resume + cover letter) |
+| `transport/http/routes/dashboard/pipeline.py` | Pipeline route handlers |
+| `transport/http/routes/dashboard/pipeline_helpers.py` | Request models, data-access, scoring helpers |
+| `lib/auth.py` | Entra ID JWT validation + `EntraAuthMiddleware` |
+| `lib/user_context.py` | Per-request `ContextVar` data routing |
+| `lib/db.py` | SQLite connection helper |
+
 ### Entra ID Login Flow (AKS dashboard)
 
 ```mermaid
