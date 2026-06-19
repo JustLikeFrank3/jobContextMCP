@@ -4,112 +4,82 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
+---
 
-- **Entra ID OAuth2 browser authentication** — full PKCE login flow for the AKS-hosted dashboard. `transport/http/routes/dashboard/login.py` handles `/dashboard/login` (redirects to Entra with PKCE challenge), `/dashboard/callback` (exchanges code + verifier + `CLIENT_SECRET` for a token, sets `jc_session` cookie), and `/dashboard/logout` (clears cookie). JWT validation in `lib/auth.py` accepts both bare `CLIENT_ID` and `api://CLIENT_ID` token audiences (Entra v1/v2 compat). `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_SECRET`, and `ENTRA_REDIRECT_URI` read from environment / k8s Secret.
-- **Root landing page at `/`** — browser-friendly entry point with the project banner SVG and an `Sign In` CTA that routes to `/dashboard/login`. Previously `/` returned a bare FastAPI 404. The SVG is injected at request time via an `html.replace("__BANNER_SVG__", banner_svg())` pattern to avoid f-string brace escaping issues.
-- **Per-user data isolation** — every authenticated user (except the designated owner) gets their own data partition under `/app/data/users/{entra_oid}/`. `lib/user_context.py` holds a `ContextVar[Path | None]` that scopes data access to the current request. `UserDataContextMiddleware` in `transport/http/app.py` extracts the `oid` claim from the JWT, skips the owner OID (`ENTRA_OWNER_OID` env var → Frank's full corpus), and sets/resets the ContextVar around `call_next()`. `lib/io.py` `_resolve_data_path()` rewrites any `DATA_FOLDER`-relative path to the user's partition; `lib/db.py` `db_path()` returns the per-user SQLite path. All MCP tool calls issued from an authenticated guest are automatically scoped to their partition — no tool code changes required.
-- **Auto-provisioning on first login** — `lib/user_provisioning.py` `provision_user_data(data_dir)` is idempotent: creates the user data directory, initialises a blank `jobcontextmcp.db` (all 16 tables via `CREATE TABLE IF NOT EXISTS`), creates the full workspace subdirectory tree (`01-Current-Optimized` through `09-Cover-Letter-PDFs`), and writes a placeholder master resume so `read_master_resume()` and cover-letter generation work immediately without any manual setup. Called by `UserDataContextMiddleware` on first request per user.
-- **Workspace file isolation** — `lib/config.py` `get_active_workspace_folder()` returns the user's `workspace/` folder when the ContextVar is set, or the global `RESUME_FOLDER` for the owner. `lib/helpers.py` `_scan_dirs()` calls this helper dynamically so generated resumes, cover letters, and assessments for guest users land in their isolated workspace tree.
-- **Logout button on all dashboard pages** — `transport/http/routes/dashboard/shared.py` `page_header()` now includes a **Sign out** button (POST form to `/dashboard/logout`) in the header right corner. `.logout-btn` CSS added to `BASE_CSS`.
-- **`ENTRA_OWNER_OID` env var** — `k8s/deployment.yaml` reads `entra_owner_oid` from `jcmcp-app-secrets`. The owner's Entra Object ID is patched into the secret so `UserDataContextMiddleware` can distinguish the service owner (full data access) from all other authenticated users (isolated partitions).
-- **Guest user invitations** — Shannon Murdie (`shannonmurdie@yahoo.com`), Randi MacBride (`randi.macbride@gmail.com`), and Max Batki (`max.batki@gmail.com`) invited as Entra B2B guests via Microsoft Graph API. All three have isolated data partitions that are auto-provisioned on first login.
+## [1.0.0] - 2026-06-19
 
-### Fixed
+Completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform. 77 tools, 627 tests, production-verified on AKS with Entra ID auth, per-user data isolation, and GitHub Copilot app HTTP/SSE connectivity confirmed.
 
-- **Missing Entra service principal** (`AADSTS7000229`) — app registration and service principal are separate objects; `az ad sp create --id <CLIENT_ID>` must be run explicitly in the tenant before any token exchange can succeed. Documented in provisioner comments.
-- **JWT audience mismatch** (`{"detail":"Invalid credentials"}`) — Entra v1 tokens carry `api://CLIENT_ID` as the audience; v2 tokens use bare `CLIENT_ID`. `lib/auth.py` `validate_token()` now accepts both via `audience=[CLIENT_ID, f"api://{CLIENT_ID}"]`.
-- **`IndentationError` CrashLoopBackOff** — `transport/http/app.py` root route `_root_login_entry` had its `return HTMLResponse(...)` statement dedented outside the function body after a patch. Fixed to 8-space indent inside the function. Python AST check (`python3 -c "import ast; ast.parse(open('app.py').read())"`) now runs as a pre-commit gate.
+### Multi-tenant Entra ID authentication
 
-- **MCP Streamable HTTP transport** — `transport/http/app.py` `create_app(mcp=None)` factory builds `mcp.streamable_http_app()` and mounts it at `""` (not `"/mcp"`) so the sub-app's internal `/mcp` route resolves correctly. `asynccontextmanager lifespan` drives `mcp_starlette.router.lifespan_context()` to initialize `StreamableHTTPSessionManager`. Logs `"MCP Streamable HTTP transport mounted at /mcp"` on startup. Verified: `POST /mcp` returns `HTTP 200 text/event-stream`, `mcp-session-id` header, and `protocolVersion: 2025-03-26` on initialize handshake.
-- **`transport/http/config.py` port validation** — `_env_port()` helper validates `os.environ.get("PORT")` is non-empty and `.isdigit()` before `int()` conversion. Prevents `ValueError` crash when `PORT=""` leaks from `start_server.sh` into pytest.
-- **`.vscode/mcp.json` AKS entry** — second server `jobContextMCP-aks` of type `http` pointing at `http://localhost:8099/mcp`. Connects VS Code to the live AKS pod over Streamable HTTP via `kubectl port-forward svc/jcmcp 8099:80 -n jcmcp`.
-- **`workspace-sync` sidecar** — second container in the AKS pod (`mcr.microsoft.com/azure-cli:latest`) that re-auths via workload identity every 15 minutes and pushes `/app/data/workspace/*` and `jobcontextmcp.db` back to Blob Storage. Worst-case data loss on unexpected pod death: 15 minutes. Requires `Storage Blob Data Contributor` role on the storage account (previously only `Reader` was assigned).
-- **Catch-all init container workspace seed** — init container now does a single `az storage blob download-batch` with no `--pattern` filter, seeding all 9 workspace subdirs (`01-Current-Optimized` through `09-Cover-Letter-PDFs`) instead of 3 hardcoded patterns. All 9 `mkdir -p` lines added.
-- **`SQLITE_ONLY` env flag** — `lib/io.py` `_SQLITE_ONLY` bool (set by `SQLITE_ONLY=1`). When both `USE_SQLITE` and `SQLITE_ONLY` are true, `_save_json()` skips JSON writes for SQLite-mapped files. Unmapped files always write JSON regardless. Enabled in `k8s/deployment.yaml` (`SQLITE_ONLY: "1"`); defaulted off in `docker-compose.yml` (`SQLITE_ONLY: ${SQLITE_ONLY:-0}`) and `.env`.
-- **`AKS port-forward` VS Code task** — `.vscode/tasks.json` background task that runs `kubectl port-forward svc/jcmcp 8099:80 -n jcmcp` in a dedicated silent panel. Replaces manual shell invocation.
-- **`scripts/upload_workspace.sh` full workspace sync** — bulk upload loop over all 9 workspace subdirs so existing generated materials (cover letters, PDFs, assessments, prep docs) are uploaded to Blob before first AKS seed. Previously only uploaded files referenced by `*_path` / `*_png` config keys.
-- **`.gitignore` — `data/jobcontextmcp.db` and `data_dev/`** — SQLite DB and dev snapshot folder excluded from version control.
-- **SQLite persistence layer** — `lib/db.py` connection helper + `scripts/migrate_to_sqlite.py` migration script. All pipeline data (71 applications, 119 events, 30 queue items, 112 people, 11 interviews, 10 rejections, 126 tone samples, 250 LinkedIn connections, 1178 contact crossref rows) migrated to `jobcontextmcp.db`. Enabled via `USE_SQLITE=1` env var; JSON files remain as fallback.
-- **Dual-write io layer** — `lib/io_sqlite.py` adapter. All reads route through SQLite when `USE_SQLITE=1`; all writes go to both SQLite and JSON simultaneously. 9 load + 9 save handlers with full round-trip test coverage.
-- **Sync-delete on save** — `_save_job_queue`, `_save_status`, and `_save_people` now delete stale rows from SQLite after upsert so dismissed/removed entries don't persist indefinitely. Guarded against empty-list wipe.
-- **Canonical event type normalization** — `EVENT_TYPE_MAP` (41 raw strings → 16 canonical types) + `normalize_event_type()` in `lib/db.py` so legacy event strings stored in JSON survive migration without data loss.
-- **AKS deployment manifests** — `k8s/` directory: `pvc.yaml` (5Gi Azure Premium SSD), `configmap.yaml` (non-sensitive config.json for container), `deployment.yaml` (init container + main container), `service.yaml` (ClusterIP). Cluster live: `jcmcp-aks`, eastus, `Standard_D2s_v3`, 1 node.
-- **Init container workspace seeding** — `seed-workspace` init container logs in via federated token (`az login --federated-token`), downloads workspace blobs from Azure Blob Storage (`jcmcpstore`), and seeds `jobcontextmcp.db` from `workspace/db/` on first boot only (preserves runtime writes across restarts).
-- **One-shot idempotent provisioner** — `scripts/provision_aks.sh` creates/checks all Azure infrastructure (resource group, ACR, Storage Account, AKS cluster, workload identity, federated credential, role assignments, k8s namespace + SA, secrets, ConfigMap, PVC, Service) and builds + pushes the container image. Safe to re-run.
-- **Config-driven workspace uploader** — `scripts/upload_workspace.sh` reads `resume_folder`/`leetcode_folder` from `config.json` and uploads all `*_path` keys to Blob Storage. Works for any user's config without hardcoded paths.
-- **Provider-agnostic LLM** — `lib/config.get_llm_client()` respects `LLM_PROVIDER` env var (openai / foundry / ollama). `LLM_API_KEY` overrides the provider-specific key. Ollama needs no key. Provider and model injected into k8s Secret via `provision_aks.sh`.
-- **Keyless Azure AI Foundry auth** — Foundry provider uses `DefaultAzureCredential` + `get_bearer_token_provider` when no API key is set. Workload identity in AKS, `az login` locally. Zero secrets in production. `azure-identity>=1.15.0` added to `requirements.txt`.
+- Full PKCE OAuth2 login flow for the AKS-hosted dashboard — `/dashboard/login`, `/dashboard/callback`, `/dashboard/logout`. JWT validation accepts both bare `CLIENT_ID` and `api://CLIENT_ID` audiences (Entra v1/v2 compat). Secure `jc_session` HTTP-only cookie; logout button on every dashboard page.
+- Per-user data isolation via `lib/user_context.py` `ContextVar` — every authenticated user gets their own SQLite DB, workspace folder tree, and JSON partition under `/app/data/users/{entra_oid}/`. Owner OID (`ENTRA_OWNER_OID`) bypasses isolation and routes to the full corpus.
+- Auto-provisioning on first login — `lib/user_provisioning.py` idempotently creates the user data directory, initializes a blank `jobcontextmcp.db` (all 16 tables), creates workspace subdirs `01`–`09`, and writes a placeholder master resume so generation tools work immediately.
+- Workspace file isolation — `lib/config.py` `get_active_workspace_folder()` returns the user-scoped path; `lib/helpers.py` `_scan_dirs()` uses it dynamically.
+- Guest user invitation support via Entra B2B — invited users are auto-provisioned on first login with isolated data partitions.
+- Root landing page at `/` — project banner SVG + Sign In CTA; previously returned bare FastAPI 404.
 
-### Fixed
+### SQLite persistence + dual-write layer
 
-- **`_save_json` double write** — `path.write_text(...)` was called twice in sequence; second call was redundant and masked partial-write errors.
-- **Init container `az login` missing** — workload identity injects `AZURE_FEDERATED_TOKEN_FILE` but `az cli` still requires an explicit `az login --federated-token` before `--auth-mode login` blob ops work.
-- **Init container `--overwrite false` error on existing files** — PVC retains files across restarts; changed to `--overwrite true` so workspace sync always reflects Blob state.
-- **Stale DB guard triggering on 0-byte file** — existence check now also verifies non-empty size before skipping seed.
-- **`TestRunJobAssessmentPersona` patch target stale** — tests were patching `openai.OpenAI` directly; patched `lib.config.get_llm_client` instead to match the provider-agnostic refactor.
+- `lib/db.py` connection helper + `scripts/migrate_to_sqlite.py` one-shot migration from JSON.
+- `lib/io_sqlite.py` dual-write adapter — all writes go to SQLite AND JSON simultaneously; reads from SQLite when `USE_SQLITE=1`.
+- 9 table handlers: applications + events, job queue, people, interviews, rejections, tone samples, health log, LinkedIn posts, personal context.
+- Sync-delete on save — dismissed/removed entries don't linger in SQLite.
+- `SQLITE_ONLY=1` skips JSON writes for SQLite-mapped tables (default on in AKS, default off locally).
+- 36 new round-trip + sync-delete tests.
+
+### AKS production deployment
+
+- Full `k8s/` manifests: PVC (5Gi Premium SSD), ConfigMap, Deployment, Service.
+- Workload identity + federated credential — zero secrets in production.
+- Init container seeds all 9 workspace dirs from Azure Blob Storage on pod start.
+- `workspace-sync` sidecar pushes PVC workspace files + SQLite DB back to blob every 15 min — survives pod replacement without data loss (worst-case 15 min).
+- `scripts/provision_aks.sh` — idempotent one-shot provisioner for all Azure infrastructure.
+- `scripts/upload_workspace.sh` — config-driven bulk uploader for all 9 workspace subdirs.
+- Provider-agnostic LLM via `lib/config.get_llm_client()`: OpenAI / Azure AI Foundry (keyless `DefaultAzureCredential`) / Ollama.
+
+### MCP Streamable HTTP transport (`2025-03-26`)
+
+- `transport/http/app.py` mounts `mcp.streamable_http_app()` at `/mcp`; verified `protocolVersion: 2025-03-26`.
+- `.vscode/mcp.json` includes both stdio (local/Docker) and HTTP (AKS) entries.
+- `AKS port-forward` VS Code background task in `.vscode/tasks.json`.
+- **GitHub Copilot app** — verified working via Settings → MCP servers GUI (HTTP tab, URL = deployed endpoint, no config file editing). Entra ID OAuth flow on save.
+
+### Dashboard: daily digest + cover-letter editor
+
+- `GET /dashboard/digest` + `POST /dashboard/digest/generate` — browser digest with collapsible sections, spinner, timestamps, **NEEDS DECISION** queue section.
+- Cover-letter edit dialog with draft versioning (`{stem}.edit1.tmp`, …) — source never overwritten mid-session. Accept/cancel/discard flow.
+- `09-Cover-Letter-PDFs/` dedicated output folder (previously mixed into `03-Resume-PDFs/`).
+- Job-id-based pipeline actions — assess, select resume, generate materials, export PDFs, unqueue, remove, add, dismiss without brittle company/role string matching.
+- Inline assessment details — fitment scores, gaps, angles, and recommendations visible in the pipeline.
+- Cover-letter narrative routing — `PRIMARY COVER LETTER HOOK` from personal context surfaced when a matching company story exists; cross-company hooks filtered.
+- Semantic personal-story retrieval — `lib/story_retrieval.py` blends keyword scores with OpenAI embeddings, mission queries, and hook-tag boosts for cover letter generation.
+- LaTeX export path — Tectonic-based cover letter renderer; date, role title, and export pipeline configurable per generation.
+- NEEDS DECISION in `get_daily_digest()` — queue items now appear in digest and TODAY'S FOCUS.
+
+### Fixes
+
+- iOS Share Sheet URL whitespace/non-printable char stripping.
+- Jina scraper 4xx tolerance when body has content.
+- `_save_json` double `write_text` call removed.
+- Init container: `az login` federated token, `--overwrite true`, 0-byte DB guard.
+- Dashboard auth provider settings staleness on token rotation.
+- `IndentationError` CrashLoopBackOff in root route — Python AST check added as pre-commit gate.
+- JWT audience mismatch (`api://CLIENT_ID` vs bare) — both accepted.
+- `transport/http/config.py` `_env_port()` port validation fix.
+- `workspace-sync` sidecar — `Storage Blob Data Contributor` role required (not just `Reader`).
+- All shell scripts pass shellcheck.
 
 ### Tests
 
-- 627 passing (was 591 before this branch). 36 new SQLite round-trip + sync-delete tests in `tests/test_sqlite_migration.py`.
+627 passing (up from 591 at last main merge).
 
----
+### Upgrade notes
 
-## [0.9.x] — feat/dashboard-digest-ollama
-
-### Added
-
-- **Cover-letter edit dialog** — each pipeline job card now exposes an **Edit Cover Letter** button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export checkbox. Backend routes: `POST /pipeline/read-cover-letter`, `POST /pipeline/edit-cover-letter`. Cover-letter options are injected into `_pipeline_payload()` as `cover_letter_options`; per-job `last_edited_cover_letter` and `suggested_edit_cover_letter` fields surface as pre-selected defaults.
-
-- **Cover-letter draft versioning** — Apply Edit no longer overwrites the source file. Each run writes `{stem}.edit1.tmp`, `.edit2.tmp`, … and the latest draft is used as input on subsequent edits. New routes: `POST /pipeline/open-cover-letter-draft` (reads latest draft back into modal), `POST /pipeline/accept-cover-letter-edit` (backs up source to `{stem}.bak`, promotes latest draft, deletes all `.editN.tmp` files), `POST /pipeline/cancel-cover-letter-edit` (deletes drafts, leaves source untouched). Overlay click-outside triggers draft cleanup.
-
-- **Dedicated `09-Cover-Letter-PDFs/` output folder** — cover-letter PDFs now route to `09-Cover-Letter-PDFs/` instead of `03-Resume-PDFs/`. New helper `_cover_letter_pdf_folder_name()` reads `config.cover_letter_pdfs_dir` (default `"09-Cover-Letter-PDFs"`). `_resolve_output_path` accepts a `folder_name` parameter; resume exports still use `03-Resume-PDFs`, cover-letter exports use the new folder. LaTeX exporter default `output_dir` updated accordingly. `setup.py` creates the folder on workspace init. `config.example.json` documents `"cover_letter_pdfs_dir": "09-Cover-Letter-PDFs"`. Materials dashboard exposes a Cover Letter PDFs folder card.
-
-- **NEEDS DECISION section in daily digest** — `get_daily_digest()` now reads `job_queue.json` and surfaces any `pending` or `evaluated` jobs in a **NEEDS DECISION** block (with fitment score when available). The top undecided item also appears in TODAY'S FOCUS. Previously the queue was completely invisible to the digest.
-
-- **Job queue cleanup on decide** — `decide_job("add")` and `decide_job("dismiss")` now remove the entry from `job_queue.json` entirely instead of soft-deleting with a status flag. The queue is a staging area only; decided jobs live in `status.json`. `_VALID_STATUSES` trimmed to `{"pending", "evaluated"}`.
-
-- **Cover-letter company hook routing** — `_cover_letter_narrative_plan()` now yields to a `PRIMARY COVER LETTER HOOK` from personal context when one exists for the target company, instead of unconditionally opening with the AI platform opener. A brand/childhood/fan story (Coca-Cola bottle collection, Home Depot Saturday ritual, etc.) is only surfaced if it explicitly matches the target company; cross-company hooks are filtered and replaced with a `NO COMPANY-SPECIFIC PERSONAL STORY FOUND` fallback.
-
-- **AI platform evidence surfacing** — `tools/fitment.py` now deterministically extracts MCP/RAG/LangGraph/OpenAI evidence from the master resume and injects it at the top of assessment prompts for AI Platform / Agent Platform roles. System prompt updated with an AI PLATFORM CALIBRATION RULE instructing the assessor not to call side-project AI platform experience "absent."
-
-- **`uncle Roy` relationship wording** — narrative plan now instructs the model to refer to "my uncle Roy" (not bare "Uncle Roy") on first reference. A sanitizer backstop applies `re.sub` to catch any model that ignores the prompt.
-
-- **Dashboard command-center README preview** — added the dashboard screenshot and expanded quick-start notes for the browser UI: Home/Daily Digest, Pipeline, Job Hunt, Materials, Rejections, Posts, Outreach, People, and Wellbeing views.
-- **LaTeX demo screenshots** — added fake-identity resume and cover-letter screenshots under `docs/` and embedded them in the README output preview.
-- **Dedicated dashboard Daily Digest page** — added the browser digest flow with `GET /dashboard/digest`, `POST /dashboard/digest/generate`, parsed briefing sections, timestamps, spinner/progress feedback, and same-data parity with the `get_daily_digest()` tool.
-- **Dashboard browser login/session support** — dashboard users can authenticate with the existing HTTP token via `/dashboard/login`; successful login sets an HTTP-only `jc_session` cookie and `/dashboard/logout` clears it.
-- **Dashboard pipeline UX upgrades** — pipeline actions are job-id-based, preserve selected resume choices, show assessment details inline, expose busy/progress state, support unqueue/remove actions, and make LaTeX/HTML cover-letter exports available from the same screen.
-- **Semantic personal-story retrieval for cover letters** — `lib/story_retrieval.py` can now blend keyword scores with cached OpenAI embeddings, mission-oriented semantic queries, query-chrome stripping, and hook-tag boosts so company mission language can surface the strongest personal story even when the JD has little literal overlap.
-- **Cover-letter prompt budget cleanup** — long scraped job pages are compacted before prompt assembly, removing LinkedIn/apply/sign-in/navigation chrome and preserving role, mission, responsibility, qualification, and benefit anchors.
-- **LaTeX cover-letter controls** — the Tectonic export path now prints a right-aligned letter date, accepts an explicit `letter_date`, and uses a configurable role title.
-- **Selected-resume-aware cover-letter titles** — dashboard cover-letter generation passes the selected resume variant through the service layer so Modern/AI resume choices can use the AI title while classic variants keep the default full-stack title.
-- **Assessment-specific LLM routing** — `lib.config.get_llm_client()` now supports provider/profile switching so generation and assessment calls can use separate OpenAI/Ollama model settings without changing caller code.
-- **Durable GitHub portfolio metrics** — GitHub traffic snapshots can be refreshed into a local history file and summarized later, preserving clone/view metrics beyond GitHub's rolling 14-day traffic window.
-- **`httpx2>=2.3.0` dependency** — aligns the test client with the current Starlette/FastAPI stack and removes the test-suite deprecation warning.
-
-### Changed
-
-- **Cover-letter generation** now targets a fuller one-page body, uses a primary mission/brand hook when semantic retrieval is enabled, asks for three distinct grounded artifacts, and applies deterministic cleanup for stock phrases and unsupported metrics.
-- **Generation prompt assembly** now uses retrieval-first budgeting: bounded master/tone/JD sections, recency/diversity tone sample selection, dynamic personal-context budgets, and a final token-ceiling guard.
-- **Story retrieval diagnostics** now report semantic availability and candidate counts alongside selected stories, making it easier to debug why a personal context item did or did not appear.
-- **HTML cover-letter export** accepts a footer/title tag so generated PDFs can reflect the selected resume/title variant.
-- **Dashboard auth tests** now set session cookies through the active test client cookie jar for compatibility with newer httpx/httpx2 behavior.
-
-### Fixed
-
-- **Noisy LinkedIn postings crowding out personal context** — JD cleanup keeps the cover-letter prompt from losing retrieved stories to scraped page metadata.
-- **Mission-fit cover letters over-indexing on work history** — semantic story retrieval lets human/creator/brand stories such as independent-label work rank ahead of unrelated literal keyword matches when that is the better company hook.
-- **Fitment-assessment fabrication guardrails** — compensation analysis must quote only JD-provided compensation numbers, and unsupported facts must be grounded in either the JD or the master resume.
-- **Dashboard auth-provider staleness** — token settings are read fresh instead of reusing stale auth state across configuration changes.
-- **Dashboard same-origin credentials** — browser requests and tests now exercise the session-cookie path cleanly instead of relying on deprecated per-request cookie injection.
-- **Assessment wrapper cleanup** — saved/displayed assessments strip tool/context wrappers so dashboard details focus on the actual fitment result.
-- **Full test suite** is green again on the current branch: 574/574 passing.
-- **Portable `~` path expansion in config** — `lib/config.py` now calls `.expanduser()` on all user-configured path keys (`resume_folder`, `leetcode_folder`, `data_folder`, `side_project_folders`, `fb_friends_folder`, `latex_resume_dir`), so `config.json` values written as `~/...` resolve correctly regardless of where `$HOME` lives (e.g. an external volume). `tools/setup.py` now writes `~`-prefixed paths via a `_to_tilde()` helper so any future `setup_workspace` call produces a portable config. `tests/test_server_exports.py` gains `test_reconfigure_expands_tilde_paths` verifying all six keys expand and none retain a literal `~`.
-
-### Planned
-
-- **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
+- Run `python scripts/migrate_to_sqlite.py` once to bootstrap `data/jobcontextmcp.db` from existing JSON.
+- Set `USE_SQLITE=1` in `.env` to activate SQLite reads/writes.
+- AKS users: run `./scripts/upload_workspace.sh` before the next pod restart to seed all workspace dirs into blob.
+- No tool API changes — existing `config.json` and data files work as-is.
 
 ## [0.9.0] - 2026-06-01
 

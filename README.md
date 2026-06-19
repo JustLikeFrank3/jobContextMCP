@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.9.x%20%E2%86%92%201.0-blue" alt="Version 0.9.x approaching 1.0"/>
-  <img src="https://img.shields.io/badge/tests-625%20passing-brightgreen" alt="625 tests passing"/>
+  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"/>
+  <img src="https://img.shields.io/badge/tests-627%20passing-brightgreen" alt="627 tests passing"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -1396,9 +1396,9 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 - **Portfolio analytics for applications** — durable project evidence can feed resumes, STAR stories, and interview prep without hand-copying GitHub traffic screenshots.
 - **GitHub Copilot app (HTTP/SSE)** — confirmed working via the app's Settings → MCP servers UI; no config file required.
 
-### v1.0 *(in progress)*
+### v1.0 *(shipped)*
 
-The v1.0 line completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform:
+v1.0 completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform:
 
 - **Entra ID browser authentication** — full PKCE OAuth2 login flow for the AKS-hosted dashboard; JWT validation (v1 + v2 audiences); secure `jc_session` cookie; logout from every page.
 - **Per-user data isolation** — each authenticated user (guest or tenant member) gets their own isolated SQLite DB, workspace folder tree, and JSON partition. The service owner routes to the full corpus; everyone else is scoped to `/app/data/users/{oid}/`. Auto-provisioned on first login with a placeholder resume so the setup flow works immediately.
@@ -1406,13 +1406,15 @@ The v1.0 line completes the transformation from a local stdio context server int
 - **MCP Streamable HTTP transport (`2025-03-26`)** — VS Code + GitHub Copilot (and any HTTP MCP client) can connect to the live AKS pod over the standard transport via `kubectl port-forward`.
 - **SQLite + dual-write persistence** — all pipeline writes go to both SQLite and JSON; reads come from SQLite when `USE_SQLITE=1`; `SQLITE_ONLY=1` skips JSON for production AKS.
 - **AKS production deployment** — fully automated `provision_aks.sh`, workspace-sync sidecar, workload identity, Azure Blob Storage backup, ConfigMap-driven config.
+- **Cover-letter editor with draft versioning** — dashboard edit dialog with live preview, `.editN.tmp` versioning, accept/cancel/discard flow.
+- **Semantic personal-story retrieval** — embedding-assisted story selection for cover letter generation; retrieval diagnostics; hook-tag boosts.
+- **Provider-agnostic LLM** — OpenAI / Azure AI Foundry (`DefaultAzureCredential`) / Ollama via `get_llm_client()`.
 
-### Beyond v1.0
+### v1.x planned
 
-- Public setup path hardening for fresh users (clone → setup → dashboard → first application).
-- Normalize tool counts and generated docs.
-- Harden dashboard edge cases and empty-state UX.
 - `POST /jobs/ingest` — single-blob mobile intake (no per-field prompts).
+- Public setup path hardening for fresh users (clone → setup → dashboard → first application).
+- Harden dashboard edge cases and empty-state UX.
 
 ---
 
