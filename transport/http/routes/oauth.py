@@ -189,9 +189,17 @@ async def oauth_token_proxy(request: Request):
         f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
     )
 
+    import logging
+    _log = logging.getLogger(__name__)
+
     # Parse the form body and strip 'resource'
     form = await request.form()
     payload = {k: v for k, v in form.multi_items() if k != "resource"}
+
+    # Debug: log what the client sent (mask secrets)
+    safe = {k: (str(v)[:8] + "…" if k in ("code", "client_secret", "refresh_token") and len(str(v)) > 8 else str(v))
+            for k, v in payload.items()}
+    _log.info("oauth/token proxy payload: %s", safe)
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -200,6 +208,9 @@ async def oauth_token_proxy(request: Request):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=30,
         )
+
+    if resp.status_code >= 400:
+        _log.warning("oauth/token Entra error %s: %s", resp.status_code, resp.text[:500])
 
     from fastapi.responses import Response
     return Response(
