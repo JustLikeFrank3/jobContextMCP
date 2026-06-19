@@ -86,7 +86,28 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             finally:
                 reset_data_folder(token)
 
-        return await call_next(request)
+        # No authenticated identity resolved — block MCP and API endpoints.
+        # Pass through public paths (well-known, health, dashboard login/callback,
+        # oauth register) so discovery and auth flows still work unauthenticated.
+        _PUBLIC_PREFIXES = (
+            "/.well-known/",
+            "/health",
+            "/oauth/",
+            "/dashboard/login",
+            "/dashboard/callback",
+            "/favicon",
+            "/apple-touch-icon",
+            "/",
+        )
+        if any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        from starlette.responses import JSONResponse as _JSONResponse
+        return _JSONResponse(
+            {"error": "unauthorized", "message": "Authentication required"},
+            status_code=401,
+            headers={"WWW-Authenticate": 'Bearer realm="jobContextMCP"'},
+        )
 
 
 def create_app(mcp: "FastMCP | None" = None) -> FastAPI:

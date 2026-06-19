@@ -96,7 +96,14 @@ def _load_master_context() -> str:
 
     parts = [_read(master_path)]
 
-    awards_text = _read(config.GM_AWARDS)
+    # Only append awards/feedback from the same workspace — never cross-tenant.
+    # Resolve against the active workspace's 06-Reference-Materials/ so each
+    # user gets their own files (or nothing, if they haven't uploaded them yet).
+    ref_dir = ws / config._cfg.get("reference_materials_dir", "06-Reference-Materials")
+    awards_path = ref_dir / config._cfg.get("gm_awards_path", "GM Recognition Awards.txt").split("/")[-1]
+    feedback_path = ref_dir / config._cfg.get("feedback_received_path", "Feedback_Received.txt").split("/")[-1]
+
+    awards_text = _read(awards_path)
     if not awards_text.startswith("[Error"):
         parts.append(
             "──── GM RECOGNITION AWARDS ────\n"
@@ -104,7 +111,7 @@ def _load_master_context() -> str:
             + awards_text
         )
 
-    feedback_text = _read(config.FEEDBACK_RECEIVED)
+    feedback_text = _read(feedback_path)
     if not feedback_text.startswith("[Error"):
         parts.append(
             "──── PEER FEEDBACK (verbatim) ────\n"
