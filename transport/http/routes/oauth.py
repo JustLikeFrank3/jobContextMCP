@@ -62,8 +62,15 @@ async def oauth_protected_resource(request: Request, path: str = "") -> JSONResp
     # fetch Entra's own openid-configuration, find no registration_endpoint,
     # and throw "Incompatible auth server: does not support dynamic client
     # registration" — even when --client-id is supplied.
+    #
+    # resource MUST be the Entra Application ID URI (api://{client_id}), not
+    # our server URL.  mcp-remote forwards the resource value as the OAuth
+    # `resource` parameter in authorization/token requests.  Entra throws
+    # AADSTS9010010 if `resource` and the requested scopes reference different
+    # application identifiers.  api://{client_id} matches scope
+    # api://{client_id}/access, so both sides agree on the target resource.
     return JSONResponse({
-        "resource": base,
+        "resource": f"api://{client_id}",
         "authorization_servers": [base],
         "bearer_methods_supported": ["header"],
         "scopes_supported": [
