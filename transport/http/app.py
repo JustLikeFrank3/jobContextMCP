@@ -97,8 +97,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
                 reset_data_folder(token)
 
         # No authenticated identity resolved — block MCP and API endpoints.
-        # Pass through public paths (well-known, health, dashboard login/callback,
-        # oauth register) so discovery and auth flows still work unauthenticated.
+        # Pass through public paths (well-known, health, oauth, dashboard login/callback)
+        # so discovery and auth flows still work unauthenticated.
         _PUBLIC_PREFIXES = (
             "/.well-known/",
             "/health",
@@ -107,9 +107,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/dashboard/callback",
             "/favicon",
             "/apple-touch-icon",
-            "/",
         )
-        if any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
+        if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
 
         from starlette.responses import JSONResponse as _JSONResponse
