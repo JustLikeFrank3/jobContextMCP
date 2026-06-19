@@ -99,12 +99,13 @@ async def oauth_authorization_server(request: Request) -> JSONResponse:
     # RFC 8414 §3.3: issuer MUST equal the URL this document was served from.
     data["issuer"] = base
     data["registration_endpoint"] = f"{base}/oauth/register"
-    # Point authorization_endpoint at our proxy route.  mcp-remote will send
-    # the browser there; we strip the `resource` param (which causes Entra's
-    # AADSTS9010010 when it doesn't match the api:// scope identifier) and
-    # 302-redirect to Entra.  token_endpoint stays pointed at Entra directly
-    # because the token exchange does not include `resource`.
+    # Point BOTH authorize and token endpoints at our proxy routes.
+    # mcp-remote sends resource=<server-origin> in both the authorize redirect
+    # and the token exchange POST.  Entra v2.0 throws AADSTS9010010 when
+    # resource and scope reference different application identifiers.
+    # Our proxies strip 'resource' before forwarding to Entra.
     data["authorization_endpoint"] = f"{base}/oauth/authorize"
+    data["token_endpoint"] = f"{base}/oauth/token"
     return JSONResponse(data)
 
 
@@ -171,3 +172,38 @@ async def oauth_authorize_proxy(request: Request) -> RedirectResponse:
     params = {k: v for k, v in request.query_params.items() if k != "resource"}
     target_url = f"{entra_authorize}?{urlencode(params)}"
     return RedirectResponse(url=target_url, status_code=302)
+
+
+@router.post("/oauth/token", include_in_schema=False)
+async def oauth_token_proxy(request: Request):
+    """Strip 'resource' from the token exchange POST and forward to Entra.
+
+    mcp-remote sends resource=<server-origin> in the token exchange body.
+    Entra v2.0 throws AADSTS9010010 when 'resource' and 'scope' reference
+    different application identifiers.  We strip it here before forwarding.
+    """
+    import httpx
+
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    entra_token = (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    )
+
+    # Parse the form body and strip 'resource'
+    form = await request.form()
+    payload = {k: v for k, v in form.multi_items() if k != "resource"}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            entra_token,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30,
+        )
+
+    from fastapi.responses import Response
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers={"Content-Type": resp.headers.get("Content-Type", "application/json")},
+    )
