@@ -85,7 +85,24 @@ def test_ai_role_detection_does_not_match_ai_inside_retail():
     )
 
 
-def test_cover_letter_tone_prefers_high_signal_cover_samples():
+def test_cover_letter_tone_prefers_high_signal_cover_samples(tmp_path, monkeypatch):
+    """Cover-letter sources should rank above other sample types."""
+    import json
+    import lib.config as cfg
+
+    tone_file = tmp_path / "tone.json"
+    tone_file.write_text(json.dumps({"samples": [
+        {"id": 1, "source": "cover_letter_ford_motor_credit",
+         "text": "Ford Motor Credit cover letter sample text." * 10, "context": ""},
+        {"id": 2, "source": "cover_letter_airbnb_listings",
+         "text": "Airbnb cover letter sample text." * 10, "context": ""},
+        {"id": 3, "source": "linkedin_post_unhinged_bio_2026_05_25",
+         "text": "LinkedIn post sample text." * 10, "context": ""},
+        {"id": 4, "source": "resume_google",
+         "text": "Resume sample text." * 10, "context": ""},
+    ]}))
+
+    monkeypatch.setattr(cfg, "TONE_FILE", tone_file)
     profile = tone.get_cover_letter_tone_profile_budgeted(token_budget=1800, max_samples=7)
 
     assert "cover_letter_ford_motor_credit" in profile
