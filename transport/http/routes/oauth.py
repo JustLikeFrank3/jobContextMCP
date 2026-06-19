@@ -25,9 +25,10 @@ Entra app registration requirements (one-time, done in Azure Portal):
 from __future__ import annotations
 
 import os
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 router = APIRouter(tags=["oauth-discovery"])
 
@@ -61,16 +62,17 @@ async def oauth_protected_resource(request: Request, path: str = "") -> JSONResp
     # registration_endpoint).  If we pointed to Entra here, mcp-remote would
     # fetch Entra's own openid-configuration, find no registration_endpoint,
     # and throw "Incompatible auth server: does not support dynamic client
-    # registration" — even when --client-id is supplied.
+    # registration".
     #
-    # resource MUST be the Entra Application ID URI (api://{client_id}), not
-    # our server URL.  mcp-remote forwards the resource value as the OAuth
-    # `resource` parameter in authorization/token requests.  Entra throws
-    # AADSTS9010010 if `resource` and the requested scopes reference different
-    # application identifiers.  api://{client_id} matches scope
-    # api://{client_id}/access, so both sides agree on the target resource.
+    # resource MUST be the server HTTPS origin so that mcp-remote 0.1.37's
+    # selectResourceURL check passes (it validates resource == serverUrl or
+    # server origin).  mcp-remote then sends resource=<this value> to
+    # Entra's authorize endpoint.  Entra v2.0 throws AADSTS9010010 when
+    # `resource` and `scope` reference different app identifiers — we fix
+    # that via the /oauth/authorize proxy route which strips `resource`
+    # before forwarding to Entra.
     return JSONResponse({
-        "resource": f"api://{client_id}",
+        "resource": base,
         "authorization_servers": [base],
         "bearer_methods_supported": ["header"],
         "scopes_supported": [
@@ -95,10 +97,14 @@ async def oauth_authorization_server(request: Request) -> JSONResponse:
     base = _base_url(request)
     data = oauth_discovery_json()
     # RFC 8414 §3.3: issuer MUST equal the URL this document was served from.
-    # authorization_endpoint / token_endpoint still point to Entra so the
-    # actual PKCE flow goes to Entra — we just act as the discovery broker.
     data["issuer"] = base
     data["registration_endpoint"] = f"{base}/oauth/register"
+    # Point authorization_endpoint at our proxy route.  mcp-remote will send
+    # the browser there; we strip the `resource` param (which causes Entra's
+    # AADSTS9010010 when it doesn't match the api:// scope identifier) and
+    # 302-redirect to Entra.  token_endpoint stays pointed at Entra directly
+    # because the token exchange does not include `resource`.
+    data["authorization_endpoint"] = f"{base}/oauth/authorize"
     return JSONResponse(data)
 
 
@@ -138,3 +144,30 @@ async def oauth_dynamic_register(request: Request) -> JSONResponse:
         },
         status_code=201,
     )
+
+
+@router.get("/oauth/authorize", include_in_schema=False)
+async def oauth_authorize_proxy(request: Request) -> RedirectResponse:
+    """Strip the 'resource' param and proxy to Entra's authorize endpoint.
+
+    mcp-remote takes the PRM 'resource' value and adds it as a query param
+    when building the authorization URL.  Entra v2.0 throws AADSTS9010010
+    when both 'resource' and 'scope' are present and they reference different
+    application identifiers (resource=https://... vs scope=api://...).
+
+    We point auth_server_metadata.authorization_endpoint here so that
+    mcp-remote sends the browser to US first.  We strip 'resource' from the
+    query string, then 302-redirect to Entra's real authorize endpoint.
+    All PKCE params (code_challenge, state, redirect_uri, etc.) are
+    preserved — this is completely transparent to both the browser and
+    mcp-remote's local callback server.
+    """
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    entra_authorize = (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+    )
+
+    # Forward every param the client sent EXCEPT 'resource'
+    params = {k: v for k, v in request.query_params.items() if k != "resource"}
+    target_url = f"{entra_authorize}?{urlencode(params)}"
+    return RedirectResponse(url=target_url, status_code=302)
