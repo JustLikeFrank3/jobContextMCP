@@ -11,7 +11,7 @@
 
 # JobContextMCP
 
-A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
+A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives the GitHub Copilot app, GitHub Copilot in VS Code, Claude Desktop, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint/LaTeX export paths, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
@@ -115,7 +115,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 ```mermaid
 graph TB
   subgraph CLIENTS["Clients"]
-    COPILOT["GitHub Copilot / Claude / Cursor / Windsurf / Zed\nMCP stdio or Streamable HTTP"]
+    COPILOT["GitHub Copilot app / Copilot in VS Code / Claude / Cursor / Windsurf / Zed\nMCP stdio or Streamable HTTP"]
     CLI["cli.py / cron / launchd / scripts"]
     DASH["Browser — Entra PKCE login\ndashboard + pipeline"]
     HTTPCLIENT["HTTP / REST / SSE clients"]
@@ -314,6 +314,15 @@ sequenceDiagram
 | `get_upcoming_interviews(days_ahead?)` | **v0.7** — filters logged interviews to a forward window (default 14 days); sorted soonest-first with "today" / "in Nd" labels |
 | `get_referral_chains(target_company)` | **v0.7** — groups contacts into `direct` (company match) and `adjacent` (company mentioned in tags/context/notes) for referral planning |
 | `draft_reply(incoming_message, contact?, company?, intent?)` | **v0.7** — package tone profile, personal context, contact context, and intent-specific posture (`accept` / `decline_polite` / `decline_compensation` / `request_info` / `delay` / `enthusiastic_yes`) for AI-drafted replies to inbound messages |
+| `scrape_job_url(url, auto_queue?)` | **v0.8** — fetch any job posting URL via Jina Reader, extract company/role/JD, and optionally queue it; works with Greenhouse, Lever, Ashby, Workday, and most company career pages |
+| `search_jobs(query, location?, num_results?, auto_queue?)` | **v0.8** — search Google Jobs via SerpAPI; requires `serpapi_key` in config; `auto_queue=True` pipelines all results directly |
+| `search_greenhouse_jobs(company_slug, query?, num_results?, auto_queue?)` | **v0.8** — browse all open roles on any Greenhouse job board; free, no API key required |
+| `search_lever_jobs(company_slug, query?, num_results?, auto_queue?)` | **v0.8** — browse all open roles on any Lever job board; free, no API key required |
+| `generate_resume_agent(company, role, job_description)` | **v0.9** — LangGraph multi-stage resume pipeline: `assess → draft → review → [revise →] finalize`; higher-quality output than a single LLM call; falls back to `generate_resume()` context-packing when no LLM is configured |
+| `get_all_star_context()` | **v0.9** — dump the complete STAR library in one call: all personal stories, all metric bullets by category, all company framing hints; used at session boot for full interview prep picture |
+| `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
+| `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
+| `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
 
 ---
 
@@ -613,6 +622,26 @@ The server speaks MCP — it works with any compatible client. You don't need an
 This means automation scripts, cron jobs, and CI pipelines can consume the same tools as any AI client — deterministic, observable, no agent required.
 
 #### AI clients
+
+##### GitHub Copilot app *(HTTP/SSE — requires remote endpoint)*
+
+The standalone GitHub Copilot desktop application connects to MCP servers over HTTP or SSE — it does not run local stdio processes. You need the HTTP transport running (locally accessible or deployed to a server).
+
+1. Open the Copilot app → **Settings → MCP servers**
+2. Click **+ Add server**
+3. Enter a **Server name** (e.g. `jobContextMCP`)
+4. Select the **HTTP** tab (for streamable-http) or **SSE** tab
+5. Set the **URL** to your endpoint:
+   - Streamable-HTTP: `https://your-server/mcp`
+   - SSE: `https://your-server/sse`
+   - Local (if running uvicorn): `http://localhost:8765/mcp`
+6. Click **Save**
+
+If your server is configured with `JOBCONTEXTMCP_HTTP_TOKEN`, the app will prompt for authentication. If deployed on Azure with Entra ID, an OAuth login flow will appear — sign in with your Microsoft account.
+
+> **Verified:** HTTP transport with Azure-hosted endpoint confirmed working with the Copilot app as of June 2026. See [HTTP + SSE transport](#http--sse-transport-fastapi) for deployment details.
+
+---
 
 ##### VS Code + GitHub Copilot *(recommended — zero extra config)*
 
@@ -1365,6 +1394,7 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 - **`refresh_portfolio_metrics()`** — snapshots GitHub clone/view traffic for configured repositories into durable local history so GitHub's rolling 14-day traffic window is not lost.
 - **`get_portfolio_metrics()`** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones.
 - **Portfolio analytics for applications** — durable project evidence can feed resumes, STAR stories, and interview prep without hand-copying GitHub traffic screenshots.
+- **GitHub Copilot app (HTTP/SSE)** — confirmed working via the app's Settings → MCP servers UI; no config file required.
 
 ### v1.0 *(in progress)*
 

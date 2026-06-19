@@ -111,6 +111,36 @@ All notable changes to this project will be documented in this file.
 
 - **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
 
+## [0.9.0] - 2026-06-01
+
+Adds local LLM support via Ollama, a LangGraph-powered resume agent tool, three new context tools, and a verified GitHub Copilot app (HTTP/SSE) client path. Tool count 65 → 73. Full suite 523/523 green.
+
+### Added
+
+- **Ollama provider support** (`lib/config.py` — `get_llm_client()`) — new factory function returns `(client, model_name)` for whichever LLM provider is configured. Setting `llm_provider = "ollama"` in `config.json` routes all generation calls to a local Ollama server via the OpenAI-compatible API (`base_url = ollama_base_url`, `api_key = "ollama"`). Defaults to `"openai"` when not set. Config keys:
+  - `llm_provider` — `"openai"` (default) or `"ollama"`
+  - `ollama_base_url` — default `http://localhost:11434/v1`
+  - `ollama_model` — default `llama3.1:8b`
+  - All three generation paths (`generate_resume`, `generate_cover_letter`, `generate_resume_agent`) and the fitment path (`run_job_assessment`) now call `get_llm_client()` instead of constructing their own OpenAI clients.
+
+- **`generate_resume_agent(company, role, job_description)`** (`tools/langgraph_pipeline.py`) — LangGraph multi-stage resume pipeline exposed as an MCP tool. Runs a 4-node `StateGraph`: `load_context → retrieve (RAG) → draft → review → [revise →] finalize`. Each node has a narrow mandate so no context is lost between stages. Falls back to `generate_resume()` context-packing when no LLM client is configured. Returns header with pipeline summary (revision count, final review excerpt) prepended to the finished draft.
+
+- **`get_all_star_context()`** (`tools/star.py`) — full STAR library dump in one call: all personal stories with tags and people, all resume metric bullets organized by category (`cloud_migration`, `testing`, `ai_adoption`, etc.), and all company-specific framing hints. Intended for session boot when a complete interview prep picture is needed without filtering by tag.
+
+- **`get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)`** (`tools/crossref.py`) — prioritized queue of Facebook friends who are not yet LinkedIn connections. Sorted by recency (most recently added FB friend first) to surface the freshest relationships. Active job target companies are pulled from `status.json` and included in the header so the AI can flag contacts who work at target companies. Supports pagination (`limit` / `offset`) and optional inclusion of pending FB requests (`include_pending=True`).
+
+- **`save_job_assessment(company, content, filename?, source?)`** (`tools/fitment.py`) — saves a generated fitment assessment to `07-Job-Assessments/` as a `.md` file. Optional `source` parameter saves into a named subfolder (e.g. `07-Job-Assessments/Miguel Referral/`) for intake-source organization. Filename defaults to `{Company} - Fitment Assessment.md`.
+
+### Changed
+
+- **`server.py` — missing exports wired** — `run_job_assessment`, session/star/health tool aliases, and `_TOOL_MODULES` list added to module-level exports; `JOB_ASSESSMENTS_FOLDER` and `SERPAPI_KEY` added to `_sync_config_exports()` so downstream tools and tests resolve these correctly.
+- **`cli.py` — tool discovery fixed** — `job_scraper` and `job_queue` modules added to `_discover_tools()` so all 73 tools are callable via the CLI.
+- **`tools.json` regenerated** — static tool manifest rebuilt from live server registry; count 65 → 73.
+
+### Client Support
+
+- **GitHub Copilot app (HTTP/SSE) — verified** — the standalone GitHub Copilot desktop application connects via its **Settings → MCP servers** GUI. Select HTTP or SSE transport, enter your deployed endpoint URL (e.g. `https://your-server/mcp`), and save. No config file editing required. OAuth/Entra ID login prompt appears when auth is configured on the server. Verified working with Azure-hosted endpoint.
+
 ## [0.8.0] - 2026-05-29
 
 Adds web-based job ingestion — four new MCP tools for scraping individual job postings by URL and searching Greenhouse, Lever, and Google Jobs boards directly from the server. All results funnel into the existing `queue_job` pipeline. 34 new tests; full suite 499/499 green.
