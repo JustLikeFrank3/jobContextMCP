@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 
 from lib import config
 from lib.io import _load_json, _load_master_context, _save_json
-from lib.openai_calls import create_chat_completion
 
 _COMPACT_TOKEN_RE = r"[^a-z0-9]+"
 
