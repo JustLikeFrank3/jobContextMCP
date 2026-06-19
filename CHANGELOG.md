@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Refactoring
+
+- Split three monolithic source files into focused single-responsibility modules:
+  - `tools/export.py` 1,035 → 184 lines; all `.txt` resume/cover-letter parsers extracted to `lib/resume_parser.py`
+  - `transport/http/routes/dashboard/pipeline.py` 1,696 → 1,080 lines; request models, data-access helpers, and scoring logic extracted to `pipeline_helpers.py`
+  - `tools/generate.py` 1,618 → 1,351 lines; all format-spec and system-prompt constants extracted to `tools/generate_prompts.py`
+  - All public symbols re-exported from their original modules — no call-site changes required
+
+### Bug fixes
+
+- `k8s/deployment.yaml`: added `DISABLE_REBINDING_CHECK=true` next to `ENABLE_REMOTE=true` — the MCP SDK's DNS rebinding protection was responding 421 to all `/mcp` requests from the AKS ingress because `Host: jobcontextmcp.eastus.cloudapp.azure.com` is not `localhost`
+
+### CI/CD
+
+- `deploy.yml`: added `workflow_dispatch` trigger with built-in branch/tag selector so deploys can be triggered manually from any branch directly in the GitHub Actions UI
+
 ---
 
 ## [1.0.0] - 2026-06-19
