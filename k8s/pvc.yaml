@@ -4,8 +4,8 @@
 #   /app/data/workspace/         (resume_folder — writable generated outputs)
 #
 # Static reference files (master resume, awards, etc.) are seeded into
-# /app/data/workspace/ by the init container on first boot, sourced from
-# Azure Key Vault via the CSI driver (see secret-provider-class.yaml).
+# /app/data/workspace/ by the init container on first boot from
+# Azure Blob Storage (see deployment.yaml initContainers).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

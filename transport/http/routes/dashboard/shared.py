@@ -1,8 +1,6 @@
 """Shared HTML fragments reused across dashboard pages."""
 from __future__ import annotations
 
-import json
-
 from .assets import logo_svg
 
 

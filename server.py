@@ -125,11 +125,18 @@ def _reconfigure(cfg: dict) -> None:
 _sync_config_exports()
 
 
-# When running behind a reverse proxy (ENABLE_REMOTE=true), disable the MCP SDK's
-# localhost-only DNS rebinding check.  The proxy (nginx-ingress + TLS) is the
-# security boundary; the SDK check just blocks legitimate remote connections.
+# Disable the MCP SDK's localhost-only DNS rebinding check only when running
+# behind a reverse proxy (AKS nginx-ingress + TLS) where the proxy is the
+# security boundary.  ENABLE_REMOTE alone is not sufficient — it is also set
+# for local LAN / Tailscale stdio binds where the rebinding check should stay
+# on.  Require an explicit DISABLE_REBINDING_CHECK=true opt-out to minimise
+# exposure surface.
 _transport_security: TransportSecuritySettings | None = None
-if os.getenv("ENABLE_REMOTE", "false").lower() in ("1", "true", "yes"):
+_behind_proxy = (
+    os.getenv("ENABLE_REMOTE", "false").lower() in ("1", "true", "yes")
+    and os.getenv("DISABLE_REBINDING_CHECK", "false").lower() in ("1", "true", "yes")
+)
+if _behind_proxy:
     _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 mcp = FastMCP(

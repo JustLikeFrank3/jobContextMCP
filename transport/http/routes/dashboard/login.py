@@ -28,6 +28,19 @@ _SERVER_BASE = os.environ.get(
 
 router = APIRouter()
 
+
+def _is_secure(request: Request) -> bool:
+    """Return True when the connection is HTTPS.
+
+    Checks X-Forwarded-Proto first so the flag is correct when running behind
+    a TLS-terminating ingress (AKS nginx, Azure App Gateway, etc.) where
+    request.url.scheme is always 'http' at the pod level.
+    """
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.lower() == "https"
+    return request.url.scheme == "https"
+
 _DASHBOARD_ROOT = "/dashboard"
 _LOGIN_PATH = "/dashboard/login"
 
@@ -65,7 +78,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
     resp = RedirectResponse(url=auth_url, status_code=302)
     # Store verifier in a short-lived cookie for the callback
     resp.set_cookie("pkce_verifier", verifier, httponly=True, samesite="lax",
-                    secure=request.url.scheme == "https", max_age=600, path="/")
+                    secure=_is_secure(request), max_age=600, path="/")
     return resp
 
   if not provider.auth_enabled:
@@ -153,7 +166,7 @@ async def dashboard_login_submit(
     _, session_token = login_result
 
     resp = RedirectResponse(url=next_url, status_code=303)
-    secure_cookie = request.url.scheme == "https"
+    secure_cookie = _is_secure(request)
     resp.set_cookie(
         key="jc_session",
         value=session_token,
@@ -192,7 +205,7 @@ async def dashboard_logout(request: Request) -> RedirectResponse:
         path="/",
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=_is_secure(request),
     )
     return resp
 
@@ -256,7 +269,7 @@ async def dashboard_entra_callback(
 
     next_url = _safe_next(state)
     redirect = RedirectResponse(url=next_url, status_code=303)
-    secure = request.url.scheme == "https"
+    secure = _is_secure(request)
     redirect.set_cookie(
         key="jc_session",
         value=access_token,

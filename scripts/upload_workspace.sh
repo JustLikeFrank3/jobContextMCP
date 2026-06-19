@@ -14,7 +14,7 @@
 #   All *_path keys   — relative paths within resume_folder or leetcode_folder
 #
 # Configurable via env vars:
-#   STORAGE_ACCOUNT   (default: reads from k8s/configmap.yaml, else jcmcpstore)
+#   STORAGE_ACCOUNT   (default: jcmcpstore; override via env or .env.deploy)
 #   CONFIG_FILE       (default: config.json)
 
 set -euo pipefail

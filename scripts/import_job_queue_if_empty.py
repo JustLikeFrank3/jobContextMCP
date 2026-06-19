@@ -6,7 +6,6 @@ This is safe to run on startup; it's idempotent (will not duplicate rows)
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 import sys
 
@@ -15,10 +14,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from lib import config
-from lib.db import get_connection
+from lib.db import get_connection, db_path
 
 JOB_FILE = config.JOB_QUEUE_FILE
-DB = config.DATA_FOLDER / "jobcontextmcp.db"
+DB = db_path()
 
 
 def main() -> int:
@@ -47,15 +46,16 @@ def main() -> int:
             """
             INSERT OR REPLACE INTO job_queue
                 (id, company, role, jd, source, added_date, status,
-                 fitment_score, decision_notes, decided_date)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                 fitment_score, fitment_context, decision_notes, decided_date)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             """,
             [
                 (
                     r.get("id"), r.get("company", ""), r.get("role", ""),
                     r.get("jd"), r.get("source"), r.get("added_date"),
                     r.get("status", "pending"), r.get("fitment_score"),
-                    r.get("decision_notes"), r.get("decided_date"),
+                    r.get("fitment_context"), r.get("decision_notes"),
+                    r.get("decided_date"),
                 )
                 for r in jobs
             ],

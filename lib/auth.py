@@ -21,8 +21,8 @@ from starlette.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Config — resolved once at import time, re-read at each request so a future
-# hot-reload or secret rotation doesn't require a pod restart.
+# Config — resolved once at import time (module-level constants).
+# A pod restart is required to pick up rotated secrets or new env vars.
 # ---------------------------------------------------------------------------
 TENANT_ID: str = os.getenv("ENTRA_TENANT_ID", "")
 CLIENT_ID: str = os.getenv("ENTRA_CLIENT_ID", "")
