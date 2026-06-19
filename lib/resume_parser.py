@@ -28,7 +28,7 @@ def _get_contact_defaults() -> dict:
 
 # ── HELPERS ──────────────────────────────────────────────────────────────
 
-_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 _DATE_WORD_RE = re.compile(
     r"\b(January|February|March|April|May|June|July|August|September|"
     r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",

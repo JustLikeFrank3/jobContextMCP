@@ -9,7 +9,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from pydantic import BaseModel
 
 from lib import config
 from lib.io import _load_json, _load_master_context, _now, _save_json
