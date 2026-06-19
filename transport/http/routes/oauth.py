@@ -54,14 +54,17 @@ async def oauth_protected_resource(request: Request, path: str = "") -> JSONResp
     The path suffix variant handles clients that append the resource path
     (e.g. /.well-known/oauth-protected-resource/mcp).
     """
-    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
     client_id = os.environ.get("ENTRA_CLIENT_ID", "")
     base = _base_url(request)
-    auth_server = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
-
+    # Point to OUR server as the authorization server so that mcp-remote
+    # fetches /.well-known/oauth-authorization-server from US (which has a
+    # registration_endpoint).  If we pointed to Entra here, mcp-remote would
+    # fetch Entra's own openid-configuration, find no registration_endpoint,
+    # and throw "Incompatible auth server: does not support dynamic client
+    # registration" — even when --client-id is supplied.
     return JSONResponse({
         "resource": base,
-        "authorization_servers": [auth_server],
+        "authorization_servers": [base],
         "bearer_methods_supported": ["header"],
         "scopes_supported": [
             f"api://{client_id}/access",
@@ -84,8 +87,10 @@ async def oauth_authorization_server(request: Request) -> JSONResponse:
 
     base = _base_url(request)
     data = oauth_discovery_json()
-    # Point registration at our proxy so mcp-remote can obtain a client_id
-    # without the user needing to copy-paste anything.
+    # RFC 8414 §3.3: issuer MUST equal the URL this document was served from.
+    # authorization_endpoint / token_endpoint still point to Entra so the
+    # actual PKCE flow goes to Entra — we just act as the discovery broker.
+    data["issuer"] = base
     data["registration_endpoint"] = f"{base}/oauth/register"
     return JSONResponse(data)
 
