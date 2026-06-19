@@ -103,6 +103,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/.well-known/",
             "/health",
             "/oauth/",
+            "/logout",
+            "/logged-out",
             "/dashboard/login",
             "/dashboard/callback",
             "/favicon",

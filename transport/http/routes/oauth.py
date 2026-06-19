@@ -28,7 +28,7 @@ import os
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 router = APIRouter(tags=["oauth-discovery"])
 
@@ -207,3 +207,60 @@ async def oauth_token_proxy(request: Request):
         status_code=resp.status_code,
         headers={"Content-Type": resp.headers.get("Content-Type", "application/json")},
     )
+
+
+@router.get("/logout", include_in_schema=False)
+async def logout(request: Request) -> RedirectResponse:
+    """User-facing logout page.
+
+    Clears the Entra browser session via the end_session_endpoint, then
+    shows instructions for clearing the local mcp-remote token cache.
+    Visit https://jobcontextmcp.eastus.cloudapp.azure.com/logout in a browser.
+    """
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    base = _base_url(request)
+    entra_logout = (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
+        f"?post_logout_redirect_uri={base}/logged-out"
+    )
+    return RedirectResponse(url=entra_logout, status_code=302)
+
+
+@router.get("/logged-out", include_in_schema=False)
+async def logged_out(request: Request) -> HTMLResponse:
+    """Post-logout landing page with local cache clear instructions."""
+    mcp_auth_path = "~/.mcp-auth/mcp-remote-0.1.37"
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Logged out — jobContextMCP</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; max-width: 560px;
+           margin: 80px auto; padding: 0 24px; color: #1a1a1a; }}
+    h1 {{ font-size: 1.4rem; margin-bottom: 8px; }}
+    p  {{ color: #555; line-height: 1.6; }}
+    code {{ background: #f4f4f4; padding: 2px 6px; border-radius: 4px;
+            font-size: .9rem; }}
+    pre  {{ background: #f4f4f4; padding: 14px; border-radius: 6px;
+            overflow-x: auto; font-size: .85rem; }}
+    .step {{ margin-top: 20px; }}
+  </style>
+</head>
+<body>
+  <h1>✓ Signed out of jobContextMCP</h1>
+  <p>Your Microsoft account session has been cleared.</p>
+  <p>To fully log out and allow a different account to connect, also clear
+     the local token cache that Claude Desktop stores on this machine:</p>
+  <div class="step">
+    <strong>1. Open a terminal and run:</strong>
+    <pre>rm -rf "{mcp_auth_path}"</pre>
+  </div>
+  <div class="step">
+    <strong>2. Quit and reopen Claude Desktop.</strong><br>
+    <p style="margin-top:6px">Claude Desktop will re-authenticate on next start
+    and open a new browser login prompt.</p>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
