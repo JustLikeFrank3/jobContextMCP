@@ -1,0 +1,82 @@
+name: Build & Deploy to AKS
+
+on:
+  push:
+    branches:
+      - qa
+      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: 'qa'
+
+env:
+  ACR: jcmcpacr.azurecr.io
+  IMAGE: jcmcpacr.azurecr.io/jcmcp
+  AKS_CLUSTER: jcmcp-aks
+  AKS_RG: jcmcp-rg
+  K8S_NAMESPACE: jcmcp
+  K8S_DEPLOYMENT: jcmcp
+  K8S_CONTAINER: jcmcp
+  LLM_PROVIDER: foundry
+  FOUNDRY_ENDPOINT: https://jobcontextmcp-resource.services.ai.azure.com
+  FOUNDRY_DEPLOYMENT: gpt-4.1-mini
+  FOUNDRY_API_VERSION: 2025-01-01-preview
+  STORAGE_ACCOUNT: jcmcpstore
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Log in to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build & push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AKS_RG }}
+          cluster-name: ${{ env.AKS_CLUSTER }}
+
+      - name: Deploy new image
+        run: |
+          # Substitute placeholders and apply configmap + deployment so all
+          # changes are picked up on every deploy — not just the image tag.
+          ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          sed \
+            -e "s|__LLM_PROVIDER__|${{ env.LLM_PROVIDER }}|g" \
+            -e "s|__FOUNDRY_ENDPOINT__|${{ env.FOUNDRY_ENDPOINT }}|g" \
+            -e "s|__FOUNDRY_DEPLOYMENT__|${{ env.FOUNDRY_DEPLOYMENT }}|g" \
+            -e "s|__FOUNDRY_API_VERSION__|${{ env.FOUNDRY_API_VERSION }}|g" \
+            -e "s|__STORAGE_ACCOUNT__|${{ env.STORAGE_ACCOUNT }}|g" \
+            k8s/configmap.yaml | kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
+          sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
+            k8s/deployment.yaml | \
+            kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
+            -n ${{ env.K8S_NAMESPACE }} --timeout=300s
