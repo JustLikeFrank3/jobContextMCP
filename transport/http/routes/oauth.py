@@ -239,8 +239,22 @@ async def logout(request: Request) -> RedirectResponse:
 
 @router.post("/logout", include_in_schema=False)
 async def logout_post(request: Request) -> RedirectResponse:
-    """POST handler for sign-out form buttons across the dashboard."""
-    return await logout(request)
+    """POST handler for sign-out form buttons across the dashboard.
+
+    Clears the jc_session cookie first, then hands off to the Entra
+    end-session endpoint so the SSO session is also cleared server-side.
+    """
+    from transport.http.routes.dashboard.login import _is_secure
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    base = _base_url(request)
+    entra_logout = (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
+        f"?post_logout_redirect_uri={base}/logged-out"
+    )
+    resp = RedirectResponse(url=entra_logout, status_code=303)
+    resp.delete_cookie("jc_session", path="/", httponly=True,
+                       samesite="lax", secure=_is_secure(request))
+    return resp
 
 
 @router.get("/logged-out", include_in_schema=False)

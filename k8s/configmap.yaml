@@ -38,7 +38,17 @@ data:
         "https://github.com/JustLikeFrank3/RetrosPiCam",
         "https://github.com/JustLikeFrank3/LiveVox",
         "https://github.com/JustLikeFrank3/LiveVoxNative"
-      ]
+      ],
+      "contact": {
+        "name":      "Frank Vladmir MacBride III",
+        "phone":     "+1 (305) 490-1262",
+        "email":     "frankvmacbride@gmail.com",
+        "linkedin":  "www.linkedin.com/in/frankvmacbride",
+        "github":    "https://github.com/JustLikeFrank3",
+        "city":      "Atlanta, GA",
+        "city_state":"Atlanta, GA",
+        "location":  "Atlanta, GA"
+      }
     }
   storage_account: "__STORAGE_ACCOUNT__"
   entra_owner_oid: "__ENTRA_OWNER_OID__"

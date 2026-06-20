@@ -17,7 +17,7 @@ def test_latex_user_identity_default_name_uses_exact_spelling(monkeypatch):
 
     identity = latex_export._user_identity()
 
-    assert identity["name"] == "frank vladmir macbride iii"
+    assert identity["name"] == "Frank Vladmir MacBride III"
 
 
 def test_latex_cover_letter_defaults_to_cover_letter_pdf_folder(monkeypatch, tmp_path):
