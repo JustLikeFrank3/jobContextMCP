@@ -239,6 +239,12 @@ def get_linkedin_posts(
     if not filtered:
         return "No posts match the given filters."
 
+    def _sort_key(post: dict) -> tuple[str, str, int]:
+        posted_date = post.get("posted_date") or ""
+        timestamp = post.get("timestamp") or ""
+        post_id = post.get("id") or 0
+        return (posted_date, timestamp, post_id)
+
     total_reactions = sum((p.get("metrics") or {}).get("reactions") or 0 for p in filtered)
     total_impressions = sum((p.get("metrics") or {}).get("impressions") or 0 for p in filtered)
     total_reposts = sum((p.get("metrics") or {}).get("reposts") or 0 for p in filtered)
@@ -251,11 +257,11 @@ def get_linkedin_posts(
         "",
     ]
 
-    for p in sorted(filtered, key=lambda x: x.get("posted_date", ""), reverse=True):
+    for p in sorted(filtered, key=_sort_key, reverse=True):
         m = p.get("metrics") or {}
         ah = p.get("audience_highlights") or {}
         label = p.get("title") or p.get("source", "")
-        lines.append(f"── #{p['id']} | {p.get('posted_date', 'unknown date')} | {label} ──")
+        lines.append(f"── #{p['id']} | {p.get('posted_date') or 'unknown date'} | {label} ──")
         if p.get("url"):
             lines.append(f"URL: {p['url']}")
         if p.get("context"):

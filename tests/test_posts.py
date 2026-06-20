@@ -327,3 +327,29 @@ class TestGetLinkedInPosts:
         _seed(source="ctx_show", text="T.", context="Announcing JobContextMCP v5")
         result = srv.get_linkedin_posts()
         assert "Announcing JobContextMCP v5" in result
+
+    def test_missing_posted_date_does_not_crash(self, isolated_server):
+        _seed(source="dated_post", posted_date="2026-02-24")
+        posts = _posts(isolated_server)
+        posts.append(
+            {
+                "id": 99,
+                "timestamp": None,
+                "posted_date": None,
+                "source": None,
+                "title": "Broken imported post",
+                "url": "",
+                "hashtags": [],
+                "context": "",
+                "links": [],
+                "metrics": {},
+                "audience_highlights": {},
+            }
+        )
+        srv.LINKEDIN_POSTS_FILE.write_text(json.dumps({"posts": posts}, indent=2), encoding="utf-8")
+
+        result = srv.get_linkedin_posts()
+
+        assert "dated_post" in result
+        assert "Broken imported post" in result
+        assert result.index("dated_post") < result.index("Broken imported post")

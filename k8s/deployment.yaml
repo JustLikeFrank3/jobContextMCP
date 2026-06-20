@@ -35,6 +35,11 @@ spec:
                 -u "$AZURE_CLIENT_ID" \
                 --tenant "$AZURE_TENANT_ID" \
                 --output none
+              # Remove legacy root-level data trees left behind by the earlier
+              # single-user layout. The live data model now lives under
+              # /app/data/users/{oid}/, so these duplicates should never be
+              # preserved across pod restarts.
+              rm -rf /app/data/data /app/data/workspace/data
               # Restore all tenant data in one operation.
               # Blob layout: workspace/users/{oid}/workspace/...
               #                           users/{oid}/jobcontextmcp.db
