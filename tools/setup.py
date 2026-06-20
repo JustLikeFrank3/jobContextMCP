@@ -279,7 +279,7 @@ def check_workspace() -> str:
     lines.append("── Master resume ──")
     if config_path.exists():
         try:
-            mr = config.MASTER_RESUME
+            mr = config.get_active_master_resume_path()
             if mr.exists():
                 word_count = len(mr.read_text(encoding="utf-8", errors="replace").split())
                 lines.append(f"  ✓ {mr.name} ({word_count} words)")
@@ -299,8 +299,8 @@ def check_workspace() -> str:
     lc_exists = lc_root.exists()
     lines.append(f"  {'✓' if lc_exists else '✗'} {lc_root}/")
     if lc_exists:
-        cheat = config.LEETCODE_CHEATSHEET
-        qref  = config.QUICK_REFERENCE
+        cheat = config.get_active_leetcode_cheatsheet_path()
+        qref  = config.get_active_quick_reference_path()
         lines.append(f"  {'✓' if cheat.exists() else '✗'} {cheat.name}")
         lines.append(f"  {'✓' if qref.exists() else '✗'} {qref.name}")
 

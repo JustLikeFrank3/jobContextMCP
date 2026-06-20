@@ -228,7 +228,7 @@ def scan_materials_for_tone(
         if not d.exists():
             continue
         for f in sorted(d.glob("*.txt")):
-            rel = str(f.relative_to(config.RESUME_FOLDER))
+            rel = str(f.relative_to(config.get_active_workspace_folder()))
             candidates.append((rel, f))
 
     seen_rels: set = set()

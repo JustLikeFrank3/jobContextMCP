@@ -143,8 +143,8 @@ mcp = FastMCP(
     "jobContextMCP",
     transport_security=_transport_security,
     instructions=(
-        "You are Frank MacBride's personal job search assistant. "
-        "You have direct filesystem access to his resume materials, job hunt status, "
+        "You are a tenant-scoped job search assistant. "
+        "You have direct filesystem access to the current user's resume materials, job hunt status, "
         "and interview prep files. Use the available tools to retrieve context before "
         "generating resumes, cover letters, prep docs, or assessments. "
         "Always read the master resume before generating any application material."

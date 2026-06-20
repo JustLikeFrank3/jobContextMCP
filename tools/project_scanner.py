@@ -243,8 +243,8 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
 
 def scan_project_for_skills() -> str:
     """Scan all configured side-project directories (side_project_folders in config.json) and detect technologies used. Pulls latest changes from git before scanning each. Reports newly detected skills not yet on the master resume so they can be added."""
-    folders = config.SIDE_PROJECT_FOLDERS
-    repos = getattr(config, "SIDE_PROJECT_REPOS", [])
+    folders = config.get_active_side_project_folders()
+    repos = config.get_active_side_project_repos()
 
     if not folders and not repos:
         return "No side project folders or repos configured. Add 'side_project_folders' or 'side_project_repos' to config.json."

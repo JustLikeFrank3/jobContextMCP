@@ -89,10 +89,11 @@ def _update_job(job_id: int, mutate) -> dict:
 
 
 def _list_resume_options() -> list[str]:
-    target_names = ["Frank_MacBride_Resume.pdf", "Frank_MacBride_Resume_MODERN.pdf"]
+    display_name = re.sub(r"[^A-Za-z0-9]+", "_", config.get_contact_name("Resume")).strip("_") or "Resume"
+    target_names = [f"{display_name}_Resume.pdf", f"{display_name}_Resume_MODERN.pdf"]
 
     # Resume choices are intentionally locked to exactly these two PDFs.
-    latex_dir = config.LATEX_RESUME_DIR
+    latex_dir = config.get_active_latex_resume_dir()
     if not latex_dir:
         return target_names
 
@@ -103,7 +104,7 @@ def _list_resume_options() -> list[str]:
 
 
 def _optimized_resume_dir() -> Path:
-    return config.get_active_workspace_folder() / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+    return config.get_active_optimized_resumes_dir()
 
 
 def _list_optimized_resume_options() -> list[str]:
@@ -121,7 +122,7 @@ def _list_optimized_resume_options() -> list[str]:
 
 
 def _cover_letter_dir() -> Path:
-    return config.get_active_workspace_folder() / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+    return config.get_active_cover_letters_dir()
 
 
 def _list_cover_letter_options() -> list[str]:
@@ -349,8 +350,8 @@ def _material_href_for_pdf(path: Path | str | None) -> str:
         return ""
     pdf_path = Path(path)
     folder_key_by_name = {
-        config._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs"): "cover_letter_pdfs",
-        config._cfg.get("cover_letters_dir", "02-Cover-Letters"): "cover_letters",
+        config.get_active_cover_letter_pdfs_dir().name: "cover_letter_pdfs",
+        config.get_active_cover_letters_dir().name: "cover_letters",
         "03-Resume-PDFs": "resume_pdfs",
     }
     folder_key = folder_key_by_name.get(pdf_path.parent.name)
@@ -650,5 +651,3 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
         f"Source: {_source_url_from_jd(jd)}",
     ])
     return summary, detail
-
-

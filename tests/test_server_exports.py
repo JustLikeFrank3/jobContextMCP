@@ -10,6 +10,8 @@ with auto-discovery loops. These tests guard against silent drift:
   - every historically-exposed name must still resolve (regression boundary)
 """
 
+import json
+
 import server as srv
 from lib import config
 
@@ -273,3 +275,35 @@ def test_reconfigure_expands_tilde_paths(tmp_path):
     finally:
         if orig_cfg:
             cfg._reconfigure(orig_cfg)
+
+
+def test_active_config_uses_request_scoped_user_override(isolated_server):
+    from lib import config as cfg
+    from lib.user_context import reset_data_folder, set_data_folder
+
+    user_dir = cfg.DATA_FOLDER / "users" / "u1"
+    workspace = user_dir / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    (user_dir / "config.json").write_text(json.dumps({
+        "contact": {"name": "Max Batki"},
+        "optimized_resumes_dir": "tenant-resumes",
+        "cover_letters_dir": "tenant-letters",
+        "reference_materials_dir": "tenant-reference",
+        "cover_letter_pdfs_dir": "tenant-pdfs",
+        "interview_prep_docs_dir": "tenant-prep",
+        "job_assessments_dir": "tenant-assessments",
+        "openai_model": "gpt-tenant",
+    }), encoding="utf-8")
+
+    token = set_data_folder(user_dir)
+    try:
+        assert cfg.get_contact_name() == "Max Batki"
+        assert cfg.get_config_value("openai_model") == "gpt-tenant"
+        assert cfg.get_active_optimized_resumes_dir() == workspace / "tenant-resumes"
+        assert cfg.get_active_cover_letters_dir() == workspace / "tenant-letters"
+        assert cfg.get_active_reference_materials_dir() == workspace / "tenant-reference"
+        assert cfg.get_active_cover_letter_pdfs_dir() == workspace / "tenant-pdfs"
+        assert cfg.get_active_interview_prep_dir() == workspace / "tenant-prep"
+        assert cfg.get_active_job_assessments_dir() == workspace / "tenant-assessments"
+    finally:
+        reset_data_folder(token)

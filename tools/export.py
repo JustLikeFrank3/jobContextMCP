@@ -70,8 +70,7 @@ def _resolve_output_path(
     default_stem: str,
     folder_name: str = "03-Resume-PDFs",
 ) -> pathlib.Path:
-    resume_folder = config.get_active_workspace_folder()
-    pdf_dir = resume_folder / folder_name
+    pdf_dir = config.get_active_workspace_folder() / folder_name
     pdf_dir.mkdir(parents=True, exist_ok=True)
     fname = output_filename or (default_stem + ".pdf")
     if not fname.endswith(".pdf"):
@@ -80,7 +79,7 @@ def _resolve_output_path(
 
 
 def _cover_letter_pdf_folder_name() -> str:
-    return config._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
+    return config.get_active_cover_letter_pdfs_dir().name
 
 
 # ── MCP TOOLS ─────────────────────────────────────────────────────────────
@@ -101,8 +100,7 @@ def export_resume_pdf(
     Returns:
         Path to the generated PDF.
     """
-    resume_folder = config.get_active_workspace_folder()
-    opt_dir = resume_folder / "01-Current-Optimized"
+    opt_dir = config.get_active_optimized_resumes_dir()
 
     # Resolve filename
     if not filename.endswith(".txt"):
@@ -153,8 +151,7 @@ def export_cover_letter_pdf(
     Returns:
         Path to the generated PDF.
     """
-    resume_folder = config.get_active_workspace_folder()
-    cl_dir = resume_folder / "02-Cover-Letters"
+    cl_dir = config.get_active_cover_letters_dir()
 
     if not filename.endswith(".txt"):
         filename += ".txt"

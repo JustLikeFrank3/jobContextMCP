@@ -87,21 +87,16 @@ def _load_master_context() -> str:
     from lib import config  # local import avoids circular dependency
 
     # Dynamically resolve master resume path for the current user.
-    ws = config.get_active_workspace_folder()
-    # Scan for any *MASTER SOURCE.txt in 01-Current-Optimized first;
-    # fall back to the global config path if none found.
-    optimized_dir = ws / "01-Current-Optimized"
-    candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
-    master_path = candidates[0] if candidates else config.MASTER_RESUME
+    master_path = config.get_active_master_resume_path()
 
     parts = [_read(master_path)]
 
     # Only append awards/feedback from the same workspace — never cross-tenant.
     # Resolve against the active workspace's 06-Reference-Materials/ so each
     # user gets their own files (or nothing, if they haven't uploaded them yet).
-    ref_dir = ws / config._cfg.get("reference_materials_dir", "06-Reference-Materials")
-    awards_path = ref_dir / config._cfg.get("gm_awards_path", "GM Recognition Awards.txt").split("/")[-1]
-    feedback_path = ref_dir / config._cfg.get("feedback_received_path", "Feedback_Received.txt").split("/")[-1]
+    ref_dir = config.get_active_reference_materials_dir()
+    awards_path = ref_dir / str(config.get_config_value("gm_awards_path", "GM Recognition Awards.txt")).split("/")[-1]
+    feedback_path = ref_dir / str(config.get_config_value("feedback_received_path", "Feedback_Received.txt")).split("/")[-1]
 
     awards_text = _read(awards_path)
     if not awards_text.startswith("[Error"):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from typing import Any
 _HERE = Path(__file__).parent.parent          # jobContextMCP/ root
 _CONFIG_PATH = _HERE / "config.json"
 _EXAMPLE_PATH = _HERE / "config.example.json"
+_ACTIVE_CONFIG_CTX: ContextVar[dict[str, Any] | None] = ContextVar("active_config_ctx", default=None)
 
 
 def _load_config() -> dict:
@@ -27,6 +29,16 @@ def _load_config() -> dict:
             except Exception:
                 pass
     return {}
+
+
+def _merge_config(base: Any, override: Any) -> Any:
+    """Recursively merge two config objects, preferring override values."""
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged = dict(base)
+        for key, value in override.items():
+            merged[key] = _merge_config(base.get(key), value) if key in base else value
+        return merged
+    return override
 
 
 # ── mutable config state ──────────────────────────────────────────────────────
@@ -173,6 +185,119 @@ def get_active_workspace_path(relative: str) -> Path:
     return get_active_workspace_folder() / relative
 
 
+def set_active_config(cfg: dict[str, Any] | None) -> object:
+    """Bind a request-scoped config override. Returns a reset token."""
+    return _ACTIVE_CONFIG_CTX.set(dict(cfg) if cfg is not None else None)
+
+
+def reset_active_config(token: object) -> None:
+    """Restore the previous request-scoped config override."""
+    _ACTIVE_CONFIG_CTX.reset(token)  # type: ignore[arg-type]
+
+
+def get_active_config() -> dict[str, Any]:
+    """Return the config for the active request/tenant."""
+    active = _ACTIVE_CONFIG_CTX.get()
+    if active is not None:
+        return active
+
+    from lib.user_context import get_data_folder_override
+
+    override = get_data_folder_override()
+    if override is not None:
+        user_config_path = override / "config.json"
+        if user_config_path.exists():
+            try:
+                user_cfg = json.loads(user_config_path.read_text(encoding="utf-8"))
+            except Exception:
+                user_cfg = {}
+            if isinstance(user_cfg, dict) and user_cfg:
+                return _merge_config(_cfg, user_cfg)
+
+    return _cfg
+
+
+def get_config_value(key: str, default: Any = "") -> Any:
+    """Return a config value for the active request/tenant."""
+    return get_active_config().get(key, default)
+
+
+def get_contact_info() -> dict[str, Any]:
+    """Return the active request's contact config block."""
+    contact = get_active_config().get("contact", {})
+    return contact if isinstance(contact, dict) else {}
+
+
+def get_contact_name(default: str = "") -> str:
+    """Return the active request's display name."""
+    contact_name = str(get_contact_info().get("name", "") or "").strip()
+    if contact_name:
+        return contact_name
+    return str(get_config_value("name", default) or default)
+
+
+def get_active_workspace_subdir(key: str, fallback: str) -> Path:
+    """Resolve a workspace-relative config directory for the active request."""
+    return get_active_workspace_folder() / str(get_config_value(key, fallback))
+
+
+def get_active_side_project_folders() -> list[Path]:
+    raw = get_config_value("side_project_folders", []) or []
+    return [Path(str(p)).expanduser() for p in raw]
+
+
+def get_active_side_project_repos() -> list[str]:
+    return list(get_config_value("side_project_repos", []) or [])
+
+
+def get_active_optimized_resumes_dir() -> Path:
+    return get_active_workspace_subdir("optimized_resumes_dir", "01-Current-Optimized")
+
+
+def get_active_cover_letters_dir() -> Path:
+    return get_active_workspace_subdir("cover_letters_dir", "02-Cover-Letters")
+
+
+def get_active_reference_materials_dir() -> Path:
+    return get_active_workspace_subdir("reference_materials_dir", "06-Reference-Materials")
+
+
+def get_active_job_assessments_dir() -> Path:
+    return get_active_workspace_subdir("job_assessments_dir", "07-Job-Assessments")
+
+
+def get_active_interview_prep_dir() -> Path:
+    return get_active_workspace_subdir("interview_prep_docs_dir", "08-Interview-Prep-Docs")
+
+
+def get_active_cover_letter_pdfs_dir() -> Path:
+    return get_active_workspace_subdir("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
+
+
+def get_active_latex_resume_dir() -> Path:
+    raw = str(get_config_value("latex_resume_dir", "") or "").strip()
+    return Path(raw).expanduser() if raw else Path()
+
+
+def get_active_leetcode_cheatsheet_path() -> Path:
+    folder = get_active_leetcode_folder()
+    return folder / str(get_config_value("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")) if str(folder) else Path()
+
+
+def get_active_quick_reference_path() -> Path:
+    folder = get_active_leetcode_folder()
+    return folder / str(get_config_value("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md")) if str(folder) else Path()
+
+
+def get_active_master_resume_path() -> Path:
+    optimized_dir = get_active_optimized_resumes_dir()
+    candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
+    if candidates:
+        return candidates[0]
+    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt"))
+    return get_active_workspace_folder() / relative
+
+
 # ── LLM client factory ────────────────────────────────────────────────────────
 
 def get_llm_client(task: str = "") -> tuple[Any, str]:
@@ -191,14 +316,15 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
     except ImportError:
         return None, ""
 
-    provider = _cfg.get("llm_provider", "openai").lower()
+    active_cfg = get_active_config()
+    provider = str(active_cfg.get("llm_provider", "openai")).lower()
     # LLM_PROVIDER env var overrides config.json (used in AKS / Docker deployments)
     provider = os.environ.get("LLM_PROVIDER", provider).lower()
-    model = _cfg.get("openai_model", "gpt-4o-mini")
+    model = active_cfg.get("openai_model", "gpt-4o-mini")
 
     if provider == "ollama":
-        ollama_base = _cfg.get("ollama_base_url", "http://localhost:11434/v1")
-        ollama_model = _cfg.get("ollama_model", "llama3.1:8b")
+        ollama_base = active_cfg.get("ollama_base_url", "http://localhost:11434/v1")
+        ollama_model = active_cfg.get("ollama_model", "llama3.1:8b")
         client = OpenAI(base_url=ollama_base, api_key="ollama")
         return client, ollama_model
 
@@ -208,17 +334,17 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
         except ImportError:
             return None, ""
         # Strip trailing /openai/v1 if present — AzureOpenAI adds its own path
-        endpoint = _cfg.get("azure_foundry_endpoint", "").rstrip("/")
+        endpoint = str(active_cfg.get("azure_foundry_endpoint", "")).rstrip("/")
         if endpoint.endswith("/openai/v1"):
             endpoint = endpoint[: -len("/openai/v1")]
-        deployment = _cfg.get("azure_foundry_deployment", "gpt-4.1-mini")
-        api_version = _cfg.get("azure_foundry_api_version", "2025-01-01-preview")
+        deployment = active_cfg.get("azure_foundry_deployment", "gpt-4.1-mini")
+        api_version = active_cfg.get("azure_foundry_api_version", "2025-01-01-preview")
         if not endpoint:
             return None, ""
         # Prefer explicit key (local dev / non-Azure CI). If absent, fall back to
         # DefaultAzureCredential — works automatically in AKS via workload identity
         # and locally via `az login`. No secret needed in production.
-        api_key = os.environ.get("LLM_API_KEY") or _cfg.get("azure_foundry_api_key", "")
+        api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("azure_foundry_api_key", "")
         if api_key:
             client = AzureOpenAI(
                 azure_endpoint=endpoint,
@@ -230,7 +356,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
                 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
             except ImportError:
                 return None, ""
-            scope = _cfg.get("azure_foundry_scope", "https://ai.azure.com/.default")
+            scope = active_cfg.get("azure_foundry_scope", "https://ai.azure.com/.default")
             token_provider = get_bearer_token_provider(DefaultAzureCredential(), scope)
             client = AzureOpenAI(
                 azure_endpoint=endpoint,
@@ -241,7 +367,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:
 
     # openai (default)
     # LLM_API_KEY env var overrides config.json openai_api_key
-    api_key = os.environ.get("LLM_API_KEY") or _cfg.get("openai_api_key", "")
+    api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("openai_api_key", "")
     if not api_key:
         return None, ""
     client = OpenAI(api_key=api_key)
@@ -261,7 +387,7 @@ def get_generation_budgets() -> dict:
         "resume_max_tokens": 12000,
         "safety_margin_tokens": 500,
     }
-    configured = _cfg.get("generation_budgets", {})
+    configured = get_config_value("generation_budgets", {})
     return {**defaults, **configured}
 
 
@@ -271,7 +397,7 @@ def get_github_metrics_config() -> dict:
     Shape: {"username": str, "repos": [str, ...]}. Repo entries may be either
     bare names (combined with username) or full "owner/name" slugs.
     """
-    block = _cfg.get("github_metrics", {}) if isinstance(_cfg, dict) else {}
+    block = get_config_value("github_metrics", {})
     if not isinstance(block, dict):
         return {"username": "", "repos": []}
     return {

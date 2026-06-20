@@ -21,6 +21,7 @@ import json
 
 from lib import config
 from lib.io import _load_json
+from lib.user_context import reset_data_folder, set_data_folder
 from transport.http.routes.dashboard import pipeline as pl
 
 
@@ -543,6 +544,22 @@ class TestPipelineAuth:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestPipelineHelpers:
+    def test_list_resume_options_uses_active_contact_name(self, isolated_server):
+        user_dir = config.DATA_FOLDER / "users" / "u1"
+        user_dir.mkdir(parents=True, exist_ok=True)
+        (user_dir / "config.json").write_text(json.dumps({
+            "contact": {"name": "Max Batki"},
+        }), encoding="utf-8")
+
+        token = set_data_folder(user_dir)
+        try:
+            assert pl._list_resume_options() == [
+                "Max_Batki_Resume.pdf",
+                "Max_Batki_Resume_MODERN.pdf",
+            ]
+        finally:
+            reset_data_folder(token)
+
     def test_recommend_resume_empty_options(self):
         assert pl._recommend_resume("Engineer", "jd", []) == "Generate new resume"
 

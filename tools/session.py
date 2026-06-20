@@ -29,7 +29,7 @@ def get_session_context() -> str:
 
     This exists so Frank never has to recontextualize. Honor that.
     """
-    _display_name = config._cfg.get("contact", {}).get("name", "User")
+    _display_name = config.get_contact_name("User")
     sections = [
         "═" * 60,
         f"SESSION CONTEXT — {_display_name}",

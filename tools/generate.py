@@ -135,9 +135,9 @@ def _model() -> str:
     try:
         from lib.config import get_llm_client
         _, model = get_llm_client()
-        return str(model or config._cfg.get("openai_model", "gpt-4o-mini"))
+        return str(model or config.get_config_value("openai_model", "gpt-4o-mini"))
     except Exception:
-        return str(config._cfg.get("openai_model", "gpt-4o-mini"))
+        return str(config.get_config_value("openai_model", "gpt-4o-mini"))
 
 
 def _portfolio_metrics_block() -> str:
@@ -259,10 +259,7 @@ def _load_cover_letter_master_context(role: str, job_description: str) -> str:
     try:
         # Resolve the master resume for the ACTIVE REQUEST'S user, not the
         # global config.MASTER_RESUME constant which always points to the owner's file.
-        ws = config.get_active_workspace_folder()
-        optimized_dir = ws / "01-Current-Optimized"
-        candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
-        master_path = candidates[0] if candidates else config.MASTER_RESUME
+        master_path = config.get_active_master_resume_path()
         raw = master_path.read_text(encoding="utf-8")
     except Exception:
         return _load_master_context()
@@ -395,9 +392,7 @@ def _load_ai_role_hook_stories() -> list[dict]:
     of whether semantic retrieval ranked it high enough to include it.
     """
     try:
-        import json
-        with open(config.PERSONAL_CONTEXT_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
         return [
             s for s in data.get("stories", [])
             if "ai_role_hook" in {t.lower() for t in s.get("tags", [])}

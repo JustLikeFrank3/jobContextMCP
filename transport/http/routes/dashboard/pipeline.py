@@ -242,7 +242,7 @@ async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
     response = create_chat_completion(
         client,
         label="resume_edit_dialog",
-        model=model or config._cfg.get("openai_model", "gpt-4o"),
+        model=model or str(config.get_config_value("openai_model", "gpt-4o")),
         messages=messages,
         temperature=0.2,
         max_tokens=3500,
@@ -353,7 +353,7 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
     response = create_chat_completion(
         client,
         label="cover_letter_edit_dialog",
-        model=model or config._cfg.get("openai_model", "gpt-4o"),
+        model=model or str(config.get_config_value("openai_model", "gpt-4o")),
         messages=messages,
         temperature=0.2,
         max_tokens=2500,

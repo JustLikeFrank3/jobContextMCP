@@ -157,7 +157,7 @@ def draft_node(state: ResumeAgentState) -> dict:
         f"TARGET ROLE: {state['role']}",
         f"JOB DESCRIPTION:\n{state['job_description']}",
         f"RETRIEVED EXPERIENCE (RAG hits — use to decide what to emphasize, NOT as the source of facts):\n{state['retrieved_context']}",
-        f"MASTER RESUME (strict source of truth — use ONLY facts, dates, metrics, and names from here; do not invent anything):\n{_read(config.MASTER_RESUME)}",
+        f"MASTER RESUME (strict source of truth — use ONLY facts, dates, metrics, and names from here; do not invent anything):\n{_read(config.get_active_master_resume_path())}",
         f"STAR STORIES (draw specific metrics and quotes from these):\n{state['star_stories']}" if state.get("star_stories") else "",
         f"TONE PROFILE (write in this voice):\n{state['tone_profile']}",
         _RESUME_FORMAT_SPEC,
@@ -243,7 +243,7 @@ def revise_node(state: ResumeAgentState) -> dict:
         Output the complete revised resume in .txt format — no preamble, no commentary.
 
         MASTER RESUME (strict source of truth — do NOT invent any metric, percentage, number, date, or named artifact not present in the current draft or this source. If a bullet needs strengthening, use named technologies, concrete actions, or qualitative outcomes instead of fabricated numbers):
-        {_read(config.MASTER_RESUME)}
+        {_read(config.get_active_master_resume_path())}
 
         REVIEWER FEEDBACK:
         {state['review_notes']}
@@ -434,7 +434,7 @@ def _model() -> str:
         _, model = get_llm_client()
         return model
     except Exception:
-        return config._cfg.get("openai_model", "gpt-4o-mini")
+        return str(config.get_config_value("openai_model", "gpt-4o-mini"))
 
 
 def register(mcp) -> None:

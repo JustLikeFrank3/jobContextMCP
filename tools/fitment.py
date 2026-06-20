@@ -227,7 +227,7 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    _assessments_folder = config.get_active_workspace_folder() / config._cfg.get("job_assessments_dir", "07-Job-Assessments")
+    _assessments_folder = config.get_active_job_assessments_dir()
     folder = _assessments_folder
     if source:
         # Sanitise source into a safe folder name
@@ -276,7 +276,7 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
             persona_note = f" (persona warning: {exc})"
 
     master = _load_master_context()
-    candidate_name = config._cfg.get("name", "the candidate")
+    candidate_name = config.get_contact_name("the candidate")
     ai_evidence_msg = ""
     if _is_ai_focused(role, job_description):
         ai_evidence = _extract_ai_platform_evidence(master)
