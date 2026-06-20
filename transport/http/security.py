@@ -26,7 +26,7 @@ class User:
     roles: tuple[str, ...] = ("admin",)
 
 
-_SYSTEM_USER = User(id="admin", name="Frank", roles=("admin",))
+_SYSTEM_USER = User(id="admin", name="Admin", roles=("admin",))
 
 
 def _normalize_bearer(raw: str | None) -> str | None:

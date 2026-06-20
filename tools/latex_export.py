@@ -78,15 +78,17 @@ Dear Hiring Manager,
 \end{{document}}
 """
 
-# Contact / identity values — kept centralised here; update if the master
-# cover_letter.tex changes its \def block.
+# Generic fallback identity values used when no contact block is present in
+# config.json.  These are intentionally neutral placeholders — they must never
+# contain any real person's data so that an unconfigured workspace does not
+# expose someone else's information.
 _AUTHOR_DEFAULTS = {
-    "name":       r"Frank Vladmir MacBride III",
-    "phone":      r"+1 (305) 490-1262",
-    "city":       r"Atlanta, GA",
-    "email":      r"frankvmacbride@gmail.com",
-    "linkedin":   r"frankvmacbride",
-    "github":     r"JustLikeFrank3",
+    "name":       r"YOUR FULL NAME",
+    "phone":      r"555-867-5309",
+    "city":       r"Your City, ST",
+    "email":      r"you@example.com",
+    "linkedin":   r"yourhandle",
+    "github":     r"YourGitHub",
 }
 
 _BUNDLED_LATEX_ASSETS_DIR = Path(__file__).resolve().parent.parent / "templates" / "latex_assets"

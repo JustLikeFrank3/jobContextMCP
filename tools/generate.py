@@ -1066,18 +1066,23 @@ def _sanitize_cover_letter_output(content: str) -> str:
         flags=re.IGNORECASE | re.MULTILINE,
     )
 
-    # Enforce correct sign-off — strip middle name and suffix.
-    cleaned = re.sub(
-        r"\bFrank(?:\s+\w+)?\s+MacBride(?:\s+III)?\b",
-        "Frank MacBride",
-        cleaned,
-    )
-    # Catch variants: "Regards, Frank V. MacBride" etc.
-    cleaned = re.sub(
-        r"\bFrank\s+V\.?\s+MacBride\b",
-        "Frank MacBride",
-        cleaned,
-    )
+    # Normalise the sign-off name to the configured contact name so that
+    # middle names, suffixes, or model hallucinations don't leak through.
+    # Skip entirely when no name is configured (empty workspace).
+    _configured_name = config.get_contact_name("")
+    if _configured_name:
+        # Build a pattern that matches any variant of the configured name
+        # (e.g. with/without middle initial or suffix) and normalise to the
+        # plain "First Last" form stored in contact.name.
+        _name_parts = _configured_name.split()
+        if len(_name_parts) >= 2:
+            _first = re.escape(_name_parts[0])
+            _last  = re.escape(_name_parts[-1])
+            cleaned = re.sub(
+                rf"\b{_first}(?:\s+\w+{{1,2}})?\s+{_last}(?:\s+[IVX]{{1,4}})?\b",
+                _configured_name,
+                cleaned,
+            )
 
     return cleaned.strip()
 

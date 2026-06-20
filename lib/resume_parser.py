@@ -811,7 +811,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
     body_lines: list[str] = []
     in_body = False
     _contact_first = config.get_contact_name("").split()
-    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "Frank"
+    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "(?!)"
     header_re = re.compile(rf"^({_first_name_pat}|\+1|\d{{3}}|www\.|linkedin)", re.I)
     for line in lines:
         s = line.strip()

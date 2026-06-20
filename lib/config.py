@@ -96,7 +96,7 @@ JOB_QUEUE_FILE: Path            = DATA_FOLDER / "job_queue.json"
 # ── resume / reference file paths ────────────────────────────────────────────
 
 MASTER_RESUME: Path = _resume_path("master_resume_path",
-                                   "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt")
+                                   "01-Current-Optimized/Resume - MASTER SOURCE.txt")
 
 LEETCODE_CHEATSHEET: Path = (
     LEETCODE_FOLDER / _cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")
@@ -115,7 +115,7 @@ RESUME_TEMPLATE_PNG: Path     = _resume_path("resume_template_png",
 COVER_LETTER_TEMPLATE_PNG: Path = _resume_path("cover_letter_template_png",
                                                 "06-Reference-Materials/cover_letter_template.png")
 TEMPLATE_FORMAT: Path         = _resume_path("template_format_path",
-                                              "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
+                                              "06-Reference-Materials/Resume - Template Format.txt")
 ACHIEVEMENTS: Path            = _resume_path("achievements_path",
                                               "06-Reference-Materials/Achievements.txt")
 FEEDBACK_RECEIVED: Path       = _resume_path("feedback_received_path",
@@ -298,7 +298,7 @@ def get_active_master_resume_path() -> Path:
     candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
     if candidates:
         return candidates[0]
-    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt"))
+    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Resume - MASTER SOURCE.txt"))
     return get_active_workspace_folder() / relative
 
 
@@ -467,9 +467,9 @@ def _reconfigure(cfg: dict) -> None:
         return RESUME_FOLDER / cfg.get(key, fallback)
 
     MASTER_RESUME       = _res("master_resume_path",
-                               "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt")
+                               "01-Current-Optimized/Resume - MASTER SOURCE.txt")
     TEMPLATE_FORMAT     = _res("template_format_path",
-                               "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
+                               "06-Reference-Materials/Resume - Template Format.txt")
     ACHIEVEMENTS        = _res("achievements_path",
                                "06-Reference-Materials/Achievements.txt")
     FEEDBACK_RECEIVED   = _res("feedback_received_path",

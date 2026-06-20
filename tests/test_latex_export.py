@@ -12,12 +12,20 @@ def test_latex_cover_letter_template_owns_date_and_signature():
     assert "\\name" in template.split("Kindest Regards,")[-1]
 
 
-def test_latex_user_identity_default_name_uses_exact_spelling(monkeypatch):
+def test_latex_user_identity_default_is_generic_placeholder(monkeypatch):
+    """When no contact is configured, _user_identity() must return generic
+    placeholder values — never a real person's data."""
     monkeypatch.setattr(latex_export.cfg, "get_contact_info", lambda: {})
 
     identity = latex_export._user_identity()
 
-    assert identity["name"] == "Frank Vladmir MacBride III"
+    # Must not contain any real personal data as the fallback
+    assert "Frank" not in identity["name"]
+    assert "MacBride" not in identity["name"]
+    # Must be a neutral placeholder string
+    assert identity["name"] == "YOUR FULL NAME"
+    assert "@" in identity["email"]
+    assert "example" in identity["email"]
 
 
 def test_latex_cover_letter_defaults_to_cover_letter_pdf_folder(monkeypatch, tmp_path):
