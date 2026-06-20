@@ -12,6 +12,14 @@ def test_latex_cover_letter_template_owns_date_and_signature():
     assert "\\name" in template.split("Kindest Regards,")[-1]
 
 
+def test_latex_user_identity_default_name_uses_exact_spelling(monkeypatch):
+    monkeypatch.setattr(latex_export.cfg, "get_contact_info", lambda: {})
+
+    identity = latex_export._user_identity()
+
+    assert identity["name"] == "frank vladmir macbride iii"
+
+
 def test_latex_cover_letter_defaults_to_cover_letter_pdf_folder(monkeypatch, tmp_path):
     latex_dir = tmp_path / "latex"
     resume_dir = tmp_path / "resumes"

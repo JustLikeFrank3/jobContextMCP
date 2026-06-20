@@ -81,7 +81,7 @@ Dear Hiring Manager,
 # Contact / identity values — kept centralised here; update if the master
 # cover_letter.tex changes its \def block.
 _AUTHOR_DEFAULTS = {
-    "name":       r"Frank MacBride",
+    "name":       r"frank vladmir macbride iii",
     "phone":      r"+1 (305) 490-1262",
     "city":       r"Atlanta, GA",
     "email":      r"frankvmacbride@gmail.com",
