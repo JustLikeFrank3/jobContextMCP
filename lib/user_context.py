@@ -15,9 +15,8 @@ Usage (handled automatically by UserDataContextMiddleware in transport/http/app.
     finally:
         reset_data_folder(token)
 
-The feature is gated by the ENTRA_OWNER_OID env var.  When that var is not
-set the middleware is a no-op and the existing single-user behaviour is
-preserved — making it safe to deploy the code before wiring up the env var.
+Used by UserDataContextMiddleware for strict per-user partition routing.
+Authenticated users are always scoped to DATA_FOLDER/users/{oid}.
 """
 from __future__ import annotations
 

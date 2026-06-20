@@ -12,7 +12,6 @@ can connect to the remote server via type:"http" in mcp.json).
 """
 
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
@@ -45,20 +44,14 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
     """Starlette middleware that routes each authenticated request to the
     requesting user's own data partition under DATA_FOLDER/users/{oid}/.
 
-    Gated by the ENTRA_OWNER_OID env var:
-      - Not set  → no-op (single-user / local dev mode, existing behaviour preserved).
-      - Set       → ALL authenticated users, including the owner, are routed to
-                   DATA_FOLDER/users/{oid}/, provisioned on first access.
-                   ENTRA_OWNER_OID is retained for admin/dashboard privilege
-                   checks but no longer controls filesystem routing.
+        Security model:
+            - Any authenticated Entra user is routed to DATA_FOLDER/users/{oid}/,
+                provisioned on first access.
+            - API-key "admin" sessions are never mapped to an owner partition and
+                cannot access tenant-scoped data endpoints.
     """
 
     async def dispatch(self, request: StarletteRequest, call_next):
-        owner_oid = os.environ.get("ENTRA_OWNER_OID", "").strip()
-        if not owner_oid:
-            # Feature not yet configured — preserve existing behaviour.
-            return await call_next(request)
-
         from transport.http.security import get_auth_provider
         from lib.user_context import set_data_folder, reset_data_folder
         from lib.user_provisioning import provision_user_data
@@ -78,27 +71,6 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             user is not None,
         )
 
-        # Resolve the OID to route to: prefer the JWT claim, fall back to
-        # ENTRA_OWNER_OID for API-key / admin sessions.
-        oid: str | None = None
-        if user and user.id and user.id != "admin":
-            oid = user.id
-        elif user and user.id == "admin":
-            oid = owner_oid  # route API-key sessions to the owner's data dir
-
-        if oid:
-            _logger.debug("auth: routing to tenant path=%s", request.url.path)
-            data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / oid
-            provision_user_data(data_dir)
-            token = set_data_folder(data_dir)
-            try:
-                return await call_next(request)
-            finally:
-                reset_data_folder(token)
-
-        # No authenticated identity resolved — block MCP and API endpoints.
-        # Pass through public paths (well-known, health, oauth, dashboard login/callback)
-        # so discovery and auth flows still work unauthenticated.
         _PUBLIC_PREFIXES = (
             "/.well-known/",
             "/health",
@@ -110,6 +82,32 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/favicon",
             "/apple-touch-icon",
         )
+
+        if user and user.id and user.id != "admin":
+            _logger.debug("auth: routing to tenant path=%s", request.url.path)
+            data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / user.id
+            provision_user_data(data_dir)
+            token = set_data_folder(data_dir)
+            try:
+                return await call_next(request)
+            finally:
+                reset_data_folder(token)
+
+        if user and user.id == "admin":
+            if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
+                return await call_next(request)
+            from starlette.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(
+                {
+                    "error": "forbidden",
+                    "message": "API-key sessions are not tenant-scoped; sign in with Entra to access user data.",
+                },
+                status_code=403,
+            )
+
+        # No authenticated identity resolved — block MCP and API endpoints.
+        # Pass through public paths (well-known, health, oauth, dashboard login/callback)
+        # so discovery and auth flows still work unauthenticated.
         if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
 
@@ -158,7 +156,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Per-user data isolation — no-op unless ENTRA_OWNER_OID is set.
+    # Per-user data isolation for every authenticated request.
     # Registered first so it sits inside CORS (CORS must be outermost).
     app.add_middleware(UserDataContextMiddleware)
 

@@ -25,6 +25,7 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
 import time
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -590,3 +591,58 @@ class TestLogoutEndpoints:
     def test_logged_out_page_has_cache_clear_instructions(self, oauth_client):
         r = oauth_client.get("/logged-out")
         assert "mcp-remote" in r.text or "rm -rf" in r.text
+
+
+class _StubAuthProvider:
+    def __init__(self, user):
+        self._user = user
+
+    @property
+    def auth_enabled(self) -> bool:
+        return True
+
+    def authenticate_request(self, authorization: str | None, session_token: str | None):
+        return self._user
+
+    def authenticate_login(self, credential: str):
+        return None
+
+
+class TestUserDataContextMiddleware:
+    def test_routes_authenticated_user_to_user_partition(self, monkeypatch, isolated_server):
+        from lib import config
+        from transport.http.app import create_app
+        from transport.http.security import User
+
+        user_ws = Path(config.DATA_FOLDER) / "users" / "u1" / "workspace"
+        (user_ws / "02-Cover-Letters").mkdir(parents=True, exist_ok=True)
+        (user_ws / "02-Cover-Letters" / "u1-cover-letter.txt").write_text("hello", encoding="utf-8")
+
+        provider = _StubAuthProvider(User(id="u1", name="Normal User", roles=("user",)))
+        monkeypatch.setattr("transport.http.security.get_auth_provider", lambda: provider)
+        monkeypatch.setattr("transport.http.auth.get_auth_provider", lambda: provider)
+
+        app = create_app()
+        with TestClient(app, raise_server_exceptions=True) as client:
+            r = client.get("/dashboard/materials/data")
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["cover_letters"] >= 1
+        names = [f["name"] for f in data["folders"]["cover_letters"]["files"]]
+        assert "u1-cover-letter.txt" in names
+
+    def test_admin_api_key_session_cannot_access_tenant_data(self, monkeypatch, isolated_server):
+        from transport.http.app import create_app
+        from transport.http.security import User
+
+        provider = _StubAuthProvider(User(id="admin", name="System", roles=("admin",)))
+        monkeypatch.setattr("transport.http.security.get_auth_provider", lambda: provider)
+        monkeypatch.setattr("transport.http.auth.get_auth_provider", lambda: provider)
+
+        app = create_app()
+        with TestClient(app, raise_server_exceptions=True) as client:
+            r = client.get("/dashboard/materials/data")
+
+        assert r.status_code == 403
+        assert "not tenant-scoped" in r.json().get("message", "")
