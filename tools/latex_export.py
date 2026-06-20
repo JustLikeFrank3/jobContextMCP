@@ -89,6 +89,8 @@ _AUTHOR_DEFAULTS = {
     "github":     r"JustLikeFrank3",
 }
 
+_BUNDLED_LATEX_ASSETS_DIR = Path(__file__).resolve().parent.parent / "templates" / "latex_assets"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -154,6 +156,20 @@ def _tectonic_bin() -> str:
             return candidate
     raise FileNotFoundError(
         "tectonic not found.  Install via: brew install tectonic"
+    )
+
+
+def _resolve_support_file(latex_src: Path, name: str) -> Path:
+    """Resolve a required LaTeX support file from workspace or bundled assets."""
+    candidate = latex_src / name
+    if candidate.exists():
+        return candidate
+    bundled = _BUNDLED_LATEX_ASSETS_DIR / name
+    if bundled.exists():
+        return bundled
+    raise FileNotFoundError(
+        f"Required LaTeX support file not found: {name}. "
+        f"Checked {candidate} and {bundled}."
     )
 
 
@@ -234,11 +250,11 @@ def generate_cover_letter_latex(
         tex_file = tmp_path / "cover_letter.tex"
         tex_file.write_text(tex_src, encoding="utf-8")
 
-        # Symlink required support files into the temp dir
+        # Symlink required support files into the temp dir.
+        # Prefer workspace assets, fall back to bundled copies shipped with app.
         for name in ["_header.tex", "TLCresume.sty"]:
-            src_file = latex_src / name
-            if src_file.exists():
-                (tmp_path / name).symlink_to(src_file)
+            src_file = _resolve_support_file(latex_src, name)
+            (tmp_path / name).symlink_to(src_file)
 
         result = subprocess.run(
             [tectonic, str(tex_file)],
