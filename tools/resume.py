@@ -42,7 +42,7 @@ def _unwrap(content: str) -> str:
 
 
 def read_master_resume() -> str:
-    """Read Frank's master source resume — the single source of truth containing all metrics, achievements, projects, and context notes. Always read this before generating any resume or cover letter."""
+    """Read the candidate's master source resume — the single source of truth containing all metrics, achievements, projects, and context notes. Always read this before generating any resume or cover letter."""
     return _load_master_context()
 
 

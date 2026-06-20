@@ -42,7 +42,7 @@ def generate_interview_prep_context(
     stage: str = "phone_screen",
     job_description: str = "",
 ) -> str:
-    """Bundle Frank's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
+    """Bundle the candidate's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
     master = _load_master_context()
     quick_ref = _read(config.get_active_quick_reference_path())
 
@@ -54,15 +54,15 @@ def generate_interview_prep_context(
         f"Role:    {role}\n"
         f"Stage:   {stage}\n"
         f"{desc_block}\n\n"
-        f"──── FRANK'S MASTER RESUME ────\n{master}\n\n"
+        f"──── CANDIDATE'S MASTER RESUME ────\n{master}\n\n"
         f"──── QUICK REFERENCE / STAR STORIES ────\n{quick_ref}\n\n"
         f"Use the above to produce:\n"
-        f"  1. Top 5 things Frank must communicate for THIS role/stage\n"
+        f"  1. Top 5 things the candidate must communicate for THIS role/stage\n"
         f"  2. Anticipated questions + suggested STAR responses\n"
         f"  3. Technical topics to review (if applicable)\n"
-        f"  4. Smart questions for Frank to ask the interviewer\n"
+        f"  4. Smart questions for the candidate to ask the interviewer\n"
         f"  5. Any gaps to proactively address\n"
-        f"  6. Confidence anchors — Frank's strongest achievements relevant here\n"
+        f"  6. Confidence anchors — the candidate's strongest achievements relevant here\n"
     )
 
 

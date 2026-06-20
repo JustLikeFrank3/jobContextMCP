@@ -269,12 +269,11 @@ def _load_cover_letter_master_context(role: str, job_description: str) -> str:
     }
     pinned_terms = {
         "ai", "claude", "copilot", "agent", "agentic", "mcp", "model context",
-        "jobcontextmcp", "langgraph", "rag", "faiss", "embedding", "openai",
+        "langgraph", "rag", "faiss", "embedding", "openai",
         "fastapi", "python", "backend", "platform", "memory", "retrieval",
         "azure", "container apps", "terraform", "postgresql", "redis", "kafka",
-        "oauth2", "msal", "sla", "zero downtime", "98%", "35%", "80%",
-        "77", "574", "livevox", "2.8ms", "12.7ms", "retrospicam",
-        "raspberry", "iot", "test coverage", "500k",
+        "oauth2", "msal", "sla", "zero downtime", "test coverage", "iot",
+        "raspberry", "spring boot", "angular", "java", "typescript",
     }
     keep_terms = query_terms | pinned_terms
 

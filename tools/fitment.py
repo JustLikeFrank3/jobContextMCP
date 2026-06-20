@@ -128,7 +128,7 @@ def _extract_ai_platform_evidence(master: str, limit: int = 10) -> str:
 
 
 def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
-    """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
+    """Package the candidate's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
 
     When `persona` is set, prepends the persona's prompt block to the context
     pack so the consuming agent reads it as a role-specific lens (e.g.

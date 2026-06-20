@@ -20,14 +20,14 @@ def get_session_context() -> str:
     """
     SESSION STARTUP — call this first, before anything else, every single session.
 
-    Returns Frank's complete context in one shot:
+    Returns the candidate's complete context in one shot:
       1. Master resume with all metrics, projects, and personal notes
-      2. Tone profile — all writing samples. Do not write a single word for him without this.
+      2. Tone profile — all writing samples. Do not write a single word without this.
       3. STAR context — all personal stories, anecdotes, metric bullets by category, and company framing hints
       4. Live job hunt pipeline — current applications and next steps
       5. People & networking log — every contact, referral, and relationship
 
-    This exists so Frank never has to recontextualize. Honor that.
+    This exists so the candidate never has to recontextualize. Honor that.
     """
     _display_name = config.get_contact_name("User")
     sections = [
