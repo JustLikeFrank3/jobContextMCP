@@ -52,6 +52,10 @@ def _pipeline_payload() -> dict:
     cover_letter_options = _list_cover_letter_options()
     persona_options = PersonaService.list_personas()
 
+    # Owner = no per-user data-folder override active (the owner's partition is the global root)
+    from lib.user_context import get_data_folder_override
+    is_owner: bool = get_data_folder_override() is None
+
     payload_jobs = []
     for j in jobs:
         role = j.get("role", "")
@@ -84,6 +88,7 @@ def _pipeline_payload() -> dict:
         "cover_letter_options": cover_letter_options,
         "persona_options": persona_options,
         "default_persona": DEFAULT_PERSONA,
+        "is_owner": is_owner,
         "jobs": payload_jobs,
     }
 
@@ -142,8 +147,15 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
     })
 
 
-@router.post("/pipeline/generate-cover-letter", responses={404: {"description": "Job id not found"}})
+@router.post("/pipeline/generate-cover-letter", responses={403: {"description": "Owner-only feature"}, 404: {"description": "Job id not found"}})
 async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse:
+    # LaTeX pipeline is owner-only — tectonic is not installed for beta users
+    # and the template assets live in the owner's workspace.
+    if req.export_pipeline == "latex":
+        from lib.user_context import get_data_folder_override
+        if get_data_folder_override() is not None:
+            raise HTTPException(status_code=403, detail="LaTeX export is not available for beta accounts.")
+
     job = _find_job(req.job_id)
     selected = (job.get("selected_resume") or "").strip()
     if not selected:
@@ -1029,7 +1041,7 @@ function render(){
                 <button onclick='action(${j.id},"select")'>Use Existing</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
                 <button onclick='action(${j.id},"edit-resume")'>Edit Resume</button>
-        <button onclick='action(${j.id},"cl-latex")'>Cover Letter (LaTeX)</button>
+        ${state.is_owner ? `<button onclick='action(${j.id},"cl-latex")'>Cover Letter (LaTeX)</button>` : ''}
         <button onclick='action(${j.id},"cl-html")'>Cover Letter (HTML)</button>
             <button onclick='action(${j.id},"edit-cover-letter")'>Edit Cover Letter</button>
         <button onclick='action(${j.id},"apply")' ${disabledApply}>Queue Apply</button>
