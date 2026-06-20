@@ -298,7 +298,7 @@ async def logged_out(request: Request) -> HTMLResponse:
     <p style="margin-top:6px">Claude Desktop will re-authenticate on next start
     and open a new browser login prompt.</p>
   </div>
-  <a class="home-btn" href="/dashboard/">Return to dashboard</a>
+  <a class="home-btn" href="/dashboard/login">Sign in again</a>
 </body>
 </html>"""
     return HTMLResponse(content=html)
