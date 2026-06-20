@@ -169,8 +169,8 @@ Full Name
      verbatim from the master resume (for example the LiveVox latency work: 2.8ms web / 12.7ms
      iOS round-trip audio latency measured from microphone input to speaker output, 98% SLA). Close with one sentence on what they demonstrate together. Do not pad;
      every sentence carries a distinct fact.
-   • Para 4: Closer. State the fit directly in Frank's own words, then invite a conversation.
-     Short but not dismissive. Write the invite in his voice; do not paste a stock closing line.
+   • Para 4: Closer. State the fit directly in the candidate's own words, then invite a conversation.
+     Short but not dismissive. Write the invite in the candidate's voice; do not paste a stock closing line.
 3. NO date, NO company address, NO "Re:" line, NO address/city_state fields in the contact
    header — only name, phone, email, linkedin.
 4. Start with the salutation: `Dear Hiring Manager,`
@@ -202,13 +202,13 @@ Full Name
      belief, a personal thread) drawn from the framing context or tone samples; it does not have
      to open with an accomplishment and does not need a metric.
    • Para 4 (the closer): make a direct statement about fit, then invite a conversation, in
-     Frank's own voice. Do NOT reuse a fixed closing sentence; write a fresh invite that matches
-     the tone samples. Never end with "I look forward to hearing from you" or similar boilerplate.
+     the candidate's own voice. Do NOT reuse a fixed closing sentence; write a fresh invite that
+     matches the tone samples. Never end with "I look forward to hearing from you" or similar boilerplate.
    • No sycophantic language anywhere. Confidence, not deference.
    • The ownership paragraphs (2 and 3) must be metric-anchored. The opener and closer may carry
      the human throughline without a metric; do not stuff numbers into every sentence.
 8. CLOSING: Use "Kindest Regards," (not "Sincerely"). Sign the name in Title Case — NOT all
-   caps. Example: "Frank Vladmir MacBride III" not "FRANK VLADMIR MACBRIDE III".
+   caps. Example: "Jane Smith" not "JANE SMITH".
 """
 
 # ---------------------------------------------------------------------------

@@ -216,24 +216,21 @@ def _cover_letter_narrative_plan(company: str, role: str, job_description: str) 
         "- Write one coherent story, not a catalog of achievements.",
         "- Use no more than one primary project in Paragraph 2 and no more than three supporting artifacts in Paragraph 3.",
         "- Do not repeat the same evidence in multiple paragraphs.",
-        "- jobContextMCP is an active/current project. Refer to it as 'I built and maintain jobContextMCP' or 'jobContextMCP currently...', never only as a completed past-tense artifact.",
+        "- If the master resume lists an active/current side project, refer to it in the present tense ('I built and maintain X' or 'X currently...'), never only as a completed past-tense artifact.",
         "- GitHub traffic phrasing must be natural: say 'currently shows X clones in the last 14 days' or 'has X clones in the last 14 days'; do not say 'cloned X times'.",
         "- Avoid sweeping alignment claims like 'aligns perfectly'; name the actual engineering overlap instead.",
     ]
     if _is_ai_role(role, job_description):
         base.extend([
             f"- Narrative spine for {company}: current AI platform builder with production platform instincts.",
-            "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story marked 'PRIMARY COVER LETTER HOOK' explicitly tied to this company, use that personal/brand/childhood/fan story as the Para 1 hook. "
-            "SECOND: if no company-specific hook exists, look for the Uncle Roy / Intellicorp story (tagged 'uncle-roy', 'ai-history', 'intellicorp' in PERSONAL CONTEXT) and use it as the Para 1 hook for this AI role. "
-            "Frame it directly and identify the relationship for readers: 'My uncle Roy' built expert systems on Lisp at Intellicorp — KEE, first-generation AI work — through the eighties and nineties; he handed Frank one of the first Raspberry Pis off the factory line; "
-            "he passed before Frank went back to school, before any of this. There is a clear line from KEE to that Pi to the MCP server Frank maintains right now. "
-            "Write this in Frank's plain first-person voice, not as inspirational biography. Do not write 'igniting a passion', 'resonates deeply', 'led to my current role', or anything that sounds like a template. "
-            "Do not name jobContextMCP in Paragraph 1 if Paragraph 2 uses it; say 'the MCP server' or 'that server' in the hook. "
-            "Do not open with 'Growing up'; start with 'My uncle Roy' or Intellicorp. Never open by calling him only 'Uncle Roy' because readers do not know whose uncle he is. "
-            "ONLY IF neither a company hook nor the Uncle Roy story is present in PERSONAL CONTEXT: open on the professional angle: AI tools are only useful when they become reliable platforms with memory, retrieval, workflow, and operational surfaces.",
-            "- Paragraph 2: make jobContextMCP the primary ownership story, but name it once, then use 'the server' or 'the project': active MCP/FastAPI platform, 77 tools, RAG/FAISS, LangGraph, dashboard/API surfaces, and live GitHub metrics from the portfolio block.",
-            "- Paragraph 3: add supporting proof only: GM AI adoption (35%+), GM cloud/platform reliability (zero downtime / 98% SLA / Kafka), and one performance or full-stack project if it directly strengthens the role fit.",
-            "- Do not lead with the Azure migration for an AI Platform role; use it as supporting platform reliability evidence.",
+            "- Paragraph 1: FIRST check PERSONAL CONTEXT. If it contains a story explicitly marked 'PRIMARY COVER LETTER HOOK' tied to this company, use that story verbatim in the candidate's plain voice — concrete, understated, no inspirational gloss. "
+            "SECOND: if no company hook exists, look for a story tagged 'PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story)' in PERSONAL CONTEXT and use it as the Para 1 hook. "
+            "Write it in first person; if it references another person, identify their relationship clearly the first time. "
+            "In Paragraph 1, refer to any primary AI project generically ('the server', 'the platform', 'that project') if it will be named in Paragraph 2. "
+            "ONLY IF no hook is present in PERSONAL CONTEXT: open with a professional angle grounded in what AI tools actually need to be production-ready.",
+            "- Paragraph 2: use the candidate's primary AI/platform project from the master resume as the ownership story. Name it once, then use 'the server' or 'the project'. Make end-to-end ownership explicit; include live GitHub metrics from the portfolio block when available.",
+            "- Paragraph 3: add supporting proof from the master resume: AI adoption metrics, cloud/platform reliability, and one performance or full-stack project if it directly strengthens the role fit.",
+            "- Do not lead with cloud migration as the headline for an AI Platform role; use it as supporting platform reliability evidence.",
         ])
     return "\n".join(base)
 
@@ -260,7 +257,13 @@ def _load_cover_letter_master_context(role: str, job_description: str) -> str:
     recurring metric-bearing project bullets.
     """
     try:
-        raw = config.MASTER_RESUME.read_text(encoding="utf-8")
+        # Resolve the master resume for the ACTIVE REQUEST'S user, not the
+        # global config.MASTER_RESUME constant which always points to the owner's file.
+        ws = config.get_active_workspace_folder()
+        optimized_dir = ws / "01-Current-Optimized"
+        candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
+        master_path = candidates[0] if candidates else config.MASTER_RESUME
+        raw = master_path.read_text(encoding="utf-8")
     except Exception:
         return _load_master_context()
 
@@ -338,7 +341,11 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     """Generate a safe default output filename."""
     slug = re.sub(r"[^A-Za-z0-9 ]", "", f"{company} {role} {suffix}").strip()
     slug = re.sub(r"\s+", " ", slug)
-    name = config._cfg.get("contact", {}).get("name", "")
+    try:
+        from tools.latex_export import _user_identity
+        name = _user_identity().get("name", "")
+    except Exception:
+        name = ""
     if name:
         return f"{name} Resume - {slug}.txt" if suffix == "Resume" else f"{name} Cover Letter - {slug}.txt"
     # In per-user partitions contact.name may be unset; avoid odd fallback names
@@ -660,26 +667,32 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     assessment_context = _assessment_context_block(company, role)
     narrative_plan = _cover_letter_narrative_plan(company, role, clean_job_description)
 
-    contact = config._cfg.get("contact", {})
-    name = contact.get("name", "")
-    phone = contact.get("phone", "")
-    email = contact.get("email", "")
-    linkedin = contact.get("linkedin", "")
-    github = contact.get("github", "")
-    contact_block = f"{name.upper()}\n\nphone: +1.{phone}\nemail: {email}\nlinkedin: {linkedin}\ngithub: {github}"
+    from tools.latex_export import _user_identity
+    _identity = _user_identity()
+    name     = _identity["name"]
+    phone    = _identity["phone"]
+    email    = _identity["email"]
+    linkedin = _identity["linkedin"]
+    github   = _identity["github"]
+    _linkedin_line = f"\nlinkedin: {linkedin}" if linkedin else ""
+    _github_line   = f"\ngithub: {github}" if github else ""
+    contact_block = f"{name.upper()}\n\nphone: {phone}\nemail: {email}{_linkedin_line}{_github_line}"
     interview_block = get_interview_context(company=company, role=role)
 
     instructions = (
         f"Now write the cover letter for {company}. Output the raw .txt content only.\n"
         "Use the structured fitment assessment first, then the resume, customization strategy, interview context, personal context, tone profile, and job description.\n"
         "\n"
-        "VOICE COMES FIRST: the TONE PROFILE samples are the authority on how Frank sounds.\n"
+        "VOICE COMES FIRST: the TONE PROFILE samples are the authority on how this candidate sounds.\n"
         "Match their rhythm, sentence length, and register. If any structure rule below fights\n"
         "that voice, keep the voice. Write like the samples, not like a template.\n"
-        "The Uncle Roy hook must sound like Frank telling the truth plainly, not like a motivational\n"
-        "origin story. Keep the human thread, then pivot into engineering evidence.\n"
-        "PROJECT-NAME BUDGET: jobContextMCP should appear at most once in the body, ideally\n"
-        "in Paragraph 2. In Paragraph 1, say 'the MCP server' or 'that server' instead.\n"
+        "If PERSONAL CONTEXT provides a PRIMARY COVER LETTER HOOK, write it in the candidate's\n"
+        "plain spoken voice: concrete, understated, no inspirational gloss. Identify any people\n"
+        "mentioned by their relationship the first time. Keep the human thread, then pivot into\n"
+        "the professional evidence.\n"
+        "PROJECT-NAME BUDGET: any primary project from the master resume should appear at most once\n"
+        "by name in the body. In Paragraph 1, refer to it generically ('the server', 'that project')\n"
+        "if it will be named in Paragraph 2.\n"
         "Avoid thesis-sentence sludge. Do not explain what the paragraph 'demonstrates',\n"
         "'showcases', 'highlights', or 'aligns with'. State the artifact, the constraint,\n"
         "the metric, and why it matters in plain English.\n"
@@ -696,16 +709,10 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  TWO cases where you MUST open with the personal story:\n"
         "  (A) The block says 'PRIMARY COVER LETTER HOOK' and ties the story to THIS company — use it.\n"
         "  (B) The block says 'PRIMARY COVER LETTER HOOK (AI ROLE — cross-company origin story)' —\n"
-        "      this is the Uncle Roy / Intellicorp story. For AI roles it IS the correct P1 opener\n"
-        "      regardless of company. Open directly with it; do NOT say 'Growing up'.\n"
-        "      Start with 'My uncle Roy', Intellicorp, KEE, or the Raspberry Pi — not with a generic AI sentence.\n"
-        "      If you use Roy, identify the relationship as 'my uncle Roy' the first time; "
-        "do not write only 'Uncle Roy' because an outside reader lacks that context.\n"
-        "      Write it in first person and in Frank's cadence: concrete, a little understated, no\n"
-        "      inspirational gloss. A good shape is: My uncle Roy did the old AI work; he handed me\n"
-        "      the Pi; there is a direct line from that to the MCP server I maintain now; this\n"
-        "      role is the same\n"
-        "      thread at production scale.\n"
+        "      PERSONAL CONTEXT contains this story. Use it verbatim in the candidate's voice:\n"
+        "      plain first person, concrete, understated. Identify any people by their relationship\n"
+        "      the first time they are mentioned. Do NOT say 'Growing up'. Pivot directly from\n"
+        "      the story into the role without inspirational gloss.\n"
         "  If PERSONAL CONTEXT says NO COMPANY-SPECIFIC PERSONAL STORY FOUND, do not invent one;\n"
         "  open with a crisp professional hook grounded in the JD instead.\n"
         "  Never borrow a brand/childhood/fan story from another company (Home Depot, Coca-Cola, Ford)\n"
@@ -714,28 +721,27 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
         "  JD details and the assessment.\n"
         "\n"
         "PARA 2 (~120-150 words): Primary ownership story. One major example with concrete metrics\n"
-        "  from the master resume. For AI/LLM/platform roles, make jobContextMCP the primary story\n"
+        "  from the master resume. For AI/LLM/platform roles, use the candidate's primary AI project\n"
         "  unless the assessment says a different artifact is clearly stronger. Name it once, then\n"
         "  use 'the server' or 'the project' for the rest of the paragraph. Describe it as active\n"
-        "  work: 'I built and maintain jobContextMCP' or 'jobContextMCP currently...'. Make the\n"
-        "  end-to-end ownership chain explicit. State facts cleanly; do not append a justifying clause\n"
-        "  to every metric.\n"
+        "  work ('I built and maintain X' or 'X currently...'). Make the end-to-end ownership chain\n"
+        "  explicit. State facts cleanly; do not append a justifying clause to every metric.\n"
         "\n"
         "PARA 3 (~140-170 words): Cover THREE distinct artifacts from the master resume to show range.\n"
         "  Lead with the STRONGEST match to this specific JD (the AI/RAG tooling, a side project, or\n"
         "  performance work) in two sentences with verbatim metrics, then add TWO more artifacts, one\n"
         "  sentence each, every one carrying a distinct real metric verbatim from the master resume\n"
-        "  (e.g. the LiveVox latency work: 2.8ms web / 12.7ms iOS round-trip audio latency\n"
-        "  measured from microphone input to speaker output, 98% SLA). Close with one\n"
-        "  sentence on what they demonstrate together. If jobContextMCP is used, clone/view traffic\n"
-        "  MUST come from GITHUB PORTFOLIO METRICS, not stale clone counts in the master resume.\n"
+        "  (e.g. measured latency, SLA percentages, or migration scope from the master resume). Close with one\n"
+        "  sentence on what they demonstrate together. If a side project is referenced, clone/view\n"
+        "  traffic MUST come from GITHUB PORTFOLIO METRICS, not stale clone counts in the master resume.\n"
         "  Phrase GitHub traffic naturally: 'currently shows X clones in the last 14 days' or 'has\n"
         "  X clones in the last 14 days'; never write 'cloned X times'.\n"
         "  Every sentence carries a distinct fact; no padding.\n"
         "\n"
-        "PARA 4 (~50-70 words): Closer. State the fit directly in Frank's own words, then invite a\n"
-        "  conversation. Write a fresh invite in his voice; do NOT paste a stock closing line and do\n"
-        "  NOT end with 'I look forward to hearing from you' or similar boilerplate.\n"
+        "PARA 4 (~50-70 words): Closer. State the fit directly in the candidate's own words, then\n"
+        "  invite a conversation. Write a fresh invite in the candidate's voice (follow the tone\n"
+        "  samples); do NOT paste a stock closing line and do NOT end with 'I look forward to\n"
+        "  hearing from you' or similar boilerplate.\n"
         "\n"
         "Do not use: 'strong fit', 'I am prepared', 'my comprehensive experience', 'makes me a strong', 'aligns perfectly', 'resonates deeply', 'resonates with', 'igniting a passion', 'led to my current role', 'showcases my ability', 'showcasing', 'highlights my capability', 'demonstrates my ability', 'mission aligns', 'aspirations', 'contribute to your success', 'best practices'.\n"
         "\n"
