@@ -94,6 +94,10 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
                 reset_data_folder(token)
 
         if user and user.id == "admin":
+            # API-key provider is single-tenant mode; keep historical behavior.
+            # Tenant-scoped blocking is for Entra multi-user contexts only.
+            if provider.__class__.__name__ == "ApiKeyAuthProvider" or not provider.auth_enabled:
+                return await call_next(request)
             if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
                 return await call_next(request)
             from starlette.responses import JSONResponse as _JSONResponse
@@ -112,8 +116,10 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         from starlette.responses import JSONResponse as _JSONResponse
+        has_candidate = bool((authorization and authorization.strip()) or (session and session.strip()))
+        detail = "Invalid credentials" if has_candidate else "Missing credentials"
         return _JSONResponse(
-            {"error": "unauthorized", "message": "Authentication required"},
+            {"error": "unauthorized", "message": "Authentication required", "detail": detail},
             status_code=401,
             headers={"WWW-Authenticate": 'Bearer realm="jobContextMCP"'},
         )

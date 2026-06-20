@@ -14,6 +14,7 @@ from lib import config
 from lib.io import _load_json, _load_master_context, _now, _save_json
 from lib.openai_calls import create_chat_completion
 from services import JobAnalysisService, ResumeService
+from services.persona_service import PersonaService, DEFAULT_PERSONA
 from tools.export import export_cover_letter_pdf, export_resume_pdf
 from tools.generate import _extract_cover_letter_body, _sanitize_cover_letter_output
 from tools.job_hunt import log_application_event, update_application
@@ -49,6 +50,7 @@ def _pipeline_payload() -> dict:
     resume_options = _list_resume_options()
     optimized_resume_options = _list_optimized_resume_options()
     cover_letter_options = _list_cover_letter_options()
+    persona_options = PersonaService.list_personas()
 
     payload_jobs = []
     for j in jobs:
@@ -80,6 +82,8 @@ def _pipeline_payload() -> dict:
         "resume_options": resume_options,
         "optimized_resume_options": optimized_resume_options,
         "cover_letter_options": cover_letter_options,
+        "persona_options": persona_options,
+        "default_persona": DEFAULT_PERSONA,
         "jobs": payload_jobs,
     }
 
@@ -894,6 +898,8 @@ function renderBusy(){
 }
 
 async function action(jobId, type){
+    const personaSel = document.getElementById(`persona-select-${jobId}`);
+    const persona = personaSel ? personaSel.value : (state.default_persona || 'default');
     try {
         if(type === 'eval') {
             setBusy(true, `Running assessment for job #${jobId}...`);
@@ -906,7 +912,7 @@ async function action(jobId, type){
         }
         if(type === 'resume') {
             setBusy(true, `Generating resume for job #${jobId}...`);
-            const res = await post('/dashboard/pipeline/generate-resume', { job_id: jobId });
+            const res = await post('/dashboard/pipeline/generate-resume', { job_id: jobId, persona });
             if(!res?.ok){
                 const msg = String(res?.content || 'Resume generation failed.').split('\\n').slice(0, 8).join('\\n');
                 alert(`Resume generation did not produce files.\\n\\n${msg}`);
@@ -922,7 +928,7 @@ async function action(jobId, type){
         }
         if(type === 'cl-latex') {
             setBusy(true, `Generating cover letter (LaTeX) for job #${jobId}...`);
-            const res = await post('/dashboard/pipeline/generate-cover-letter', { job_id: jobId, export_pipeline: 'latex' });
+            const res = await post('/dashboard/pipeline/generate-cover-letter', { job_id: jobId, export_pipeline: 'latex', persona });
             if(!res?.ok){
                 const msg = String(res?.content || 'Cover letter generation failed.').split('\\n').slice(0, 10).join('\\n');
                 alert(`Cover letter generation did not produce files (likely API rate limit or provider error).\\n\\n${msg}`);
@@ -930,7 +936,7 @@ async function action(jobId, type){
         }
         if(type === 'cl-html') {
             setBusy(true, `Generating cover letter (HTML) for job #${jobId}...`);
-            const res = await post('/dashboard/pipeline/generate-cover-letter', { job_id: jobId, export_pipeline: 'html' });
+            const res = await post('/dashboard/pipeline/generate-cover-letter', { job_id: jobId, export_pipeline: 'html', persona });
             if(!res?.ok){
                 const msg = String(res?.content || 'Cover letter generation failed.').split('\\n').slice(0, 10).join('\\n');
                 alert(`Cover letter generation did not produce files (likely API rate limit or provider error).\\n\\n${msg}`);
@@ -1008,6 +1014,12 @@ function render(){
                 <strong>Selected resume:</strong>
                 <select id='resume-select-${j.id}' style='margin-left:8px;background:#0e1628;color:#e6edf7;border:1px solid #23324d;border-radius:8px;padding:6px;'>
                     ${state.resume_options.map(r => `<option value='${esc(r)}' ${(j.selected_resume ? j.selected_resume === r : j.recommended_resume === r) ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+                </select>
+            </div>
+            <div class='detail'>
+                <strong>Persona:</strong>
+                <select id='persona-select-${j.id}' style='margin-left:8px;background:#0e1628;color:#e6edf7;border:1px solid #23324d;border-radius:8px;padding:6px;'>
+                    ${(state.persona_options || []).map(p => `<option value='${esc(p)}' ${p === (state.default_persona || 'default') ? 'selected' : ''}>${esc(p)}</option>`).join('')}
                 </select>
             </div>
       ${j.fitment_score ? `<div class='detail'><strong>Fitment score:</strong> ${esc(j.fitment_score)}</div>` : ''}

@@ -54,6 +54,21 @@ class TestPersonaService:
         assert names == ["custom"]
         assert PersonaService.get("custom").tone_modifiers["register"] == "custom-register"
 
+    def test_builtin_fallback_when_persona_dirs_empty(self, monkeypatch, tmp_path):
+        """If mounted data dirs have no persona JSON files, built-ins still resolve."""
+        empty_user = tmp_path / "user-empty"
+        empty_bundled = tmp_path / "bundled-empty"
+        empty_user.mkdir(parents=True, exist_ok=True)
+        empty_bundled.mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(PersonaService, "_user_personas_dir", staticmethod(lambda: empty_user))
+        monkeypatch.setattr(PersonaService, "_bundled_personas_dir", staticmethod(lambda: empty_bundled))
+
+        assert "default" in PersonaService.list_personas()
+        p = PersonaService.get(None)
+        assert p.name == "default"
+        assert p.tone_modifiers.get("preferred_punctuation", {}).get("no_em_dash") is True
+
 
 class TestResumeServicePersonaWiring:
     def test_default_persona_used_when_omitted(self, isolated_server):
