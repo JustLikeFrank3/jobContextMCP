@@ -8,7 +8,7 @@ from lib.helpers import _build_tone_sample_entry, _scan_dirs
 _NO_TONE_SAMPLES_MESSAGE = (
     "No tone samples logged yet.\n"
     "Use log_tone_sample() to ingest writing samples — cover letters, "
-    "messages, anything Frank actually wrote."
+    "messages, anything you've actually written."
 )
 
 
