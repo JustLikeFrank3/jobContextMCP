@@ -95,17 +95,53 @@ _BUNDLED_LATEX_ASSETS_DIR = Path(__file__).resolve().parent.parent / "templates"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _latex_dir() -> Path:
-    """Return the frank-resume-latex directory from config, or raise."""
+def _latex_dir() -> Path | None:
+    """Return the frank-resume-latex directory from config, or None if unset/missing.
+
+    Returns None instead of raising so callers can fall back to bundled assets
+    (the AKS container case where latex_resume_dir is not configured).
+    """
     d = cfg.LATEX_RESUME_DIR
-    if d is None:
-        raise RuntimeError(
-            "latex_resume_dir is not set in config.json. "
-            "Add the absolute path to your frank-resume-latex folder."
-        )
+    if d is None or not str(d).strip():
+        return None
     if not d.exists():
-        raise FileNotFoundError(f"latex_resume_dir does not exist: {d}")
+        return None
     return d
+
+
+def _user_identity() -> dict[str, str]:
+    """Read contact info from the active user's config.json at call time.
+
+    Falls back to _AUTHOR_DEFAULTS so local dev / Frank's own partition
+    still works without any extra setup.  Per-user callers (beta testers)
+    get their own name/email on the generated document.
+    """
+    try:
+        from lib.user_context import get_data_folder_override
+        override = get_data_folder_override()
+        if override is not None:
+            user_config_path = override / "config.json"
+            if user_config_path.exists():
+                import json as _json
+                user_cfg = _json.loads(user_config_path.read_text(encoding="utf-8"))
+                contact = user_cfg.get("contact", {})
+                if contact:
+                    # Normalise linkedin/github — strip URL prefix if present
+                    linkedin = contact.get("linkedin", _AUTHOR_DEFAULTS["linkedin"])
+                    linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
+                    github = contact.get("github", _AUTHOR_DEFAULTS["github"])
+                    github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
+                    return {
+                        "name":     contact.get("name",  _AUTHOR_DEFAULTS["name"]),
+                        "phone":    contact.get("phone", _AUTHOR_DEFAULTS["phone"]),
+                        "city":     contact.get("city",  _AUTHOR_DEFAULTS["city"]),
+                        "email":    contact.get("email", _AUTHOR_DEFAULTS["email"]),
+                        "linkedin": linkedin or _AUTHOR_DEFAULTS["linkedin"],
+                        "github":   github   or _AUTHOR_DEFAULTS["github"],
+                    }
+    except Exception:
+        pass
+    return dict(_AUTHOR_DEFAULTS)
 
 
 def _escape_latex(text: str) -> str:
@@ -159,17 +195,18 @@ def _tectonic_bin() -> str:
     )
 
 
-def _resolve_support_file(latex_src: Path, name: str) -> Path:
+def _resolve_support_file(latex_src: Path | None, name: str) -> Path:
     """Resolve a required LaTeX support file from workspace or bundled assets."""
-    candidate = latex_src / name
-    if candidate.exists():
-        return candidate
+    if latex_src is not None:
+        candidate = latex_src / name
+        if candidate.exists():
+            return candidate
     bundled = _BUNDLED_LATEX_ASSETS_DIR / name
     if bundled.exists():
         return bundled
     raise FileNotFoundError(
         f"Required LaTeX support file not found: {name}. "
-        f"Checked {candidate} and {bundled}."
+        f"Checked {'workspace and ' if latex_src else ''}bundled assets at {_BUNDLED_LATEX_ASSETS_DIR}."
     )
 
 
@@ -208,11 +245,11 @@ def generate_cover_letter_latex(
     Returns:
         Path to the compiled PDF.
     """
-    latex_src = _latex_dir()
+    latex_src = _latex_dir()  # None when not configured (AKS) — bundled assets used
 
     if output_dir is None:
         folder_name = cfg._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
-        final_output_dir = cfg.RESUME_FOLDER / folder_name
+        final_output_dir = cfg.get_active_workspace_folder() / folder_name
     else:
         final_output_dir = Path(output_dir)
     final_output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,7 +267,7 @@ def generate_cover_letter_latex(
     if not letter_date:
         letter_date = f"{today.strftime('%B')} {today.day}, {today.year}"
 
-    author = {**_AUTHOR_DEFAULTS, **(identity or {})}
+    author = {**_user_identity(), **(identity or {})}
     author = {key: _escape_latex(value) for key, value in author.items()}
 
     tex_body = _prose_to_tex(body)
@@ -324,6 +361,11 @@ def generate_resume_latex(
         RuntimeError: If tectonic compilation fails.
     """
     latex_src = _latex_dir()
+    if latex_src is None:
+        raise FileNotFoundError(
+            "latex_resume_dir is not set or does not exist in config.json. "
+            "Add the absolute path to your frank-resume-latex folder to use LaTeX resume export."
+        )
     resume_tex = latex_src / "resume.tex"
 
     if not resume_tex.exists():
@@ -392,7 +434,10 @@ def generate_resume_latex(
 def list_latex_output_pdfs() -> list[Path]:
     """Return PDFs in the latex output/ folder, newest modification time first."""
     try:
-        output_dir = _latex_dir() / "output"
+        latex_dir = _latex_dir()
+        if latex_dir is None:
+            return []
+        output_dir = latex_dir / "output"
     except (RuntimeError, FileNotFoundError):
         return []
     if not output_dir.exists():
