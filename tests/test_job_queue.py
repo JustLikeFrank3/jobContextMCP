@@ -197,8 +197,9 @@ class TestDecideJob:
 class TestJobQueueSQLite:
     """
     Verifies that queue_job / decide_job write to both SQLite and the JSON
-    replica, that load_from_sqlite reads back what was written, and that the
-    upsert-only contract holds (no sync-delete).
+    replica, that load_from_sqlite reads back what was written, and that
+    sync-delete (omitting a job from a save payload removes it from the DB)
+    works correctly — this is what makes the pipeline /remove endpoint work.
     """
 
     @pytest.fixture()
@@ -328,3 +329,87 @@ class TestJobQueueSQLite:
         result = load_from_sqlite(srv.JOB_QUEUE_FILE, {})
         job = next(j for j in result["jobs"] if j["company"] == "Nimble")
         assert job["status"] == "evaluated"
+
+
+class TestJobQueueTenantIsolation:
+    """Regression tests for the JSON replica path isolation bug.
+
+    Before the fix, _save_job_queue always wrote the JSON replica to the
+    global config.JOB_QUEUE_FILE regardless of which tenant's session
+    triggered the save. This means tenant A's save would overwrite tenant B's
+    file (and the global file) with A's data.
+    """
+
+    @pytest.fixture()
+    def tenant_env(self, tmp_path, monkeypatch):
+        """Patch DB, config paths, and activate a per-user data folder override."""
+        import lib.db as db_mod
+        import lib.config as cfg
+        import lib.user_context as uctx
+
+        # Global data folder (owner / default)
+        global_data = tmp_path / "data"
+        global_data.mkdir()
+
+        # Tenant's isolated data folder (what UserDataContextMiddleware sets)
+        tenant_data = tmp_path / "data" / "users" / "tenant-oid-123"
+        (tenant_data / "db").mkdir(parents=True)
+
+        # Build DB under tenant's db/ subdir (where get_connection resolves it
+        # when the data-folder override is active)
+        from scripts.migrate_to_sqlite import _SCHEMA
+        tenant_db = tenant_data / "db" / "jobcontextmcp.db"
+        con = sqlite3.connect(tenant_db)
+        con.executescript(_SCHEMA)
+        con.commit()
+        con.close()
+
+        monkeypatch.setattr(cfg, "DATA_FOLDER", global_data)
+        monkeypatch.setattr(cfg, "JOB_QUEUE_FILE", global_data / "job_queue.json")
+
+        # Activate the tenant override (simulates UserDataContextMiddleware)
+        token = uctx.set_data_folder(tenant_data)
+        yield global_data, tenant_data
+        uctx.reset_data_folder(token)
+
+    def test_json_replica_goes_to_tenant_folder(self, tenant_env):
+        """JSON replica must be written to the tenant's folder, not the global path."""
+        from lib.io_sqlite import save_to_sqlite
+        import lib.config as cfg
+
+        global_data, tenant_data = tenant_env
+
+        save_to_sqlite(cfg.JOB_QUEUE_FILE, {
+            "jobs": [{"id": 1, "company": "TenantCo", "role": "SWE", "status": "pending"}]
+        })
+
+        tenant_replica = tenant_data / "job_queue.json"
+        global_replica = global_data / "job_queue.json"
+
+        assert tenant_replica.exists(), "JSON replica must exist in the tenant's data folder"
+        assert not global_replica.exists(), "JSON replica must NOT be written to the global path"
+
+        data = json.loads(tenant_replica.read_text())
+        assert data["jobs"][0]["company"] == "TenantCo"
+
+    def test_global_path_unaffected_by_tenant_save(self, tenant_env, tmp_path):
+        """A pre-existing global job_queue.json is not overwritten by a tenant save."""
+        from lib.io_sqlite import save_to_sqlite
+        import lib.config as cfg
+
+        global_data, tenant_data = tenant_env
+
+        # Seed an owner job in the global file
+        owner_data = {"jobs": [{"id": 99, "company": "OwnerCo", "role": "CTO", "status": "pending"}]}
+        (global_data / "job_queue.json").write_text(json.dumps(owner_data))
+
+        # Tenant saves their own job
+        save_to_sqlite(cfg.JOB_QUEUE_FILE, {
+            "jobs": [{"id": 1, "company": "TenantCo", "role": "SWE", "status": "pending"}]
+        })
+
+        # Global file must be unchanged
+        global_content = json.loads((global_data / "job_queue.json").read_text())
+        assert global_content["jobs"][0]["company"] == "OwnerCo", (
+            "Tenant save must not overwrite the global job_queue.json"
+        )

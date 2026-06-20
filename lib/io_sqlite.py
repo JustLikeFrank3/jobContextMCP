@@ -459,8 +459,19 @@ def _save_job_queue(con, data: dict) -> None:
         ]
     }
 
-    # Atomic write to the configured JOB_QUEUE_FILE
-    job_file: Path = config.JOB_QUEUE_FILE
+    # Atomic write — resolve to the active tenant's data folder (same logic as
+    # lib.io._resolve_data_path) to avoid overwriting the global shared file
+    # when called from a per-user session.  Importing lib.io here would create
+    # a circular dependency, so we inline the resolution directly.
+    from lib.user_context import get_data_folder_override
+    _override = get_data_folder_override()
+    if _override is not None:
+        try:
+            job_file: Path = _override / config.JOB_QUEUE_FILE.relative_to(config.DATA_FOLDER)
+        except ValueError:
+            job_file = config.JOB_QUEUE_FILE
+    else:
+        job_file = config.JOB_QUEUE_FILE
     try:
         job_file.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_path = tempfile.mkstemp(prefix="job_queue.", dir=str(job_file.parent))
