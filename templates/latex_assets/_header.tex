@@ -18,8 +18,12 @@
   \end{minipage}\hfill
   \begin{minipage}[t]{0.30\textwidth}
     \raggedleft
-    \href{https://www.linkedin.com/in/\linkedin}{linkedin.com/in/\linkedin} \\
-    \href{https://github.com/\github}{github.com/\github}
+    \ifx\linkedin\empty\else
+      \href{https://www.linkedin.com/in/\linkedin}{linkedin.com/in/\linkedin} \\
+    \fi
+    \ifx\github\empty\else
+      \href{https://github.com/\github}{github.com/\github}
+    \fi
   \end{minipage}%
   \par\vspace{3pt}%
   \noindent{\color{highlight}\rule{\textwidth}{1pt}}%

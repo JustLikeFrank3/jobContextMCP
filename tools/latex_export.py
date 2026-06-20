@@ -127,17 +127,20 @@ def _user_identity() -> dict[str, str]:
                 contact = user_cfg.get("contact", {})
                 if contact:
                     # Normalise linkedin/github — strip URL prefix if present
-                    linkedin = contact.get("linkedin", _AUTHOR_DEFAULTS["linkedin"])
+                    # linkedin and github are optional — default to "" so the
+                    # header template can suppress the link rather than rendering
+                    # a dead github.com/ or linkedin.com/in/ with no handle.
+                    linkedin = contact.get("linkedin", "")
                     linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
-                    github = contact.get("github", _AUTHOR_DEFAULTS["github"])
+                    github = contact.get("github", "")
                     github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
                     return {
                         "name":     contact.get("name",  _AUTHOR_DEFAULTS["name"]),
                         "phone":    contact.get("phone", _AUTHOR_DEFAULTS["phone"]),
                         "city":     contact.get("city",  _AUTHOR_DEFAULTS["city"]),
                         "email":    contact.get("email", _AUTHOR_DEFAULTS["email"]),
-                        "linkedin": linkedin or _AUTHOR_DEFAULTS["linkedin"],
-                        "github":   github   or _AUTHOR_DEFAULTS["github"],
+                        "linkedin": linkedin,
+                        "github":   github,
                     }
     except Exception:
         pass
