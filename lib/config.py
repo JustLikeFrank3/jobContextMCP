@@ -142,6 +142,32 @@ def get_active_workspace_folder() -> Path:
     return RESUME_FOLDER
 
 
+def get_active_data_folder() -> Path:
+    """Return the data folder for the current request.
+
+    Uses the per-request DATA_FOLDER ContextVar when set (non-owner user),
+    otherwise falls back to the global DATA_FOLDER.
+    """
+    from lib.user_context import get_data_folder_override
+    override = get_data_folder_override()
+    if override is not None:
+        return override
+    return DATA_FOLDER
+
+
+def get_active_leetcode_folder() -> Path:
+    """Return the LeetCode workspace folder for the current request.
+
+    Uses the per-request DATA_FOLDER ContextVar when set (non-owner user),
+    otherwise falls back to the global LEETCODE_FOLDER.
+    """
+    from lib.user_context import get_data_folder_override
+    override = get_data_folder_override()
+    if override is not None:
+        return override / "workspace" / "leetcode"
+    return LEETCODE_FOLDER
+
+
 def get_active_workspace_path(relative: str) -> Path:
     """Join get_active_workspace_folder() with a relative path fragment."""
     return get_active_workspace_folder() / relative

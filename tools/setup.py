@@ -24,16 +24,16 @@ _HERE = Path(__file__).resolve().parent.parent  # repo root
 # snapshotting them at import time (config may not be loaded yet).
 
 def _resumes_root() -> Path:
-    """Resume workspace root — honours config.RESUME_FOLDER (e.g. /workspace in Docker)."""
-    return config.RESUME_FOLDER
+    """Resume workspace root — honours per-user context in multi-tenant mode."""
+    return config.get_active_workspace_folder()
 
 def _leetcode_root() -> Path:
-    """LeetCode workspace root — honours config.LEETCODE_FOLDER."""
-    return config.LEETCODE_FOLDER
+    """LeetCode workspace root — honours per-user context in multi-tenant mode."""
+    return config.get_active_leetcode_folder()
 
 def _data_dir() -> Path:
-    """Data directory — honours config.DATA_FOLDER."""
-    return config.DATA_FOLDER
+    """Data directory — honours per-user context in multi-tenant mode."""
+    return config.get_active_data_folder()
 
 # Kept only for _build_config which constructs a brand-new config.json
 _WORKSPACE_ROOT = _HERE / "workspace"
@@ -457,29 +457,34 @@ def setup_workspace(
         else:
             _mark(f"{data_dir}/{fname}", False)
 
-    # 5. config.json
-    config_path = _HERE / "config.json"
-    if not config_path.exists():
-        cfg = _build_config(
-            name=name,
-            email=email,
-            phone=phone,
-            linkedin=linkedin,
-            city_state=city_state,
-            address=address,
-            openai_api_key=openai_api_key,
-            leetcode_language=lang,
-            side_project_folders=list(side_project_folders or []),
-        )
-        config_path.write_text(
-            json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        _mark("config.json", True)
-        # Reload live config so tools work immediately
-        from lib.config import _reconfigure
-        _reconfigure(cfg)
-    else:
-        _mark("config.json (already exists — not overwritten)", False)
+    # 5. config.json — local mode only
+    # In multi-tenant AKS mode the config is injected via ConfigMap env vars
+    # and there is no writable config.json at the repo root.  Skip when a
+    # per-user data folder override is active (i.e. a guest user session).
+    from lib.user_context import get_data_folder_override
+    if get_data_folder_override() is None:
+        config_path = _HERE / "config.json"
+        if not config_path.exists():
+            cfg = _build_config(
+                name=name,
+                email=email,
+                phone=phone,
+                linkedin=linkedin,
+                city_state=city_state,
+                address=address,
+                openai_api_key=openai_api_key,
+                leetcode_language=lang,
+                side_project_folders=list(side_project_folders or []),
+            )
+            config_path.write_text(
+                json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            _mark("config.json", True)
+            # Reload live config so tools work immediately
+            from lib.config import _reconfigure
+            _reconfigure(cfg)
+        else:
+            _mark("config.json (already exists — not overwritten)", False)
 
     # ── Report ────────────────────────────────────────────────────────────────
     lines = ["═══ WORKSPACE SETUP COMPLETE ═══", ""]
