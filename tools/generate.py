@@ -337,15 +337,10 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     """Generate a safe default output filename."""
     slug = re.sub(r"[^A-Za-z0-9 ]", "", f"{company} {role} {suffix}").strip()
     slug = re.sub(r"\s+", " ", slug)
-    try:
-        from tools.latex_export import _user_identity
-        name = _user_identity().get("name", "")
-    except Exception:
-        name = ""
+    name = config.get_contact_name("")
     if name:
         return f"{name} Resume - {slug}.txt" if suffix == "Resume" else f"{name} Cover Letter - {slug}.txt"
-    # In per-user partitions contact.name may be unset; avoid odd fallback names
-    # like "Resume Cover Letter - ..." and use a neutral role/company stem.
+    # Unconfigured user: use neutral company/role stem with no personal name.
     return f"{slug}.txt"
 
 
@@ -661,16 +656,15 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     assessment_context = _assessment_context_block(company, role)
     narrative_plan = _cover_letter_narrative_plan(company, role, clean_job_description)
 
-    from tools.latex_export import _user_identity
-    _identity = _user_identity()
-    name     = _identity["name"]
-    phone    = _identity["phone"]
-    email    = _identity["email"]
-    linkedin = _identity["linkedin"]
-    github   = _identity["github"]
-    _linkedin_line = f"\nlinkedin: {linkedin}" if linkedin else ""
-    _github_line   = f"\ngithub: {github}" if github else ""
-    contact_block = f"{name.upper()}\n\nphone: {phone}\nemail: {email}{_linkedin_line}{_github_line}"
+    _contact   = config.get_contact_info()
+    name     = str(_contact.get("name", "") or "").strip()
+    phone    = str(_contact.get("phone", "") or "").strip()
+    email    = str(_contact.get("email", "") or "").strip()
+    _li      = str(_contact.get("linkedin", "") or "").strip().replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
+    _gh      = str(_contact.get("github", "") or "").strip().replace("https://github.com/", "").replace("https://www.github.com/", "").strip("/")
+    _linkedin_line = f"\nlinkedin: {_li}" if _li else ""
+    _github_line   = f"\ngithub: {_gh}" if _gh else ""
+    contact_block = f"{name.upper()}\n\nphone: {phone}\nemail: {email}{_linkedin_line}{_github_line}" if name else ""
     interview_block = get_interview_context(company=company, role=role)
 
     instructions = (
