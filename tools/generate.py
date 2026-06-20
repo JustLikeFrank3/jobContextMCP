@@ -339,8 +339,11 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9 ]", "", f"{company} {role} {suffix}").strip()
     slug = re.sub(r"\s+", " ", slug)
     name = config._cfg.get("contact", {}).get("name", "")
-    prefix = name if name else "Resume"
-    return f"{prefix} Resume - {slug}.txt" if suffix == "Resume" else f"{prefix} Cover Letter - {slug}.txt"
+    if name:
+        return f"{name} Resume - {slug}.txt" if suffix == "Resume" else f"{name} Cover Letter - {slug}.txt"
+    # In per-user partitions contact.name may be unset; avoid odd fallback names
+    # like "Resume Cover Letter - ..." and use a neutral role/company stem.
+    return f"{slug}.txt"
 
 
 def _no_company_story_block(company: str) -> str:
