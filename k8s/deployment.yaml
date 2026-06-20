@@ -100,6 +100,11 @@ spec:
                 secretKeyRef:
                   name: jcmcp-app-secrets
                   key: entra_client_secret
+            - name: ENTRA_OWNER_OID
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-config
+                  key: entra_owner_oid
             # LLM_PROVIDER overrides llm_provider in config.json.
             # LLM_API_KEY is used as the API key regardless of provider
             # (openai_api_key for openai, azure_foundry_api_key for foundry).

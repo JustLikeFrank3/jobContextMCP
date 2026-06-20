@@ -95,7 +95,13 @@ def _load_master_context() -> str:
     # Resolve against the active workspace's 06-Reference-Materials/ so each
     # user gets their own files (or nothing, if they haven't uploaded them yet).
     ref_dir = config.get_active_reference_materials_dir()
-    awards_path = ref_dir / str(config.get_config_value("achievements_path", "Achievements.txt")).split("/")[-1]
+    # achievements_path is the current key; gm_awards_path is the legacy key kept
+    # for backward compatibility with config.json files that haven't been updated yet.
+    _awards_val = (
+        config.get_config_value("achievements_path", "")
+        or config.get_config_value("gm_awards_path", "Achievements.txt")
+    )
+    awards_path = ref_dir / str(_awards_val).split("/")[-1]
     feedback_path = ref_dir / str(config.get_config_value("feedback_received_path", "Feedback_Received.txt")).split("/")[-1]
 
     awards_text = _read(awards_path)
