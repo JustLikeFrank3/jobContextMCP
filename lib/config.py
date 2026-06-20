@@ -96,7 +96,7 @@ JOB_QUEUE_FILE: Path            = DATA_FOLDER / "job_queue.json"
 # ── resume / reference file paths ────────────────────────────────────────────
 
 MASTER_RESUME: Path = _resume_path("master_resume_path",
-                                   "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt")
+                                   "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt")
 
 LEETCODE_CHEATSHEET: Path = (
     LEETCODE_FOLDER / _cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")
@@ -294,7 +294,7 @@ def get_active_master_resume_path() -> Path:
     candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
     if candidates:
         return candidates[0]
-    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt"))
+    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt"))
     return get_active_workspace_folder() / relative
 
 
@@ -463,7 +463,7 @@ def _reconfigure(cfg: dict) -> None:
         return RESUME_FOLDER / cfg.get(key, fallback)
 
     MASTER_RESUME       = _res("master_resume_path",
-                               "01-Current-Optimized/Frank Vladmir MacBride III Resume - MASTER SOURCE.txt")
+                               "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt")
     TEMPLATE_FORMAT     = _res("template_format_path",
                                "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
     GM_AWARDS           = _res("gm_awards_path",

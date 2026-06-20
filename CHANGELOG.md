@@ -221,7 +221,7 @@ Built during an active job search after a layoff. What began as a few tools to s
 
 ### Fixed
 - **Cover letter closing** — sign-off changed from `Sincerely,` to `Kindest Regards,`; new rule in `_COVER_LETTER_FORMAT_SPEC` instructs the model to sign the name in Title Case (not ALL CAPS) with the name on its own line below the closing
-- **Filename casing (`name.title()` bug)** — `_safe_filename()` was calling `.title()` on the name from config, mangling roman numerals: "Frank Vladmir MacBride III" → "Frank Vladmir Macbride Iii"; removed the `.title()` call; the name in `config.json` is now used verbatim
+- **Filename casing (`name.title()` bug)** — `_safe_filename()` was calling `.title()` on the name from config, mangling roman numerals: "Frank MacBride" → "Frank Macbride"; removed the `.title()` call; the name in `config.json` is now used verbatim
 - **"Kindest Regards, Name" merged on one line** — `_parse_cover_letter_txt()` in `export.py` now detects closing salutations (`Kindest Regards,`, `Sincerely,`, `Best Regards,`, `Best,`) merged with the signature on the same line and splits them into separate paragraphs for correct PDF rendering
 
 ### Added
@@ -448,8 +448,8 @@ Built during an active job search after a layoff. What began as a few tools to s
 - `templates/resume.html` — increased bottom page margin (`0.42in` → `0.52in`) and changed footer `vertical-align` from `bottom` to `middle` so the `</ROLE>` tag no longer sits flush against the paper edge
 - `templates/cover_letter.html` — name sidebar font size bumped from `15pt` to `18pt` for better visual weight
 - `tools/export.py` `_parse_cover_letter_txt` — salutation lines (`Dear …`, `To whom …`, `Hello`, `Hi`) were being mistakenly parsed as the author's name; now excluded from name detection and correctly fall back to the hardcoded default
-- `tools/export.py` — closing salutation now normalised to `"Kindest regards,"` on its own line with `"Frank Vladmir MacBride III"` as a separate line below; replaces the old single-line `"Best regards, Frank V. MacBride III"` across all cover letters
-- `tools/export.py` — full middle name **Vladmir** added to the cover-letter sidebar default (`FRANK VLADMIR MACBRIDE III`) and all generated signatures
+- `tools/export.py` — closing salutation now normalised to `"Kindest regards,"` on its own line with `"Frank MacBride"` as a separate line below; replaces the old single-line `"Best regards, Frank V. MacBride III"` across all cover letters
+- `tools/export.py` — cover-letter sidebar default and generated signatures now use `FRANK MACBRIDE`
 
 ## [0.4.0] - 2026-02-21
 

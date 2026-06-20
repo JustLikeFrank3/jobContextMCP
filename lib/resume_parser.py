@@ -857,7 +857,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
     if current:
         paragraphs.append(" ".join(current))
 
-    # Split a closing like "Kindest Regards, Frank Vladmir MacBride III" that got
+    # Split a closing like "Kindest Regards, Frank MacBride" that got
     # merged into one paragraph because there was no blank line between the salutation
     # and the signature in the .txt output.
     _closing_res = [

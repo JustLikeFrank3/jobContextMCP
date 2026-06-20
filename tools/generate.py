@@ -1075,7 +1075,7 @@ def _sanitize_cover_letter_output(content: str) -> str:
 
     # Enforce correct sign-off — strip middle name and suffix.
     cleaned = re.sub(
-        r"\bFrank\s+Vladmir\s+MacBride\s+III\b",
+        r"\bFrank(?:\s+\w+)?\s+MacBride(?:\s+III)?\b",
         "Frank MacBride",
         cleaned,
     )

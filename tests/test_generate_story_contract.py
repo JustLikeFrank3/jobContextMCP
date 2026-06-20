@@ -151,7 +151,7 @@ At GM, I led the AI adoption initiative, achieving a 35%+ organizational uptake.
 Sema4.ai's focus on transforming knowledge work aligns with my experience in building platforms that are not just intelligent but operable and reliable. I want a conversation to explore how my background can contribute to your Agent Platform's success.
 
 Regards,
-Frank Vladmir MacBride III"""
+Frank MacBride"""
 
     cleaned = generate._sanitize_cover_letter_output(raw)
     lowered = cleaned.lower()
@@ -165,7 +165,7 @@ Frank Vladmir MacBride III"""
         "highlight my capability",
         "aligns with my experience",
         "contribute to your agent platform's success",
-        "frank vladmir macbride iii",
+        "frank v. macbride",
     ]:
         assert bad not in lowered
 
