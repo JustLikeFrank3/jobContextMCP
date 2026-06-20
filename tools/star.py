@@ -110,6 +110,10 @@ def get_star_story_context(
 
     story_data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     all_stories = story_data.get("stories", [])
+    # Read per-user metrics and framing from the data file — never from the
+    # hardcoded module constants which contain the owner's personal data.
+    star_metrics: dict = story_data.get("star_metrics", {})
+    company_framing: dict = story_data.get("company_framing", {})
 
     related = _STAR_RELATED.get(tag_lower, [])
     search_tags = {tag_lower} | set(related)
@@ -129,15 +133,15 @@ def get_star_story_context(
 
     metrics: list[str] = []
     for t in [tag_lower] + related:
-        for m in _STAR_METRICS.get(t, []):
+        for m in star_metrics.get(t, []):
             if m not in metrics:
                 metrics.append(m)
 
     company_lower = company.lower().strip()
     framing = None
-    for key in _COMPANY_FRAMING:
+    for key in company_framing:
         if key in company_lower:
-            framing = _COMPANY_FRAMING[key]
+            framing = company_framing[key]
             break
 
     header = f"tag='{tag}'"
@@ -202,6 +206,10 @@ def get_all_star_context() -> str:
     """Dump the full STAR context: all personal stories, all metric bullets by category, and all company framing hints. Used at session boot to load the complete interview prep picture."""
     story_data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     all_stories = story_data.get("stories", [])
+    # Read per-user metrics and framing from the data file — never from the
+    # hardcoded module constants which contain the owner's personal data.
+    star_metrics: dict = story_data.get("star_metrics", {})
+    company_framing: dict = story_data.get("company_framing", {})
 
     lines = ["═══ STAR CONTEXT (full boot dump) ═══", ""]
 
@@ -221,20 +229,30 @@ def get_all_star_context() -> str:
         lines.append("")
 
     # All STAR metrics by category
-    lines.append("── RESUME METRICS BY CATEGORY ──")
-    for category, bullets in _STAR_METRICS.items():
-        lines.append(f"\n  [{category}]")
-        for b in bullets:
-            lines.append(f"    • {b}")
-    lines.append("")
+    if star_metrics:
+        lines.append("── RESUME METRICS BY CATEGORY ──")
+        for category, bullets in star_metrics.items():
+            lines.append(f"\n  [{category}]")
+            for b in bullets:
+                lines.append(f"    • {b}")
+        lines.append("")
+    else:
+        lines.append("── RESUME METRICS BY CATEGORY ──")
+        lines.append("  No metrics logged yet. Add star_metrics to your personal_context.json.")
+        lines.append("")
 
     # All company framing hints
-    lines.append("── COMPANY FRAMING HINTS ──")
-    for company, framing in _COMPANY_FRAMING.items():
-        lines.append(f"\n  [{company.upper()}]")
-        for k, v in framing.items():
-            lines.append(f"    {k}: {v}")
-    lines.append("")
+    if company_framing:
+        lines.append("── COMPANY FRAMING HINTS ──")
+        for company, framing in company_framing.items():
+            lines.append(f"\n  [{company.upper()}]")
+            for k, v in framing.items():
+                lines.append(f"    {k}: {v}")
+        lines.append("")
+    else:
+        lines.append("── COMPANY FRAMING HINTS ──")
+        lines.append("  No company framing logged yet.")
+        lines.append("")
 
     return "\n".join(lines)
 
