@@ -21,7 +21,7 @@ DEFAULT_PERSONA = "default"
 _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
     "default": {
         "name": "default",
-        "description": "Frank's neutral baseline persona: concise, evidence-led, no AI tells, no em dashes, ellipses for natural connective tissue.",
+        "description": "Neutral baseline persona: concise, evidence-led, no AI tells, no em dashes, ellipses for natural connective tissue.",
         "tone_modifiers": {
             "register": "professional-conversational",
             "voice": "first-person where appropriate, active verbs, short sentences",

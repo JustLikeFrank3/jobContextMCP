@@ -136,7 +136,6 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
     <h1>Dashboard Login</h1>
     <p>Enter your API key to create a browser session on this device.</p>
     <input type="hidden" name="next" value="{next_url}" />
-    <input type="text" name="username" value="frank" autocomplete="username" style="display:none" />
     <label for="api_key">API key</label>
     <input id="api_key" name="api_key" type="password" autocomplete="current-password" required />
     <button type="submit">Sign in</button>
