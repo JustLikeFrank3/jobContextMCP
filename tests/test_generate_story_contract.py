@@ -118,11 +118,9 @@ def test_ai_cover_letter_narrative_plan_uses_current_jobcontextmcp():
     )
 
     assert "current AI platform builder" in plan
-    assert "I built and maintain jobContextMCP" in plan
-    assert "Do not lead with the Azure migration" in plan
-    assert "never only as a completed past-tense artifact" in plan
-    assert "My uncle Roy" in plan
-    assert "readers do not know whose uncle he is" in plan
+    assert "Do not lead with cloud migration" in plan
+    assert "cloned X times" in plan  # phrasing rule present
+    assert "aligns perfectly" in plan  # alignment rule present
 
 
 def test_cover_letter_sanitizer_fixes_awkward_clone_phrasing():

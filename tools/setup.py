@@ -211,7 +211,7 @@ def _build_config(
         "resume_template_png":        "06-Reference-Materials/resume_template.png",
         "cover_letter_template_png":  "06-Reference-Materials/cover_letter_template.png",
         "template_format_path":       "06-Reference-Materials/Template Format.txt",
-        "gm_awards_path":             "06-Reference-Materials/Awards.txt",
+        "achievements_path":           "06-Reference-Materials/Achievements.txt",
         "feedback_received_path":     "06-Reference-Materials/Feedback.txt",
         "skills_shorter_path":        "06-Reference-Materials/Skills Shorter.txt",
 

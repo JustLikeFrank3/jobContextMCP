@@ -52,9 +52,10 @@ def _pipeline_payload() -> dict:
     cover_letter_options = _list_cover_letter_options()
     persona_options = PersonaService.list_personas()
 
-    # Owner = no per-user data-folder override active (the owner's partition is the global root)
-    from lib.user_context import get_data_folder_override
-    is_owner: bool = get_data_folder_override() is None
+    # Owner = the authenticated user's OID matches the configured ENTRA_OWNER_OID
+    from lib.user_context import get_current_user_oid
+    from lib.config import OWNER_OID as _OWNER_OID
+    is_owner: bool = bool(_OWNER_OID) and get_current_user_oid() == _OWNER_OID
 
     payload_jobs = []
     for j in jobs:
@@ -152,8 +153,9 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
     # LaTeX pipeline is owner-only — tectonic is not installed for beta users
     # and the template assets live in the owner's workspace.
     if req.export_pipeline == "latex":
-        from lib.user_context import get_data_folder_override
-        if get_data_folder_override() is not None:
+        from lib.user_context import get_current_user_oid
+        from lib.config import OWNER_OID as _OWNER_OID
+        if not (bool(_OWNER_OID) and get_current_user_oid() == _OWNER_OID):
             raise HTTPException(status_code=403, detail="LaTeX export is not available for beta accounts.")
 
     job = _find_job(req.job_id)
@@ -1021,24 +1023,11 @@ function render(){
                 <summary>Assessment details</summary>
                 <pre>${esc(j.assessment_detail || '')}</pre>
             </details>
-      <div class='detail'><strong>Recommended resume:</strong> ${esc(j.recommended_resume)} <span class='hint'>(auto-picked from current resume output set)</span></div>
-            <div class='detail'>
-                <strong>Selected resume:</strong>
-                <select id='resume-select-${j.id}' style='margin-left:8px;background:#0e1628;color:#e6edf7;border:1px solid #23324d;border-radius:8px;padding:6px;'>
-                    ${state.resume_options.map(r => `<option value='${esc(r)}' ${(j.selected_resume ? j.selected_resume === r : j.recommended_resume === r) ? 'selected' : ''}>${esc(r)}</option>`).join('')}
-                </select>
-            </div>
-            <div class='detail'>
-                <strong>Persona:</strong>
-                <select id='persona-select-${j.id}' style='margin-left:8px;background:#0e1628;color:#e6edf7;border:1px solid #23324d;border-radius:8px;padding:6px;'>
-                    ${(state.persona_options || []).map(p => `<option value='${esc(p)}' ${p === (state.default_persona || 'default') ? 'selected' : ''}>${esc(p)}</option>`).join('')}
-                </select>
-            </div>
+
       ${j.fitment_score ? `<div class='detail'><strong>Fitment score:</strong> ${esc(j.fitment_score)}</div>` : ''}
       ${j.decision_notes ? `<div class='detail'><strong>Notes:</strong> ${esc(j.decision_notes)}</div>` : ''}
       <div class='btnrow'>
         <button onclick='action(${j.id},"eval")' ${disabledEval}>${evalLabel}</button>
-                <button onclick='action(${j.id},"select")'>Use Existing</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
                 <button onclick='action(${j.id},"edit-resume")'>Edit Resume</button>
         ${state.is_owner ? `<button onclick='action(${j.id},"cl-latex")'>Cover Letter (LaTeX)</button>` : ''}

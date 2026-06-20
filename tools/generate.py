@@ -216,7 +216,6 @@ def _cover_letter_narrative_plan(company: str, role: str, job_description: str) 
         "- Write one coherent story, not a catalog of achievements.",
         "- Use no more than one primary project in Paragraph 2 and no more than three supporting artifacts in Paragraph 3.",
         "- Do not repeat the same evidence in multiple paragraphs.",
-        "- If the master resume lists an active/current side project, refer to it in the present tense ('I built and maintain X' or 'X currently...'), never only as a completed past-tense artifact.",
         "- GitHub traffic phrasing must be natural: say 'currently shows X clones in the last 14 days' or 'has X clones in the last 14 days'; do not say 'cloned X times'.",
         "- Avoid sweeping alignment claims like 'aligns perfectly'; name the actual engineering overlap instead.",
     ]

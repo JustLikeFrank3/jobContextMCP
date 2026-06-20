@@ -53,7 +53,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: StarletteRequest, call_next):
         from transport.http.security import get_auth_provider
-        from lib.user_context import set_data_folder, reset_data_folder
+        from lib.user_context import set_data_folder, reset_data_folder, set_user_oid, reset_user_oid
         from lib.user_provisioning import provision_user_data
         import lib.config as _cfg_module
 
@@ -87,11 +87,13 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             _logger.debug("auth: routing to tenant path=%s", request.url.path)
             data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / user.id
             provision_user_data(data_dir)
+            oid_token = set_user_oid(user.id)
             token = set_data_folder(data_dir)
             try:
                 return await call_next(request)
             finally:
                 reset_data_folder(token)
+                reset_user_oid(oid_token)
 
         if user and user.id == "admin":
             # API-key provider is single-tenant mode; keep historical behavior.

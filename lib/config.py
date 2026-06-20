@@ -116,8 +116,8 @@ COVER_LETTER_TEMPLATE_PNG: Path = _resume_path("cover_letter_template_png",
                                                 "06-Reference-Materials/cover_letter_template.png")
 TEMPLATE_FORMAT: Path         = _resume_path("template_format_path",
                                               "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
-GM_AWARDS: Path               = _resume_path("gm_awards_path",
-                                              "06-Reference-Materials/GM Recognition Awards.txt")
+ACHIEVEMENTS: Path            = _resume_path("achievements_path",
+                                              "06-Reference-Materials/Achievements.txt")
 FEEDBACK_RECEIVED: Path       = _resume_path("feedback_received_path",
                                               "06-Reference-Materials/Feedback_Received.txt")
 SKILLS_SHORTER: Path          = _resume_path("skills_shorter_path",
@@ -133,6 +133,10 @@ JOB_ASSESSMENTS_FOLDER: Path = RESUME_FOLDER / _cfg.get("job_assessments_dir",
 # ── misc ──────────────────────────────────────────────────────────────────────
 
 SERPAPI_KEY: str = _cfg.get("serpapi_key", "")
+
+# OID of the application owner — used to gate owner-only features (e.g. LaTeX export).
+# Set via ENTRA_OWNER_OID env var; falls back to config.json "entra_owner_oid" key.
+OWNER_OID: str = os.getenv("ENTRA_OWNER_OID", "") or _cfg.get("entra_owner_oid", "")
 
 
 # ── Per-request workspace folder resolution ───────────────────────────────────
@@ -423,7 +427,7 @@ def _reconfigure(cfg: dict) -> None:
     global GITHUB_METRICS_FILE, JOB_QUEUE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
-    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
+    global ACHIEVEMENTS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_ASSESSMENTS_FOLDER
     global SERPAPI_KEY
 
@@ -466,8 +470,8 @@ def _reconfigure(cfg: dict) -> None:
                                "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE.txt")
     TEMPLATE_FORMAT     = _res("template_format_path",
                                "06-Reference-Materials/Frank MacBride Resume - Template Format.txt")
-    GM_AWARDS           = _res("gm_awards_path",
-                               "06-Reference-Materials/GM Recognition Awards.txt")
+    ACHIEVEMENTS        = _res("achievements_path",
+                               "06-Reference-Materials/Achievements.txt")
     FEEDBACK_RECEIVED   = _res("feedback_received_path",
                                "06-Reference-Materials/Feedback_Received.txt")
     SKILLS_SHORTER      = _res("skills_shorter_path",

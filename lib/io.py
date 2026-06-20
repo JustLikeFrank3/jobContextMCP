@@ -95,13 +95,13 @@ def _load_master_context() -> str:
     # Resolve against the active workspace's 06-Reference-Materials/ so each
     # user gets their own files (or nothing, if they haven't uploaded them yet).
     ref_dir = config.get_active_reference_materials_dir()
-    awards_path = ref_dir / str(config.get_config_value("gm_awards_path", "GM Recognition Awards.txt")).split("/")[-1]
+    awards_path = ref_dir / str(config.get_config_value("achievements_path", "Achievements.txt")).split("/")[-1]
     feedback_path = ref_dir / str(config.get_config_value("feedback_received_path", "Feedback_Received.txt")).split("/")[-1]
 
     awards_text = _read(awards_path)
     if not awards_text.startswith("[Error"):
         parts.append(
-            "──── GM RECOGNITION AWARDS ────\n"
+            "──── ACHIEVEMENTS ────\n"
             "(Peer-written quotes — use exact language in cover letters and fitment assessments)\n"
             + awards_text
         )

@@ -59,6 +59,51 @@
             "detail": "Same as above but skip the pre-sync tarball. Use only when you've just snapshotted moments ago."
         },
         {
+            "label": "Sync data from Azure (preview)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--dry-run"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "List blobs in Azure for your OID — shows what would download, no files touched."
+        },
+        {
+            "label": "Sync data from Azure (quick, no backup)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--quick", "--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Download Azure blob data → iCloud production workspace. No backup. One-way: Azure → iCloud → dev."
+        },
+        {
+            "label": "Sync data from Azure (full, with backup)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--full", "--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Download Azure blob data → iCloud production workspace. Creates timestamped backup first."
+        },
+        {
             "label": "AKS port-forward",
             "type": "shell",
             "command": "kubectl port-forward svc/jcmcp 8099:80 -n jcmcp",
