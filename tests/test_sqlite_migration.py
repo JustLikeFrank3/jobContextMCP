@@ -778,10 +778,10 @@ def test_save_event_append_only(monkeypatch, tmp_path):
     assert len(result["applications"][0]["events"]) == 2
 
 
-def test_save_job_queue_upsert_no_sync_delete(monkeypatch, tmp_path):
-    """_save_job_queue is upsert-only — omitting a job from the payload must NOT
-    delete it from the DB.  Explicit deletion (e.g. via decide_job) is the
-    only supported delete path, preventing accidental data loss from races."""
+def test_save_job_queue_sync_deletes_removed_jobs(monkeypatch, tmp_path):
+    """_save_job_queue performs sync-delete — omitting a job from the payload
+    removes it from the DB.  This is what makes the /pipeline/remove endpoint
+    actually work when USE_SQLITE=1."""
     import lib.db as db_mod
     import lib.config as config
     from lib.io_sqlite import save_to_sqlite, load_from_sqlite
@@ -799,14 +799,14 @@ def test_save_job_queue_upsert_no_sync_delete(monkeypatch, tmp_path):
     }
     save_to_sqlite(tmp_path / "job_queue.json", queue)
 
-    # Save only job 1 — job 2 must still be present (no sync-delete).
+    # Save only job 1 — job 2 must be removed (sync-delete).
     queue["jobs"] = [j for j in queue["jobs"] if j["id"] != 2]
     save_to_sqlite(tmp_path / "job_queue.json", queue)
 
     result = load_from_sqlite(tmp_path / "job_queue.json", {})
     ids = [j["id"] for j in result["jobs"]]
-    assert set(ids) == {1, 2}, (
-        f"Expected both jobs still present (upsert-only), got {ids}"
+    assert set(ids) == {1}, (
+        f"Expected only job 1 after removal, got {ids}"
     )
 
 

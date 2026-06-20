@@ -256,24 +256,25 @@ class TestJobQueueSQLite:
 
     # ── upsert-only: omitting a job must NOT delete it ─────────────────────
 
-    def test_upsert_does_not_delete_omitted_jobs(self, sqlite_server):
-        """Saving a subset of jobs must not remove the rest from the DB."""
+    def test_save_subset_removes_omitted_jobs(self, sqlite_server):
+        """Saving a subset of jobs removes the omitted ones — this is the sync-delete
+        behaviour that makes the pipeline /remove endpoint actually work in SQLite mode."""
         from lib.io_sqlite import save_to_sqlite, load_from_sqlite
 
         save_to_sqlite(srv.JOB_QUEUE_FILE, {
             "jobs": [
                 {"id": 10, "company": "Keep", "role": "SWE", "status": "pending"},
-                {"id": 11, "company": "Also", "role": "SWE", "status": "evaluated"},
+                {"id": 11, "company": "Remove", "role": "SWE", "status": "evaluated"},
             ]
         })
-        # Save only job 10 — job 11 must survive
+        # Save only job 10 — job 11 must be removed (sync-delete)
         save_to_sqlite(srv.JOB_QUEUE_FILE, {
             "jobs": [{"id": 10, "company": "Keep", "role": "SWE", "status": "pending"}]
         })
 
         result = load_from_sqlite(srv.JOB_QUEUE_FILE, {})
         ids = {j["id"] for j in result["jobs"]}
-        assert ids == {10, 11}, f"Expected both jobs, got {ids}"
+        assert ids == {10}, f"Expected only job 10 after removal, got {ids}"
 
     # ── decide_job: explicit deletes hit the DB ────────────────────────────
 
