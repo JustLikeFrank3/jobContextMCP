@@ -227,7 +227,26 @@ def get_config_value(key: str, default: Any = "") -> Any:
 
 
 def get_contact_info() -> dict[str, Any]:
-    """Return the active request's contact config block."""
+    """Return the active request's contact config block.
+
+    When a per-user data folder is active (multi-tenant / AKS mode) and that
+    user has no config.json of their own, the base config's contact block must
+    NOT be returned — it belongs to the owner, not the requesting user.
+    """
+    from lib.user_context import get_data_folder_override
+    override = get_data_folder_override()
+    if override is not None:
+        # Per-user session: only return contact if the user has their own config.json
+        user_config_path = override / "config.json"
+        if user_config_path.exists():
+            try:
+                user_cfg = json.loads(user_config_path.read_text(encoding="utf-8"))
+                contact = user_cfg.get("contact", {})
+                return contact if isinstance(contact, dict) else {}
+            except Exception:
+                pass
+        # No user-specific config — return empty rather than leaking owner contact
+        return {}
     contact = get_active_config().get("contact", {})
     return contact if isinstance(contact, dict) else {}
 
