@@ -316,7 +316,7 @@ def _build_cover_letter_edit_messages(
 ) -> list[dict]:
     system = (
         "You are editing an existing cover letter, not regenerating from scratch. "
-        "Preserve Frank's plainspoken voice, the current contact block if present, the salutation, "
+        "Preserve the candidate's plainspoken voice, the current contact block if present, the salutation, "
         "and the 4-paragraph body structure unless the edit instructions explicitly say otherwise. "
         "Apply only the requested changes. Do not invent employers, dates, tools, metrics, or claims. "
         "Do not add a date block; the PDF template owns the printed date and signature. "

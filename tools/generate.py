@@ -996,7 +996,7 @@ def _sanitize_cover_letter_output(content: str) -> str:
 
     # Backstop for corporate template filler that can survive the prompt while
     # still technically obeying the hook/story instructions. These substitutions
-    # preserve the factual claims but put them back into Frank's plainer cadence.
+    # preserve the factual claims but put them back into the candidate's plainer cadence.
     for pattern, repl in _CORPORATE_STYLE_SUBS:
         cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
 
@@ -1071,16 +1071,17 @@ def _sanitize_cover_letter_output(content: str) -> str:
     # Skip entirely when no name is configured (empty workspace).
     _configured_name = config.get_contact_name("")
     if _configured_name:
-        # Build a pattern that matches any variant of the configured name
-        # (e.g. with/without middle initial or suffix) and normalise to the
-        # plain "First Last" form stored in contact.name.
         _name_parts = _configured_name.split()
         if len(_name_parts) >= 2:
             _first = re.escape(_name_parts[0])
             _last  = re.escape(_name_parts[-1])
+            # "First Last", dropping any middle name/initial or suffix
+            _short_name = f"{_name_parts[0]} {_name_parts[-1]}"
+            # Match "First [optional-middle] Last [optional-suffix]"
+            # (?:\s+\w+)? — one optional extra word; no stacked quantifiers.
             cleaned = re.sub(
-                rf"\b{_first}(?:\s+\w+{{1,2}})?\s+{_last}(?:\s+[IVX]{{1,4}})?\b",
-                _configured_name,
+                rf"\b{_first}(?:\s+\w+)?\s+{_last}(?:\s+\w+)?\b",
+                _short_name,
                 cleaned,
             )
 
@@ -1255,7 +1256,7 @@ def generate_cover_letter(
     - No bullets, no bold, no headers — prose only.
     - Salutation must be: Dear Hiring Manager,
     - Voice from the tone samples takes priority over the structure template.
-    - Paragraph 4 is a short closer (1-2 sentences) written in Frank's voice.
+    - Paragraph 4 is a short closer (1-2 sentences) written in the candidate's voice.
     """
     user_msg = _build_cover_letter_user_message(company, role, job_description)
     client = _openai_client()
