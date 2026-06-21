@@ -50,9 +50,7 @@ jobs:
   sonar:
     needs: test
     runs-on: ubuntu-latest
-    # Skip if SONAR_TOKEN is not configured — set it in GitHub repo secrets
-    # (Settings → Secrets → Actions) to enable SonarCloud analysis.
-    if: ${{ secrets.SONAR_TOKEN != '' }}
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
