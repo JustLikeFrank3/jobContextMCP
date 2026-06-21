@@ -17,7 +17,7 @@ def log_tone_sample(
     source: str,
     context: str = "",
 ) -> str:
-    """Ingest a writing sample to build Frank's tone/voice profile. Pass the text, a source label (e.g. 'cover_letter_fanduel'), and optional context describing the situation. Used to calibrate the AI before drafting new materials."""
+    """Ingest a writing sample to build the candidate's tone/voice profile. Pass the text, a source label (e.g. 'cover_letter_fanduel'), and optional context describing the situation. Used to calibrate the AI before drafting new materials."""
     data = _load_json(config.TONE_FILE, {"samples": []})
     entry = _build_tone_sample_entry(data["samples"], text, source, context)
     data["samples"].append(entry)
@@ -26,7 +26,7 @@ def log_tone_sample(
 
 
 def get_tone_profile() -> str:
-    """Return all logged tone samples so the AI can calibrate Frank's writing voice before drafting cover letters, outreach messages, or other materials."""
+    """Return all logged tone samples so the AI can calibrate the candidate's writing voice before drafting cover letters, outreach messages, or other materials."""
     data = _load_json(config.TONE_FILE, {"samples": []})
     samples = data.get("samples", [])
 
@@ -36,7 +36,7 @@ def get_tone_profile() -> str:
     total_words = sum(s.get("word_count", 0) for s in samples)
     lines = [
         f"═══ TONE PROFILE ({len(samples)} samples, {total_words} total words) ═══",
-        "Use these samples to calibrate Frank's voice before writing anything.",
+        "Use these samples to calibrate the candidate's voice before writing anything.",
         "",
     ]
     for s in samples:
@@ -54,7 +54,7 @@ def _format_tone_samples(samples: list, total_count: int) -> str:
     header = f"═══ TONE PROFILE ({len(samples)} of {total_count} samples, {total_words} words) ═══"
     lines = [
         header,
-        "Use these samples to calibrate Frank's voice before writing anything.",
+        "Use these samples to calibrate the candidate's voice before writing anything.",
         "",
     ]
     for s in samples:
@@ -149,10 +149,10 @@ def get_tone_profile_budgeted(
 
 
 def _cover_letter_tone_score(sample: dict) -> tuple:
-    """Return a priority score for samples that preserve Frank's cover-letter voice.
+    """Return a priority score for samples that preserve the candidate's cover-letter voice.
 
     Newest-first selection can overfit to short outreach snippets. Cover letters need
-    the older high-signal samples that show how Frank connects a personal thread to
+    the older high-signal samples that show how the candidate connects a personal thread to
     professional evidence without sounding like a corporate template.
     """
     source = (sample.get("source") or "").lower()
@@ -187,7 +187,7 @@ def get_cover_letter_tone_profile_budgeted(
 
     This keeps the bounded-token behavior of ``get_tone_profile_budgeted`` but
     seeds the packer with high-signal cover-letter and narrative samples before
-    backfilling with recent writing. The goal is to preserve Frank's actual cover
+    backfilling with recent writing. The goal is to preserve the candidate's actual cover
     letter register after retrieval surfaces a strong personal hook.
     """
     data = _load_json(config.TONE_FILE, {"samples": []})
@@ -228,7 +228,7 @@ def scan_materials_for_tone(
         if not d.exists():
             continue
         for f in sorted(d.glob("*.txt")):
-            rel = str(f.relative_to(config.RESUME_FOLDER))
+            rel = str(f.relative_to(config.get_active_workspace_folder()))
             candidates.append((rel, f))
 
     seen_rels: set = set()
@@ -283,7 +283,7 @@ def scan_materials_for_tone(
         "═══ EXTRACTION INSTRUCTIONS ═══",
         "",
         "For each file above, extract:",
-        "  1. TONE SAMPLES  — paragraphs that sound distinctly like Frank's voice.",
+        "  1. TONE SAMPLES  — paragraphs that sound distinctly like the candidate's voice.",
         "     Best candidates: opening paragraph, closing paragraph, any personal framing.",
         "     Call: log_tone_sample(text='...', source='Cover Letter <Company>')",
         "",

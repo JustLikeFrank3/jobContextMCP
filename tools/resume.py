@@ -42,15 +42,14 @@ def _unwrap(content: str) -> str:
 
 
 def read_master_resume() -> str:
-    """Read Frank's master source resume — the single source of truth containing all metrics, achievements, projects, and context notes. Always read this before generating any resume or cover letter."""
+    """Read the candidate's master source resume — the single source of truth containing all metrics, achievements, projects, and context notes. Always read this before generating any resume or cover letter."""
     return _load_master_context()
 
 
 def list_existing_materials(company: str = "") -> str:
     """List all existing resume and cover letter files. Optionally filter by company name to see materials for a specific target company."""
-    _ws = config.get_active_workspace_folder()
-    optimized_dir = _ws / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
-    cover_letter_dir = _ws / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+    optimized_dir = config.get_active_optimized_resumes_dir()
+    cover_letter_dir = config.get_active_cover_letters_dir()
 
     def _list_dir(d: Path, label: str) -> list[str]:
         if not d.exists():
@@ -74,7 +73,7 @@ def list_existing_materials(company: str = "") -> str:
 
 def read_existing_resume(filename: str) -> str:
     """Read the full text of an existing resume from 01-Current-Optimized/. Use list_existing_materials() to find available filenames."""
-    path = config.get_active_workspace_folder() / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized") / filename
+    path = config.get_active_optimized_resumes_dir() / filename
     if not path.exists():
         return f"Not found: {filename}\nUse list_existing_materials() to see available resumes."
     return _read(path)
@@ -82,7 +81,7 @@ def read_existing_resume(filename: str) -> str:
 
 def read_reference_file(filename: str) -> str:
     """Read a file from 06-Reference-Materials/ (e.g. template format, consolidated resume, skills variants, GM feedback). Pass the filename only — use list_existing_materials() to discover what's available."""
-    ref_dir = config.get_active_workspace_folder() / config._cfg.get("reference_materials_dir", "06-Reference-Materials")
+    ref_dir = config.get_active_reference_materials_dir()
     path = ref_dir / filename
     if not path.exists():
         available = sorted(f.name for f in ref_dir.iterdir()) if ref_dir.exists() else []
@@ -107,7 +106,7 @@ def save_resume_txt(filename: str, content: str) -> str:
     """
     if not filename.endswith(".txt"):
         filename += ".txt"
-    out_dir = config.get_active_workspace_folder() / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+    out_dir = config.get_active_optimized_resumes_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / filename
     path.write_text(_unwrap(content), encoding="utf-8")
@@ -131,7 +130,7 @@ def save_cover_letter_txt(filename: str, content: str) -> str:
     """
     if not filename.endswith(".txt"):
         filename += ".txt"
-    out_dir = config.get_active_workspace_folder() / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+    out_dir = config.get_active_cover_letters_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / filename
     path.write_text(_unwrap(content), encoding="utf-8")
@@ -158,8 +157,8 @@ def resume_diff(file_a: str, file_b: str) -> str:
     def _resolve(name: str) -> Path:
         _ws = config.get_active_workspace_folder()
         if name.startswith("ref:"):
-            return _ws / config._cfg.get("reference_materials_dir", "06-Reference-Materials") / name[4:]
-        return _ws / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized") / name
+            return config.get_active_reference_materials_dir() / name[4:]
+        return config.get_active_optimized_resumes_dir() / name
 
     path_a = _resolve(file_a)
     path_b = _resolve(file_b)

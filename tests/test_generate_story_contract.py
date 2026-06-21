@@ -118,11 +118,9 @@ def test_ai_cover_letter_narrative_plan_uses_current_jobcontextmcp():
     )
 
     assert "current AI platform builder" in plan
-    assert "I built and maintain jobContextMCP" in plan
-    assert "Do not lead with the Azure migration" in plan
-    assert "never only as a completed past-tense artifact" in plan
-    assert "My uncle Roy" in plan
-    assert "readers do not know whose uncle he is" in plan
+    assert "Do not lead with cloud migration" in plan
+    assert "cloned X times" in plan  # phrasing rule present
+    assert "aligns perfectly" in plan  # alignment rule present
 
 
 def test_cover_letter_sanitizer_fixes_awkward_clone_phrasing():
@@ -151,7 +149,7 @@ At GM, I led the AI adoption initiative, achieving a 35%+ organizational uptake.
 Sema4.ai's focus on transforming knowledge work aligns with my experience in building platforms that are not just intelligent but operable and reliable. I want a conversation to explore how my background can contribute to your Agent Platform's success.
 
 Regards,
-Frank Vladmir MacBride III"""
+Frank MacBride"""
 
     cleaned = generate._sanitize_cover_letter_output(raw)
     lowered = cleaned.lower()
@@ -165,7 +163,7 @@ Frank Vladmir MacBride III"""
         "highlight my capability",
         "aligns with my experience",
         "contribute to your agent platform's success",
-        "frank vladmir macbride iii",
+        "frank v. macbride",
     ]:
         assert bad not in lowered
 

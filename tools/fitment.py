@@ -128,7 +128,7 @@ def _extract_ai_platform_evidence(master: str, limit: int = 10) -> str:
 
 
 def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
-    """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
+    """Package the candidate's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
 
     When `persona` is set, prepends the persona's prompt block to the context
     pack so the consuming agent reads it as a role-specific lens (e.g.
@@ -165,44 +165,42 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
         f"{persona_section}"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
         f"{ai_evidence_section}"
-        f"──── FRANK'S MASTER RESUME ────\n{master}"
+        f"──── CANDIDATE MASTER RESUME ────\n{master}"
         f"{interview_section}"
     )
 
 
 def get_customization_strategy(role_type: str) -> str:
-    """Return a resume customization strategy for a given role type. Valid values: testing, cloud, data_engineering, backend, fullstack, ai_innovation, iot. Advises which skills and stories to lead with."""
+    """Return a resume customization strategy for a given role type. Valid values: testing, cloud, data_engineering, backend, fullstack, ai_innovation, iot. Advises which skills and stories to lead with based on the candidate's master resume."""
     strategies = {
         "testing": (
-            "Lead with JUnit/Mockito/Selenium expertise, 80%+ coverage metrics, TDD practices. "
-            "Feature the 'prevented production defects' story. "
-            "Highlight Karma/Jest for frontend testing."
+            "Lead with testing expertise, coverage metrics, and TDD practices. "
+            "Feature any story about defect prevention or quality improvements. "
+            "Highlight both backend (JUnit/Mockito) and frontend (Karma/Jest) testing if present."
         ),
         "cloud": (
-            "Lead with Azure Container Apps, Terraform IaC, zero-downtime PCF→OCF→Azure migration. "
-            "Emphasize containerization, CI/CD pipelines, and infrastructure-as-code."
+            "Lead with cloud platform experience, infrastructure-as-code, and migration work. "
+            "Emphasize containerization, CI/CD pipelines, and zero-downtime deployment stories."
         ),
         "data_engineering": (
-            "Lead with IBM DataStage, PySpark ETL pipelines, Oracle→PostgreSQL migration. "
-            "Emphasize data modeling, multi-source integration, and warehouse work."
+            "Lead with ETL pipeline experience, data migration work, and warehouse projects. "
+            "Emphasize data modeling, multi-source integration, and throughput improvements."
         ),
         "backend": (
-            "Lead with microservices architecture, event-driven pub/sub, Spring Boot, "
-            "98% SLA compliance on production forecasting app. "
-            "Emphasize distributed systems debugging, on-call rotation, observability."
+            "Lead with microservices architecture, event-driven messaging, and API ownership. "
+            "Emphasize SLA compliance, distributed systems debugging, on-call experience, and observability."
         ),
         "fullstack": (
-            "Lead with Java/Spring Boot + Angular/TypeScript full ownership. "
-            "Emphasize API design, end-to-end modernization, cross-functional product work."
+            "Lead with end-to-end ownership across backend APIs and frontend interfaces. "
+            "Emphasize API design, modernization work, and cross-functional product collaboration."
         ),
         "ai_innovation": (
-            "Lead with GitHub Copilot champion story: 35% org adoption, 3.5x target. "
-            "Emphasize technical evangelism, AI tooling adoption, and measurable team impact."
+            "Lead with AI tooling adoption and technical evangelism stories. "
+            "Emphasize measurable team impact, org-wide adoption metrics, and agentic/LLM platform work."
         ),
         "iot": (
-            "Lead with IoT Engineering degree, RetrosPiCam project (FastAPI + Raspberry Pi + servo HAT), "
-            "hardware/software integration, and Azure edge/cloud connectivity. "
-            "Tie in LiveVox latency work (2.8ms web, 12.7ms iOS) as embedded-adjacent."
+            "Lead with hardware/software integration experience and IoT or embedded adjacent projects. "
+            "Highlight edge/cloud connectivity, latency work, and real-time data handling."
         ),
     }
     result = strategies.get(role_type.lower())
@@ -227,7 +225,7 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    _assessments_folder = config.get_active_workspace_folder() / config._cfg.get("job_assessments_dir", "07-Job-Assessments")
+    _assessments_folder = config.get_active_job_assessments_dir()
     folder = _assessments_folder
     if source:
         # Sanitise source into a safe folder name
@@ -276,7 +274,7 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
             persona_note = f" (persona warning: {exc})"
 
     master = _load_master_context()
-    candidate_name = config._cfg.get("name", "the candidate")
+    candidate_name = config.get_contact_name("the candidate")
     ai_evidence_msg = ""
     if _is_ai_focused(role, job_description):
         ai_evidence = _extract_ai_platform_evidence(master)

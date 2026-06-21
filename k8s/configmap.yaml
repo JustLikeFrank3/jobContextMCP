@@ -22,7 +22,7 @@ data:
       "leetcode_cheatsheet_path":  "GM_Interview_Cheatsheet.md",
       "quick_reference_path":      "INTERVIEW_DAY_QUICK_REFERENCE.md",
       "template_format_path":      "06-Reference-Materials/Frank MacBride Resume - Template Format.txt",
-      "gm_awards_path":            "06-Reference-Materials/GM Recognition Awards.txt",
+      "achievements_path":          "06-Reference-Materials/GM Recognition Awards.txt",
       "feedback_received_path":    "06-Reference-Materials/Feedback_Received.txt",
       "skills_shorter_path":       "06-Reference-Materials/Skills - 10% Shorter.txt",
       "resume_template_png":       "06-Reference-Materials/resume_template.png",
@@ -38,6 +38,17 @@ data:
         "https://github.com/JustLikeFrank3/RetrosPiCam",
         "https://github.com/JustLikeFrank3/LiveVox",
         "https://github.com/JustLikeFrank3/LiveVoxNative"
-      ]
+      ],
+      "contact": {
+        "name":      "Frank Vladmir MacBride III",
+        "phone":     "+1 (305) 490-1262",
+        "email":     "frankvmacbride@gmail.com",
+        "linkedin":  "www.linkedin.com/in/frankvmacbride",
+        "github":    "https://github.com/JustLikeFrank3",
+        "city":      "Atlanta, GA",
+        "city_state":"Atlanta, GA",
+        "location":  "Atlanta, GA"
+      }
     }
   storage_account: "__STORAGE_ACCOUNT__"
+  entra_owner_oid: "__ENTRA_OWNER_OID__"

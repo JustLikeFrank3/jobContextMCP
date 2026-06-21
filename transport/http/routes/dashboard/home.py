@@ -105,6 +105,13 @@ async def dashboard_home() -> HTMLResponse:
     .card-title {{ font-weight: 700; font-size: 1rem; }}
     .card-desc {{ color: var(--muted); font-size: 0.83rem; line-height: 1.4; }}
     .card-arrow {{ color: var(--accent); font-size: 0.85rem; margin-top: 6px; }}
+    .signout-wrap {{ margin-top: 28px; text-align: center; }}
+    .signout-btn {{
+      background: none; border: 1px solid var(--line); color: var(--muted);
+      border-radius: 8px; padding: 8px 18px; font-size: 0.83rem;
+      cursor: pointer; font-family: inherit;
+    }}
+    .signout-btn:hover {{ color: #ffdede; border-color: #c0393b; }}
   </style>
 </head>
 <body>
@@ -112,6 +119,11 @@ async def dashboard_home() -> HTMLResponse:
   <p class="tagline">Job search command center</p>
   <div class="grid">
     {cards}
+  </div>
+  <div class="signout-wrap">
+    <form method="post" action="/logout">
+      <button class="signout-btn" type="submit">Sign out</button>
+    </form>
   </div>
 </body>
 </html>"""

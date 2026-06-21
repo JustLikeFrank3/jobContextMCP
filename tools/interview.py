@@ -4,12 +4,12 @@ from lib.io import _read, _load_master_context
 
 def get_interview_quick_reference() -> str:
     """Return the full interview day quick reference: algorithm pattern cheat sheets, system design 5-step framework, testing talking points, and pre-interview checklist."""
-    return _read(config.QUICK_REFERENCE)
+    return _read(config.get_active_quick_reference_path())
 
 
 def get_leetcode_cheatsheet(section: str = "") -> str:
     """Return the LeetCode algorithm cheatsheet. Pass a section name (e.g. 'trees', 'graphs', 'dynamic programming') to get just that section, or leave blank for the full 1400-line reference."""
-    content = _read(config.LEETCODE_CHEATSHEET)
+    content = _read(config.get_active_leetcode_cheatsheet_path())
     if not section:
         return content
 
@@ -42,9 +42,9 @@ def generate_interview_prep_context(
     stage: str = "phone_screen",
     job_description: str = "",
 ) -> str:
-    """Bundle Frank's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
+    """Bundle the candidate's master resume and quick reference into a structured context prompt for interview prep. Specify company, role, stage (phone_screen, technical, behavioral, system_design), and optional job description. Returns a prompt instructing the AI to generate top talking points, STAR responses, technical topics, smart questions, and confidence anchors."""
     master = _load_master_context()
-    quick_ref = _read(config.QUICK_REFERENCE)
+    quick_ref = _read(config.get_active_quick_reference_path())
 
     desc_block = f"\n──── JOB DESCRIPTION ────\n{job_description}" if job_description else ""
 
@@ -54,22 +54,22 @@ def generate_interview_prep_context(
         f"Role:    {role}\n"
         f"Stage:   {stage}\n"
         f"{desc_block}\n\n"
-        f"──── FRANK'S MASTER RESUME ────\n{master}\n\n"
+        f"──── CANDIDATE'S MASTER RESUME ────\n{master}\n\n"
         f"──── QUICK REFERENCE / STAR STORIES ────\n{quick_ref}\n\n"
         f"Use the above to produce:\n"
-        f"  1. Top 5 things Frank must communicate for THIS role/stage\n"
+        f"  1. Top 5 things the candidate must communicate for THIS role/stage\n"
         f"  2. Anticipated questions + suggested STAR responses\n"
         f"  3. Technical topics to review (if applicable)\n"
-        f"  4. Smart questions for Frank to ask the interviewer\n"
+        f"  4. Smart questions for the candidate to ask the interviewer\n"
         f"  5. Any gaps to proactively address\n"
-        f"  6. Confidence anchors — Frank's strongest achievements relevant here\n"
+        f"  6. Confidence anchors — the candidate's strongest achievements relevant here\n"
     )
 
 
 def get_existing_prep_file(company: str) -> str:
     """Find and return all existing interview prep files for a given company — searches across both the Resume 2025 and LeetCode folders for files containing the company name and prep/interview/call/assessment keywords."""
     _ws = config.get_active_workspace_folder()
-    search_roots = [_ws, config.LEETCODE_FOLDER, _ws / config._cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")]
+    search_roots = [_ws, config.get_active_leetcode_folder(), config.get_active_interview_prep_dir()]
     seen: set = set()
     matches = []
     for root in search_roots:
@@ -105,7 +105,7 @@ def save_interview_prep(company: str, content: str, filename: str = "") -> str:
     # Strip trailing whitespace per line; preserve intentional blank lines
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    target = config.get_active_workspace_folder() / config._cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
+    target = config.get_active_interview_prep_dir()
     target.mkdir(parents=True, exist_ok=True)
     dest = target / filename
     dest.write_text(cleaned, encoding="utf-8")

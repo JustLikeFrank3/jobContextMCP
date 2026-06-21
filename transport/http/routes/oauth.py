@@ -237,6 +237,26 @@ async def logout(request: Request) -> RedirectResponse:
     return RedirectResponse(url=entra_logout, status_code=302)
 
 
+@router.post("/logout", include_in_schema=False)
+async def logout_post(request: Request) -> RedirectResponse:
+    """POST handler for sign-out form buttons across the dashboard.
+
+    Clears the jc_session cookie first, then hands off to the Entra
+    end-session endpoint so the SSO session is also cleared server-side.
+    """
+    from transport.http.routes.dashboard.login import _is_secure
+    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+    base = _base_url(request)
+    entra_logout = (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
+        f"?post_logout_redirect_uri={base}/logged-out"
+    )
+    resp = RedirectResponse(url=entra_logout, status_code=303)
+    resp.delete_cookie("jc_session", path="/", httponly=True,
+                       samesite="lax", secure=_is_secure(request))
+    return resp
+
+
 @router.get("/logged-out", include_in_schema=False)
 async def logged_out(request: Request) -> HTMLResponse:
     """Post-logout landing page with local cache clear instructions."""
@@ -256,6 +276,12 @@ async def logged_out(request: Request) -> HTMLResponse:
     pre  {{ background: #f4f4f4; padding: 14px; border-radius: 6px;
             overflow-x: auto; font-size: .85rem; }}
     .step {{ margin-top: 20px; }}
+    .home-btn {{
+      display: inline-block; margin-top: 28px;
+      background: #1a1a1a; color: #fff; text-decoration: none;
+      border-radius: 8px; padding: 10px 20px; font-size: .9rem;
+    }}
+    .home-btn:hover {{ background: #333; }}
   </style>
 </head>
 <body>
@@ -272,6 +298,7 @@ async def logged_out(request: Request) -> HTMLResponse:
     <p style="margin-top:6px">Claude Desktop will re-authenticate on next start
     and open a new browser login prompt.</p>
   </div>
+  <a class="home-btn" href="/dashboard/login">Sign in again</a>
 </body>
 </html>"""
     return HTMLResponse(content=html)

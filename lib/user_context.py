@@ -42,3 +42,23 @@ def set_data_folder(path: str | Path) -> object:
 def reset_data_folder(token: object) -> None:
     """Restore the previous context value using the token from set_data_folder()."""
     _DATA_FOLDER_CTX.reset(token)  # type: ignore[arg-type]
+
+
+# Holds the OID of the authenticated user for the current request.
+# Empty string means unauthenticated / API-key session.
+_USER_OID_CTX: ContextVar[str] = ContextVar("user_oid_ctx", default="")
+
+
+def set_user_oid(oid: str) -> object:
+    """Store the current request's user OID. Returns a reset token."""
+    return _USER_OID_CTX.set(oid)
+
+
+def reset_user_oid(token: object) -> None:
+    """Restore the previous OID context value."""
+    _USER_OID_CTX.reset(token)  # type: ignore[arg-type]
+
+
+def get_current_user_oid() -> str:
+    """Return the OID of the authenticated user for the current request, or '' if unset."""
+    return _USER_OID_CTX.get()

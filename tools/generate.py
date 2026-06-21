@@ -135,9 +135,9 @@ def _model() -> str:
     try:
         from lib.config import get_llm_client
         _, model = get_llm_client()
-        return str(model or config._cfg.get("openai_model", "gpt-4o-mini"))
+        return str(model or config.get_config_value("openai_model", "gpt-4o-mini"))
     except Exception:
-        return str(config._cfg.get("openai_model", "gpt-4o-mini"))
+        return str(config.get_config_value("openai_model", "gpt-4o-mini"))
 
 
 def _portfolio_metrics_block() -> str:
@@ -216,7 +216,6 @@ def _cover_letter_narrative_plan(company: str, role: str, job_description: str) 
         "- Write one coherent story, not a catalog of achievements.",
         "- Use no more than one primary project in Paragraph 2 and no more than three supporting artifacts in Paragraph 3.",
         "- Do not repeat the same evidence in multiple paragraphs.",
-        "- If the master resume lists an active/current side project, refer to it in the present tense ('I built and maintain X' or 'X currently...'), never only as a completed past-tense artifact.",
         "- GitHub traffic phrasing must be natural: say 'currently shows X clones in the last 14 days' or 'has X clones in the last 14 days'; do not say 'cloned X times'.",
         "- Avoid sweeping alignment claims like 'aligns perfectly'; name the actual engineering overlap instead.",
     ]
@@ -259,10 +258,7 @@ def _load_cover_letter_master_context(role: str, job_description: str) -> str:
     try:
         # Resolve the master resume for the ACTIVE REQUEST'S user, not the
         # global config.MASTER_RESUME constant which always points to the owner's file.
-        ws = config.get_active_workspace_folder()
-        optimized_dir = ws / "01-Current-Optimized"
-        candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
-        master_path = candidates[0] if candidates else config.MASTER_RESUME
+        master_path = config.get_active_master_resume_path()
         raw = master_path.read_text(encoding="utf-8")
     except Exception:
         return _load_master_context()
@@ -273,12 +269,11 @@ def _load_cover_letter_master_context(role: str, job_description: str) -> str:
     }
     pinned_terms = {
         "ai", "claude", "copilot", "agent", "agentic", "mcp", "model context",
-        "jobcontextmcp", "langgraph", "rag", "faiss", "embedding", "openai",
+        "langgraph", "rag", "faiss", "embedding", "openai",
         "fastapi", "python", "backend", "platform", "memory", "retrieval",
         "azure", "container apps", "terraform", "postgresql", "redis", "kafka",
-        "oauth2", "msal", "sla", "zero downtime", "98%", "35%", "80%",
-        "77", "574", "livevox", "2.8ms", "12.7ms", "retrospicam",
-        "raspberry", "iot", "test coverage", "500k",
+        "oauth2", "msal", "sla", "zero downtime", "test coverage", "iot",
+        "raspberry", "spring boot", "angular", "java", "typescript",
     }
     keep_terms = query_terms | pinned_terms
 
@@ -341,15 +336,10 @@ def _safe_filename(company: str, role: str, suffix: str) -> str:
     """Generate a safe default output filename."""
     slug = re.sub(r"[^A-Za-z0-9 ]", "", f"{company} {role} {suffix}").strip()
     slug = re.sub(r"\s+", " ", slug)
-    try:
-        from tools.latex_export import _user_identity
-        name = _user_identity().get("name", "")
-    except Exception:
-        name = ""
+    name = config.get_contact_name("")
     if name:
         return f"{name} Resume - {slug}.txt" if suffix == "Resume" else f"{name} Cover Letter - {slug}.txt"
-    # In per-user partitions contact.name may be unset; avoid odd fallback names
-    # like "Resume Cover Letter - ..." and use a neutral role/company stem.
+    # Unconfigured user: use neutral company/role stem with no personal name.
     return f"{slug}.txt"
 
 
@@ -395,9 +385,7 @@ def _load_ai_role_hook_stories() -> list[dict]:
     of whether semantic retrieval ranked it high enough to include it.
     """
     try:
-        import json
-        with open(config.PERSONAL_CONTEXT_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
         return [
             s for s in data.get("stories", [])
             if "ai_role_hook" in {t.lower() for t in s.get("tags", [])}
@@ -667,16 +655,15 @@ def _build_cover_letter_user_message(company: str, role: str, job_description: s
     assessment_context = _assessment_context_block(company, role)
     narrative_plan = _cover_letter_narrative_plan(company, role, clean_job_description)
 
-    from tools.latex_export import _user_identity
-    _identity = _user_identity()
-    name     = _identity["name"]
-    phone    = _identity["phone"]
-    email    = _identity["email"]
-    linkedin = _identity["linkedin"]
-    github   = _identity["github"]
-    _linkedin_line = f"\nlinkedin: {linkedin}" if linkedin else ""
-    _github_line   = f"\ngithub: {github}" if github else ""
-    contact_block = f"{name.upper()}\n\nphone: {phone}\nemail: {email}{_linkedin_line}{_github_line}"
+    _contact   = config.get_contact_info()
+    name     = str(_contact.get("name", "") or "").strip()
+    phone    = str(_contact.get("phone", "") or "").strip()
+    email    = str(_contact.get("email", "") or "").strip()
+    _li      = str(_contact.get("linkedin", "") or "").strip().replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
+    _gh      = str(_contact.get("github", "") or "").strip().replace("https://github.com/", "").replace("https://www.github.com/", "").strip("/")
+    _linkedin_line = f"\nlinkedin: {_li}" if _li else ""
+    _github_line   = f"\ngithub: {_gh}" if _gh else ""
+    contact_block = f"{name.upper()}\n\nphone: {phone}\nemail: {email}{_linkedin_line}{_github_line}" if name else ""
     interview_block = get_interview_context(company=company, role=role)
 
     instructions = (
@@ -1008,7 +995,7 @@ def _sanitize_cover_letter_output(content: str) -> str:
 
     # Backstop for corporate template filler that can survive the prompt while
     # still technically obeying the hook/story instructions. These substitutions
-    # preserve the factual claims but put them back into Frank's plainer cadence.
+    # preserve the factual claims but put them back into the candidate's plainer cadence.
     for pattern, repl in _CORPORATE_STYLE_SUBS:
         cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
 
@@ -1078,18 +1065,24 @@ def _sanitize_cover_letter_output(content: str) -> str:
         flags=re.IGNORECASE | re.MULTILINE,
     )
 
-    # Enforce correct sign-off — strip middle name and suffix.
-    cleaned = re.sub(
-        r"\bFrank\s+Vladmir\s+MacBride\s+III\b",
-        "Frank MacBride",
-        cleaned,
-    )
-    # Catch variants: "Regards, Frank V. MacBride" etc.
-    cleaned = re.sub(
-        r"\bFrank\s+V\.?\s+MacBride\b",
-        "Frank MacBride",
-        cleaned,
-    )
+    # Normalise the sign-off name to the configured contact name so that
+    # middle names, suffixes, or model hallucinations don't leak through.
+    # Skip entirely when no name is configured (empty workspace).
+    _configured_name = config.get_contact_name("")
+    if _configured_name:
+        _name_parts = _configured_name.split()
+        if len(_name_parts) >= 2:
+            _first = re.escape(_name_parts[0])
+            _last  = re.escape(_name_parts[-1])
+            # "First Last", dropping any middle name/initial or suffix
+            _short_name = f"{_name_parts[0]} {_name_parts[-1]}"
+            # Match "First [optional-middle] Last [optional-suffix]"
+            # (?:\s+\w+)? — one optional extra word; no stacked quantifiers.
+            cleaned = re.sub(
+                rf"\b{_first}(?:\s+\w+)?\s+{_last}(?:\s+\w+)?\b",
+                _short_name,
+                cleaned,
+            )
 
     return cleaned.strip()
 
@@ -1262,7 +1255,7 @@ def generate_cover_letter(
     - No bullets, no bold, no headers — prose only.
     - Salutation must be: Dear Hiring Manager,
     - Voice from the tone samples takes priority over the structure template.
-    - Paragraph 4 is a short closer (1-2 sentences) written in Frank's voice.
+    - Paragraph 4 is a short closer (1-2 sentences) written in the candidate's voice.
     """
     user_msg = _build_cover_letter_user_message(company, role, job_description)
     client = _openai_client()

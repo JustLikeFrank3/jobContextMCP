@@ -78,15 +78,17 @@ Dear Hiring Manager,
 \end{{document}}
 """
 
-# Contact / identity values — kept centralised here; update if the master
-# cover_letter.tex changes its \def block.
+# Generic fallback identity values used when no contact block is present in
+# config.json.  These are intentionally neutral placeholders — they must never
+# contain any real person's data so that an unconfigured workspace does not
+# expose someone else's information.
 _AUTHOR_DEFAULTS = {
-    "name":       r"Frank Vladmir MacBride III",
-    "phone":      r"+1 (305) 490-1262",
-    "city":       r"Atlanta, GA",
-    "email":      r"frankvmacbride@gmail.com",
-    "linkedin":   r"frankvmacbride",
-    "github":     r"JustLikeFrank3",
+    "name":       r"YOUR FULL NAME",
+    "phone":      r"555-867-5309",
+    "city":       r"Your City, ST",
+    "email":      r"you@example.com",
+    "linkedin":   r"yourhandle",
+    "github":     r"YourGitHub",
 }
 
 _BUNDLED_LATEX_ASSETS_DIR = Path(__file__).resolve().parent.parent / "templates" / "latex_assets"
@@ -116,35 +118,22 @@ def _user_identity() -> dict[str, str]:
     still works without any extra setup.  Per-user callers (beta testers)
     get their own name/email on the generated document.
     """
-    try:
-        from lib.user_context import get_data_folder_override
-        override = get_data_folder_override()
-        if override is not None:
-            user_config_path = override / "config.json"
-            if user_config_path.exists():
-                import json as _json
-                user_cfg = _json.loads(user_config_path.read_text(encoding="utf-8"))
-                contact = user_cfg.get("contact", {})
-                if contact:
-                    # Normalise linkedin/github — strip URL prefix if present
-                    # linkedin and github are optional — default to "" so the
-                    # header template can suppress the link rather than rendering
-                    # a dead github.com/ or linkedin.com/in/ with no handle.
-                    linkedin = contact.get("linkedin", "")
-                    linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
-                    github = contact.get("github", "")
-                    github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
-                    return {
-                        "name":     contact.get("name",  _AUTHOR_DEFAULTS["name"]),
-                        "phone":    contact.get("phone", _AUTHOR_DEFAULTS["phone"]),
-                        "city":     contact.get("city",  _AUTHOR_DEFAULTS["city"]),
-                        "email":    contact.get("email", _AUTHOR_DEFAULTS["email"]),
-                        "linkedin": linkedin,
-                        "github":   github,
-                    }
-    except Exception:
-        pass
-    return dict(_AUTHOR_DEFAULTS)
+    contact = cfg.get_contact_info()
+    if not contact:
+        return dict(_AUTHOR_DEFAULTS)
+
+    linkedin = str(contact.get("linkedin", ""))
+    linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
+    github = str(contact.get("github", ""))
+    github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
+    return {
+        "name":     str(contact.get("name", _AUTHOR_DEFAULTS["name"])),
+        "phone":    str(contact.get("phone", _AUTHOR_DEFAULTS["phone"])),
+        "city":     str(contact.get("city", _AUTHOR_DEFAULTS["city"])),
+        "email":    str(contact.get("email", _AUTHOR_DEFAULTS["email"])),
+        "linkedin": linkedin,
+        "github":   github,
+    }
 
 
 def _escape_latex(text: str) -> str:
@@ -251,8 +240,7 @@ def generate_cover_letter_latex(
     latex_src = _latex_dir()  # None when not configured (AKS) — bundled assets used
 
     if output_dir is None:
-        folder_name = cfg._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs")
-        final_output_dir = cfg.get_active_workspace_folder() / folder_name
+        final_output_dir = cfg.get_active_cover_letter_pdfs_dir()
     else:
         final_output_dir = Path(output_dir)
     final_output_dir.mkdir(parents=True, exist_ok=True)

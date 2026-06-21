@@ -105,8 +105,8 @@ Role/label: description
 8. Skills format: `Label: value, value, value` — colon after label, comma-separated values.
 9. No hard line wrapping — let lines be as long as they need to be; the renderer wraps text.
 10. PROJECTS section is REQUIRED. Always include 2–3 of the most relevant side projects from the
-    master resume. jobContextMCP, RetrosPiCam, and LiveVoxNative are the primary candidates —
-    pick based on relevance to the target role.
+    master resume. Pick the 2–3 most relevant projects from the master resume based on the
+    target role.
 
 ### Target length
 - Aim for 750–900 words total (one tight page in Courier New 9.2pt).
@@ -166,8 +166,8 @@ Full Name
      page. Lead with whatever is the STRONGEST match to this specific job description (the AI/RAG
      tooling, a side project, or performance work) and give it two sentences with verbatim
      metrics. Then add two more concrete artifacts, one sentence each, each carrying a real metric
-     verbatim from the master resume (for example the LiveVox latency work: 2.8ms web / 12.7ms
-     iOS round-trip audio latency measured from microphone input to speaker output, 98% SLA). Close with one sentence on what they demonstrate together. Do not pad;
+     verbatim from the master resume. Then add two more concrete artifacts, one sentence each, each carrying a real metric
+     verbatim from the master resume. Close with one sentence on what they demonstrate together. Do not pad;
      every sentence carries a distinct fact.
    • Para 4: Closer. State the fit directly in the candidate's own words, then invite a conversation.
      Short but not dismissive. Write the invite in the candidate's voice; do not paste a stock closing line.

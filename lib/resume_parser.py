@@ -15,7 +15,7 @@ from lib import config
 def _get_contact_defaults() -> dict:
     """Read contact defaults from config.json 'contact' block. Falls back to empty strings.
     config.json is gitignored — put your real contact info there, not in source."""
-    c = config._cfg.get("contact", {})
+    c = config.get_contact_info()
     return {
         "phone": c.get("phone", ""),
         "email": c.get("email", ""),
@@ -776,7 +776,7 @@ def _parse_resume_txt(text: str) -> dict:
         sections.append(s)
 
     return {
-        "name": name or tag_name or config._cfg.get("contact", {}).get("name", ""),
+        "name": name or tag_name or config.get_contact_name(""),
         "contact": contact,
         "tagline": tagline,
         "synopsis": synopsis,
@@ -798,7 +798,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
 
     # Name is the very first non-blank, non-contact line.
     # Fall back to config-driven default (set "name" in config.json "contact" block).
-    derived_name = config._cfg.get("contact", {}).get("name", "")
+    derived_name = config.get_contact_name("")
     for line in lines:
         s = line.strip()
         if s and "@" not in s and not _PHONE_RE.search(s) and not _LINKEDIN_RE.search(s):
@@ -810,8 +810,8 @@ def _parse_cover_letter_txt(text: str) -> dict:
     # are short; genuine body paragraphs are fully-joined and > 60 chars.
     body_lines: list[str] = []
     in_body = False
-    _contact_first = (config._cfg.get("contact", {}).get("name", "") or "").split()
-    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "Frank"
+    _contact_first = config.get_contact_name("").split()
+    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "(?!)"
     header_re = re.compile(rf"^({_first_name_pat}|\+1|\d{{3}}|www\.|linkedin)", re.I)
     for line in lines:
         s = line.strip()
@@ -857,7 +857,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
     if current:
         paragraphs.append(" ".join(current))
 
-    # Split a closing like "Kindest Regards, Frank Vladmir MacBride III" that got
+    # Split a closing like "Kindest Regards, Frank MacBride" that got
     # merged into one paragraph because there was no blank line between the salutation
     # and the signature in the .txt output.
     _closing_res = [
@@ -875,7 +875,7 @@ def _parse_cover_letter_txt(text: str) -> dict:
                 break
 
     # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
-    _full_name = config._cfg.get("contact", {}).get("name", "") or ""
+    _full_name = config.get_contact_name("")
     if _full_name:
         _sign_first = re.escape(_full_name.split()[0])
         sign_re = re.compile(rf"^{_sign_first}\s+\S", re.I)
@@ -892,4 +892,3 @@ def _parse_cover_letter_txt(text: str) -> dict:
         "contact": contact,
         "paragraphs": paragraphs,
     }
-

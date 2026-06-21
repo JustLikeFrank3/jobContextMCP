@@ -74,9 +74,9 @@ def _sync_config_exports() -> None:
     global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, GITHUB_METRICS_FILE, FB_FRIENDS_FOLDER
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
-    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
+    global ACHIEVEMENTS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
-    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY, LATEX_RESUME_DIR
+    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY, LATEX_RESUME_DIR, OWNER_OID
 
     _cfg = config._cfg
 
@@ -107,13 +107,14 @@ def _sync_config_exports() -> None:
     RESUME_TEMPLATE_PNG = config.RESUME_TEMPLATE_PNG
     COVER_LETTER_TEMPLATE_PNG = config.COVER_LETTER_TEMPLATE_PNG
     TEMPLATE_FORMAT = config.TEMPLATE_FORMAT
-    GM_AWARDS = config.GM_AWARDS
+    ACHIEVEMENTS = config.ACHIEVEMENTS
     FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
     SKILLS_SHORTER = config.SKILLS_SHORTER
     INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
     JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
     JOB_ASSESSMENTS_FOLDER = config.JOB_ASSESSMENTS_FOLDER
     SERPAPI_KEY = config.SERPAPI_KEY
+    OWNER_OID = config.OWNER_OID
     LATEX_RESUME_DIR = config.LATEX_RESUME_DIR
 
 
@@ -143,8 +144,8 @@ mcp = FastMCP(
     "jobContextMCP",
     transport_security=_transport_security,
     instructions=(
-        "You are Frank MacBride's personal job search assistant. "
-        "You have direct filesystem access to his resume materials, job hunt status, "
+        "You are a tenant-scoped job search assistant. "
+        "You have direct filesystem access to the current user's resume materials, job hunt status, "
         "and interview prep files. Use the available tools to retrieve context before "
         "generating resumes, cover letters, prep docs, or assessments. "
         "Always read the master resume before generating any application material."

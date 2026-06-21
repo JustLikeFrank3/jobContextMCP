@@ -7,6 +7,7 @@ on:
       - main
   workflow_dispatch:
 
+
 env:
   ACR: jcmcpacr.azurecr.io
   IMAGE: jcmcpacr.azurecr.io/jcmcp
@@ -20,6 +21,7 @@ env:
   FOUNDRY_DEPLOYMENT: gpt-4.1-mini
   FOUNDRY_API_VERSION: 2025-01-01-preview
   STORAGE_ACCOUNT: jcmcpstore
+  ENTRA_OWNER_OID: ${{ secrets.ENTRA_OWNER_OID }}
 
 jobs:
   test:
@@ -113,6 +115,7 @@ jobs:
             -e "s|__FOUNDRY_DEPLOYMENT__|${{ env.FOUNDRY_DEPLOYMENT }}|g" \
             -e "s|__FOUNDRY_API_VERSION__|${{ env.FOUNDRY_API_VERSION }}|g" \
             -e "s|__STORAGE_ACCOUNT__|${{ env.STORAGE_ACCOUNT }}|g" \
+            -e "s|__ENTRA_OWNER_OID__|${{ env.ENTRA_OWNER_OID }}|g" \
             k8s/configmap.yaml | kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
           sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
             k8s/deployment.yaml | \

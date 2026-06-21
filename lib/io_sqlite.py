@@ -399,8 +399,8 @@ def _save_status(con, data: dict) -> None:
 
 def _save_job_queue(con, data: dict) -> None:
     jobs = data.get("jobs", [])
-    # Upsert incoming jobs inside the DB transaction. Do NOT perform a
-    # destructive sync-delete here — deletes should be explicit operations.
+    incoming_ids: list = [j.get("id") for j in jobs if j.get("id") is not None]
+    # Upsert incoming jobs inside the DB transaction.
     for j in jobs:
         con.execute(
             """
@@ -422,6 +422,17 @@ def _save_job_queue(con, data: dict) -> None:
                 j.get("fitment_context"), j.get("decision_notes"), j.get("decided_date"),
             ),
         )
+    # Sync-delete: remove jobs no longer in the incoming dataset so that
+    # explicit removals (pipeline_remove endpoint) are reflected in SQLite.
+    if incoming_ids:
+        placeholders = ",".join("?" * len(incoming_ids))
+        con.execute(
+            f"DELETE FROM job_queue WHERE id NOT IN ({placeholders})",
+            incoming_ids,
+        )
+    elif jobs == []:
+        # All jobs removed — clear the table entirely.
+        con.execute("DELETE FROM job_queue")
 
     # After committing the DB changes, export the canonical job_queue to JSON
     # as an atomic replica for human inspection and safe backups. This keeps
@@ -448,8 +459,19 @@ def _save_job_queue(con, data: dict) -> None:
         ]
     }
 
-    # Atomic write to the configured JOB_QUEUE_FILE
-    job_file: Path = config.JOB_QUEUE_FILE
+    # Atomic write — resolve to the active tenant's data folder (same logic as
+    # lib.io._resolve_data_path) to avoid overwriting the global shared file
+    # when called from a per-user session.  Importing lib.io here would create
+    # a circular dependency, so we inline the resolution directly.
+    from lib.user_context import get_data_folder_override
+    _override = get_data_folder_override()
+    if _override is not None:
+        try:
+            job_file: Path = _override / config.JOB_QUEUE_FILE.relative_to(config.DATA_FOLDER)
+        except ValueError:
+            job_file = config.JOB_QUEUE_FILE
+    else:
+        job_file = config.JOB_QUEUE_FILE
     try:
         job_file.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_path = tempfile.mkstemp(prefix="job_queue.", dir=str(job_file.parent))
