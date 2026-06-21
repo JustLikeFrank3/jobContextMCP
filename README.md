@@ -4,9 +4,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"/>
-  <img src="https://img.shields.io/badge/tests-671%20passing-brightgreen" alt="671 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-681%20passing-brightgreen" alt="681 tests passing"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
+</p>
+<p align="center">
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
 </p>
 
