@@ -121,7 +121,7 @@ async def dashboard_home() -> HTMLResponse:
     {cards}
   </div>
   <div class="signout-wrap">
-    <form method="post" action="/logout">
+    <form method="post" action="/dashboard/logout">
       <button class="signout-btn" type="submit">Sign out</button>
     </form>
   </div>

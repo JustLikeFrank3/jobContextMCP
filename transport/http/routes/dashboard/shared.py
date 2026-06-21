@@ -119,7 +119,7 @@ def page_header(title: str, subtitle: str = "") -> str:
       <div class="brand-logo">{logo_svg()}</div>
       <div><h1>{title}</h1>{sub}</div>
     </div>
-    <form method="post" action="/logout" style="margin:0">
+    <form method="post" action="/dashboard/logout" style="margin:0">
       <button class="logout-btn" type="submit">Sign out</button>
     </form>
   </header>"""

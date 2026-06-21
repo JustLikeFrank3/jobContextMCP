@@ -181,6 +181,8 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
         from lib.user_context import get_data_folder_override
         override = get_data_folder_override()
         resolved = (override / "db" / "jobcontextmcp.db") if override else db_path()
+    # Ensure the directory exists (first run, new tenant, or global DB on fresh deploy)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(resolved)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
