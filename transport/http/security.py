@@ -123,6 +123,15 @@ class EntraAuthProvider(AuthProvider):
 
         if not token:
             return None
+
+        # Per-user API keys (jcmcp_…) bypass Entra JWT validation.
+        if token.startswith("jcmcp_"):
+            from lib.api_keys import lookup_key
+            oid = lookup_key(token)
+            if oid:
+                return User(id=oid, name="api-key")
+            return None
+
         try:
             claims = validate_token(token)
             name = claims.get("name") or claims.get("preferred_username") or "user"

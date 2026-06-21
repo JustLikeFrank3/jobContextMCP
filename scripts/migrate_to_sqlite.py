@@ -226,6 +226,15 @@ CREATE TABLE contact_crossref (
     signals        TEXT,    -- JSON array
     action_hints   TEXT     -- JSON array
 );
+
+CREATE TABLE user_api_keys (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash     TEXT    NOT NULL UNIQUE,  -- SHA-256 hex of the plaintext token
+    oid          TEXT    NOT NULL,         -- Entra OID of the owning user
+    label        TEXT,                     -- human-readable name for the key
+    created_at   TEXT    NOT NULL,
+    last_used_at TEXT
+);
 """
 
 

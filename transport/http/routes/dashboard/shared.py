@@ -99,6 +99,7 @@ _PAGES = [
     ("Wellbeing",   "/dashboard/health",      "health"),
     ("Digest",      "/dashboard/digest",      "digest"),
     ("Interviews",  "/dashboard/interviews",  "interviews"),
+    ("API Keys",    "/dashboard/api-keys",    "api-keys"),
 ]
 
 

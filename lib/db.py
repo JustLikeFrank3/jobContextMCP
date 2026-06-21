@@ -117,6 +117,51 @@ def db_path() -> Path:
     return Path(str(_cfg.DATA_FOLDER)) / "db" / "jobcontextmcp.db"
 
 
+def global_db_path() -> Path:
+    """Always return the GLOBAL database path regardless of per-request user context.
+
+    Use this for tables that must be queryable before a user is identified
+    (e.g. user_api_keys lookup during auth).
+    """
+    return Path(str(_cfg.DATA_FOLDER)) / "db" / "jobcontextmcp.db"
+
+
+# ── Schema migrations ──────────────────────────────────────────────────────────
+# Applied lazily on first connection to ensure existing DBs stay up to date
+# without requiring a full migration script re-run.
+_MIGRATIONS = [
+    # v1 — per-user API keys for programmatic access (iOS Shortcuts, CLI tools)
+    """CREATE TABLE IF NOT EXISTS user_api_keys (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        key_hash     TEXT    NOT NULL UNIQUE,
+        oid          TEXT    NOT NULL,
+        label        TEXT,
+        created_at   TEXT    NOT NULL,
+        last_used_at TEXT
+    )""",
+]
+
+
+def _apply_migrations(con: sqlite3.Connection) -> None:
+    """Run any _MIGRATIONS statements that haven't been applied yet.
+
+    Uses a simple applied_migrations table as a version ledger.
+    Idempotent — safe to call on every connection open.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS applied_migrations "
+        "(id INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
+    for i, sql in enumerate(_MIGRATIONS):
+        if i >= applied:
+            con.execute(sql)
+            con.execute(
+                "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
+            )
+    con.commit()
+
+
 @contextmanager
 def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, None, None]:
     """
@@ -140,6 +185,8 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA journal_mode = WAL")
+    # Apply any pending schema migrations (idempotent, cheap when up to date).
+    _apply_migrations(con)
     try:
         yield con
         con.commit()
