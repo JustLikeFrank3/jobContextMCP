@@ -94,10 +94,6 @@ def _list_resume_options() -> list[str]:
 
     # Resume choices are intentionally locked to exactly these two PDFs.
     latex_dir = config.get_active_latex_resume_dir()
-    target_names = ["Frank_MacBride_Resume.pdf", "Frank_MacBride_Resume_MODERN.pdf"]
-
-    # Resume choices are intentionally locked to exactly these two PDFs.
-    latex_dir = config.LATEX_RESUME_DIR
     if not latex_dir:
         return target_names
 
@@ -109,7 +105,6 @@ def _list_resume_options() -> list[str]:
 
 def _optimized_resume_dir() -> Path:
     return config.get_active_optimized_resumes_dir()
-    return config.get_active_workspace_folder() / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
 
 
 def _list_optimized_resume_options() -> list[str]:
