@@ -9,7 +9,7 @@ _REAL_GENERATE_COVER_LETTER = generate.generate_cover_letter
 
 
 @pytest.fixture(autouse=True)
-def _restore_generate_entrypoints(monkeypatch):
+def _restore_generate_entrypoints(monkeypatch, _mock_llm):
     monkeypatch.setattr(generate, "generate_resume", _REAL_GENERATE_RESUME)
     monkeypatch.setattr(generate, "generate_cover_letter", _REAL_GENERATE_COVER_LETTER)
 
