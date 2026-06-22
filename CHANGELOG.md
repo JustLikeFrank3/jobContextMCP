@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+---
+
+## [1.0.1] - 2026-06-22
+
+Multi-tenant hardening, per-user API keys, refactor sprint, and coverage push. 860 passing tests, 82.25% coverage.
+
+### Security / Multi-tenant hardening
+
+- Full data-leakage fix for beta user sessions — owner's contact info, STAR metrics, and company framing no longer fall through to unconfigured user sessions:
+  - `lib/config.py` `get_contact_info()` returns `{}` for users without a configured contact block; no fallback to owner defaults
+  - `_STAR_METRICS` and `_COMPANY_FRAMING` removed from `tools/star.py` module constants; STAR context now comes exclusively from per-user `personal_context.json`
+  - `tools/generate.py` cover letter generation uses `get_contact_info()` throughout; unconfigured users get a generic filename instead of the owner's name
+- Owner OID gating (`ENTRA_OWNER_OID`) — the LaTeX cover letter button only renders for the service owner; all other users see HTML/WeasyPrint export only
+- `GM_AWARDS` → `ACHIEVEMENTS` throughout codebase; backward-compatible fallback in `lib/io.py` reads either key from existing JSON files
+
+### Features
+
+- **Per-user API keys** (`lib/api_keys.py`, `/dashboard/api-keys`) — each authenticated user can generate personal programmatic access tokens scoped to their own data partition; used for iOS Shortcuts, CLI automation, and other HTTP clients without sharing the global admin key or requiring a browser session; keys start with `jcmcp_`, can be labeled per-device, and are individually revokable
+
+### Bug fixes
+
+- `lib/db.py` — database directory created on connect if absent; fixes `sqlite3.OperationalError` on first boot in fresh user partitions
+- Logout consolidated to `POST /logout`; `jc_session` cookie cleared before Entra end-session redirect so re-login always starts fresh
+- `k8s/deployment.yaml` — `DISABLE_REBINDING_CHECK=true` added alongside `ENABLE_REMOTE=true`; the MCP SDK's DNS rebinding protection was responding `421` to all `/mcp` requests from the AKS ingress because `Host: jobcontextmcp.eastus.cloudapp.azure.com` is not `localhost`
+- `lib/resume_parser.py` — `_YEAR_RE` reverted to non-capturing group `(?:19|20)` to fix date-range parsing regression introduced during parser extraction
+
 ### Refactoring
 
 - Split three monolithic source files into focused single-responsibility modules:
@@ -12,13 +38,16 @@ All notable changes to this project will be documented in this file.
   - `tools/generate.py` 1,618 → 1,351 lines; all format-spec and system-prompt constants extracted to `tools/generate_prompts.py`
   - All public symbols re-exported from their original modules — no call-site changes required
 
-### Bug fixes
-
-- `k8s/deployment.yaml`: added `DISABLE_REBINDING_CHECK=true` next to `ENABLE_REMOTE=true` — the MCP SDK's DNS rebinding protection was responding 421 to all `/mcp` requests from the AKS ingress because `Host: jobcontextmcp.eastus.cloudapp.azure.com` is not `localhost`
-
 ### CI/CD
 
-- `deploy.yml`: added `workflow_dispatch` trigger with built-in branch/tag selector so deploys can be triggered manually from any branch directly in the GitHub Actions UI
+- `deploy.yml` — `workflow_dispatch` trigger with branch/tag selector for manual deploys from any branch in the GitHub Actions UI
+- `deploy.yml` — test job and SonarCloud scan added to the deploy pipeline
+
+### Tests
+
+- 860 passing (up from 627 at v1.0.0); 17 skipped; coverage 82.25%
+- `lib/resume_parser.py` coverage 9% → 88% (164 new tests)
+- New suites: `test_openai_calls`, `test_rag_tools`, `test_story_retrieval_coverage`, `test_github_metrics_coverage`, `test_langgraph_pipeline_coverage`, `test_project_scanner_coverage`, `test_dashboard_pipeline`
 
 ---
 
@@ -70,7 +99,6 @@ Completes the transformation from a local stdio context server into a multi-user
 - Inline assessment details — fitment scores, gaps, angles, and recommendations visible in the pipeline.
 - Cover-letter narrative routing — `PRIMARY COVER LETTER HOOK` from personal context surfaced when a matching company story exists; cross-company hooks filtered.
 - Semantic personal-story retrieval — `lib/story_retrieval.py` blends keyword scores with OpenAI embeddings, mission queries, and hook-tag boosts for cover letter generation.
-- LaTeX export path — Tectonic-based cover letter renderer; date, role title, and export pipeline configurable per generation.
 - NEEDS DECISION in `get_daily_digest()` — queue items now appear in digest and TODAY'S FOCUS.
 
 ### Fixes

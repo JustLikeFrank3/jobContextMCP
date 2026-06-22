@@ -4,7 +4,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"/>
-  <img src="https://img.shields.io/badge/tests-681%20passing-brightgreen" alt="681 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-860%20passing-brightgreen" alt="860 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-82.25%25-brightgreen" alt="82.25% coverage"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -16,7 +17,7 @@
 
 A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives the GitHub Copilot app, GitHub Copilot in VS Code, Claude Desktop, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
 
-Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint/LaTeX export paths, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
+Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint PDF export, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
 > **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 77 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
@@ -33,7 +34,7 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 | | |
 |---|---|
 | 77 MCP tools | Resume + cover letter generation |
-| 625 passing tests | Job fitment analysis with persona lenses |
+| 860 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -63,7 +64,7 @@ If you're in the same situation, it's yours.
 
 The browser dashboard turns the local MCP workspace into a job-search command center: daily digest (including a NEEDS DECISION section surfacing unevaluated queue items), pipeline triage, cover-letter edit dialog with LLM-powered revision and draft versioning, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
 
-**Edit Cover Letter** — each queued job card exposes an Edit button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, export pipeline selector (LaTeX / HTML), and optional PDF export. Each edit run writes a versioned draft (`{stem}.edit1.tmp`, `.edit2.tmp`, …) so the source is never overwritten mid-session. After review: **Accept Changes** promotes the latest draft to canonical source (backing up the original to `{stem}.bak`) and cleans up all `.editN.tmp` files; **Cancel** deletes all drafts and leaves the source untouched.
+**Edit Cover Letter** — each queued job card exposes an Edit button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, and optional PDF export. Each edit run writes a versioned draft (`{stem}.edit1.tmp`, `.edit2.tmp`, …) so the source is never overwritten mid-session. After review: **Accept Changes** promotes the latest draft to canonical source (backing up the original to `{stem}.bak`) and cleans up all `.editN.tmp` files; **Cancel** deletes all drafts and leaves the source untouched.
 
 ### Generated documents
 
@@ -72,12 +73,6 @@ The browser dashboard turns the local MCP workspace into a job-search command ce
 | ![Resume demo](docs/demo-resume.png) | ![Cover letter demo](docs/demo-cover-letter.png) |
 
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
-
-LaTeX/Tectonic cover-letter output is also supported for the stricter formatted option.
-
-| LaTeX Resume | LaTeX Cover Letter |
-|--------------|-------------------|
-| ![Nobody MacFakename LaTeX resume](docs/Nobody%20MacFakename%20Resume.png) | ![Nobody MacFakename LaTeX cover letter](docs/Nobody%20MacFakeNAme%20CoverLetter.png) |
 
 ---
 
@@ -103,7 +98,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
 | Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
 | Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
-| Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export, LaTeX/Tectonic cover letters |
+| Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export |
 | Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
 | People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
 | Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
@@ -139,7 +134,7 @@ graph TB
     WORKFLOW["LangGraph workflow service"]
     RAG["RAG / semantic search"]
     LLM["OpenAI / Ollama / Azure AI Foundry"]
-    PDF["HTML + LaTeX PDF export"]
+    PDF["HTML/WeasyPrint PDF export"]
     PROV["User provisioning\nauto-create on first Entra login"]
   end
 
@@ -254,7 +249,7 @@ sequenceDiagram
     Tools->>Store: Read master resume, tone, stories, selected variant
     Tools->>LLM: Generate or return Copilot-ready context package
     Tools->>Store: Save text output
-    Tools->>Store: Export WeasyPrint or LaTeX PDF
+    Tools->>Store: Export WeasyPrint PDF
 
     You->>UI: Add to pipeline or dismiss
     UI->>API: Decide queued job
@@ -379,7 +374,7 @@ Endpoints:
 The dashboard at `/dashboard/` is the visual layer over the same local data and services exposed through MCP/HTTP. Current views include:
 
 - **Home / Daily Digest** — follow-ups, stale applications, upcoming interviews, recent rejections, post metrics, wellbeing nudges, and priority focus areas. The digest page is available at `GET /dashboard/digest`; `POST /dashboard/digest/generate` regenerates the parsed briefing with a spinner, timestamp, and collapsible sections.
-- **Pipeline** — queue jobs, evaluate fitment, inspect assessment details, select resume variants, generate tailored resumes and cover letters, export HTML/LaTeX PDFs, add/dismiss jobs, and remove queued items from one job-id-driven flow.
+- **Pipeline** — queue jobs, evaluate fitment, inspect assessment details, select resume variants, generate tailored resumes and cover letters, export PDFs, add/dismiss jobs, and remove queued items from one job-id-driven flow.
 - **Job Hunt** — application status, immutable event history, next steps, compensation data, and stale-item cleanup.
 - **Materials** — generated resumes, cover letters, PDFs, reference files, diffs, and exports.
 - **Rejections** — rejection logging, filtering, stage/reason pattern analysis, and digest integration.
@@ -486,6 +481,44 @@ Troubleshooting:
 - If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running (`bash scripts/start_server.sh`), and macOS Firewall allows Python/Terminal incoming connections.
 - If `/jobs/ingest-url` returns a LinkedIn-blocked message, you shared the LinkedIn URL instead of the ATS URL. Tap Apply on the LinkedIn page first to get to the employer's site, then share.
 - If the Mac changes networks, the LAN IP can change. Run `lsof -i tcp:8000` to confirm the server is up and re-check the IP printed at startup.
+
+### Per-user API keys
+
+Each authenticated user can generate personal programmatic access tokens from the dashboard at `/dashboard/api-keys`. Unlike the global `API_KEY` environment variable (which is admin-level), per-user keys are scoped to your own data partition and are the recommended credential for iOS Shortcuts, CLI scripts, and any automation tool that needs to call HTTP endpoints without a browser session.
+
+Keys start with `jcmcp_` and are shown once at generation time. Multiple keys can be active simultaneously — one per device or script — and each can be revoked individually without affecting other keys or your browser session.
+
+**Generate a key:**
+
+1. Open the dashboard and click **API Keys** in the top nav.
+2. Enter a label (e.g. `iPhone Shortcut` or `Home Mac CLI`).
+3. Click **Generate key**.
+4. Copy the full `jcmcp_...` token immediately. It is shown once; if you lose it, revoke and regenerate.
+
+**Use with iOS Shortcuts:**
+
+In the **Get Contents of URL** action of your shortcut, expand **Headers** and add:
+
+| Header name | Value |
+|-------------|-------|
+| `Authorization` | `Bearer jcmcp_<paste-token-here>` |
+
+The per-user key is scoped to your own workspace — it cannot read or write another user's data even if the server URL is shared. If you previously used the global `API_KEY` in your shortcut, replace it with your per-user token here.
+
+**Use from scripts or the CLI:**
+
+```bash
+# Single request
+curl -H "Authorization: Bearer jcmcp_<your-token>" \
+  https://your-server/context/session
+
+# Set for the session
+export JCMCP_TOKEN="jcmcp_<your-token>"
+curl -H "Authorization: Bearer $JCMCP_TOKEN" \
+  https://your-server/jobs/evaluate
+```
+
+**Revocation:** Dashboard → **API Keys** → **Revoke** next to the key. Takes effect immediately on all clients using that token.
 
 ### Persona configs
 
@@ -1302,8 +1335,6 @@ Cover-letter generation also pulls relevant personal stories from `personal_cont
 
 Prompt budgeting is retrieval-first: the generator bounds fixed context sections, packs tone samples by recency/diversity, computes the remaining personal-story budget dynamically, then enforces a final prompt ceiling before calling the model. If semantic retrieval is available, the top cover-letter story is marked as the primary hook so the opener uses a concrete mission/brand connection instead of generic enthusiasm.
 
-PDF export supports both the default HTML/WeasyPrint templates and the LaTeX/Tectonic cover-letter path. The LaTeX cover-letter template prints a right-aligned date, uses a configurable role title, and the dashboard passes the selected resume variant through so AI/Modern resume selections can produce an `AI Full Stack Software Engineer` letter title while classic selections use `Full Stack Software Engineer`.
-
 ### With OpenAI key (fully automated)
 Add `openai_api_key` (and optionally `openai_model`) to `config.json`:
 
@@ -1340,7 +1371,7 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 **Cover letter**
 - Target: **380–430 words** in the letter body for a full one-page render.
 - Exactly **4 paragraphs** — Para 1: genuine personal/company hook + role; Para 2: technical achievement + grounded metric; Para 3: distinct artifacts and differentiators; Para 4: short closer.
-- No address block or Re: line; the LaTeX template handles the date when that export path is used.
+- No address block or Re: line.
 - Salutation: `Dear Hiring Manager,` — no variations.
 - No bullets, no bold, no headers inside the body — prose only.
 - Metrics and compensation claims must be grounded in the master resume, interview notes, or JD; unsupported percentages, salary ranges, and generic hype phrases are stripped or rejected by prompt rules and sanitizers.
@@ -1366,7 +1397,7 @@ export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Enginee
 
 PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
 
-The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so README image links stay on-repo and do not expose private application documents.
+Demo screenshots are stored under `docs/` so README image links stay on-repo and do not expose private application documents.
 
 ---
 
@@ -1405,7 +1436,7 @@ The LaTeX-formatted fake-identity screenshots above are stored under `docs/`, so
 - **Job-id-based pipeline actions** — assess, select resume, generate materials, export PDFs, unqueue, remove, add, and dismiss without relying on brittle company/role matching alone.
 - **Inline assessment details** — fitment scores, gaps, angles, and recommendations visible directly in the pipeline.
 - **Resume-variant-aware generation/export** — dashboard selections pass through to cover-letter title/export settings.
-- **LaTeX/HTML cover-letter export routing** — dashboard buttons cover both strict formatted output and HTML/WeasyPrint output.
+- **HTML/WeasyPrint cover-letter PDF export** — dashboard export button renders cover letters via the WeasyPrint HTML template.
 
 ### v0.9 *(shipped)*
 
@@ -1427,6 +1458,16 @@ v1.0 completes the transformation from a local stdio context server into a multi
 - **Cover-letter editor with draft versioning** — dashboard edit dialog with live preview, `.editN.tmp` versioning, accept/cancel/discard flow.
 - **Semantic personal-story retrieval** — embedding-assisted story selection for cover letter generation; retrieval diagnostics; hook-tag boosts.
 - **Provider-agnostic LLM** — OpenAI / Azure AI Foundry (`DefaultAzureCredential`) / Ollama via `get_llm_client()`.
+
+### v1.0.1 *(shipped)*
+
+Hardening, per-user API keys, refactor sprint, and coverage push. 860 passing, 82.25% coverage.
+
+- **Multi-tenant hardening** — owner's contact info, STAR metrics, and company framing no longer leak to unconfigured user sessions; `get_contact_info()` returns `{}` for users without a configured contact block; `_STAR_METRICS` and `_COMPANY_FRAMING` loaded exclusively from per-user `personal_context.json`
+- **Per-user API keys** — `/dashboard/api-keys` — personal programmatic access tokens per user account, scoped to the user's own data partition; labeled per-device, individually revokable; recommended credential for iOS Shortcuts and CLI automation
+- **Refactor** — three monolithic files split into focused modules (`lib/resume_parser.py`, `pipeline_helpers.py`, `tools/generate_prompts.py`); all public symbols re-exported, no call-site changes
+- **Coverage 82.25%** — 860 passing (up from 627 at v1.0.0); 164 new tests for `lib/resume_parser.py` (9% → 88%); new suites for RAG, story retrieval, GitHub metrics, LangGraph pipeline, project scanner, and dashboard pipeline
+- **CI** — `workflow_dispatch` trigger + test + SonarCloud scan jobs added to deploy pipeline; coverage badge on README
 
 ### v1.x planned
 
