@@ -5,10 +5,6 @@ import pytest
 
 from lib import story_retrieval as sr
 
-
-pytestmark = pytest.mark.live_llm
-
-
 def _write_stories(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
