@@ -123,6 +123,7 @@ def _list_optimized_resume_options() -> list[str]:
 
 def _cover_letter_dir() -> Path:
     return config.get_active_cover_letters_dir()
+    return config.get_active_workspace_folder() / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
 
 
 def _list_cover_letter_options() -> list[str]:
@@ -317,6 +318,7 @@ def _build_cover_letter_edit_messages(
     system = (
         "You are editing an existing cover letter, not regenerating from scratch. "
         "Preserve the candidate's plainspoken voice, the current contact block if present, the salutation, "
+        "Preserve Frank's plainspoken voice, the current contact block if present, the salutation, "
         "and the 4-paragraph body structure unless the edit instructions explicitly say otherwise. "
         "Apply only the requested changes. Do not invent employers, dates, tools, metrics, or claims. "
         "Do not add a date block; the PDF template owns the printed date and signature. "
@@ -352,6 +354,8 @@ def _material_href_for_pdf(path: Path | str | None) -> str:
     folder_key_by_name = {
         config.get_active_cover_letter_pdfs_dir().name: "cover_letter_pdfs",
         config.get_active_cover_letters_dir().name: "cover_letters",
+        config._cfg.get("cover_letter_pdfs_dir", "09-Cover-Letter-PDFs"): "cover_letter_pdfs",
+        config._cfg.get("cover_letters_dir", "02-Cover-Letters"): "cover_letters",
         "03-Resume-PDFs": "resume_pdfs",
     }
     folder_key = folder_key_by_name.get(pdf_path.parent.name)
@@ -651,3 +655,5 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
         f"Source: {_source_url_from_jd(jd)}",
     ])
     return summary, detail
+
+

@@ -7,7 +7,6 @@ on:
       - main
   workflow_dispatch:
 
-
 env:
   ACR: jcmcpacr.azurecr.io
   IMAGE: jcmcpacr.azurecr.io/jcmcp
