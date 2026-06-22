@@ -217,6 +217,17 @@ CREATE TABLE IF NOT EXISTS contact_crossref (
 );
 """
 
+_STARTER_CONFIG: dict = {
+    "contact": {
+        "name":     "",
+        "phone":    "",
+        "city":     "",
+        "email":    "",
+        "linkedin": "",
+        "github":   "",
+    }
+}
+
 _WORKSPACE_SUBDIRS = [
     "workspace/01-Current-Optimized",
     "workspace/02-Cover-Letters",
@@ -273,25 +284,39 @@ EDUCATION
 
 
 def provision_user_data(data_dir: Path) -> None:
-    """Create the per-user data folder and blank SQLite DB if they don't exist yet.
+    """Ensure the per-user data folder and all required seed files exist.
 
-    Idempotent — exits immediately if data_dir already exists.
+    File-level idempotent — creates any missing files/directories even when
+    data_dir already exists.  Safe to call on every authenticated request;
+    the hot path (everything present) is just a stat() on data_dir.
     Thread/process safe because mkdir(exist_ok=True) is atomic on POSIX.
     """
-    if data_dir.exists():
-        return
+    import json as _json
+    import shutil
 
-    _log.info("Provisioning new user data dir: %s", data_dir)
+    needs_full_log = not data_dir.exists()
+    if needs_full_log:
+        _log.info("Provisioning new user data dir: %s", data_dir)
 
     # Directory tree
     data_dir.mkdir(parents=True, exist_ok=True)
     for sub in _WORKSPACE_SUBDIRS:
         (data_dir / sub).mkdir(parents=True, exist_ok=True)
 
+    # Starter config.json — empty contact block so get_contact_info() has a
+    # real dict to read.  Never overwrites an existing config.json.
+    config_path = data_dir / "config.json"
+    if not config_path.exists():
+        config_path.write_text(
+            _json.dumps(_STARTER_CONFIG, indent=2), encoding="utf-8"
+        )
+        _log.info("Seeded starter config.json at %s", config_path)
+
     # Placeholder master resume — gives tools something to read on first login.
     # Overwritten when user completes workspace setup via chat.
     resume_file = data_dir / "workspace" / "01-Current-Optimized" / "Resume - MASTER SOURCE.txt"
-    resume_file.write_text(_PLACEHOLDER_RESUME, encoding="utf-8")
+    if not resume_file.exists():
+        resume_file.write_text(_PLACEHOLDER_RESUME, encoding="utf-8")
 
     # Seed all *.example.json files from the global DATA_FOLDER root into the
     # user's data dir.  Strip the ".example" suffix so tools find the files by
@@ -302,11 +327,11 @@ def provision_user_data(data_dir: Path) -> None:
     for example_file in sorted(global_data_dir.glob("*.example.json")):
         dest = data_dir / example_file.name.replace(".example.json", ".json")
         if not dest.exists():
-            import shutil
             shutil.copy2(example_file, dest)
             _log.debug("Seeded %s → %s", example_file.name, dest)
 
-    # Blank SQLite DB with full schema
+    # Blank SQLite DB with full schema — executescript with IF NOT EXISTS is safe
+    # to run against an existing DB (adds any missing tables, no data loss).
     (data_dir / "db").mkdir(parents=True, exist_ok=True)
     db_file = data_dir / "db" / "jobcontextmcp.db"
     con = sqlite3.connect(str(db_file))
@@ -316,4 +341,5 @@ def provision_user_data(data_dir: Path) -> None:
     finally:
         con.close()
 
-    _log.info("User data provisioned at %s", data_dir)
+    if needs_full_log:
+        _log.info("User data provisioned at %s", data_dir)

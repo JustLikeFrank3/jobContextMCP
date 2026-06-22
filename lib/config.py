@@ -230,13 +230,15 @@ def get_contact_info() -> dict[str, Any]:
     """Return the active request's contact config block.
 
     When a per-user data folder is active (multi-tenant / AKS mode) and that
-    user has no config.json of their own, the base config's contact block must
-    NOT be returned — it belongs to the owner, not the requesting user.
+    user has no config.json of their own, the base config's contact block is
+    returned only if the requesting user is the app owner (OID matches
+    OWNER_OID).  For all other users without their own config.json, an empty
+    dict is returned to prevent leaking owner contact data.
     """
-    from lib.user_context import get_data_folder_override
+    from lib.user_context import get_data_folder_override, get_current_user_oid
     override = get_data_folder_override()
     if override is not None:
-        # Per-user session: only return contact if the user has their own config.json
+        # Per-user session: prefer the user's own config.json if present.
         user_config_path = override / "config.json"
         if user_config_path.exists():
             try:
@@ -245,7 +247,10 @@ def get_contact_info() -> dict[str, Any]:
                 return contact if isinstance(contact, dict) else {}
             except Exception:
                 pass
-        # No user-specific config — return empty rather than leaking owner contact
+        # No user-specific config — fall back to base config only for the owner.
+        if OWNER_OID and get_current_user_oid() == OWNER_OID:
+            contact = _cfg.get("contact", {})
+            return contact if isinstance(contact, dict) else {}
         return {}
     contact = get_active_config().get("contact", {})
     return contact if isinstance(contact, dict) else {}
