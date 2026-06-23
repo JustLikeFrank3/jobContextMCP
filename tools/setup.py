@@ -457,12 +457,34 @@ def setup_workspace(
         else:
             _mark(f"{data_dir}/{fname}", False)
 
-    # 5. config.json — local mode only
-    # In multi-tenant AKS mode the config is injected via ConfigMap env vars
-    # and there is no writable config.json at the repo root.  Skip when a
-    # per-user data folder override is active (i.e. a guest user session).
+    # 5. config.json
+    # In multi-tenant AKS mode (per-user data folder is active), write the
+    # contact block into the user's own data-folder config.json instead of
+    # the repo-root config.json (which is read-only, injected via ConfigMap).
     from lib.user_context import get_data_folder_override
-    if get_data_folder_override() is None:
+    override = get_data_folder_override()
+    if override is not None:
+        # Per-user session: write/update contact info in user's config.json
+        user_config_path = override / "config.json"
+        try:
+            existing: dict = json.loads(user_config_path.read_text(encoding="utf-8")) if user_config_path.exists() else {}
+        except Exception:
+            existing = {}
+        existing["contact"] = {
+            "name":       _safe_name(name),
+            "phone":      phone.strip(),
+            "email":      email.strip(),
+            "linkedin":   linkedin.strip(),
+            "city":       city_state.strip(),
+            "city_state": city_state.strip(),
+            "location":   city_state.strip(),
+        }
+        if address:
+            existing["contact"]["address"] = address.strip()
+        user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+        _mark("config.json (contact block)", True)
+    else:
+        # Local mode: write the full config.json at the repo root
         config_path = _HERE / "config.json"
         if not config_path.exists():
             cfg = _build_config(
