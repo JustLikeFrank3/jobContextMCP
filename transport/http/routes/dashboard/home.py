@@ -84,7 +84,12 @@ async def dashboard_home() -> HTMLResponse:
     }}
     .banner-wrap {{ width: 100%; max-width: 620px; margin: 0 auto 8px; }}
     .banner-wrap svg {{ width: 100%; height: auto; display: block; }}
-    .tagline {{ color: var(--muted); font-size: 0.92rem; text-align: center; margin-bottom: 32px; }}
+    .tagline {{
+      color: #06B6D4; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      text-align: center; margin: 0 0 32px;
+      opacity: 0.9;
+    }}
     .grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -116,7 +121,7 @@ async def dashboard_home() -> HTMLResponse:
 </head>
 <body>
   <div class="banner-wrap">{banner_svg()}</div>
-  <p class="tagline">Job search command center</p>
+  <p class="tagline">Career Command Center</p>
   <div class="grid">
     {cards}
   </div>
