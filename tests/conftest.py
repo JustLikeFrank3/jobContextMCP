@@ -195,7 +195,13 @@ def _mock_llm(request, monkeypatch):
 
     Tests that genuinely need the live-LLM code path (with their own mocked
     client) opt out via @pytest.mark.live_llm.
+
+    _LAST_CHAT_CALL is reset to 0.0 for every test (including live_llm ones)
+    so the process-local rate-smoothing gate never sleeps during the test suite.
     """
+    import lib.openai_calls as _oc
+    monkeypatch.setattr(_oc, "_LAST_CHAT_CALL", 0.0)
+
     if request.node.get_closest_marker("live_llm"):
         yield
         return
