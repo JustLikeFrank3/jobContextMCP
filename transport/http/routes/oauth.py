@@ -232,7 +232,7 @@ async def logout(request: Request) -> RedirectResponse:
 
     Clears the Entra browser session via the end_session_endpoint, then
     shows instructions for clearing the local mcp-remote token cache.
-    Visit https://jobcontextmcp.eastus.cloudapp.azure.com/logout in a browser.
+    Visit https://jobcontext.ai/logout in a browser.
     """
     tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
     base = _base_url(request)
@@ -266,7 +266,7 @@ async def logout_post(request: Request) -> RedirectResponse:
         # registered URI when running behind an ingress or load balancer.
         server_base = os.environ.get(
             "SERVER_BASE_URL",
-            "https://jobcontextmcp.eastus.cloudapp.azure.com",
+            "https://jobcontext.ai",
         )
         target = (
             f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"

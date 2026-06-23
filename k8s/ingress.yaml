@@ -11,10 +11,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - jobcontextmcp.eastus.cloudapp.azure.com
+        - jobcontext.ai
       secretName: jcmcp-tls
   rules:
-    - host: jobcontextmcp.eastus.cloudapp.azure.com
+    - host: jobcontext.ai
       http:
         paths:
           - path: /
