@@ -82,7 +82,7 @@ async def dashboard_home() -> HTMLResponse:
       display: flex; flex-direction: column; align-items: center;
       justify-content: center; padding: 32px 16px;
     }}
-    .banner-wrap {{ width: 100%; max-width: 420px; margin: 0 auto 8px; }}
+    .banner-wrap {{ width: 100%; max-width: 620px; margin: 0 auto 8px; }}
     .banner-wrap svg {{ width: 100%; height: auto; display: block; }}
     .tagline {{ color: var(--muted); font-size: 0.92rem; text-align: center; margin-bottom: 32px; }}
     .grid {{
