@@ -6,11 +6,6 @@ on:
       - qa
       - main
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch or tag to build and deploy'
-        required: false
-        default: 'qa'
 
 env:
   ACR: jcmcpacr.azurecr.io
@@ -80,7 +75,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
+          ref: ${{ github.ref }}
 
       - name: Log in to ACR
         uses: docker/login-action@v3
