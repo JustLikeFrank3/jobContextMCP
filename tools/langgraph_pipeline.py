@@ -122,7 +122,7 @@ def retrieve_node(state: ResumeAgentState) -> dict:
 
     Token cost: one embedding call (~$0.00003) instead of an LLM call.
     """
-    from rag import search, format_results
+    from lib.rag import search, format_results
 
     # Query 1: JD-driven — surfaces what the role actually asks for
     jd_query = state["job_description"][:800]

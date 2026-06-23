@@ -26,7 +26,7 @@ def test_retrieve_node_deduplicates_hits(isolated_server, monkeypatch):
         search=lambda q, n_results=5: [{"text": "A", "score": 1}] if "RAG" not in q else [{"text": "A", "score": 0.9}, {"text": "B", "score": 0.8}],
         format_results=lambda rows, _label: "|".join(sorted(h["text"] for h in rows)),
     )
-    monkeypatch.setitem(sys.modules, "rag", fake_rag)
+    monkeypatch.setitem(sys.modules, "lib.rag", fake_rag)
 
     out = lp.retrieve_node({"job_description": "Build platform APIs"})
     assert out["retrieved_context"] in {"A|B", "B|A"}

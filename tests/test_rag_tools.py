@@ -9,7 +9,7 @@ def test_search_materials_success(monkeypatch):
         search=lambda *_a, **_k: [{"text": "hit"}],
         format_results=lambda hits, title: f"{title} ({len(hits)})",
     )
-    monkeypatch.setitem(sys.modules, "rag", fake_rag)
+    monkeypatch.setitem(sys.modules, "lib.rag", fake_rag)
 
     out = rag.search_materials("python")
     assert 'Results for: "python"' in out
@@ -23,11 +23,11 @@ def test_search_materials_error_paths(monkeypatch):
     def _raise_generic(*_a, **_k):
         raise RuntimeError("index missing")
 
-    monkeypatch.setitem(sys.modules, "rag", types.SimpleNamespace(search=_raise_key, format_results=lambda *_a, **_k: "x"))
+    monkeypatch.setitem(sys.modules, "lib.rag", types.SimpleNamespace(search=_raise_key, format_results=lambda *_a, **_k: "x"))
     out = rag.search_materials("q")
     assert "requires an OpenAI API key" in out
 
-    monkeypatch.setitem(sys.modules, "rag", types.SimpleNamespace(search=_raise_generic, format_results=lambda *_a, **_k: "x"))
+    monkeypatch.setitem(sys.modules, "lib.rag", types.SimpleNamespace(search=_raise_generic, format_results=lambda *_a, **_k: "x"))
     out2 = rag.search_materials("q")
     assert out2.startswith("Search error:")
     assert "reindex_materials" in out2
@@ -36,7 +36,7 @@ def test_search_materials_error_paths(monkeypatch):
 def test_reindex_materials_success_and_error(monkeypatch):
     monkeypatch.setitem(
         sys.modules,
-        "rag",
+        "lib.rag",
         types.SimpleNamespace(build_index=lambda verbose=False: {"resumes": 2, "letters": 3}),
     )
     out = rag.reindex_materials()
@@ -46,7 +46,7 @@ def test_reindex_materials_success_and_error(monkeypatch):
     def _raise_key(*_a, **_k):
         raise RuntimeError("openai_api_key not set")
 
-    monkeypatch.setitem(sys.modules, "rag", types.SimpleNamespace(build_index=_raise_key))
+    monkeypatch.setitem(sys.modules, "lib.rag", types.SimpleNamespace(build_index=_raise_key))
     out2 = rag.reindex_materials()
     assert "requires an OpenAI API key" in out2
 
