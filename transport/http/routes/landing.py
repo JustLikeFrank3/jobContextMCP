@@ -390,9 +390,9 @@ LANDING_HTML: str = r'''<!doctype html>
     <div>
       <span class="eyebrow"><span class="dot"></span>Open-source · Model Context Protocol</span>
       <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
-      <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews &mdash; your whole professional story &mdash; and feeds it to any AI assistant. Your career has context. Your AI should too.</p>
+      <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="/login">Get started &mdash; it's free</a>
+        <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
       <div class="micro">
