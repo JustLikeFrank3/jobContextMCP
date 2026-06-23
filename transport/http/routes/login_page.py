@@ -306,7 +306,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
       <div class="hint" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
         No invitation yet?
-        <a href="mailto:jobContextMCP@gmail.com?subject=Access%20Request%20%E2%80%94%20jobContext&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20Here%27s%20a%20bit%20about%20me%3A%0A%0A" style="color:var(--primary);text-decoration:none;font-weight:600;">Request access</a>
+        <a href="mailto:admin@jobcontext.ai?subject=Access%20Request%20%E2%80%94%20jobContext&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20Here%27s%20a%20bit%20about%20me%3A%0A%0A" style="color:var(--primary);text-decoration:none;font-weight:600;">Request access</a>
       </div>
       <a class="back" href="/">
         <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5l-5 5 5 5"/></svg>
