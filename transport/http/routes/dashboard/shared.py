@@ -159,7 +159,10 @@ def html_page(title: str, active_tab: str, subtitle: str, extra_css: str, body: 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContext — {title}</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20100%20100'%3E%3Crect%20width%3D'100'%20height%3D'100'%20rx%3D'16'%20fill%3D'%230A0F1C'%2F%3E%3Cpath%20d%3D'M70%2050%20A26%2026%200%201%200%2070%2076'%20fill%3D'none'%20stroke%3D'%2306B6D4'%20stroke-width%3D'15'%20stroke-linecap%3D'round'%2F%3E%3Ccircle%20cx%3D'30'%20cy%3D'26'%20r%3D'9'%20fill%3D'%23FFFFFF'%2F%3E%3Cpath%20d%3D'M30%2039%20L30%2070%20Q30%2082%2017%2082'%20fill%3D'none'%20stroke%3D'%23FFFFFF'%20stroke-width%3D'13'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <style>{BASE_CSS}{extra_css}</style>
   {_auth_header_js()}
 </head>

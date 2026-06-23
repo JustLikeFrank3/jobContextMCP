@@ -66,7 +66,10 @@ async def dashboard_home() -> HTMLResponse:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContextMCP — Dashboard</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Ccircle cx='42' cy='42' r='30'/%3E%3C/clipPath%3E%3C/defs%3E%3Crect width='100' height='100' fill='%231E1E1E' rx='16'/%3E%3Cline x1='64' y1='64' x2='88' y2='88' stroke='%233FA8A8' stroke-width='10' stroke-linecap='round'/%3E%3Ccircle cx='42' cy='42' r='30' fill='%230f1b2d'/%3E%3Cg clip-path='url(%23c)'%3E%3Crect x='21' y='32' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3Crect x='32' y='32' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3Crect x='43' y='32' width='9' height='9' fill='%233FA8A8' rx='1.5'/%3E%3Crect x='54' y='32' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3Crect x='21' y='43' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3Crect x='32' y='43' width='9' height='9' fill='%233FA8A8' rx='1.5'/%3E%3Crect x='43' y='43' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3Crect x='54' y='43' width='9' height='9' fill='%23234060' rx='1.5'/%3E%3C/g%3E%3Ccircle cx='42' cy='42' r='30' fill='none' stroke='%23EDEDED' stroke-width='6'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <style>
     :root {{
       --bg: #0b1220; --panel: #111a2b; --muted: #9aa8bf;

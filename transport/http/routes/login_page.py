@@ -261,6 +261,10 @@ _LOGIN_TMPL: str = r'''<!doctype html>
     .panel { display: none; }
   }
 </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </head>
 <body>
 <div class="split">

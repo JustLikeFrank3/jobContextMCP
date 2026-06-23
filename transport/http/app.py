@@ -235,6 +235,18 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     async def favicon():
         return FileResponse(_static / "favicon.ico", media_type="image/x-icon")
 
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def favicon_svg():
+        return FileResponse(_static / "favicon.svg", media_type="image/svg+xml")
+
+    @app.get("/favicon-32.png", include_in_schema=False)
+    async def favicon_32():
+        return FileResponse(_static / "favicon-32.png", media_type="image/png")
+
+    @app.get("/favicon-16.png", include_in_schema=False)
+    async def favicon_16():
+        return FileResponse(_static / "favicon-16.png", media_type="image/png")
+
     @app.get("/apple-touch-icon{_:path}.png", include_in_schema=False)
     async def apple_touch_icon(_: str):
         """Catch all apple-touch-icon variants iOS requests (sized, precomposed, etc.)."""
