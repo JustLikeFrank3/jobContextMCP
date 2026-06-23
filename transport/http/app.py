@@ -32,6 +32,8 @@ from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
 from transport.http.routes.dashboard.assets import banner_svg
+from transport.http.routes.landing import landing_html
+from transport.http.routes.login_page import login_html
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -77,6 +79,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/oauth/",
             "/logout",
             "/logged-out",
+            "/login",
             "/dashboard/login",
             "/dashboard/callback",
             "/dashboard/logout",
@@ -202,38 +205,12 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(dashboard_router)
 
     @app.get("/", include_in_schema=False)
-    async def _root_login_entry() -> HTMLResponse:
-        html = """<!doctype html>
-<html lang=\"en\">
-<head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
-  <title>jobContextMCP</title>
-  <style>
-        body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-           background: #0b1220; color: #e6edf7;
-           font-family: Inter, Arial, sans-serif; }
-        .card { width: min(560px, 92vw); background: #111a2b; border: 1px solid #23324d;
-            border-radius: 14px; padding: 24px; text-align: center; }
-        .banner-wrap { width: 100%; max-width: 420px; margin: 0 auto 10px; }
-        .banner-wrap svg { width: 100%; height: auto; display: block; }
-    h1 { margin: 0 0 10px; font-size: 1.25rem; }
-    p { margin: 0 0 16px; color: #9aa8bf; line-height: 1.45; }
-    .btn { display: inline-block; text-decoration: none; font-weight: 700;
-           color: #0b1220; background: #3FA8A8; border-radius: 10px;
-           padding: 10px 14px; }
-  </style>
-</head>
-<body>
-  <main class=\"card\">
-                <div class=\"banner-wrap\">__BANNER_SVG__</div>
-        <h1>Secure Dashboard Access</h1>
-    <p>Sign in to access the dashboard.</p>
-    <a class=\"btn\" href=\"/dashboard/login\">Log in</a>
-  </main>
-</body>
-</html>"""
-        return HTMLResponse(html.replace("__BANNER_SVG__", banner_svg()))
+    async def _root_landing() -> HTMLResponse:
+        return HTMLResponse(landing_html())
+
+    @app.get("/login", include_in_schema=False)
+    async def _login_page(next: str = "/dashboard") -> HTMLResponse:
+        return HTMLResponse(login_html(next))
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
     # catch-all mount below doesn't intercept it before FastAPI can redirect.
