@@ -79,6 +79,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/logged-out",
             "/dashboard/login",
             "/dashboard/callback",
+            "/dashboard/logout",
             "/favicon",
             "/apple-touch-icon",
         )
@@ -116,6 +117,14 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         # so discovery and auth flows still work unauthenticated.
         if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
+
+        # Dashboard HTML pages: redirect expired/missing sessions to the root
+        # landing page instead of returning a JSON 401 that the browser just
+        # renders as a white page full of JSON.  API and MCP endpoints still
+        # get the structured 401 so automation and tooling can react to it.
+        if request.url.path == "/dashboard" or request.url.path.startswith("/dashboard/"):
+            from starlette.responses import RedirectResponse as _Redirect
+            return _Redirect(url="/", status_code=302)
 
         from starlette.responses import JSONResponse as _JSONResponse
         has_candidate = bool((authorization and authorization.strip()) or (session and session.strip()))
