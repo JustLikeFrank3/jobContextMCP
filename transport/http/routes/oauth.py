@@ -19,8 +19,14 @@ Flow that works once these are in place:
 
 Entra app registration requirements (one-time, done in Azure Portal):
   - "Allow public client flows" = Yes (Entra app → Authentication tab)
-  - Add redirect URI: http://localhost  (covers mcp-remote's local callback)
-  - Add redirect URI: https://claude.ai/oauth/callback  (Claude.ai native MCP)
+  - Under "Mobile and desktop applications" platform:
+      cursor://anysphere.cursor-mcp/oauth/callback  (Cursor IDE)
+      http://localhost                               (mcp-remote local callback)
+  - Under "Single-page application" or "Web" platform:
+      https://claude.ai/oauth/callback              (Claude.ai native MCP)
+
+  NOTE: Custom URI schemes (cursor://, vscode://, etc.) MUST be registered
+  under "Mobile and desktop applications" — the "Web" platform rejects them.
 """
 from __future__ import annotations
 
@@ -241,17 +247,35 @@ async def logout(request: Request) -> RedirectResponse:
 async def logout_post(request: Request) -> RedirectResponse:
     """POST handler for sign-out form buttons across the dashboard.
 
-    Clears the jc_session cookie first, then hands off to the Entra
-    end-session endpoint so the SSO session is also cleared server-side.
+    Clears the jc_session cookie first.  In Entra mode, hands off to the
+    Entra end-session endpoint so the SSO session is also cleared
+    server-side, then Entra redirects the browser back to the root landing
+    page (/).  In API-key (non-Entra) mode, skips Entra and goes straight
+    to / so the user can click Sign In again.
     """
     from transport.http.routes.dashboard.login import _is_secure
-    tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
-    base = _base_url(request)
-    entra_logout = (
-        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
-        f"?post_logout_redirect_uri={base}/logged-out"
-    )
-    resp = RedirectResponse(url=entra_logout, status_code=303)
+    from transport.http.security import EntraAuthProvider, get_auth_provider
+
+    provider = get_auth_provider()
+
+    if isinstance(provider, EntraAuthProvider):
+        tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
+        # Use SERVER_BASE_URL (same env var login.py uses) so the redirect URI
+        # always matches what is registered in Entra AD.  _base_url(request)
+        # derives the URL from X-Forwarded-Host which may differ from the
+        # registered URI when running behind an ingress or load balancer.
+        server_base = os.environ.get(
+            "SERVER_BASE_URL",
+            "https://jobcontextmcp.eastus.cloudapp.azure.com",
+        )
+        target = (
+            f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
+            f"?post_logout_redirect_uri={server_base}/"
+        )
+    else:
+        target = "/"
+
+    resp = RedirectResponse(url=target, status_code=303)
     resp.delete_cookie("jc_session", path="/", httponly=True,
                        samesite="lax", secure=_is_secure(request))
     return resp
