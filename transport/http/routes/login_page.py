@@ -6,8 +6,6 @@ Self-contained HTML (design tokens + Google Fonts inlined). Renders a
 """
 from __future__ import annotations
 
-import html as _html
-
 _LOGIN_TMPL: str = r'''<!doctype html>
 <html lang="en">
 <head>
@@ -327,5 +325,4 @@ def login_html(next_url: str = "/dashboard") -> str:
     """Return the branded sign-in page with next_url URL-encoded into the Microsoft sign-in link."""
     from urllib.parse import quote as _quote
     safe_href = _quote(next_url, safe="")
-    safe_html = _html.escape(next_url, quote=True)
-    return _LOGIN_TMPL.replace("__NEXT_HREF__", safe_href).replace("__NEXT__", safe_html)
+    return _LOGIN_TMPL.replace("__NEXT_HREF__", safe_href)

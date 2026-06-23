@@ -534,6 +534,18 @@ class TestPipelineAuth:
         )
         assert r.status_code == 401
 
+    def test_pipeline_browser_nav_unauthenticated_redirects(self, http_client_authed):
+        # Browser document navigations to any dashboard path without a valid
+        # session must get a 303 redirect to the landing page — not a 401 —
+        # so the browser renders the landing page instead of a JSON error.
+        r = http_client_authed.get(
+            "/dashboard/pipeline",
+            headers={"Sec-Fetch-Dest": "document"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/"
+
     def test_pipeline_data_accepts_bearer(self, http_client_authed):
         r = http_client_authed.get(
             "/dashboard/pipeline/data",

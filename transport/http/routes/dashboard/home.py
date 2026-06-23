@@ -65,7 +65,7 @@ async def dashboard_home() -> HTMLResponse:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>jobContextMCP — Dashboard</title>
+  <title>jobContext — Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />

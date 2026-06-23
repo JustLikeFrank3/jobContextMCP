@@ -135,7 +135,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/dashboard/")
         ):
             from starlette.responses import RedirectResponse as _Redirect
-            return _Redirect(url="/", status_code=302)
+            return _Redirect(url="/", status_code=303)
 
         from starlette.responses import JSONResponse as _JSONResponse
         has_candidate = bool((authorization and authorization.strip()) or (session and session.strip()))
