@@ -31,7 +31,6 @@ from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
-from transport.http.routes.dashboard.assets import banner_svg
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
 
@@ -122,10 +121,19 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Dashboard HTML pages: redirect expired/missing sessions to the root
-        # landing page instead of returning a JSON 401 that the browser just
-        # renders as a white page full of JSON.  API and MCP endpoints still
-        # get the structured 401 so automation and tooling can react to it.
-        if request.url.path == "/dashboard" or request.url.path.startswith("/dashboard/"):
+        # Redirect unauthenticated *browser* navigations to the landing page
+        # instead of returning a JSON 401 that the browser just renders as a
+        # white page full of JSON.  API/fetch callers (Accept: application/json
+        # or Sec-Fetch-Dest != document) still get the structured 401 so
+        # automation, tooling, and dashboard JS can react to it correctly.
+        is_document_nav = (
+            "text/html" in request.headers.get("accept", "")
+            or request.headers.get("sec-fetch-dest", "") == "document"
+        )
+        if is_document_nav and (
+            request.url.path == "/dashboard"
+            or request.url.path.startswith("/dashboard/")
+        ):
             from starlette.responses import RedirectResponse as _Redirect
             return _Redirect(url="/", status_code=302)
 

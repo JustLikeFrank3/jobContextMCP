@@ -523,13 +523,16 @@ class TestPipelineValidation:
 
 class TestPipelineAuth:
     def test_pipeline_data_requires_auth_when_enabled(self, http_client_authed):
-        # Dashboard routes redirect unauthenticated browsers to / (302)
-        # rather than returning JSON 401, so the test client follows to the
-        # root landing page which returns 200.
-        r = http_client_authed.get("/dashboard/pipeline/data")
-        assert r.status_code == 200
-        # Confirm the redirect landed on the root page (not the data endpoint)
-        assert r.url.path == "/"
+        # /dashboard/pipeline/data is a JSON endpoint consumed by fetch().
+        # Unauthenticated fetch requests (no Accept: text/html) must still
+        # receive a structured 401 — not a redirect — so the dashboard JS
+        # can handle the auth failure gracefully.
+        r = http_client_authed.get(
+            "/dashboard/pipeline/data",
+            headers={"Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 401
 
     def test_pipeline_data_accepts_bearer(self, http_client_authed):
         r = http_client_authed.get(

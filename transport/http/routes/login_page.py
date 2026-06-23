@@ -1,8 +1,8 @@
 """Branded sign-in page for jobContext.
 
-Self-contained HTML (design tokens + Google Fonts inlined). The form POSTs to
-/dashboard/login — the existing backend handler is unchanged. Generated from
-the jobContext Design System (ui_kits/marketing/login.html).
+Self-contained HTML (design tokens + Google Fonts inlined). Renders a
+"Sign in with Microsoft" link to /dashboard/login (Entra PKCE) and a
+"Request access" mailto link. Generated from the jobContext Design System.
 """
 from __future__ import annotations
 
@@ -294,14 +294,14 @@ _LOGIN_TMPL: str = r'''<!doctype html>
     <div class="card">
       <h1 class="lead">Sign in</h1>
       <p class="leadsub">jobContext uses Microsoft sign-in. If you have received an invitation, click below to continue.</p>
-      <a class="submit" href="/dashboard/login?next=__NEXT__" style="display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body);">
+      <a class="submit" href="/dashboard/login?next=__NEXT_HREF__" style="display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body);">
         Sign in with Microsoft
       </a>
       <div class="hint" style="margin-top:20px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
         You must have a valid invitation to sign in.
       </div>
-      <div class="hint" style="margin-top:12px;border-top:1px solid var(--surface-2);padding-top:14px;">
+      <div class="hint" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
         No invitation yet?
         <a href="mailto:jobContextMCP@gmail.com?subject=Access%20Request%20%E2%80%94%20jobContext&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20Here%27s%20a%20bit%20about%20me%3A%0A%0A" style="color:var(--primary);text-decoration:none;font-weight:600;">Request access</a>
@@ -320,6 +320,8 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 
 
 def login_html(next_url: str = "/dashboard") -> str:
-    """Return the sign-in page, with `next_url` injected into the form."""
-    safe = _html.escape(next_url, quote=True)
-    return _LOGIN_TMPL.replace("__NEXT__", safe)
+    """Return the branded sign-in page with next_url URL-encoded into the Microsoft sign-in link."""
+    from urllib.parse import quote as _quote
+    safe_href = _quote(next_url, safe="")
+    safe_html = _html.escape(next_url, quote=True)
+    return _LOGIN_TMPL.replace("__NEXT_HREF__", safe_href).replace("__NEXT__", safe_html)

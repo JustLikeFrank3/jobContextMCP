@@ -247,7 +247,7 @@ def get_contact_info() -> dict[str, Any]:
                 # Only use the user-scoped contact if it has a non-empty name.
                 # An empty contact block (e.g. from auto-provisioning) must not
                 # shadow the owner's base config contact.
-                if isinstance(contact, dict) and contact.get("name", "").strip():
+                if isinstance(contact, dict) and str(contact.get("name") or "").strip():
                     return contact
             except Exception:
                 pass
