@@ -291,24 +291,26 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 
   <!-- sign-in form -->
   <main class="formside">
-    <form class="card" method="post" action="/dashboard/login">
+    <div class="card">
       <h1 class="lead">Sign in</h1>
-      <p class="leadsub">Enter your API key to create a secure browser session on this device.</p>
-      <input type="hidden" name="next" value="__NEXT__" />
-      <div class="field">
-        <label for="api_key">API key</label>
-        <input id="api_key" name="api_key" type="password" autocomplete="current-password" placeholder="jc_••••••••••••••••" required />
-      </div>
-      <button class="submit" type="submit">Sign in</button>
-      <div class="hint">
+      <p class="leadsub">jobContext uses Microsoft sign-in. If you have received an invitation, click below to continue.</p>
+      <a class="submit" href="/dashboard/login?next=__NEXT__" style="display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body);">
+        Sign in with Microsoft
+      </a>
+      <div class="hint" style="margin-top:20px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
-        Session cookie is HTTP-only and stored for 30 days on this browser.
+        You must have a valid invitation to sign in.
+      </div>
+      <div class="hint" style="margin-top:12px;border-top:1px solid var(--surface-2);padding-top:14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+        No invitation yet?
+        <a href="mailto:jobContextMCP@gmail.com?subject=Access%20Request%20%E2%80%94%20jobContext&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20Here%27s%20a%20bit%20about%20me%3A%0A%0A" style="color:var(--primary);text-decoration:none;font-weight:600;">Request access</a>
       </div>
       <a class="back" href="/">
         <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5l-5 5 5 5"/></svg>
         Back to home
       </a>
-    </form>
+    </div>
   </main>
 
 </div>
