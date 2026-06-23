@@ -244,10 +244,14 @@ def get_contact_info() -> dict[str, Any]:
             try:
                 user_cfg = json.loads(user_config_path.read_text(encoding="utf-8"))
                 contact = user_cfg.get("contact", {})
-                return contact if isinstance(contact, dict) else {}
+                # Only use the user-scoped contact if it has a non-empty name.
+                # An empty contact block (e.g. from auto-provisioning) must not
+                # shadow the owner's base config contact.
+                if isinstance(contact, dict) and str(contact.get("name") or "").strip():
+                    return contact
             except Exception:
                 pass
-        # No user-specific config — fall back to base config only for the owner.
+        # No user-specific config (or empty contact) — fall back to base config only for the owner.
         if OWNER_OID and get_current_user_oid() == OWNER_OID:
             contact = _cfg.get("contact", {})
             return contact if isinstance(contact, dict) else {}
