@@ -235,7 +235,7 @@ class TestDashboardEndpoints:
         r = http_client_noauth.get("/dashboard/")
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]
-        assert "jobContextMCP" in r.text
+        assert "jobContext" in r.text
 
     def test_rejections_dashboard_page_renders(self, http_client_noauth):
         r = http_client_noauth.get("/dashboard/rejections")
