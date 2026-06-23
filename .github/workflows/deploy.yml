@@ -120,5 +120,6 @@ jobs:
           sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
             k8s/deployment.yaml | \
             kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
+          kubectl apply -f k8s/ingress.yaml -n ${{ env.K8S_NAMESPACE }}
           kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
             -n ${{ env.K8S_NAMESPACE }} --timeout=300s
