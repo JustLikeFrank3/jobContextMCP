@@ -117,22 +117,25 @@ def _user_identity() -> dict[str, str]:
     Falls back to _AUTHOR_DEFAULTS so local dev / Frank's own partition
     still works without any extra setup.  Per-user callers (beta testers)
     get their own name/email on the generated document.
+
+    Per-field fallback: any blank value in the contact block is replaced
+    with the corresponding placeholder so the LaTeX template never receives
+    an empty string (which causes compilation errors on fields like \\name
+    that are rendered directly into the document).
     """
     contact = cfg.get_contact_info()
-    if not contact:
-        return dict(_AUTHOR_DEFAULTS)
 
-    linkedin = str(contact.get("linkedin", ""))
+    linkedin = str(contact.get("linkedin", "") or "")
     linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
-    github = str(contact.get("github", ""))
+    github = str(contact.get("github", "") or "")
     github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
     return {
-        "name":     str(contact.get("name", _AUTHOR_DEFAULTS["name"])),
-        "phone":    str(contact.get("phone", _AUTHOR_DEFAULTS["phone"])),
-        "city":     str(contact.get("city", _AUTHOR_DEFAULTS["city"])),
-        "email":    str(contact.get("email", _AUTHOR_DEFAULTS["email"])),
-        "linkedin": linkedin,
-        "github":   github,
+        "name":     str(contact.get("name", "") or "") or _AUTHOR_DEFAULTS["name"],
+        "phone":    str(contact.get("phone", "") or "") or _AUTHOR_DEFAULTS["phone"],
+        "city":     str(contact.get("city", "") or "") or _AUTHOR_DEFAULTS["city"],
+        "email":    str(contact.get("email", "") or "") or _AUTHOR_DEFAULTS["email"],
+        "linkedin": linkedin or _AUTHOR_DEFAULTS["linkedin"],
+        "github":   github or _AUTHOR_DEFAULTS["github"],
     }
 
 

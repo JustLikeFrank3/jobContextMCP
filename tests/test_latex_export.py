@@ -28,6 +28,21 @@ def test_latex_user_identity_default_is_generic_placeholder(monkeypatch):
     assert "example" in identity["email"]
 
 
+def test_latex_user_identity_blank_strings_fall_back_to_placeholder(monkeypatch):
+    """A contact block with all blank strings (e.g. a freshly seeded config.json)
+    must still produce placeholder values — blank strings would crash tectonic."""
+    blank_contact = {"name": "", "phone": "", "city": "", "email": "", "linkedin": "", "github": ""}
+    monkeypatch.setattr(latex_export.cfg, "get_contact_info", lambda: blank_contact)
+
+    identity = latex_export._user_identity()
+
+    assert identity["name"] == "YOUR FULL NAME"
+    assert "@" in identity["email"]
+    assert "example" in identity["email"]
+    assert identity["linkedin"] == "yourhandle"
+    assert identity["github"] == "YourGitHub"
+
+
 def test_latex_cover_letter_defaults_to_cover_letter_pdf_folder(monkeypatch, tmp_path):
     latex_dir = tmp_path / "latex"
     resume_dir = tmp_path / "resumes"
