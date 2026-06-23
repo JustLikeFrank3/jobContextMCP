@@ -4,8 +4,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"/>
-  <img src="https://img.shields.io/badge/tests-860%20passing-brightgreen" alt="860 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-82.25%25-brightgreen" alt="82.25% coverage"/>
+  <img src="https://img.shields.io/badge/tests-923%20passing-brightgreen" alt="923 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-77.41%25-brightgreen" alt="77.41% coverage"/>
   <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
@@ -34,7 +34,7 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 | | |
 |---|---|
 | 77 MCP tools | Resume + cover letter generation |
-| 860 passing tests | Job fitment analysis with persona lenses |
+| 923 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
