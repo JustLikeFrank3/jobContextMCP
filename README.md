@@ -1378,7 +1378,7 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 - Job header format: `Title | Company, Location | Month YYYY - Month YYYY` (three pipe-delimited parts).
 - Bullets must use `•` (Unicode U+2022) — not `-` or `*`.
 - Contact block uses labeled fields: `phone:`, `email:`, `linkedin:` (lowercase, colon suffix).
-- Target length: 650–800 words (one tight page in Courier New 9.2pt).
+- Target length: 650–800 words (one tight page in the selected resume template).
 
 **Cover letter**
 - Target: **380–430 words** in the letter body for a full one-page render.
@@ -1394,22 +1394,23 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 
 ---
 
-## PDF Template Demo
+## PDF Export
 
-The repo includes two fake-identity demo files so you can preview the PDF output without using real data:
+Resume and cover letter PDFs are generated from plain `.txt` source files via WeasyPrint — no design tools required. The output uses whichever template and color theme you select in the pipeline (4 layouts x 5 themes = 20 combinations). Template and theme are saved per-job so each application can have its own presentation.
 
 ```bash
-# Generate the demo PDFs after setup:
+# Generate a PDF using a specific template and theme:
 python -c "
-from tools.export import export_resume_pdf, export_cover_letter_pdf
-export_resume_pdf('Nobody MacFakename Resume - Demo Software Engineer.txt')
-export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Engineer.txt')
+from tools.export import export_resume_pdf
+export_resume_pdf(
+    'Your Resume.txt',
+    template='sidebar',
+    style='slate'
+)
 "
 ```
 
-PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
-
-Demo screenshots are stored under `docs/` so README image links stay on-repo and do not expose private application documents.
+PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. Available templates: `modern`, `executive`, `sidebar`, `portfolio`. Available themes: `navy`, `slate`, `forest`, `warm`, `classic`.
 
 ---
 
@@ -1480,6 +1481,16 @@ Hardening, per-user API keys, refactor sprint, and coverage push. 860 passing, 8
 - **Refactor** — three monolithic files split into focused modules (`lib/resume_parser.py`, `pipeline_helpers.py`, `tools/generate_prompts.py`); all public symbols re-exported, no call-site changes
 - **Coverage 82.25%** — 860 passing (up from 627 at v1.0.0); 164 new tests for `lib/resume_parser.py` (9% → 88%); new suites for RAG, story retrieval, GitHub metrics, LangGraph pipeline, project scanner, and dashboard pipeline
 - **CI** — `workflow_dispatch` trigger + test + SonarCloud scan jobs added to deploy pipeline; coverage badge on README
+
+### v1.1 *(shipped)*
+
+4 resume layouts x 5 color themes = 20 presentation variants. Cover letter templates to match. Template selection is per-job in the pipeline. 924 passing, 77.41% coverage.
+
+- **Resume template system** (`lib/template_loader.py`) — Modern (single-column, ATS-friendly), Executive (serif, leadership-oriented), Sidebar (two-column with contact/skills panel), Portfolio (projects-first). All render from the same `.txt` data model; only the presentation changes.
+- **5 color themes** — Navy, Slate, Forest, Warm, Classic. Injected as CSS custom properties at render time; themes override template defaults without modifying template files.
+- **Cover letter templates** — matching 4-layout system for cover letters with the same theme support.
+- **Per-job template selection** — pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style`. A preview modal with live sandboxed iframe lets you pick format and theme before generating. Selection persists in SQLite per job.
+- **Generate now uses saved template/style** — fixed bug where the Generate Resume button ignored the saved selection and always output the legacy format.
 
 ### v1.x planned
 
