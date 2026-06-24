@@ -33,6 +33,7 @@ from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
+from transport.http.routes.why import why_html
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -79,6 +80,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/logout",
             "/logged-out",
             "/login",
+            "/why",
             "/dashboard/login",
             "/dashboard/callback",
             "/dashboard/logout",
@@ -215,6 +217,10 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     async def _root_landing() -> HTMLResponse:
         return HTMLResponse(landing_html())
+
+    @app.get("/why", include_in_schema=False)
+    async def _why_page() -> HTMLResponse:
+        return HTMLResponse(why_html())
 
     @app.get("/login", include_in_schema=False)
     async def _login_page(next: str = "/dashboard") -> HTMLResponse:

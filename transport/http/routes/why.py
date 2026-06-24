@@ -1,12 +1,15 @@
-"""Public marketing landing page for jobContext (served at /). Self-contained — tokens + Google Fonts inlined. Generated from the jobContext Design System."""
+"""Public Why-use-it page for jobContext (suggested route: /why).
+Self-contained: design tokens + Google Fonts inlined, mirrors landing.py.
+Serve it the same way landing.py is served, e.g. return WHY_HTML from a /why handler.
+"""
 from __future__ import annotations
 
-LANDING_HTML: str = r'''<!doctype html>
+WHY_HTML: str = r'''<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>jobContext &mdash; The memory layer for your career</title>
+<title>jobContext &mdash; Why use it</title>
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
@@ -357,13 +360,63 @@ LANDING_HTML: str = r'''<!doctype html>
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+<style>
+  /* ---- additions for the Why page (built on existing tokens) ---- */
+  .pagehead { padding: 76px 0 8px; position: relative; overflow: hidden; }
+  .pagehead::before { content:""; position:absolute; inset:0;
+    background: radial-gradient(620px 360px at 75% 0%, color-mix(in srgb, var(--cyan-500) 12%, transparent), transparent 70%); pointer-events:none; }
+  .pagehead .inner { position: relative; max-width: 760px; }
+  .pagehead h1 { font-family: var(--font-display); font-weight: 700; font-size: 3.1rem; line-height: 1.05; letter-spacing: -0.03em; color:#fff; margin: 20px 0 0; text-wrap: balance; }
+  .pagehead h1 .c { color: var(--cyan-400); }
+  .pagehead .lede { color: var(--muted); font-size: 1.2rem; line-height: 1.6; margin: 20px 0 0; max-width: 34em; text-wrap: pretty; }
+
+  /* before / after */
+  .ba { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  .ba .col { border-radius: var(--radius-lg); padding: 26px 26px 28px; border:1px solid var(--border); }
+  .ba .col.before { background: var(--surface); }
+  .ba .col.after  { background: var(--surface); border-color: color-mix(in srgb, var(--cyan-500) 35%, transparent); }
+  .ba .tag { display:inline-flex; align-items:center; gap:8px; font-size: var(--fs-2xs); font-weight:700; text-transform:uppercase; letter-spacing: var(--ls-eyebrow); padding:5px 11px; border-radius: var(--radius-pill); }
+  .ba .before .tag { color: var(--danger-soft); background: var(--tint-danger); }
+  .ba .after .tag  { color: var(--cyan-300); background: var(--tint-primary); }
+  .ba ul { list-style:none; margin: 18px 0 0; padding:0; }
+  .ba li { color: var(--muted); font-size: var(--fs-body); line-height: 1.55; padding-left: 26px; position: relative; margin-top: 12px; }
+  .ba li::before { position:absolute; left:0; top:1px; font-family: var(--font-mono); font-weight:700; }
+  .ba .before li::before { content:"\00d7"; color: var(--danger-soft); }
+  .ba .after  li::before { content:"\2713"; color: var(--green-500); }
+  .ba .after li b { color: var(--text); font-weight: 600; }
+
+  /* best practices list */
+  .bp { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  .bp .item { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding: 22px 24px; transition: border-color .18s, background .18s; }
+  .bp .item:hover { border-color: color-mix(in srgb, var(--cyan-500) 40%, transparent); background: var(--surface-raised); }
+  .bp .k { font-family: var(--font-mono); font-size: var(--fs-2xs); font-weight:700; color: var(--cyan-400); text-transform: uppercase; letter-spacing: var(--ls-label); }
+  .bp h3 { font-family: var(--font-display); font-weight:600; font-size: 1.08rem; color:#fff; margin: 10px 0 0; }
+  .bp p { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; margin: 8px 0 0; }
+
+  /* who it's for */
+  .who { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-xl); padding: 36px 40px; display:grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+  .who h3 { font-family: var(--font-display); font-weight:600; font-size: 1.18rem; margin:0 0 6px; }
+  .who .yes h3 { color: var(--green-300); }
+  .who .no h3  { color: var(--faint); }
+  .who ul { list-style:none; margin: 14px 0 0; padding:0; }
+  .who li { color: var(--muted); font-size: var(--fs-body); line-height:1.5; padding-left: 24px; position:relative; margin-top: 11px; }
+  .who .yes li::before { content:"\2713"; position:absolute; left:0; color: var(--green-500); font-family: var(--font-mono); font-weight:700; }
+  .who .no li::before  { content:"\2013"; position:absolute; left:0; color: var(--faint); font-family: var(--font-mono); font-weight:700; }
+
+  @media (max-width: 920px) {
+    .ba, .bp, .who { grid-template-columns: 1fr; }
+    .pagehead h1 { font-size: 2.4rem; }
+  }
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </head>
+
 <body>
 
-<!-- ============ NAV ============ -->
 <nav class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top">
+    <a class="brand" href="/">
       <svg viewBox="0 0 320 290" width="34" height="31" aria-label="jobContext">
         <path d="M268.2 124.5 A80 80 0 1 0 268.2 175.5" fill="none" stroke="var(--cyan-500)" stroke-width="46" stroke-linecap="round"/>
         <circle cx="84" cy="54" r="27" fill="#fff"/>
@@ -372,11 +425,10 @@ LANDING_HTML: str = r'''<!doctype html>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
     <div class="nav-links">
-      <a class="lnk" href="/why">Why</a>
-      <a class="lnk" href="#features">Features</a>
+      <a class="lnk" href="#value">Why</a>
       <a class="lnk" href="#how">How it works</a>
-      <a class="lnk" href="#pillars">Why it's safe</a>
-      <a class="lnk" href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
+      <a class="lnk" href="#best">Best practices</a>
+      <a class="lnk" href="#safe">Why it's safe</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
       <a class="btn btn-primary" href="/login">Get started</a>
     </div>
@@ -385,225 +437,175 @@ LANDING_HTML: str = r'''<!doctype html>
 
 <span id="top"></span>
 
-<!-- ============ HERO ============ -->
-<header class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <span class="eyebrow"><span class="dot"></span>Open-source · Model Context Protocol</span>
-      <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
-      <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
-      </div>
-      <div class="micro">
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Self-hosted &amp; private</span>
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Works with Claude, Copilot, Cursor</span>
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>70+ tools</span>
-      </div>
-    </div>
-
-    <div class="term">
-      <div class="term-bar">
-        <i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
-        <span class="term-title">claude · jobContext MCP</span>
-      </div>
-      <div class="term-body">
-        <div class="u">&gt; Draft a cover letter for the CVS role.</div>
-        <div class="g">&nbsp;</div>
-        <div class="p">claude</div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_resume()</span></div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_job(47)</span></div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_stories()</span></div>
-        <div class="g">&nbsp;</div>
-        <div class="hl2">Done. I used your <span class="ok">master resume</span>, the</div>
-        <div class="hl2">CVS assessment (<span class="ok">fitment 9/10</span>), and your</div>
-        <div class="hl2">platform-migration STAR story &mdash; no</div>
-        <div class="hl2">re-explaining needed.</div>
-      </div>
+<!-- PAGE HEAD -->
+<header class="pagehead">
+  <div class="wrap inner">
+    <span class="eyebrow"><span class="dot"></span>Why jobContext</span>
+    <h1>Stop re-explaining yourself to AI <span class="c">every morning.</span></h1>
+    <p class="lede">Your job search is scattered across thirty browser tabs, a spreadsheet, your inbox, and your memory. jobContext gives your AI assistant a memory of all of it, so every conversation picks up where you left off instead of starting from zero.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
+      <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
     </div>
   </div>
 </header>
 
-<!-- ============ CLIENTS STRIP ============ -->
-<div class="strip">
-  <div class="wrap strip-inner">
-    <span class="lbl">Plugs into your AI tools &mdash;</span>
-    <span class="name">Claude</span>
-    <span class="name">GitHub Copilot</span>
-    <span class="name">Cursor</span>
-    <span class="name">Windsurf</span>
-    <span class="name">Zed</span>
-    <span class="lbl">…any MCP client</span>
-  </div>
-</div>
-
-<!-- ============ PROBLEM ============ -->
-<section class="blk" id="why">
+<!-- THE PROBLEM / VALUE -->
+<section class="blk" id="value">
   <div class="wrap">
-    <div class="problem">
-      <div class="big">Every new AI chat starts from <span class="x">zero.</span></div>
-      <div>
-        <p>You paste your resume again. Re-explain the role. Re-tell the same story about that migration project. The AI is brilliant and amnesiac &mdash; and your career is scattered across tabs, docs, and DMs.</p>
-        <p><b>jobContext is the memory.</b> Import once and your experience, applications, outreach, and interview notes stay in sync &mdash; ready for any assistant, any session.</p>
+    <div class="sec-head">
+      <div class="sec-eyebrow">The difference</div>
+      <h2>What changes the moment it is connected</h2>
+      <p>An AI assistant without your context is a brilliant stranger. Connected to jobContext, it is a teammate who has been with you the whole search.</p>
+    </div>
+    <div class="ba">
+      <div class="col before">
+        <span class="tag">Without it</span>
+        <ul>
+          <li>You paste your resume into every new chat</li>
+          <li>You re-explain who you talked to and what you said</li>
+          <li>You remind it of your rate, your targets, your story</li>
+          <li>Advice is generic because it knows nothing about you</li>
+          <li>Your history lives in your head and a messy spreadsheet</li>
+        </ul>
+      </div>
+      <div class="col after">
+        <span class="tag">With it</span>
+        <ul>
+          <li>It already knows your <b>background and pipeline</b> on hello</li>
+          <li>It knows every <b>contact and conversation</b> in your search</li>
+          <li>Drafts come out in <b>your voice</b>, grounded in your real wins</li>
+          <li>It tells you <b>what to do next</b>, not just answers questions</li>
+          <li>The record <b>builds itself</b> as you talk</li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ============ FEATURES ============ -->
-<section class="blk" id="features">
+<!-- WHAT IT DOES: MEMORY -->
+<section class="blk" style="padding-top:0;">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-eyebrow">One source of truth</div>
-      <h2>Your whole career, remembered</h2>
-      <p>Not a job-board. A structured memory of everything that makes you hireable &mdash; and everything you're doing about it.</p>
+      <div class="sec-eyebrow">Memory &amp; continuity</div>
+      <h2>It remembers, so you don't have to</h2>
     </div>
-    <div class="bento">
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></div>
-        <h3>Pipeline</h3>
-        <p>Share-sheet intake, AI fitment scoring, resume + cover-letter generation, and an apply queue.</p>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h8l4 4v11a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M12 4v4h4"/></svg></div>
-        <h3>Materials</h3>
-        <p>Every resume, cover letter, and PDF versioned and linked to the right application.</p>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5"/><circle cx="17" cy="8" r="2.4"/><path d="M15.5 13.4c2.3.5 3.9 2.3 3.9 4.6"/></svg></div>
-        <h3>Contacts &amp; outreach</h3>
-        <p>Recruiters, referrals, and a follow-up queue so no warm intro goes cold.</p>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14l4-4 3 3 4-5 4 5"/><path d="M3 18h14"/></svg></div>
-        <h3>LinkedIn posts</h3>
-        <p>A build-in-public pipeline: draft → written → approved → posted, with engagement tracking.</p>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg></div>
-        <h3>Interviews</h3>
-        <p>Schedule, prep docs, and a debrief log with verbatim quotes and what landed.</p>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l3-4 3 2 3-5 3 3"/><path d="M3 17h14"/></svg></div>
-        <h3>Wellbeing</h3>
-        <p>A mood &amp; energy log with trend lines &mdash; the part of the search nobody tracks.</p>
-      </div>
-      <div class="feat span2">
-        <div class="txt">
-          <h3>Rejections, analyzed</h3>
-          <p>Funnel-by-stage, top companies, and the patterns that turn “no” into your next yes.</p>
-        </div>
-        <div class="ministat">
-          <div><div class="n">70+</div><div class="l">MCP tools</div></div>
-          <div><div class="n">11</div><div class="l">surfaces</div></div>
-        </div>
-      </div>
-      <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h12v9H4z"/><path d="M6 8h8M6 11h5"/><path d="M16 17l3 3"/></svg></div>
-        <h3>Daily digest</h3>
-        <p>An on-demand morning brief: follow-ups due, stale apps, and today's priorities.</p>
-      </div>
-    </div>
+    <div class="bento"><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></div><h3>It already knows you</h3><p>Resume, work history, metrics, and your live pipeline are loaded the moment you say hello. No more pasting your background into a fresh chat every single time.</p></div><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 5.2a3 3 0 0 1 0 5.6M17.5 20a5.5 5.5 0 0 0-3-4.9"/></svg></div><h3>Every contact, remembered</h3><p>Recruiters, referrals, hiring managers, what you last said, when you last reached out, what is still pending. The next message gets written with full context, not guesswork.</p></div><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 10h10M4 15h16M4 19h7"/></svg></div><h3>Sounds like you</h3><p>It learns your writing voice from your real messages, so drafts come out in your tone instead of generic AI filler.</p></div></div>
   </div>
 </section>
 
-<!-- ============ PILLARS ============ -->
-<section class="blk" id="pillars">
+<!-- WHAT IT DOES: ACTION -->
+<section class="blk" style="padding-top:0;">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-eyebrow">Built for what matters</div>
-      <h2>Private by design, yours to own</h2>
+      <div class="sec-eyebrow">Direction &amp; action</div>
+      <h2>It moves the search forward</h2>
     </div>
-    <div class="pillars">
-      <div class="pillar">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
-        <h3>Private &amp; secure</h3>
-        <p>Self-hosted with HTTP-only sessions. Your data never leaves your server.</p>
-      </div>
-      <div class="pillar green">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div>
-        <h3>You own your data</h3>
-        <p>Plain files and an open schema. Export anytime &mdash; no lock-in, ever.</p>
-      </div>
-      <div class="pillar">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></div>
-        <h3>Works everywhere</h3>
-        <p>One MCP server, every client &mdash; Claude, Copilot, Cursor, Windsurf, Zed.</p>
-      </div>
-      <div class="pillar">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
-        <h3>Extensible</h3>
-        <p>70+ open tools and a clean API. Bend it to your own workflow.</p>
-      </div>
-    </div>
+    <div class="bento"><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></div><h3>Tells you what is next</h3><p>Overdue follow-ups, who is waiting on you, threads going stale, today's priorities. A chaotic search becomes a managed pipeline.</p></div><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.6" fill="currentColor"/></svg></div><h3>Honest fit checks</h3><p>Paste a job description and get a real read against your background: where you match, where the gaps are, and whether it is worth your time.</p></div><div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2.5h8l4 4V21a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z"/><path d="M14 2.5V7h4M8 13h8M8 17h6"/></svg></div><h3>Tailored applications, fast</h3><p>Resumes and cover letters built per role in minutes, anchored to your master resume and the metrics you actually earned.</p></div></div>
   </div>
 </section>
 
-<!-- ============ HOW IT WORKS ============ -->
-<section class="blk" id="how">
+<!-- HOW IT WORKS -->
+<section class="blk" id="how" style="padding-top:0;">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-eyebrow">Up and running in minutes</div>
-      <h2>Import once. Stay in sync.</h2>
+      <div class="sec-eyebrow">How it works</div>
+      <h2>Connected in about a minute</h2>
+      <p>The hosted version needs no setup files and no infrastructure. Add the connector, sign in, and start talking.</p>
     </div>
     <div class="steps">
-      <div class="step">
-        <h3>Connect your MCP client</h3>
-        <p>Point Claude, Copilot, or Cursor at your jobContext server. One config line.</p>
+      <div class="step"><h3>Add the connector</h3><p>In Claude, Copilot, Cursor, or Windsurf, add jobContext as a connector. One click. No config files to edit, nothing to install.</p></div>
+      <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
+      <div class="step"><h3>Just start talking</h3><p>Ask it to log a contact, assess a job, draft a cover letter, or plan your day. It does the rest, and remembers all of it next time.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- BEST PRACTICES -->
+<section class="blk" id="best" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Best practices</div>
+      <h2>How to get the most out of it</h2>
+      <p>The people who get the most from jobContext treat it like a teammate they keep in the loop, not a tool they open once.</p>
+    </div>
+    <div class="bp"><div class="item"><div class="k">Practice 01</div><h3>Just talk, it logs itself</h3><p>Tell it what happened in plain language. "Had a call with Sam, sending my resume Friday." It records the contact, the message, and the follow-up automatically. The conversation is the record.</p></div><div class="item"><div class="k">Practice 02</div><h3>Drop in job descriptions</h3><p>Paste a posting and ask for a fit assessment before you spend an evening applying. Let it tell you the angles to lead with and the gaps to address.</p></div><div class="item"><div class="k">Practice 03</div><h3>Start your day with the digest</h3><p>Ask for your daily briefing. It surfaces what is overdue, who owes you a reply, and the three things actually worth doing today.</p></div><div class="item"><div class="k">Practice 04</div><h3>Debrief every interview</h3><p>Right after a call, walk through how it went. It captures what landed, what did not, and what the team really cared about, then feeds that into prep for the next round.</p></div><div class="item"><div class="k">Practice 05</div><h3>Keep people current</h3><p>Whenever someone new enters your search, mention them. A search lives or dies on relationships, and the ones it remembers are the ones you can act on.</p></div><div class="item"><div class="k">Practice 06</div><h3>Use it from your phone</h3><p>See a posting on the move? Share it straight into your pipeline with the mobile share sheet, then assess it later from your desk.</p></div></div>
+  </div>
+</section>
+
+<!-- WHO IT'S FOR -->
+<section class="blk" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Honest fit</div>
+      <h2>Who this is really for</h2>
+      <p>It pays off most when your search has a lot of moving parts. If you are casually browsing one role a month, the memory layer is more than you need.</p>
+    </div>
+    <div class="who">
+      <div class="yes">
+        <h3>You'll feel it if</h3>
+        <ul>
+          <li>You have several roles in flight at once</li>
+          <li>You are juggling recruiters, referrals, and follow-ups</li>
+          <li>You are interviewing and need to prep and debrief fast</li>
+          <li>You are tired of re-explaining yourself to AI every time</li>
+          <li>You want your search managed, not just remembered</li>
+        </ul>
       </div>
-      <div class="step">
-        <h3>Import your career</h3>
-        <p>Drop in your resume and history. jobContext structures it into a queryable memory.</p>
-      </div>
-      <div class="step">
-        <h3>Let your AI remember</h3>
-        <p>Every session now starts with full context &mdash; applications, stories, contacts, and all.</p>
+      <div class="no">
+        <h3>Probably overkill if</h3>
+        <ul>
+          <li>You are applying to one job a month</li>
+          <li>You are not using an AI assistant in your search</li>
+          <li>You just want a resume formatter and nothing more</li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ============ FINAL CTA ============ -->
-<section class="blk" style="padding-top:24px;">
+<!-- WHY IT'S SAFE -->
+<section class="blk" id="safe" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Why it's safe</div>
+      <h2>Built to be trusted with your career</h2>
+      <p>You are handing it the story of your professional life. It is built to earn that.</p>
+    </div>
+    <div class="pillars"><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>It will not make things up</h3><p>A no-fabrication guardrail lives in the system, not a prompt. It cannot invent metrics to flatter you. Everything traces back to your real record.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><h3>Your data is isolated</h3><p>Multi-tenant with per-user separation. Your search is yours. Nobody else can see it, and your data never leaks into anyone else's.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-4 1.3-4-2.2-6-2.7M15 21v-3.4a3 3 0 0 0-.8-2.3c2.8-.3 5.6-1.4 5.6-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6.6 1.6 5.6 1.9 5.6 1.9a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 4.2 8.3c0 4.6 2.8 5.7 5.6 6a3 3 0 0 0-.8 2.3V21"/></svg></div><h3>Open and inspectable</h3><p>The whole thing is open source. You can read exactly how it works, run your own copy, or just trust the hosted version. No black box.</p></div><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-7"/></svg></div><h3>Built and battle-tested</h3><p>Running in production on Azure with hundreds of automated tests behind it. This is a real system, not a weekend demo.</p></div></div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="blk" style="padding-top:0;">
   <div class="wrap">
     <div class="cta-band">
-      <h2>Give your AI a memory.</h2>
-      <p>Open-source, self-hosted, and free. Your career has context &mdash; your AI should too.</p>
+      <h2>Give your AI a memory of your career.</h2>
+      <p>Free to start. Connect in a minute. Your search, finally in one place.</p>
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="/login">Get started</a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">Star on GitHub</a>
+        <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ============ FOOTER ============ -->
+<!-- FOOTER -->
 <footer>
   <div class="wrap foot-inner">
-    <a class="brand" href="#top">
-      <svg viewBox="0 0 320 290" width="26" height="24" aria-label="jobContext">
-        <path d="M268.2 124.5 A80 80 0 1 0 268.2 175.5" fill="none" stroke="var(--cyan-500)" stroke-width="46" stroke-linecap="round"/>
-        <circle cx="84" cy="54" r="27" fill="#fff"/>
-        <path d="M84 98 L84 207 Q84 250 41 250" fill="none" stroke="#fff" stroke-width="40" stroke-linecap="round"/>
-      </svg>
-      <span class="wm" style="font-size:1.1rem">job<span class="c">Context</span></span>
-    </a>
+    <span class="muted">jobContext - the memory layer for your career.</span>
     <div class="foot-links">
-      <a href="#features">Features</a>
+      <a href="/">Home</a>
       <a href="#how">How it works</a>
       <a href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a href="/login">Sign in</a>
     </div>
-    <div class="muted">© 2026 jobContext · The memory layer for your career.</div>
   </div>
 </footer>
-
 </body>
 </html>
 '''
 
 
-def landing_html() -> str:
-    return LANDING_HTML
+def why_html() -> str:
+    return WHY_HTML
