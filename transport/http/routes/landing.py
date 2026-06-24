@@ -350,6 +350,8 @@ LANDING_HTML: str = r'''<!doctype html>
     .bento, .pillars, .steps { grid-template-columns: 1fr; }
     .feat.span2 { grid-column: span 1; flex-direction: column; align-items: flex-start; }
     h1.hl { font-size: 2.6rem; }
+  }
+  @media (max-width: 640px) {
     .nav-links .lnk { display: none; }
   }
 </style>
