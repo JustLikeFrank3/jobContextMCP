@@ -68,10 +68,6 @@ The browser dashboard turns the local MCP workspace into a job-search command ce
 
 ### Generated documents
 
-| Resume | Cover Letter |
-|--------|-------------|
-| ![Resume demo](docs/demo-resume.png) | ![Cover letter demo](docs/demo-cover-letter.png) |
-
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
 
 ### Resume template gallery
