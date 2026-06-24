@@ -74,23 +74,33 @@ Generated from plain `.txt` files — no design tools, no Canva, no InDesign. Th
 
 4 layout formats x 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
 
-| Sidebar | Executive |
-|---------|-----------|
-| ![Sidebar template](docs/screenshots/template-sidebar.png) | ![Executive template](docs/screenshots/template-executive.png) |
-| Two-column: contact/skills sidebar + experience/projects main | Centered letterhead, serif, achievement-focused |
+| Sidebar resume | Sidebar cover letter |
+|----------------|----------------------|
+| ![Sidebar resume](docs/demo/demo_resume_sidebar.png) | ![Sidebar cover letter](docs/demo/demo_coverletter_sidebar.png) |
+| Two-column: contact/skills sidebar + experience/projects main | Matching sidebar layout for the cover letter |
 
-| Modern | Portfolio |
-|--------|-----------|
-| ![Modern template](docs/screenshots/template-modern.png) | ![Portfolio template](docs/screenshots/template-portfolio.png) |
-| Single-column, ATS-friendly, clean typography | Projects-first, GitHub-prominent, technical profile |
+| Modern resume | Modern cover letter |
+|---------------|---------------------|
+| ![Modern resume](docs/demo/demo_resume_modern.png) | ![Modern cover letter](docs/demo/demo_coverletter_modern.png) |
+| Single-column, ATS-friendly, clean typography | Clean header band, flush prose paragraphs |
+
+| Executive resume | Executive cover letter |
+|------------------|------------------------|
+| ![Executive resume](docs/demo/demo_resume_executive_p1.png) | ![Executive cover letter](docs/demo/demo_coverletter_executive.png) |
+| Centered letterhead, serif, achievement-focused | Matching executive letterhead |
+
+| Portfolio resume | Portfolio cover letter |
+|------------------|------------------------|
+| ![Portfolio resume](docs/demo/demo_resume_portfolio.png) | ![Portfolio cover letter](docs/demo/demo_coverletter_portfolio.png) |
+| Projects-first, GitHub-prominent, technical profile | Accent-strip header, project-centric intro |
 
 Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 > **⚠️ No template selected?** If no template preference is saved in the pipeline, output falls back to the legacy format — Courier New, monospaced, hacker-tag header/footer. It's a genuine aesthetic choice if you want it. But if you haven't actively chosen it, your recruiter may have thoughts.
 >
-> | Legacy Resume | Legacy Cover Letter |
+> | Legacy resume | Legacy cover letter |
 > |---------------|---------------------|
-> | ![Legacy resume format](docs/legacy-resume-preview.png) | ![Legacy cover letter format](docs/legacy-cl-preview.png) |
+> | ![Legacy resume](docs/demo/demo_resume_legacy.png) | ![Legacy cover letter](docs/demo/demo_coverletter_legacy.png) |
 >
 > Select a template in the pipeline and this will never happen to you.
 
