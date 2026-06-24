@@ -83,6 +83,8 @@ def _pipeline_payload() -> dict:
             "suggested_edit_cover_letter": _suggest_cover_letter_for_job(j, cover_letter_options),
             "resume_template": j.get("resume_template") or "",
             "resume_style": j.get("resume_style") or "",
+            "cl_template": j.get("cl_template") or "",
+            "cl_style": j.get("cl_style") or "",
         })
 
     return {
@@ -178,6 +180,8 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
         export_pipeline=req.export_pipeline,
         persona=req.persona,
         selected_resume=selected,
+        cl_template=job.get("cl_template") or "",
+        cl_style=job.get("cl_style") or "navy",
     )
     return JSONResponse({
         "ok": result.success,
@@ -318,7 +322,7 @@ async def pipeline_cover_letter_draft(draft_name: str) -> FileResponse:
     return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
 
 
-def _export_cover_letter_draft_html(draft_path: Path, role: str) -> str:
+def _export_cover_letter_draft_html(draft_path: Path, role: str, cl_template: str = "", cl_style: str = "navy") -> str:
     """Export a transient .tmp draft through the existing HTML exporter."""
     temp_txt = draft_path.with_name(f"{draft_path.name}.txt")
     try:
@@ -327,6 +331,8 @@ def _export_cover_letter_draft_html(draft_path: Path, role: str) -> str:
             temp_txt.name,
             output_filename=f"{draft_path.stem}.pdf",
             footer_tag=(role or "SOFTWARE ENGINEER").upper(),
+            template=cl_template,
+            style=cl_style or "navy",
         )
     finally:
         temp_txt.unlink(missing_ok=True)
@@ -390,7 +396,11 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
             pdf_result = f"✓ PDF exported: {pdf_path}"
             pdf_href = _material_href_for_pdf(pdf_path)
         else:
-            pdf_result = _export_cover_letter_draft_html(draft_path, job.get("role", ""))
+            pdf_result = _export_cover_letter_draft_html(
+                draft_path, job.get("role", ""),
+                cl_template=job.get("cl_template") or "",
+                cl_style=job.get("cl_style") or "navy",
+            )
             pdf_href = _material_href_for_pdf(_pdf_path_from_export_result(pdf_result))
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_cover_letter": source.name}))
@@ -636,6 +646,44 @@ async def pipeline_preview_template(template_name: str, style_name: str = "navy"
     return HTMLResponse(html_str)
 
 
+_PREVIEW_FALLBACK_CL_DATA: dict = {
+    "name_line1": "FRANK",
+    "name_line2": "VLADMIR",
+    "name_last": "MACBRIDE",
+    "name_suffix": "III",
+    "contact": {
+        "address": "",
+        "city_state": "Atlanta, GA",
+        "email": "frankvmacbride@gmail.com",
+        "phone": "1.305.490.1262",
+        "linkedin": "linkedin.com/in/frankvmacbride",
+        "github": "github.com/JustLikeFrank3",
+    },
+    "paragraphs": [
+        "Dear Hiring Manager,",
+        (
+            "I am writing to express my strong interest in the Senior Software Engineer position. "
+            "With four years of experience at General Motors modernizing Java 8 monoliths to "
+            "cloud-native Spring Boot 3 microservices on Azure, I bring both the technical depth "
+            "and the delivery track record your team is looking for."
+        ),
+        (
+            "At GM I led a zero-downtime multi-phase migration from Oracle to Azure PostgreSQL, "
+            "maintained 98% SLA across services supporting thousands of internal users, and drove "
+            "35% AI tool adoption across the engineering organization through hands-on enablement. "
+            "I hold 80% or higher test coverage on every project I ship."
+        ),
+        (
+            "I am excited about the opportunity to bring this background to your team and would "
+            "welcome a conversation about how my experience aligns with your needs."
+        ),
+        "Sincerely,",
+        "Frank Vladmir MacBride III",
+    ],
+    "footer_tag": "SOFTWARE_ENGINEER",
+}
+
+
 class _SelectTemplateRequest(BaseModel):
     job_id: int
     template: str
@@ -655,6 +703,54 @@ async def pipeline_select_template(req: _SelectTemplateRequest) -> JSONResponse:
         "resume_style": req.style,
     }))
     return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
+
+
+@router.post("/pipeline/select-cl-template")
+async def pipeline_select_cl_template(req: _SelectTemplateRequest) -> JSONResponse:
+    """Persist the chosen cover letter visual template+style to a job queue entry."""
+    from lib.template_loader import VALID_CL_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+    if req.template not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown CL template {req.template!r}")
+    if req.style not in _VSTYLES:
+        raise HTTPException(status_code=400, detail=f"Unknown style {req.style!r}")
+    _update_job(req.job_id, lambda j: j.update({
+        "cl_template": req.template,
+        "cl_style": req.style,
+    }))
+    return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
+
+
+@router.get("/pipeline/preview-cl/{template_name}/{style_name}")
+async def pipeline_preview_cl(template_name: str, style_name: str = "navy") -> HTMLResponse:
+    """Render a cover letter preview with the requested template+style."""
+    from lib.resume_parser import _parse_cover_letter_txt as _parse_cl
+    from lib.template_loader import render_cover_letter as _render_cl, VALID_CL_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+
+    if template_name not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown CL template {template_name!r}")
+    if style_name not in _VSTYLES:
+        style_name = "navy"
+
+    # Try to render from the master cover letter file; fall back to sample data
+    data: dict | None = None
+    try:
+        cl_dir = config.get_active_cover_letters_dir()
+        candidates = sorted(cl_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            try:
+                text = candidates[0].read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = candidates[0].read_text(encoding="latin-1")
+            data = _parse_cl(text)
+            data["footer_tag"] = "SOFTWARE_ENGINEER"
+    except Exception:
+        pass
+
+    if not data:
+        data = dict(_PREVIEW_FALLBACK_CL_DATA)
+
+    html_str = _render_cl(data, template=template_name, style=style_name)
+    return HTMLResponse(html_str)
 
 
 @router.get("/pipeline")
@@ -800,10 +896,16 @@ async def pipeline_board() -> HTMLResponse:
     <!-- Header -->
     <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:12px'>
       <div>
-        <div style='font-weight:700;font-size:1.05rem'>Resume Template Preview</div>
+        <div style='font-weight:700;font-size:1.05rem'>Template Preview</div>
         <div id='tpJobLabel' style='color:#8899bb;font-size:0.82rem;margin-top:3px'></div>
       </div>
       <button onclick='closeTemplatePreviews()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px;flex-shrink:0'>✕</button>
+    </div>
+
+    <!-- Document type toggle -->
+    <div style='display:flex;gap:6px'>
+      <button id='tpDocResume' onclick='switchDocType("resume")' class='tp-tab' style='font-size:0.82rem;padding:6px 14px'>Resume</button>
+      <button id='tpDocCL'     onclick='switchDocType("cl")'     class='tp-tab' style='font-size:0.82rem;padding:6px 14px'>Cover Letter</button>
     </div>
 
     <!-- Format row -->
@@ -886,6 +988,7 @@ const STYLE_META = {
 let tpCurrentFormat = 'modern';
 let tpCurrentStyle  = 'navy';
 let tpCurrentJobId  = null;
+let tpDocType = 'resume';   // 'resume' | 'cl'
 
 function _setActiveFmt(name) {
   Object.keys(TEMPLATE_META).forEach(t => {
@@ -911,16 +1014,36 @@ function _setActiveStyle(name) {
   });
 }
 
+function _setActiveDocType(dt) {
+  ['resume','cl'].forEach(d => {
+    const btn = document.getElementById(d === 'resume' ? 'tpDocResume' : 'tpDocCL');
+    if (!btn) return;
+    if (d === dt) {
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    }
+  });
+}
+
 function _loadPreview() {
   const frame = document.getElementById('tpFrame');
   const loading = document.getElementById('tpLoading');
   frame.style.opacity = '0.35';
   loading.style.display = 'block';
-  frame.src = `/dashboard/pipeline/preview-template/${tpCurrentFormat}/${tpCurrentStyle}`;
+  const base = tpDocType === 'cl' ? 'preview-cl' : 'preview-template';
+  frame.src = `/dashboard/pipeline/${base}/${tpCurrentFormat}/${tpCurrentStyle}`;
   const fmt = TEMPLATE_META[tpCurrentFormat] || {};
   const sty = STYLE_META[tpCurrentStyle] || {};
+  const docLabel = tpDocType === 'cl' ? '[Cover Letter] ' : '';
   document.getElementById('tpDesc').textContent =
-    `${fmt.desc || ''} ${sty.desc ? '| ' + sty.desc : ''}`.trim();
+    `${docLabel}${fmt.desc || ''} ${sty.desc ? '| ' + sty.desc : ''}`.trim();
+}
+
+function switchDocType(dt) {
+  tpDocType = dt;
+  _setActiveDocType(dt);
+  _loadPreview();
 }
 
 function switchFormat(name) {
@@ -942,15 +1065,17 @@ async function useSelectedTemplate() {
   const btn = document.getElementById('tpUseBtn');
   btn.disabled = true;
   btn.textContent = 'Saving...';
+  const endpoint = tpDocType === 'cl'
+    ? '/dashboard/pipeline/select-cl-template'
+    : '/dashboard/pipeline/select-template';
   try {
-    await post('/dashboard/pipeline/select-template', {
+    await post(endpoint, {
       job_id: tpCurrentJobId,
       template: tpCurrentFormat,
       style: tpCurrentStyle,
     });
     btn.textContent = 'Saved!';
     btn.style.background = '#0d3a1e';
-    // Refresh job list so the card shows updated selection
     await load();
   } catch(e) {
     btn.textContent = 'Error — retry?';
@@ -963,14 +1088,18 @@ async function useSelectedTemplate() {
   }
 }
 
-function openTemplatePreviews(jobId, company, role, savedTemplate, savedStyle) {
+function openTemplatePreviews(jobId, company, role, savedTemplate, savedStyle, savedClTemplate, savedClStyle, startDocType) {
   tpCurrentJobId = jobId;
   const label = (company && role) ? `${company} \u2014 ${role}` : 'Master Resume';
   document.getElementById('tpJobLabel').textContent = `Previewing for: ${label}`;
   document.getElementById('templatePreviewOverlay').style.display = 'block';
-  // Restore saved selection for this job if any
-  tpCurrentFormat = (savedTemplate && TEMPLATE_META[savedTemplate]) ? savedTemplate : 'modern';
-  tpCurrentStyle  = (savedStyle && STYLE_META[savedStyle]) ? savedStyle : 'navy';
+  tpDocType = startDocType || 'resume';
+  _setActiveDocType(tpDocType);
+  // Restore saved selection for the active doc type
+  const tmpl = tpDocType === 'cl' ? savedClTemplate : savedTemplate;
+  const sty  = tpDocType === 'cl' ? savedClStyle   : savedStyle;
+  tpCurrentFormat = (tmpl && TEMPLATE_META[tmpl]) ? tmpl : 'modern';
+  tpCurrentStyle  = (sty && STYLE_META[sty]) ? sty : 'navy';
   _setActiveFmt(tpCurrentFormat);
   _setActiveStyle(tpCurrentStyle);
   _loadPreview();
@@ -1355,6 +1484,7 @@ function render(){
       ${j.fitment_score ? `<div class='detail'><strong>Fitment score:</strong> ${esc(j.fitment_score)}</div>` : ''}
       ${j.decision_notes ? `<div class='detail'><strong>Notes:</strong> ${esc(j.decision_notes)}</div>` : ''}
       ${j.resume_template ? `<div class='detail'><strong>Resume template:</strong> <span class='tp-selection-badge'>${esc(j.resume_template)} / ${esc(j.resume_style || 'navy')}</span></div>` : ''}
+      ${j.cl_template ? `<div class='detail'><strong>Cover letter template:</strong> <span class='tp-selection-badge'>${esc(j.cl_template)} / ${esc(j.cl_style || 'navy')}</span></div>` : ''}
       <div class='btnrow'>
         <button onclick='action(${j.id},"eval")' ${disabledEval}>${evalLabel}</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
@@ -1366,7 +1496,7 @@ function render(){
         <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>
                 <button class='danger' onclick='action(${j.id},"remove")'>Remove</button>
-        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}", ${JSON.stringify(j.resume_template||null)}, ${JSON.stringify(j.resume_style||null)})' title='Choose resume visual format and color theme'>Choose Template</button>
+        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}", ${JSON.stringify(j.resume_template||null)}, ${JSON.stringify(j.resume_style||null)}, ${JSON.stringify(j.cl_template||null)}, ${JSON.stringify(j.cl_style||null)}, "resume")' title='Choose resume visual format and color theme'>Choose Template</button>
       </div>
     </article>`;
   }).join('');

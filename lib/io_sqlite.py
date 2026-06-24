@@ -102,6 +102,8 @@ def _load_job_queue(con) -> dict:
                 "decided_date":     r["decided_date"],
                 "resume_template":  r["resume_template"] if "resume_template" in r.keys() else None,
                 "resume_style":     r["resume_style"] if "resume_style" in r.keys() else None,
+                "cl_template":      r["cl_template"] if "cl_template" in r.keys() else None,
+                "cl_style":         r["cl_style"] if "cl_style" in r.keys() else None,
             }
             for r in rows
         ]
@@ -409,8 +411,8 @@ def _save_job_queue(con, data: dict) -> None:
             INSERT INTO job_queue
                 (id, company, role, jd, source, added_date, status,
                  fitment_score, fitment_context, decision_notes, decided_date,
-                 resume_template, resume_style)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 resume_template, resume_style, cl_template, cl_style)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
                 company=excluded.company, role=excluded.role, jd=excluded.jd,
                 source=excluded.source, added_date=excluded.added_date,
@@ -418,7 +420,9 @@ def _save_job_queue(con, data: dict) -> None:
                 fitment_context=excluded.fitment_context,
                 decision_notes=excluded.decision_notes, decided_date=excluded.decided_date,
                 resume_template=excluded.resume_template,
-                resume_style=excluded.resume_style
+                resume_style=excluded.resume_style,
+                cl_template=excluded.cl_template,
+                cl_style=excluded.cl_style
             """,
             (
                 j.get("id"), j.get("company", ""), j.get("role", ""),
@@ -426,6 +430,7 @@ def _save_job_queue(con, data: dict) -> None:
                 j.get("status", "pending"), j.get("fitment_score"),
                 j.get("fitment_context"), j.get("decision_notes"), j.get("decided_date"),
                 j.get("resume_template"), j.get("resume_style"),
+                j.get("cl_template"), j.get("cl_style"),
             ),
         )
     # Sync-delete: remove jobs no longer in the incoming dataset so that

@@ -1240,6 +1240,8 @@ def generate_cover_letter(
     output_filename: str = "",
     export_pipeline: str = "html",
     role_title: str = "Full Stack Software Engineer",
+    cl_template: str = "",
+    cl_style: str = "navy",
 ) -> str:
     """
     Generate a tailored cover letter for a specific company and role.
@@ -1302,7 +1304,7 @@ def generate_cover_letter(
         else:
             from tools.export import export_cover_letter_pdf
 
-            pdf_result = export_cover_letter_pdf(filename, footer_tag=role_title.upper())
+            pdf_result = export_cover_letter_pdf(filename, footer_tag=role_title.upper(), template=cl_template, style=cl_style or "navy")
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 

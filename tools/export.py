@@ -168,6 +168,8 @@ def export_cover_letter_pdf(
     filename: str,
     output_filename: str = "",
     footer_tag: str = "SOFTWARE ENGINEER",
+    template: str = "",
+    style: str = "navy",
 ) -> str:
     """Pipeline B — HTML/weasyprint cover letter export.
 
@@ -179,15 +181,31 @@ def export_cover_letter_pdf(
     manually-compiled frank-resume-latex versions) use
     tools.latex_export.generate_cover_letter_latex() instead.
 
-    Export a .txt cover letter to PDF using the Frank MacBride two-column template.
-
     Args:
         filename:        Filename inside 02-Cover-Letters/ (with or without .txt).
         output_filename: Output PDF filename (defaults to same stem + .pdf).
+        footer_tag:      Text for the </TAG> footer.
+        template:        Visual layout. One of: modern, executive, sidebar, portfolio.
+                         Leave empty ("") to use the default legacy layout.
+        style:           Color theme. One of: navy, slate, forest, warm, classic.
 
     Returns:
         Path to the generated PDF.
     """
+    from lib.template_loader import (
+        render_cover_letter_to_pdf as _render_cl_to_pdf,
+        VALID_CL_TEMPLATES,
+        VALID_STYLES,
+    )
+
+    if template and template not in VALID_CL_TEMPLATES:
+        return (
+            f"Error: unknown CL template {template!r}. "
+            f"Valid options: {sorted(VALID_CL_TEMPLATES)} or leave empty for default."
+        )
+    if style and style not in VALID_STYLES:
+        return f"Error: unknown style {style!r}. Valid options: {sorted(VALID_STYLES)}."
+
     cl_dir = config.get_active_cover_letters_dir()
 
     if not filename.endswith(".txt"):
@@ -209,7 +227,11 @@ def export_cover_letter_pdf(
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem, _cover_letter_pdf_folder_name())
-    _render_pdf("cover_letter.html", data, out)
+
+    if template:
+        _render_cl_to_pdf(data, out, template=template, style=style or "navy")
+    else:
+        _render_pdf("cover_letter.html", data, out)
     return f"✓ PDF exported: {out}"
 
 

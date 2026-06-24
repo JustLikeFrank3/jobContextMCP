@@ -65,6 +65,8 @@ class ResumeService:
         selected_resume: Optional[str] = None,
         resume_template: str = "",
         resume_style: str = "navy",
+        cl_template: str = "",
+        cl_style: str = "navy",
         on_progress: Optional[ProgressCallback] = None,
     ) -> ResumeResult:
         """Generate a tailored resume or cover letter end-to-end.
@@ -134,6 +136,8 @@ class ResumeService:
                 output_filename,
                 export_pipeline=export_pipeline,
                 role_title=role_title,
+                cl_template=cl_template,
+                cl_style=cl_style,
             )
 
         # The tool returns a "✓ ..." confirmation string when it ran the full
@@ -191,7 +195,7 @@ class ResumeService:
         if kind == "resume":
             result = _export.export_resume_pdf(filename, template=resume_template, style=resume_style or "navy")
         else:
-            result = _export.export_cover_letter_pdf(filename)
+            result = _export.export_cover_letter_pdf(filename, template=resume_template, style=resume_style or "navy")
 
         _emit(on_progress, "complete", f"{kind} PDF export finished")
         return result

@@ -142,6 +142,9 @@ _MIGRATIONS = [
     # v2 — resume template + style selection per job card
     "ALTER TABLE job_queue ADD COLUMN resume_template TEXT",
     "ALTER TABLE job_queue ADD COLUMN resume_style TEXT",
+    # v3 — cover letter template + style selection per job card
+    "ALTER TABLE job_queue ADD COLUMN cl_template TEXT",
+    "ALTER TABLE job_queue ADD COLUMN cl_style TEXT",
 ]
 
 
