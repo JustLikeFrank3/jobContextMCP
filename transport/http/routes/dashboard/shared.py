@@ -13,13 +13,26 @@ from .assets import logo_svg
 
 
 def _auth_header_js() -> str:
-  """Return dashboard fetch defaults.
+  """Inject a global fetch interceptor that redirects to login on 401.
 
-  Browser dashboards now authenticate via the `jc_session` HTTP-only cookie
-  set by /dashboard/login, so we intentionally do not expose API keys to
-  client-side JavaScript.
+  Browser dashboards authenticate via the `jc_session` HTTP-only cookie.
+  When the cookie expires the server returns a JSON 401. Without this
+  interceptor the user sees a raw alert or an empty panel and must manually
+  sign out. The interceptor wraps window.fetch once and handles 401s
+  transparently across every dashboard page.
   """
-  return ''
+  return """<script>
+(function () {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async function (...args) {
+    const res = await _fetch(...args);
+    if (res.status === 401) {
+      window.location.href = '/';
+    }
+    return res;
+  };
+})();
+</script>"""
 
 
 BASE_CSS = """
