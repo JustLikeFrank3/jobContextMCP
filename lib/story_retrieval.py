@@ -114,12 +114,25 @@ def _strip_query_chrome(text: str) -> str:
 
 
 def _load_openai_key(path: Path) -> str:
-    """Best-effort config lookup without importing lib.config.
+    """Best-effort config lookup.
 
-    ``path`` is usually ``data/personal_context.json``; config.json lives one
-    directory above ``data`` in this project. Keeping this lookup local avoids a
-    dependency cycle and keeps keyword retrieval usable when no API key exists.
+    Priority order:
+    1. lib.config.get_config_value — user-context-aware (works in AKS/SQLite-only
+       deployments where the key lives in the DB, not on disk).
+    2. config.json on disk — for local single-user deployments.
+    3. OPENAI_API_KEY environment variable — CI / container fallback.
+
+    The lib.config import is guarded so keyword-only retrieval still works when
+    the module is loaded in environments where lib.config isn't wired up.
     """
+    try:
+        from lib import config as _cfg
+        key = _cfg.get_config_value("openai_api_key", "")
+        if key:
+            return str(key)
+    except Exception:
+        pass
+
     cfg_path = path.parent.parent / "config.json"
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
