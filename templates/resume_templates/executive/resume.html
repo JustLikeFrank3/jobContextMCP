@@ -4,6 +4,20 @@
 <meta charset="UTF-8"/>
 <title>Resume — Executive</title>
 <style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1a2744;
+  --accent-light: #2d4a8a;
+  --heading:      #1a2744;
+  --rule:         #1a2744;
+  --sidebar-bg:   #1a2744;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1a2744;
+  --link:         #2d4a8a;
+}
+
 @page {
     size: letter;
     margin: 0.50in 0.55in 0.50in 0.55in;
@@ -31,14 +45,14 @@ body {
 .header {
     margin-bottom: 8px;
     text-align: center;
-    border-bottom: 2.5px solid #1a2744;
+    border-bottom: 2.5px solid var(--accent);
     padding-bottom: 7px;
 }
 
 .header-name {
     font-size: 24pt;
     font-weight: bold;
-    color: #1a2744;
+    color: var(--accent);
     letter-spacing: 0.04em;
     line-height: 1.1;
 }
@@ -70,7 +84,7 @@ body {
 .synopsis-block {
     margin-bottom: 8px;
     padding: 7px 12px;
-    border-left: 3.5px solid #1a2744;
+    border-left: 3.5px solid var(--accent);
     background: #f7f8fa;
 }
 
@@ -79,7 +93,7 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #1a2744;
+    color: var(--accent);
     margin-bottom: 3px;
     font-family: Calibri, Arial, sans-serif;
 }
@@ -99,8 +113,8 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #1a2744;
-    border-bottom: 2px solid #1a2744;
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
     padding-bottom: 2px;
     margin-bottom: 5px;
     font-family: Calibri, Arial, sans-serif;
@@ -119,7 +133,7 @@ body {
     font-family: Calibri, Arial, sans-serif;
 }
 
-.skills-list > li::before { content: "\25A0  "; font-size: 6pt; color: #1a2744; vertical-align: 2px; }
+.skills-list > li::before { content: "\25A0  "; font-size: 6pt; color: var(--accent); vertical-align: 2px; }
 .skill-lbl { font-weight: bold; }
 
 /* ── EXPERIENCE ────────────────────────────────── */
@@ -132,12 +146,12 @@ body {
     break-after: avoid;
 }
 
-.job-title  { font-weight: bold; font-size: 10.5pt; color: #1a2744; }
+.job-title  { font-weight: bold; font-size: 10.5pt; color: var(--accent); }
 .job-dates  { font-size: 9pt; font-weight: bold; color: #666; white-space: nowrap; }
 .job-company { font-size: 9.5pt; color: #444; font-style: italic; margin-bottom: 2px; font-family: Calibri, Arial, sans-serif; }
 
 .grouped-job { margin-bottom: 7px; break-inside: auto; }
-.grouped-company { font-weight: bold; font-size: 10.5pt; color: #1a2744; }
+.grouped-company { font-weight: bold; font-size: 10.5pt; color: var(--accent); }
 .grouped-dates { font-size: 9pt; font-weight: bold; color: #666; break-after: avoid; }
 .sub-role { margin-left: 10px; margin-bottom: 2px; }
 .sub-role-header { font-weight: bold; font-size: 9.5pt; font-style: italic; }
@@ -161,14 +175,14 @@ body {
     font-family: Calibri, Arial, sans-serif;
 }
 
-.bullets > li::before { content: "\25A0  "; font-size: 6pt; color: #1a2744; vertical-align: 2px; }
+.bullets > li::before { content: "\25A0  "; font-size: 6pt; color: var(--accent); vertical-align: 2px; }
 
 /* ── PROJECTS ──────────────────────────────────── */
 .proj { margin-bottom: 4px; }
-.proj-name { font-weight: bold; font-size: 10pt; color: #1a2744; margin-bottom: 2px; }
+.proj-name { font-weight: bold; font-size: 10pt; color: var(--accent); margin-bottom: 2px; }
 
 /* ── EDUCATION ─────────────────────────────────── */
-.edu-degree { font-weight: bold; font-size: 10.2pt; color: #1a2744; }
+.edu-degree { font-weight: bold; font-size: 10.2pt; color: var(--accent); }
 .edu-school { font-size: 9.5pt; color: #444; font-style: italic; font-family: Calibri, Arial, sans-serif; }
 .edu-details { font-size: 9.2pt; font-family: Calibri, Arial, sans-serif; }
 .edu-bullet  { font-size: 9.2pt; margin-left: 14px; font-family: Calibri, Arial, sans-serif; }
@@ -177,7 +191,7 @@ body {
 
 /* ── LEADERSHIP ────────────────────────────────── */
 .leader-item { font-size: 9.8pt; line-height: 1.38; padding: 0.8px 0; font-family: Calibri, Arial, sans-serif; }
-.leader-lbl { font-weight: bold; color: #1a2744; }
+.leader-lbl { font-weight: bold; color: var(--accent); }
 </style>
 </head>
 <body>

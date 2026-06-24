@@ -4,6 +4,22 @@
 <meta charset="UTF-8"/>
 <title>Resume — Sidebar</title>
 <style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --accent-mid:   #26487a;
+  --accent-dark:  #0f1e35;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
 @page {
     size: letter;
     margin: 0;
@@ -40,15 +56,15 @@ body {
 .sidebar {
     width: 205px;
     flex-shrink: 0;
-    background: #1e3a5f;
-    color: #e8edf2;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
     padding: 20px 12px 20px 14px;
 }
 
 .sidebar-name {
     font-size: 15pt;
     font-weight: bold;
-    color: #fff;
+    color: var(--sidebar-text);
     line-height: 1.1;
     margin-bottom: 2px;
     word-break: break-word;
@@ -56,7 +72,7 @@ body {
 
 .sidebar-tagline {
     font-size: 8pt;
-    color: #a8c0d6;
+    color: var(--sidebar-head);
     margin-bottom: 14px;
     line-height: 1.3;
     font-style: italic;
@@ -67,7 +83,7 @@ body {
 
 .sidebar-contact-item {
     font-size: 7.8pt;
-    color: #ccd9e6;
+    color: var(--sidebar-text);
     margin-bottom: 3px;
     word-break: break-all;
     line-height: 1.3;
@@ -77,7 +93,7 @@ body {
     display: block;
     font-size: 7pt;
     font-weight: bold;
-    color: #7aa5c8;
+    color: var(--sidebar-head);
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -90,8 +106,8 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #7aa5c8;
-    border-bottom: 1px solid #2d5580;
+    color: var(--sidebar-head);
+    border-bottom: 1px solid var(--accent-light);
     padding-bottom: 2px;
     margin-bottom: 6px;
 }
@@ -102,23 +118,23 @@ body {
 .sidebar-skills-list > li {
     font-size: 7.8pt;
     line-height: 1.35;
-    color: #d0dce8;
+    color: var(--sidebar-text);
     padding: 0.5px 0;
     padding-left: 10px;
     text-indent: -10px;
 }
 
-.sidebar-skills-list > li::before { content: "\2023  "; color: #7aa5c8; }
-.sidebar-skill-lbl { font-weight: bold; color: #e8edf2; }
+.sidebar-skills-list > li::before { content: "\2023  "; color: var(--sidebar-head); }
+.sidebar-skill-lbl { font-weight: bold; color: var(--sidebar-text); }
 
 /* ── SIDEBAR EDUCATION ─────────────────────────── */
-.sidebar-edu-degree { font-weight: bold; font-size: 8pt; color: #e8edf2; }
-.sidebar-edu-school { font-size: 7.8pt; color: #a8c0d6; margin-bottom: 2px; }
-.sidebar-edu-detail { font-size: 7.6pt; color: #c0d0de; line-height: 1.3; }
+.sidebar-edu-degree { font-weight: bold; font-size: 8pt; color: var(--sidebar-text); }
+.sidebar-edu-school { font-size: 7.8pt; color: var(--sidebar-head); margin-bottom: 2px; }
+.sidebar-edu-detail { font-size: 7.6pt; color: var(--sidebar-head); line-height: 1.3; }
 
 /* ── SIDEBAR LEADERSHIP / CERTS ────────────────── */
-.sidebar-leader-item { font-size: 7.8pt; color: #d0dce8; line-height: 1.35; padding: 0.5px 0; }
-.sidebar-leader-lbl { font-weight: bold; color: #e8edf2; }
+.sidebar-leader-item { font-size: 7.8pt; color: var(--sidebar-text); line-height: 1.35; padding: 0.5px 0; }
+.sidebar-leader-lbl { font-weight: bold; color: var(--sidebar-text); }
 
 /* ── MAIN CONTENT ──────────────────────────────── */
 .main-col {
@@ -145,8 +161,8 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #1e3a5f;
-    border-bottom: 1.5px solid #1e3a5f;
+    color: var(--accent);
+    border-bottom: 1.5px solid var(--accent);
     padding-bottom: 1px;
     margin-bottom: 4px;
     break-after: avoid;
@@ -155,7 +171,7 @@ body {
 /* ── SKILLS (main — fallback when skills not found for sidebar) */
 .skills-list { list-style: none; padding: 0; }
 .skills-list > li { font-size: 8.8pt; line-height: 1.28; padding: 0.4px 0 0.4px 12px; text-indent: -12px; }
-.skills-list > li::before { content: "\2022  "; color: #1e3a5f; }
+.skills-list > li::before { content: "\2022  "; color: var(--accent); }
 .skill-lbl { font-weight: bold; }
 
 /* ── EXPERIENCE ────────────────────────────────── */
@@ -168,12 +184,12 @@ body {
     break-after: avoid;
 }
 
-.job-title   { font-weight: bold; font-size: 9.5pt; color: #1e3a5f; }
+.job-title   { font-weight: bold; font-size: 9.5pt; color: var(--accent); }
 .job-dates   { font-size: 8.3pt; font-weight: bold; color: #666; white-space: nowrap; }
 .job-company { font-size: 8.8pt; color: #555; margin-bottom: 1px; }
 
 .grouped-job  { margin-bottom: 5px; break-inside: auto; }
-.grouped-company { font-weight: bold; font-size: 9.5pt; color: #1e3a5f; }
+.grouped-company { font-weight: bold; font-size: 9.5pt; color: var(--accent); }
 .grouped-dates { font-size: 8.3pt; font-weight: bold; color: #666; break-after: avoid; }
 .sub-role { margin-left: 8px; margin-bottom: 1px; }
 .sub-role-header { font-weight: bold; font-size: 8.8pt; }
@@ -182,11 +198,11 @@ body {
 
 .bullets { list-style: none; padding: 0; margin: 1px 0 1px 11px; }
 .bullets > li { font-size: 8.5pt; line-height: 1.28; padding: 0.4px 0 0.4px 11px; text-indent: -11px; }
-.bullets > li::before { content: "\2022  "; color: #1e3a5f; }
+.bullets > li::before { content: "\2022  "; color: var(--accent); }
 
 /* ── PROJECTS ──────────────────────────────────── */
 .proj { margin-bottom: 3px; }
-.proj-name { font-weight: bold; font-size: 9pt; color: #1e3a5f; margin-bottom: 1px; }
+.proj-name { font-weight: bold; font-size: 9pt; color: var(--accent); margin-bottom: 1px; }
 
 /* ── EDUCATION (main fallback) ─────────────────── */
 .edu-degree { font-weight: bold; font-size: 9pt; }

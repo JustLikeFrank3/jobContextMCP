@@ -4,6 +4,20 @@
 <meta charset="UTF-8"/>
 <title>Resume — Portfolio</title>
 <style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
 @page {
     size: letter;
     margin: 0.42in 0.48in 0.42in 0.48in;
@@ -31,13 +45,13 @@ body {
 .header {
     margin-bottom: 5px;
     padding-bottom: 6px;
-    border-bottom: 2px solid #1a6644;
+    border-bottom: 2px solid var(--accent);
 }
 
 .header-name {
     font-size: 20pt;
     font-weight: bold;
-    color: #1a6644;
+    color: var(--accent);
     line-height: 1.05;
     letter-spacing: 0.02em;
 }
@@ -59,8 +73,8 @@ body {
 }
 
 .contact-strip span { white-space: nowrap; }
-.contact-lbl { font-weight: bold; color: #1a6644; }
-.github-highlight { font-weight: bold; color: #1a6644; }
+.contact-lbl { font-weight: bold; color: var(--accent); }
+.github-highlight { font-weight: bold; color: var(--accent); }
 
 /* ── SYNOPSIS ──────────────────────────────────── */
 .synopsis {
@@ -70,7 +84,7 @@ body {
     color: #222;
     background: #f2f8f5;
     padding: 5px 8px;
-    border-left: 3px solid #1a6644;
+    border-left: 3px solid var(--accent);
 }
 
 /* ── SECTIONS ──────────────────────────────────── */
@@ -81,8 +95,8 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #1a6644;
-    border-bottom: 1.5px solid #1a6644;
+    color: var(--accent);
+    border-bottom: 1.5px solid var(--accent);
     padding-bottom: 1px;
     margin-bottom: 4px;
     break-after: avoid;
@@ -99,7 +113,7 @@ body {
     text-indent: -12px;
 }
 
-.skills-list > li::before { content: "\25B8  "; color: #1a6644; font-size: 8pt; }
+.skills-list > li::before { content: "\25B8  "; color: var(--accent); font-size: 8pt; }
 .skill-lbl { font-weight: bold; }
 
 /* ── PROJECTS — given visual prominence ────────── */
@@ -112,7 +126,7 @@ body {
 .proj-name {
     font-weight: bold;
     font-size: 9.5pt;
-    color: #1a6644;
+    color: var(--accent);
     margin-bottom: 1px;
 }
 
@@ -140,7 +154,7 @@ body {
 
 .bullets { list-style: none; padding: 0; margin: 1px 0 1px 11px; }
 .bullets > li { font-size: 8.5pt; line-height: 1.28; padding: 0.4px 0 0.4px 11px; text-indent: -11px; }
-.bullets > li::before { content: "\25B8  "; color: #1a6644; font-size: 8pt; }
+.bullets > li::before { content: "\25B8  "; color: var(--accent); font-size: 8pt; }
 
 /* ── EDUCATION ─────────────────────────────────── */
 .edu-degree { font-weight: bold; font-size: 9.2pt; }

@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
 from lib import config
 from lib.io import _load_json, _load_master_context, _now, _save_json
@@ -80,6 +81,8 @@ def _pipeline_payload() -> dict:
             "suggested_edit_resume": _suggest_optimized_resume_for_job(j, optimized_resume_options),
             "last_edited_cover_letter": j.get("last_edited_cover_letter") or "",
             "suggested_edit_cover_letter": _suggest_cover_letter_for_job(j, cover_letter_options),
+            "resume_template": j.get("resume_template") or "",
+            "resume_style": j.get("resume_style") or "",
         })
 
     return {
@@ -593,17 +596,19 @@ _PREVIEW_FALLBACK_DATA: dict = {
 }
 
 
-@router.get("/pipeline/preview-template/{template_name}")
-async def pipeline_preview_template(template_name: str) -> HTMLResponse:
-    """Render the master resume with the requested template for inline browser preview."""
+@router.get("/pipeline/preview-template/{template_name}/{style_name}")
+async def pipeline_preview_template(template_name: str, style_name: str = "navy") -> HTMLResponse:
+    """Render the master resume with the requested template+style for inline browser preview."""
     from lib.resume_parser import _parse_resume_txt as _parse
-    from lib.template_loader import render_resume as _render, VALID_TEMPLATES as _VALID
+    from lib.template_loader import render_resume as _render, VALID_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
 
     if template_name not in _VALID:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown template {template_name!r}. Valid: {sorted(_VALID)}",
         )
+    if style_name not in _VSTYLES:
+        style_name = "navy"
 
     data: dict | None = None
     try:
@@ -621,8 +626,29 @@ async def pipeline_preview_template(template_name: str) -> HTMLResponse:
     if not data:
         data = dict(_PREVIEW_FALLBACK_DATA)
 
-    html_str = _render(data, template=template_name)
+    html_str = _render(data, template=template_name, style=style_name)
     return HTMLResponse(html_str)
+
+
+class _SelectTemplateRequest(BaseModel):
+    job_id: int
+    template: str
+    style: str
+
+
+@router.post("/pipeline/select-template")
+async def pipeline_select_template(req: _SelectTemplateRequest) -> JSONResponse:
+    """Persist the chosen visual template+style to a job queue entry."""
+    from lib.template_loader import VALID_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+    if req.template not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown template {req.template!r}")
+    if req.style not in _VSTYLES:
+        raise HTTPException(status_code=400, detail=f"Unknown style {req.style!r}")
+    _update_job(req.job_id, lambda j: j.update({
+        "resume_template": req.template,
+        "resume_style": req.style,
+    }))
+    return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
 
 
 @router.get("/pipeline")
@@ -763,7 +789,7 @@ async def pipeline_board() -> HTMLResponse:
 
 <!-- Template Preview modal -->
 <div id='templatePreviewOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:920;overflow-y:auto;padding:16px 10px'>
-  <div style='max-width:1120px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px'>
+  <div style='max-width:1160px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px'>
 
     <!-- Header -->
     <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:12px'>
@@ -774,16 +800,34 @@ async def pipeline_board() -> HTMLResponse:
       <button onclick='closeTemplatePreviews()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px;flex-shrink:0'>✕</button>
     </div>
 
-    <!-- Template tabs -->
-    <div style='display:flex;gap:8px;flex-wrap:wrap'>
-      <button id='tpTab-modern'    onclick='switchTemplate("modern")'    class='tp-tab'>Modern</button>
-      <button id='tpTab-executive' onclick='switchTemplate("executive")' class='tp-tab'>Executive</button>
-      <button id='tpTab-sidebar'   onclick='switchTemplate("sidebar")'   class='tp-tab'>Sidebar</button>
-      <button id='tpTab-portfolio' onclick='switchTemplate("portfolio")' class='tp-tab'>Portfolio</button>
+    <!-- Format row -->
+    <div>
+      <div style='font-size:0.75rem;color:#556;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px'>Format</div>
+      <div style='display:flex;gap:7px;flex-wrap:wrap'>
+        <button id='tpTab-modern'    onclick='switchFormat("modern")'    class='tp-tab'>Modern</button>
+        <button id='tpTab-executive' onclick='switchFormat("executive")' class='tp-tab'>Executive</button>
+        <button id='tpTab-sidebar'   onclick='switchFormat("sidebar")'   class='tp-tab'>Sidebar</button>
+        <button id='tpTab-portfolio' onclick='switchFormat("portfolio")' class='tp-tab'>Portfolio</button>
+      </div>
     </div>
 
-    <!-- Description strip -->
-    <div id='tpDesc' style='font-size:0.82rem;color:#8899bb;min-height:1.2em'></div>
+    <!-- Style row -->
+    <div>
+      <div style='font-size:0.75rem;color:#556;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px'>Color Style</div>
+      <div style='display:flex;gap:7px;flex-wrap:wrap;align-items:center'>
+        <button id='tpStyle-navy'    onclick='switchStyle("navy")'    class='tp-style-btn' title='Navy'><span class='tp-swatch' style='background:#1e3a5f'></span>Navy</button>
+        <button id='tpStyle-slate'   onclick='switchStyle("slate")'   class='tp-style-btn' title='Slate'><span class='tp-swatch' style='background:#334155'></span>Slate</button>
+        <button id='tpStyle-forest'  onclick='switchStyle("forest")'  class='tp-style-btn' title='Forest'><span class='tp-swatch' style='background:#1a6644'></span>Forest</button>
+        <button id='tpStyle-warm'    onclick='switchStyle("warm")'    class='tp-style-btn' title='Warm'><span class='tp-swatch' style='background:#92400e'></span>Warm</button>
+        <button id='tpStyle-classic' onclick='switchStyle("classic")' class='tp-style-btn' title='Classic'><span class='tp-swatch' style='background:#222'></span>Classic</button>
+      </div>
+    </div>
+
+    <!-- Description + Use This button row -->
+    <div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
+      <div id='tpDesc' style='font-size:0.82rem;color:#8899bb;flex:1;min-width:0'></div>
+      <button id='tpUseBtn' onclick='useSelectedTemplate()' style='background:#1a5a2e;border-color:#2d9e50;color:#c8f0d8;font-weight:600;white-space:nowrap;padding:8px 18px;flex-shrink:0'>Use This Template</button>
+    </div>
 
     <!-- Loading bar -->
     <div id='tpLoading' style='display:none;height:3px;background:#1b2943;border-radius:999px;overflow:hidden'>
@@ -792,7 +836,7 @@ async def pipeline_board() -> HTMLResponse:
 
     <!-- Preview iframe -->
     <iframe id='tpFrame' src='about:blank' title='Resume template preview'
-      style='width:100%;height:72vh;border:1px solid #2a3a5e;border-radius:10px;background:#fff;transition:opacity .15s'
+      style='width:100%;height:68vh;border:1px solid #2a3a5e;border-radius:10px;background:#fff;transition:opacity .15s'
     ></iframe>
 
     <!-- Footer note -->
@@ -821,52 +865,109 @@ let editCoverLetterAccepted = false;
 
 /* ── Template Preview ──────────────────────────────── */
 const TEMPLATE_META = {
-  modern:    { label: 'Modern',    desc: 'Clean single-column, sans-serif, ATS-friendly. Blue section headers. Standard corporate layout. Best for most SWE roles.' },
+  modern:    { label: 'Modern',    desc: 'Single-column, sans-serif, ATS-friendly. Clean section headers. Standard corporate layout. Best for most SWE roles.' },
   executive: { label: 'Executive', desc: 'Larger serif type, centered header, prominent left-bordered summary. Best for senior, principal, staff, or director roles.' },
-  sidebar:   { label: 'Sidebar',   desc: 'Two-column layout. Left sidebar: contact, skills, education (dark navy). Right column: summary, experience, projects.' },
-  portfolio: { label: 'Portfolio', desc: 'Projects section appears before experience. GitHub highlighted at top. Green accent. Best for open-source contributors and technical creators.' },
+  sidebar:   { label: 'Sidebar',   desc: 'Two-column layout. Left sidebar holds contact, skills, and education. Main column: summary, experience, projects.' },
+  portfolio: { label: 'Portfolio', desc: 'Projects section first, GitHub highlighted near the top. Best for open-source contributors and technical creators.' },
 };
-let tpCurrentTemplate = 'modern';
+const STYLE_META = {
+  navy:    { label: 'Navy',    desc: 'Deep professional blue.' },
+  slate:   { label: 'Slate',   desc: 'Cool gray-blue, understated.' },
+  forest:  { label: 'Forest',  desc: 'Deep green, natural and calm.' },
+  warm:    { label: 'Warm',    desc: 'Amber and golden brown accents.' },
+  classic: { label: 'Classic', desc: 'Black and white. Maximum ATS compatibility.' },
+};
+let tpCurrentFormat = 'modern';
+let tpCurrentStyle  = 'navy';
+let tpCurrentJobId  = null;
 
-function _setActiveTab(name) {
+function _setActiveFmt(name) {
   Object.keys(TEMPLATE_META).forEach(t => {
     const btn = document.getElementById(`tpTab-${t}`);
     if (!btn) return;
     if (t === name) {
-      btn.style.background = '#1a3a6e';
-      btn.style.borderColor = '#3a5aae';
-      btn.style.color = '#d0e4ff';
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
     } else {
-      btn.style.background = '';
-      btn.style.borderColor = '';
-      btn.style.color = '';
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
     }
   });
 }
 
-function switchTemplate(name) {
-  if (!TEMPLATE_META[name]) return;
-  tpCurrentTemplate = name;
-  _setActiveTab(name);
-  document.getElementById('tpDesc').textContent = TEMPLATE_META[name].desc;
+function _setActiveStyle(name) {
+  Object.keys(STYLE_META).forEach(s => {
+    const btn = document.getElementById(`tpStyle-${s}`);
+    if (!btn) return;
+    if (s === name) {
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    }
+  });
+}
+
+function _loadPreview() {
   const frame = document.getElementById('tpFrame');
   const loading = document.getElementById('tpLoading');
   frame.style.opacity = '0.35';
   loading.style.display = 'block';
-  frame.src = `/dashboard/pipeline/preview-template/${name}`;
+  frame.src = `/dashboard/pipeline/preview-template/${tpCurrentFormat}/${tpCurrentStyle}`;
+  const fmt = TEMPLATE_META[tpCurrentFormat] || {};
+  const sty = STYLE_META[tpCurrentStyle] || {};
+  document.getElementById('tpDesc').textContent =
+    `${fmt.desc || ''} ${sty.desc ? '| ' + sty.desc : ''}`.trim();
 }
 
-function openTemplatePreviews(jobId, company, role) {
-  const label = (company && role) ? `${company} — ${role}` : 'Master Resume';
-  document.getElementById('tpJobLabel').textContent = `Previewing templates for: ${label}`;
-  document.getElementById('templatePreviewOverlay').style.display = 'block';
-  // Always start on modern; only load if not already showing
-  if (tpCurrentTemplate !== 'modern' || document.getElementById('tpFrame').src.includes('about:blank')) {
-    switchTemplate('modern');
-  } else {
-    _setActiveTab('modern');
-    document.getElementById('tpDesc').textContent = TEMPLATE_META['modern'].desc;
+function switchFormat(name) {
+  if (!TEMPLATE_META[name]) return;
+  tpCurrentFormat = name;
+  _setActiveFmt(name);
+  _loadPreview();
+}
+
+function switchStyle(name) {
+  if (!STYLE_META[name]) return;
+  tpCurrentStyle = name;
+  _setActiveStyle(name);
+  _loadPreview();
+}
+
+async function useSelectedTemplate() {
+  if (!tpCurrentJobId) { alert('No job selected.'); return; }
+  const btn = document.getElementById('tpUseBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    await post('/dashboard/pipeline/select-template', {
+      job_id: tpCurrentJobId,
+      template: tpCurrentFormat,
+      style: tpCurrentStyle,
+    });
+    btn.textContent = 'Saved!';
+    btn.style.background = '#0d3a1e';
+    // Refresh job list so the card shows updated selection
+    await load();
+  } catch(e) {
+    btn.textContent = 'Error — retry?';
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Use This Template';
+      btn.style.background = '#1a5a2e';
+    }, 2200);
   }
+}
+
+function openTemplatePreviews(jobId, company, role, savedTemplate, savedStyle) {
+  tpCurrentJobId = jobId;
+  const label = (company && role) ? `${company} \u2014 ${role}` : 'Master Resume';
+  document.getElementById('tpJobLabel').textContent = `Previewing for: ${label}`;
+  document.getElementById('templatePreviewOverlay').style.display = 'block';
+  // Restore saved selection for this job if any
+  tpCurrentFormat = (savedTemplate && TEMPLATE_META[savedTemplate]) ? savedTemplate : 'modern';
+  tpCurrentStyle  = (savedStyle && STYLE_META[savedStyle]) ? savedStyle : 'navy';
+  _setActiveFmt(tpCurrentFormat);
+  _setActiveStyle(tpCurrentStyle);
+  _loadPreview();
 }
 
 function closeTemplatePreviews() {
@@ -1247,6 +1348,7 @@ function render(){
 
       ${j.fitment_score ? `<div class='detail'><strong>Fitment score:</strong> ${esc(j.fitment_score)}</div>` : ''}
       ${j.decision_notes ? `<div class='detail'><strong>Notes:</strong> ${esc(j.decision_notes)}</div>` : ''}
+      ${j.resume_template ? `<div class='detail'><strong>Resume template:</strong> <span class='tp-selection-badge'>${esc(j.resume_template)} / ${esc(j.resume_style || 'navy')}</span></div>` : ''}
       <div class='btnrow'>
         <button onclick='action(${j.id},"eval")' ${disabledEval}>${evalLabel}</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
@@ -1258,7 +1360,7 @@ function render(){
         <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>
                 <button class='danger' onclick='action(${j.id},"remove")'>Remove</button>
-        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}")' title='Preview resume in all four visual formats'>Preview Formats</button>
+        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}", ${JSON.stringify(j.resume_template||null)}, ${JSON.stringify(j.resume_style||null)})' title='Choose resume visual format and color theme'>Choose Template</button>
       </div>
     </article>`;
   }).join('');
@@ -1326,6 +1428,9 @@ button.tp-btn {
 }
 button.tp-btn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--chip)); }
 .tp-tab { font-size: 0.85rem; font-weight: 600; padding: 8px 16px; }
+.tp-style-btn { font-size: 0.82rem; font-weight: 600; padding: 6px 12px; display:inline-flex; align-items:center; gap:6px; }
+.tp-swatch { display:inline-block; width:12px; height:12px; border-radius:50%; border:1px solid rgba(255,255,255,.2); flex-shrink:0; }
+.tp-selection-badge { background:color-mix(in srgb,var(--accent) 18%,var(--chip)); color:var(--accent-bright,#60c4d8); border-radius:5px; padding:1px 7px; font-size:0.78rem; font-weight:600; }
 """
 
     return HTMLResponse(

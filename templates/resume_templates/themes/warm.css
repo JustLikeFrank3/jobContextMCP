@@ -1,0 +1,15 @@
+/* Warm theme — amber / golden brown */
+:root {
+  --accent:       #92400e;
+  --accent-light: #b45309;
+  --accent-mid:   #a24e10;
+  --accent-dark:  #5c2d09;
+  --heading:      #78350f;
+  --rule:         #b45309;
+  --sidebar-bg:   #7c2d12;
+  --sidebar-text: #fef3c7;
+  --sidebar-head: #fbbf24;
+  --chip-bg:      #fef3c7;
+  --chip-text:    #78350f;
+  --link:         #b45309;
+}

@@ -1,7 +1,7 @@
 """
-PDF export tool — v4
+PDF export tool — v5
 
-export_resume_pdf(filename, footer_tag?, output_filename?, template?)
+export_resume_pdf(filename, footer_tag?, output_filename?, template?, style?)
     Reads a .txt resume from 01-Current-Optimized/, parses it,
     renders via the selected template, and writes a PDF to 03-Resume-PDFs/.
 
@@ -11,6 +11,13 @@ export_resume_pdf(filename, footer_tag?, output_filename?, template?)
         "executive" — larger type, prominent summary, achievement-emphasis
         "sidebar"   — two-column; left sidebar for skills/contact/education
         "portfolio" — projects-first, GitHub-prominent, technical creator
+
+    style selects the color theme (only applied when template is set):
+        "navy"      — deep professional blue (default)
+        "slate"     — cool gray-blue
+        "forest"    — deep green
+        "warm"      — amber / golden brown
+        "classic"   — black & white, maximum ATS compatibility
 
 export_cover_letter_pdf(filename, output_filename?)
     Reads a .txt cover letter from 02-Cover-Letters/, parses it,
@@ -23,7 +30,7 @@ from jinja2 import Environment, FileSystemLoader
 import weasyprint
 
 from lib import config
-from lib.template_loader import render_resume_to_pdf as _render_resume_to_pdf, VALID_TEMPLATES
+from lib.template_loader import render_resume_to_pdf as _render_resume_to_pdf, VALID_TEMPLATES, VALID_STYLES
 from lib.resume_parser import (
     _derive_footer_tag,
     _parse_resume_txt,
@@ -97,6 +104,7 @@ def export_resume_pdf(
     footer_tag: str = "",
     output_filename: str = "",
     template: str = "",
+    style: str = "navy",
 ) -> str:
     """
     Export a .txt resume to PDF.
@@ -105,8 +113,10 @@ def export_resume_pdf(
         filename:        Filename inside 01-Current-Optimized/ (with or without .txt).
         footer_tag:      Text for the </TAG> footer (auto-detected from filename if omitted).
         output_filename: Output PDF filename (defaults to same stem + .pdf).
-        template:        Visual layout to use. One of: modern, executive, sidebar, portfolio.
+        template:        Visual layout. One of: modern, executive, sidebar, portfolio.
                          Leave empty ("") to use the default legacy layout.
+        style:           Color theme (only used when template is set).
+                         One of: navy, slate, forest, warm, classic. Default: navy.
 
     Returns:
         Path to the generated PDF, or an error string.
@@ -115,6 +125,11 @@ def export_resume_pdf(
         return (
             f"Error: unknown template {template!r}. "
             f"Valid options: {sorted(VALID_TEMPLATES)} or leave empty for default."
+        )
+    if style and style not in VALID_STYLES:
+        return (
+            f"Error: unknown style {style!r}. "
+            f"Valid options: {sorted(VALID_STYLES)}."
         )
 
     opt_dir = config.get_active_optimized_resumes_dir()
@@ -142,7 +157,7 @@ def export_resume_pdf(
     out = _resolve_output_path(output_filename, stem)
 
     if template:
-        _render_resume_to_pdf(data, out, template=template)
+        _render_resume_to_pdf(data, out, template=template, style=style or "navy")
     else:
         _render_pdf("resume.html", data, out)
 

@@ -139,6 +139,9 @@ _MIGRATIONS = [
         created_at   TEXT    NOT NULL,
         last_used_at TEXT
     )""",
+    # v2 — resume template + style selection per job card
+    "ALTER TABLE job_queue ADD COLUMN resume_template TEXT",
+    "ALTER TABLE job_queue ADD COLUMN resume_style TEXT",
 ]
 
 

@@ -4,6 +4,20 @@
 <meta charset="UTF-8"/>
 <title>Resume — Modern</title>
 <style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
 @page {
     size: letter;
     margin: 0.45in 0.50in 0.45in 0.50in;
@@ -30,14 +44,14 @@ body {
 /* ── HEADER ────────────────────────────────────── */
 .header {
     margin-bottom: 6px;
-    border-bottom: 2px solid #1e3a5f;
+    border-bottom: 2px solid var(--accent);
     padding-bottom: 5px;
 }
 
 .header-name {
     font-size: 21pt;
     font-weight: bold;
-    color: #1e3a5f;
+    color: var(--accent);
     letter-spacing: 0.02em;
     line-height: 1.05;
 }
@@ -59,7 +73,7 @@ body {
 }
 
 .header-contact span { white-space: nowrap; }
-.contact-lbl { font-weight: bold; color: #1e3a5f; }
+.contact-lbl { font-weight: bold; color: var(--accent); }
 
 /* ── SYNOPSIS ──────────────────────────────────── */
 .synopsis {
@@ -77,8 +91,8 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #1e3a5f;
-    border-bottom: 1.2px solid #1e3a5f;
+    color: var(--accent);
+    border-bottom: 1.2px solid var(--accent);
     padding-bottom: 1px;
     margin-bottom: 4px;
     break-after: avoid;
@@ -95,7 +109,7 @@ body {
     text-indent: -12px;
 }
 
-.skills-list > li::before { content: "\2022  "; color: #1e3a5f; }
+.skills-list > li::before { content: "\2022  "; color: var(--accent); }
 .skill-lbl { font-weight: bold; }
 
 /* ── EXPERIENCE ────────────────────────────────── */
@@ -136,7 +150,7 @@ body {
     text-indent: -12px;
 }
 
-.bullets > li::before { content: "\2022  "; color: #1e3a5f; }
+.bullets > li::before { content: "\2022  "; color: var(--accent); }
 
 /* ── PROJECTS ──────────────────────────────────── */
 .proj { margin-bottom: 3px; }
