@@ -5,15 +5,7 @@
 
 @page {
     size: letter;
-    margin: 0;}>";
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 10pt;
-        font-weight: bold;
-        color: #ccc;
-        vertical-align: middle;
-        margin-right: 0.4in;
-        margin-bottom: 0.3in;
-    }
+    margin: 0;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,7 +97,7 @@ body {
     text-indent: -10px;
 }
 
-.sidebar-skills-list > li::before { content: "\2023  "; color: #7aa5c8; }
+.sidebar-skills-list > li::before { content: "\2022  "; color: #7aa5c8; }
 .sidebar-skill-lbl { font-weight: bold; color: #e8edf2; }
 
 /* ── SIDEBAR EDUCATION ─────────────────────────── */
