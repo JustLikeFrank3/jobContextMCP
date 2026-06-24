@@ -133,7 +133,7 @@ async def dashboard_home() -> HTMLResponse:
 <body>
   <div class="banner-wrap">{banner_svg()}</div>
   <p class="tagline">Career Command Center</p>
-  <a class="why-link" href="/why">
+  <a class="why-link" href="/why" target="_blank" rel="noopener noreferrer">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v.5"/><path d="M8 8v3" stroke-linecap="round"/></svg>
     Why use jobContext?
   </a>
