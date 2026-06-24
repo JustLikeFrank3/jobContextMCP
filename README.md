@@ -74,6 +74,22 @@ The browser dashboard turns the local MCP workspace into a job-search command ce
 
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
 
+### Resume template gallery
+
+4 layout formats x 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
+
+| Sidebar | Executive |
+|---------|-----------|
+| ![Sidebar template](docs/screenshots/template-sidebar.png) | ![Executive template](docs/screenshots/template-executive.png) |
+| Two-column: contact/skills sidebar + experience/projects main | Centered letterhead, serif, achievement-focused |
+
+| Modern | Portfolio |
+|--------|-----------|
+| ![Modern template](docs/screenshots/template-modern.png) | ![Portfolio template](docs/screenshots/template-portfolio.png) |
+| Single-column, ATS-friendly, clean typography | Projects-first, GitHub-prominent, technical profile |
+
+Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
+
 ---
 
 ## The Problem It Solves
