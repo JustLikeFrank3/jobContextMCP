@@ -516,6 +516,115 @@ async def pipeline_remove(req: _JobActionRequest) -> JSONResponse:
     return JSONResponse({"ok": True, "removed_job_id": req.job_id})
 
 
+_PREVIEW_FALLBACK_DATA: dict = {
+    "name": "Your Name",
+    "tagline": "Senior Software Engineer",
+    "contact": {
+        "phone": "555-000-0000",
+        "email": "you@example.com",
+        "linkedin": "linkedin.com/in/yourname",
+        "github": "github.com/yourname",
+        "location": "Atlanta, GA",
+        "city_state": "Atlanta, GA",
+        "address": "",
+    },
+    "synopsis": (
+        "Experienced software engineer with 6+ years building high-throughput distributed systems, "
+        "modernizing Java 8 monoliths to cloud-native microservices, and driving AI tool adoption "
+        "across engineering organizations. Strong track record of 98% SLA and 80%+ test coverage."
+    ),
+    "sections": [
+        {
+            "type": "skills", "title": "TECHNICAL SKILLS",
+            "items": [
+                {"label": "Languages", "value": "Java (8–21), Python, TypeScript, SQL"},
+                {"label": "Frameworks", "value": "Spring Boot, FastAPI, Angular 6–18"},
+                {"label": "Cloud / DevOps", "value": "Azure Container Apps, Docker, Kubernetes, Terraform"},
+                {"label": "AI / ML Tooling", "value": "LangGraph, LangChain, OpenAI API, agentic pipelines"},
+            ],
+        },
+        {
+            "type": "experience", "title": "EXPERIENCE",
+            "jobs": [
+                {
+                    "title": "Software Engineer — Level 6",
+                    "company": "General Motors",
+                    "dates": "January 2022 – December 2025",
+                    "groups": [],
+                    "bullets": [
+                        "Modernized 500K+ LOC Java 8 legacy platform to Java 21 / Spring Boot 3.5, achieving 98% SLA.",
+                        "Architected event-driven microservice mesh on Azure Container Apps; reduced deploy time by 40%.",
+                        "Led org-wide AI tool adoption initiative — drove 35%+ usage across 80-person engineering org.",
+                        "Maintained 80%+ test coverage across all owned services via JUnit 5 / Mockito / Testcontainers.",
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "projects", "title": "PERSONAL PROJECTS",
+            "projects": [
+                {
+                    "name": "jobContextMCP — AI-powered job search platform",
+                    "bullets": [
+                        "MCP server exposing 40+ tools for resume generation, fitment analysis, and outreach drafting.",
+                        "Agentic pipeline built with LangGraph; renders PDF resumes via WeasyPrint template system.",
+                        "FastAPI dashboard with real-time SSE streaming and multi-tenant auth via Microsoft Entra ID.",
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "education", "title": "EDUCATION",
+            "degree": "B.S. Internet of Things Engineering",
+            "school": "Florida International University, Miami, FL",
+            "details": ["GPA: 3.85 — Magna Cum Laude"],
+            "coursework": "Cloud Computing, Algorithms, Systems Design, Embedded Systems",
+        },
+        {
+            "type": "leadership", "title": "CERTIFICATIONS & AWARDS",
+            "items": [
+                {"label": "Hackathon 1st Place", "value": "GM Innovation Hackathon 2023"},
+                {"label": "Peer Award", "value": "GM Engineering Excellence — Q3 2024"},
+                {"label": "Certification", "value": "Microsoft Azure Fundamentals (AZ-900)"},
+            ],
+        },
+    ],
+    "footer_tag": "SOFTWARE_ENGINEER",
+}
+
+
+@router.get("/pipeline/preview-template/{template_name}")
+async def pipeline_preview_template(template_name: str) -> HTMLResponse:
+    """Render the master resume with the requested template for inline browser preview."""
+    from lib.resume_parser import _parse_resume_txt as _parse
+    from lib.template_loader import render_resume as _render, VALID_TEMPLATES as _VALID
+
+    if template_name not in _VALID:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown template {template_name!r}. Valid: {sorted(_VALID)}",
+        )
+
+    data: dict | None = None
+    try:
+        master_path = config.get_active_master_resume_path()
+        if master_path.exists():
+            try:
+                text = master_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = master_path.read_text(encoding="latin-1")
+            data = _parse(text)
+            data["footer_tag"] = "SOFTWARE_ENGINEER"
+    except Exception:
+        pass
+
+    if not data:
+        data = dict(_PREVIEW_FALLBACK_DATA)
+
+    html_str = _render(data, template=template_name)
+    return HTMLResponse(html_str)
+
+
 @router.get("/pipeline")
 async def pipeline_board() -> HTMLResponse:
     body = """
@@ -652,6 +761,47 @@ async def pipeline_board() -> HTMLResponse:
     </div>
 </div>
 
+<!-- Template Preview modal -->
+<div id='templatePreviewOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:920;overflow-y:auto;padding:16px 10px'>
+  <div style='max-width:1120px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px'>
+
+    <!-- Header -->
+    <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:12px'>
+      <div>
+        <div style='font-weight:700;font-size:1.05rem'>Resume Template Preview</div>
+        <div id='tpJobLabel' style='color:#8899bb;font-size:0.82rem;margin-top:3px'></div>
+      </div>
+      <button onclick='closeTemplatePreviews()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px;flex-shrink:0'>✕</button>
+    </div>
+
+    <!-- Template tabs -->
+    <div style='display:flex;gap:8px;flex-wrap:wrap'>
+      <button id='tpTab-modern'    onclick='switchTemplate("modern")'    class='tp-tab'>Modern</button>
+      <button id='tpTab-executive' onclick='switchTemplate("executive")' class='tp-tab'>Executive</button>
+      <button id='tpTab-sidebar'   onclick='switchTemplate("sidebar")'   class='tp-tab'>Sidebar</button>
+      <button id='tpTab-portfolio' onclick='switchTemplate("portfolio")' class='tp-tab'>Portfolio</button>
+    </div>
+
+    <!-- Description strip -->
+    <div id='tpDesc' style='font-size:0.82rem;color:#8899bb;min-height:1.2em'></div>
+
+    <!-- Loading bar -->
+    <div id='tpLoading' style='display:none;height:3px;background:#1b2943;border-radius:999px;overflow:hidden'>
+      <div style='height:100%;width:35%;background:#06b6d4;animation:slide 1.2s linear infinite'></div>
+    </div>
+
+    <!-- Preview iframe -->
+    <iframe id='tpFrame' src='about:blank' title='Resume template preview'
+      style='width:100%;height:72vh;border:1px solid #2a3a5e;border-radius:10px;background:#fff;transition:opacity .15s'
+    ></iframe>
+
+    <!-- Footer note -->
+    <div style='font-size:0.77rem;color:#556;text-align:right'>
+      Preview uses your master resume. Actual export uses the selected optimized resume.
+    </div>
+  </div>
+</div>
+
 <script>
 const el = {
   summary: document.getElementById('summary'),
@@ -668,6 +818,77 @@ let editCoverLetterDraftName = '';
 let editCoverLetterDraftHref = '';
 let editCoverLetterPdfHref = '';
 let editCoverLetterAccepted = false;
+
+/* ── Template Preview ──────────────────────────────── */
+const TEMPLATE_META = {
+  modern:    { label: 'Modern',    desc: 'Clean single-column, sans-serif, ATS-friendly. Blue section headers. Standard corporate layout. Best for most SWE roles.' },
+  executive: { label: 'Executive', desc: 'Larger serif type, centered header, prominent left-bordered summary. Best for senior, principal, staff, or director roles.' },
+  sidebar:   { label: 'Sidebar',   desc: 'Two-column layout. Left sidebar: contact, skills, education (dark navy). Right column: summary, experience, projects.' },
+  portfolio: { label: 'Portfolio', desc: 'Projects section appears before experience. GitHub highlighted at top. Green accent. Best for open-source contributors and technical creators.' },
+};
+let tpCurrentTemplate = 'modern';
+
+function _setActiveTab(name) {
+  Object.keys(TEMPLATE_META).forEach(t => {
+    const btn = document.getElementById(`tpTab-${t}`);
+    if (!btn) return;
+    if (t === name) {
+      btn.style.background = '#1a3a6e';
+      btn.style.borderColor = '#3a5aae';
+      btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  });
+}
+
+function switchTemplate(name) {
+  if (!TEMPLATE_META[name]) return;
+  tpCurrentTemplate = name;
+  _setActiveTab(name);
+  document.getElementById('tpDesc').textContent = TEMPLATE_META[name].desc;
+  const frame = document.getElementById('tpFrame');
+  const loading = document.getElementById('tpLoading');
+  frame.style.opacity = '0.35';
+  loading.style.display = 'block';
+  frame.src = `/dashboard/pipeline/preview-template/${name}`;
+}
+
+function openTemplatePreviews(jobId, company, role) {
+  const label = (company && role) ? `${company} — ${role}` : 'Master Resume';
+  document.getElementById('tpJobLabel').textContent = `Previewing templates for: ${label}`;
+  document.getElementById('templatePreviewOverlay').style.display = 'block';
+  // Always start on modern; only load if not already showing
+  if (tpCurrentTemplate !== 'modern' || document.getElementById('tpFrame').src.includes('about:blank')) {
+    switchTemplate('modern');
+  } else {
+    _setActiveTab('modern');
+    document.getElementById('tpDesc').textContent = TEMPLATE_META['modern'].desc;
+  }
+}
+
+function closeTemplatePreviews() {
+  document.getElementById('templatePreviewOverlay').style.display = 'none';
+}
+
+(function() {
+  const frame = document.getElementById('tpFrame');
+  if (frame) {
+    frame.addEventListener('load', function() {
+      this.style.opacity = '1';
+      document.getElementById('tpLoading').style.display = 'none';
+    });
+  }
+  const overlay = document.getElementById('templatePreviewOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === this) closeTemplatePreviews();
+    });
+  }
+})();
+/* ─────────────────────────────────────────────────── */
 
 function esc(s){ return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 
@@ -1037,16 +1258,35 @@ function render(){
         <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>
                 <button class='danger' onclick='action(${j.id},"remove")'>Remove</button>
+        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}")' title='Preview resume in all four visual formats'>Preview Formats</button>
       </div>
     </article>`;
   }).join('');
 }
 
 async function load(){
-  const res = await fetch('/dashboard/pipeline/data', { credentials: 'same-origin' });
-  if(!res.ok){ el.list.innerHTML = `<div class='empty'>Failed to load (${res.status})</div>`; return; }
-  state = await res.json();
-  render();
+  try {
+    const res = await fetch('/dashboard/pipeline/data', { credentials: 'same-origin' });
+    if(!res.ok){
+      const msg = `Failed to load pipeline data (HTTP ${res.status}). Check server logs.`;
+      el.list.innerHTML = `<div class='empty'>${msg}</div>`;
+      console.error('[pipeline] data fetch failed:', res.status, res.statusText);
+      return;
+    }
+    let json;
+    try {
+      json = await res.json();
+    } catch(parseErr) {
+      el.list.innerHTML = `<div class='empty'>Pipeline data response is not valid JSON. The server may have returned an error page. Check the Console for details.</div>`;
+      console.error('[pipeline] JSON parse error — server may be redirecting to login or returning HTML:', parseErr);
+      return;
+    }
+    state = json;
+    render();
+  } catch(networkErr) {
+    el.list.innerHTML = `<div class='empty'>Network error loading pipeline data: ${String(networkErr)}</div>`;
+    console.error('[pipeline] network error in load():', networkErr);
+  }
 }
 
 el.q.addEventListener('input', render);
@@ -1079,6 +1319,13 @@ button { background: var(--chip); border:1px solid var(--line); color: var(--tex
 button:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); color: #ffdede; }
+button.tp-btn {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: #a0e8f0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--chip));
+}
+button.tp-btn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--chip)); }
+.tp-tab { font-size: 0.85rem; font-weight: 600; padding: 8px 16px; }
 """
 
     return HTMLResponse(

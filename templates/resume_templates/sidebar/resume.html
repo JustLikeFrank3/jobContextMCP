@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Resume — Sidebar</title>
+<style>
+@page {
+    size: letter;
+    margin: 0;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 10pt;
+        font-weight: bold;
+        color: #ccc;
+        vertical-align: middle;
+        margin-right: 0.4in;
+        margin-bottom: 0.3in;
+    }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 9pt;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.28;
+}
+
+/* ── LAYOUT ────────────────────────────────────── */
+.layout {
+    display: flex;
+    flex-direction: row;
+    min-height: 100%;
+}
+
+/* ── SIDEBAR ───────────────────────────────────── */
+.sidebar {
+    width: 205px;
+    flex-shrink: 0;
+    background: #1e3a5f;
+    color: #e8edf2;
+    padding: 20px 12px 20px 14px;
+}
+
+.sidebar-name {
+    font-size: 15pt;
+    font-weight: bold;
+    color: #fff;
+    line-height: 1.1;
+    margin-bottom: 2px;
+    word-break: break-word;
+}
+
+.sidebar-tagline {
+    font-size: 8pt;
+    color: #a8c0d6;
+    margin-bottom: 14px;
+    line-height: 1.3;
+    font-style: italic;
+}
+
+/* ── SIDEBAR CONTACT ───────────────────────────── */
+.sidebar-contact { margin-bottom: 14px; }
+
+.sidebar-contact-item {
+    font-size: 7.8pt;
+    color: #ccd9e6;
+    margin-bottom: 3px;
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.sidebar-contact-lbl {
+    display: block;
+    font-size: 7pt;
+    font-weight: bold;
+    color: #7aa5c8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ── SIDEBAR SECTION ───────────────────────────── */
+.sidebar-section { margin-bottom: 14px; }
+
+.sidebar-section-title {
+    font-size: 8.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #7aa5c8;
+    border-bottom: 1px solid #2d5580;
+    padding-bottom: 2px;
+    margin-bottom: 6px;
+}
+
+/* ── SIDEBAR SKILLS ────────────────────────────── */
+.sidebar-skills-list { list-style: none; padding: 0; }
+
+.sidebar-skills-list > li {
+    font-size: 7.8pt;
+    line-height: 1.35;
+    color: #d0dce8;
+    padding: 0.5px 0;
+    padding-left: 10px;
+    text-indent: -10px;
+}
+
+.sidebar-skills-list > li::before { content: "\2023  "; color: #7aa5c8; }
+.sidebar-skill-lbl { font-weight: bold; color: #e8edf2; }
+
+/* ── SIDEBAR EDUCATION ─────────────────────────── */
+.sidebar-edu-degree { font-weight: bold; font-size: 8pt; color: #e8edf2; }
+.sidebar-edu-school { font-size: 7.8pt; color: #a8c0d6; margin-bottom: 2px; }
+.sidebar-edu-detail { font-size: 7.6pt; color: #c0d0de; line-height: 1.3; }
+
+/* ── SIDEBAR LEADERSHIP / CERTS ────────────────── */
+.sidebar-leader-item { font-size: 7.8pt; color: #d0dce8; line-height: 1.35; padding: 0.5px 0; }
+.sidebar-leader-lbl { font-weight: bold; color: #e8edf2; }
+
+/* ── MAIN CONTENT ──────────────────────────────── */
+.main-col {
+    flex: 1;
+    padding: 18px 18px 18px 20px;
+    min-width: 0;
+}
+
+/* ── SYNOPSIS ──────────────────────────────────── */
+.synopsis {
+    font-size: 9.2pt;
+    line-height: 1.38;
+    margin-bottom: 7px;
+    color: #1a1a1a;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #dde3ea;
+}
+
+/* ── MAIN SECTIONS ─────────────────────────────── */
+.section { margin-bottom: 6px; }
+
+.section-title {
+    font-size: 10.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #1e3a5f;
+    border-bottom: 1.5px solid #1e3a5f;
+    padding-bottom: 1px;
+    margin-bottom: 4px;
+    break-after: avoid;
+}
+
+/* ── SKILLS (main — fallback when skills not found for sidebar) */
+.skills-list { list-style: none; padding: 0; }
+.skills-list > li { font-size: 8.8pt; line-height: 1.28; padding: 0.4px 0 0.4px 12px; text-indent: -12px; }
+.skills-list > li::before { content: "\2022  "; color: #1e3a5f; }
+.skill-lbl { font-weight: bold; }
+
+/* ── EXPERIENCE ────────────────────────────────── */
+.job { margin-bottom: 5px; break-inside: auto; }
+
+.job-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    break-after: avoid;
+}
+
+.job-title   { font-weight: bold; font-size: 9.5pt; color: #1e3a5f; }
+.job-dates   { font-size: 8.3pt; font-weight: bold; color: #666; white-space: nowrap; }
+.job-company { font-size: 8.8pt; color: #555; margin-bottom: 1px; }
+
+.grouped-job  { margin-bottom: 5px; break-inside: auto; }
+.grouped-company { font-weight: bold; font-size: 9.5pt; color: #1e3a5f; }
+.grouped-dates { font-size: 8.3pt; font-weight: bold; color: #666; break-after: avoid; }
+.sub-role { margin-left: 8px; margin-bottom: 1px; }
+.sub-role-header { font-weight: bold; font-size: 8.8pt; }
+
+.group-lbl { font-weight: bold; font-size: 8.6pt; margin-top: 2px; color: #333; }
+
+.bullets { list-style: none; padding: 0; margin: 1px 0 1px 11px; }
+.bullets > li { font-size: 8.5pt; line-height: 1.28; padding: 0.4px 0 0.4px 11px; text-indent: -11px; }
+.bullets > li::before { content: "\2022  "; color: #1e3a5f; }
+
+/* ── PROJECTS ──────────────────────────────────── */
+.proj { margin-bottom: 3px; }
+.proj-name { font-weight: bold; font-size: 9pt; color: #1e3a5f; margin-bottom: 1px; }
+
+/* ── EDUCATION (main fallback) ─────────────────── */
+.edu-degree { font-weight: bold; font-size: 9pt; }
+.edu-school { font-size: 8.7pt; color: #555; }
+.edu-details { font-size: 8.5pt; }
+.edu-bullet  { font-size: 8.5pt; margin-left: 11px; }
+.edu-coursework { font-size: 8.5pt; margin-top: 3px; }
+.edu-coursework-lbl { font-weight: bold; }
+
+/* ── LEADERSHIP ────────────────────────────────── */
+.leader-item { font-size: 8.8pt; line-height: 1.32; padding: 0.5px 0; }
+.leader-lbl { font-weight: bold; }
+</style>
+</head>
+<body>
+
+{# Classify sections into sidebar vs. main.
+   Sidebar: skills and education.
+   Main: everything else (experience, projects, leadership, achievements, text). #}
+{% set sidebar_types = ['skills', 'education'] %}
+
+<div class="layout">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- Name and tagline -->
+    <h1 class="sidebar-name">{{ name }}</h1>
+    {% if tagline %}<div class="sidebar-tagline">{{ tagline }}</div>{% endif %}
+
+    <!-- Contact block -->
+    <nav class="sidebar-contact">
+      {% if contact.phone %}
+      <div class="sidebar-contact-item">
+        <span class="sidebar-contact-lbl">Phone</span>{{ contact.phone }}
+      </div>
+      {% endif %}
+      {% if contact.email %}
+      <div class="sidebar-contact-item">
+        <span class="sidebar-contact-lbl">Email</span>{{ contact.email }}
+      </div>
+      {% endif %}
+      {% if contact.linkedin %}
+      <div class="sidebar-contact-item">
+        <span class="sidebar-contact-lbl">LinkedIn</span>{{ contact.linkedin }}
+      </div>
+      {% endif %}
+      {% if contact.github %}
+      <div class="sidebar-contact-item">
+        <span class="sidebar-contact-lbl">GitHub</span>{{ contact.github }}
+      </div>
+      {% endif %}
+      {% if contact.city_state or contact.location %}
+      <div class="sidebar-contact-item">
+        <span class="sidebar-contact-lbl">Location</span>{{ contact.city_state or contact.location }}
+      </div>
+      {% endif %}
+    </nav>
+
+    <!-- Skills sections in sidebar -->
+    {% for section in sections if section.type == 'skills' %}
+    <div class="sidebar-section">
+      <h2 class="sidebar-section-title">{{ section.title }}</h2>
+      <ul class="sidebar-skills-list">
+        {% for item in section['items'] %}
+        <li>{% if item.label %}<span class="sidebar-skill-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+
+    <!-- Education sections in sidebar -->
+    {% for section in sections if section.type == 'education' %}
+    <div class="sidebar-section">
+      <h2 class="sidebar-section-title">{{ section.title }}</h2>
+      <div class="sidebar-edu-degree">{{ section.degree }}</div>
+      <div class="sidebar-edu-school">{{ section.school }}</div>
+      {% for line in section.details %}
+      <div class="sidebar-edu-detail">{{ line }}</div>
+      {% endfor %}
+      {% if section.coursework %}
+      <div class="sidebar-edu-detail" style="margin-top:3px;"><strong>Coursework:</strong> {{ section.coursework }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- Leadership/Certifications in sidebar -->
+    {% for section in sections if section.type == 'leadership' %}
+    <div class="sidebar-section">
+      <h2 class="sidebar-section-title">{{ section.title }}</h2>
+      {% for item in section['items'] %}
+      <div class="sidebar-leader-item">
+        {% if item.label %}<span class="sidebar-leader-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+  </aside>
+
+  <!-- MAIN CONTENT COLUMN -->
+  <main class="main-col">
+
+    <!-- Summary -->
+    {% if synopsis %}
+    <p class="synopsis">{{ synopsis }}</p>
+    {% endif %}
+
+    <!-- Experience, Projects, Achievements, and any other non-sidebar sections -->
+    {% for section in sections if section.type not in sidebar_types and section.type != 'leadership' %}
+    <section class="section">
+      <h2 class="section-title">{{ section.title }}</h2>
+
+      {# ── EXPERIENCE ──────────────────────── #}
+      {% if section.type == 'experience' %}
+      {% for job in section.jobs %}
+      {% if job.get('type') == 'grouped' %}
+      <div class="grouped-job">
+        <div class="grouped-company">{{ job.company }}</div>
+        <div class="grouped-dates">{{ job.dates }}</div>
+        {% for role in job.sub_roles %}
+        <div class="sub-role">
+          <div class="sub-role-header">{{ role.title }}{% if role.dates %} | {{ role.dates }}{% endif %}</div>
+          {% for grp in role.groups %}
+            <div class="group-lbl">{{ grp.label }}</div>
+            <ul class="bullets">{% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+          {% endfor %}
+          {% if role.bullets %}
+          <ul class="bullets">{% for b in role.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="job">
+        <div class="job-title-row">
+          <span class="job-title">{{ job.title }}</span>
+          {% if job.dates %}<span class="job-dates">{{ job.dates }}</span>{% endif %}
+        </div>
+        {% if job.company %}<div class="job-company">{{ job.company }}</div>{% endif %}
+        {% for grp in job.groups %}
+          <div class="group-lbl">{{ grp.label }}</div>
+          <ul class="bullets">{% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+        {% endfor %}
+        {% if job.bullets %}
+        <ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+
+      {# ── PROJECTS ────────────────────────── #}
+      {% elif section.type == 'projects' %}
+      {% for proj in section.projects %}
+      <div class="proj">
+        {% if proj.name %}<div class="proj-name">{{ proj.name }}</div>{% endif %}
+        <ul class="bullets">{% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+      </div>
+      {% endfor %}
+
+      {# ── ACHIEVEMENTS ────────────────────── #}
+      {% elif section.type == 'achievements' %}
+      <ul class="bullets">
+        {% for item in section['items'] %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+
+      {# ── FALLBACK ────────────────────────── #}
+      {% else %}
+      {% for line in section.lines %}
+      <div style="font-size:8.8pt;line-height:1.35;padding:0.5px 0;">{{ line }}</div>
+      {% endfor %}
+      {% endif %}
+
+    </section>
+    {% endfor %}
+
+  </main>
+
+</div>
+
+</body>
+</html>

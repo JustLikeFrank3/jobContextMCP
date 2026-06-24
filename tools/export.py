@@ -1,9 +1,16 @@
 """
 PDF export tool — v4
 
-export_resume_pdf(filename, footer_tag?, output_filename?)
+export_resume_pdf(filename, footer_tag?, output_filename?, template?)
     Reads a .txt resume from 01-Current-Optimized/, parses it,
-    renders via resume.html template, and writes a PDF to 03-Resume-PDFs/.
+    renders via the selected template, and writes a PDF to 03-Resume-PDFs/.
+
+    template selects the visual layout (default: "" uses legacy resume.html):
+        ""          — legacy Courier New monospaced layout (backward compat)
+        "modern"    — clean single-column sans-serif, ATS-friendly
+        "executive" — larger type, prominent summary, achievement-emphasis
+        "sidebar"   — two-column; left sidebar for skills/contact/education
+        "portfolio" — projects-first, GitHub-prominent, technical creator
 
 export_cover_letter_pdf(filename, output_filename?)
     Reads a .txt cover letter from 02-Cover-Letters/, parses it,
@@ -16,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 import weasyprint
 
 from lib import config
+from lib.template_loader import render_resume_to_pdf as _render_resume_to_pdf, VALID_TEMPLATES
 from lib.resume_parser import (
     _derive_footer_tag,
     _parse_resume_txt,
@@ -88,18 +96,27 @@ def export_resume_pdf(
     filename: str,
     footer_tag: str = "",
     output_filename: str = "",
+    template: str = "",
 ) -> str:
     """
-    Export a .txt resume to PDF using the Frank MacBride Canva-style template.
+    Export a .txt resume to PDF.
 
     Args:
         filename:        Filename inside 01-Current-Optimized/ (with or without .txt).
         footer_tag:      Text for the </TAG> footer (auto-detected from filename if omitted).
         output_filename: Output PDF filename (defaults to same stem + .pdf).
+        template:        Visual layout to use. One of: modern, executive, sidebar, portfolio.
+                         Leave empty ("") to use the default legacy layout.
 
     Returns:
-        Path to the generated PDF.
+        Path to the generated PDF, or an error string.
     """
+    if template and template not in VALID_TEMPLATES:
+        return (
+            f"Error: unknown template {template!r}. "
+            f"Valid options: {sorted(VALID_TEMPLATES)} or leave empty for default."
+        )
+
     opt_dir = config.get_active_optimized_resumes_dir()
 
     # Resolve filename
@@ -123,7 +140,12 @@ def export_resume_pdf(
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem)
-    _render_pdf("resume.html", data, out)
+
+    if template:
+        _render_resume_to_pdf(data, out, template=template)
+    else:
+        _render_pdf("resume.html", data, out)
+
     return f"✓ PDF exported: {out}"
 
 

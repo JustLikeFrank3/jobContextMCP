@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Resume — Portfolio</title>
+<style>
+@page {
+    size: letter;
+    margin: 0.42in 0.48in 0.42in 0.48in;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 11pt;
+        font-weight: bold;
+        color: #555;
+        vertical-align: middle;
+    }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Calibri, 'Segoe UI', 'Trebuchet MS', Arial, sans-serif;
+    font-size: 9.3pt;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.3;
+}
+
+/* ── HEADER ────────────────────────────────────── */
+.header {
+    margin-bottom: 5px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #1a6644;
+}
+
+.header-name {
+    font-size: 20pt;
+    font-weight: bold;
+    color: #1a6644;
+    line-height: 1.05;
+    letter-spacing: 0.02em;
+}
+
+.header-tagline {
+    font-size: 9.5pt;
+    color: #444;
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.contact-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 16px;
+    margin-top: 5px;
+    font-size: 8.5pt;
+    color: #333;
+}
+
+.contact-strip span { white-space: nowrap; }
+.contact-lbl { font-weight: bold; color: #1a6644; }
+.github-highlight { font-weight: bold; color: #1a6644; }
+
+/* ── SYNOPSIS ──────────────────────────────────── */
+.synopsis {
+    font-size: 9pt;
+    line-height: 1.38;
+    margin-bottom: 6px;
+    color: #222;
+    background: #f2f8f5;
+    padding: 5px 8px;
+    border-left: 3px solid #1a6644;
+}
+
+/* ── SECTIONS ──────────────────────────────────── */
+.section { margin-bottom: 5px; }
+
+.section-title {
+    font-size: 10.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #1a6644;
+    border-bottom: 1.5px solid #1a6644;
+    padding-bottom: 1px;
+    margin-bottom: 4px;
+    break-after: avoid;
+}
+
+/* ── SKILLS ────────────────────────────────────── */
+.skills-list { list-style: none; padding: 0; }
+
+.skills-list > li {
+    font-size: 8.8pt;
+    line-height: 1.28;
+    padding: 0.4px 0;
+    padding-left: 12px;
+    text-indent: -12px;
+}
+
+.skills-list > li::before { content: "\25B8  "; color: #1a6644; font-size: 8pt; }
+.skill-lbl { font-weight: bold; }
+
+/* ── PROJECTS — given visual prominence ────────── */
+.proj {
+    margin-bottom: 5px;
+    padding-left: 8px;
+    border-left: 2px solid #b5d9c8;
+}
+
+.proj-name {
+    font-weight: bold;
+    font-size: 9.5pt;
+    color: #1a6644;
+    margin-bottom: 1px;
+}
+
+/* ── EXPERIENCE ────────────────────────────────── */
+.job { margin-bottom: 5px; break-inside: auto; }
+
+.job-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    break-after: avoid;
+}
+
+.job-title   { font-weight: bold; font-size: 9.3pt; }
+.job-dates   { font-size: 8.3pt; font-weight: bold; color: #666; white-space: nowrap; }
+.job-company { font-size: 8.8pt; color: #555; margin-bottom: 1px; }
+
+.grouped-job { margin-bottom: 5px; break-inside: auto; }
+.grouped-company { font-weight: bold; font-size: 9.3pt; }
+.grouped-dates { font-size: 8.3pt; font-weight: bold; color: #666; break-after: avoid; }
+.sub-role { margin-left: 8px; margin-bottom: 1px; }
+.sub-role-header { font-weight: bold; font-size: 8.8pt; }
+
+.group-lbl { font-weight: bold; font-size: 8.6pt; margin-top: 2px; color: #333; }
+
+.bullets { list-style: none; padding: 0; margin: 1px 0 1px 11px; }
+.bullets > li { font-size: 8.5pt; line-height: 1.28; padding: 0.4px 0 0.4px 11px; text-indent: -11px; }
+.bullets > li::before { content: "\25B8  "; color: #1a6644; font-size: 8pt; }
+
+/* ── EDUCATION ─────────────────────────────────── */
+.edu-degree { font-weight: bold; font-size: 9.2pt; }
+.edu-school { font-size: 8.9pt; color: #444; }
+.edu-details { font-size: 8.6pt; }
+.edu-bullet  { font-size: 8.6pt; margin-left: 11px; }
+.edu-coursework { font-size: 8.6pt; margin-top: 3px; }
+.edu-coursework-lbl { font-weight: bold; }
+
+/* ── LEADERSHIP ────────────────────────────────── */
+.leader-item { font-size: 9pt; line-height: 1.3; padding: 0.5px 0; }
+.leader-lbl { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<!-- HEADER — GitHub and technical profile given prominence -->
+<header class="header">
+  <h1 class="header-name">{{ name }}</h1>
+  {% if tagline %}<div class="header-tagline">{{ tagline }}</div>{% endif %}
+  <div class="contact-strip">
+    {% if contact.github %}
+    <span><span class="contact-lbl">GitHub:</span> <span class="github-highlight">{{ contact.github }}</span></span>
+    {% endif %}
+    {% if contact.linkedin %}
+    <span><span class="contact-lbl">LinkedIn:</span> {{ contact.linkedin }}</span>
+    {% endif %}
+    {% if contact.email %}
+    <span><span class="contact-lbl">Email:</span> {{ contact.email }}</span>
+    {% endif %}
+    {% if contact.phone %}
+    <span><span class="contact-lbl">Phone:</span> {{ contact.phone }}</span>
+    {% endif %}
+    {% if contact.city_state or contact.location %}
+    <span>{{ contact.city_state or contact.location }}</span>
+    {% endif %}
+  </div>
+</header>
+
+{% if synopsis %}
+<p class="synopsis">{{ synopsis }}</p>
+{% endif %}
+
+{#
+  Portfolio section ordering:
+  1. Skills   — technical profile near the top
+  2. Projects — open source / GitHub work above experience
+  3. Experience
+  4. Everything else in original order
+#}
+{% set portfolio_order = ['skills', 'projects', 'experience'] %}
+
+{% macro render_section_body(section) %}
+  {# ── SKILLS ────────────────────────────── #}
+  {% if section.type == 'skills' %}
+  <ul class="skills-list">
+    {% for item in section['items'] %}
+    <li>{% if item.label %}<span class="skill-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}</li>
+    {% endfor %}
+  </ul>
+
+  {# ── EXPERIENCE ────────────────────────── #}
+  {% elif section.type == 'experience' %}
+  {% for job in section.jobs %}
+  {% if job.get('type') == 'grouped' %}
+  <div class="grouped-job">
+    <div class="grouped-company">{{ job.company }}</div>
+    <div class="grouped-dates">{{ job.dates }}</div>
+    {% for role in job.sub_roles %}
+    <div class="sub-role">
+      <div class="sub-role-header">{{ role.title }}{% if role.dates %} | {{ role.dates }}{% endif %}</div>
+      {% for grp in role.groups %}
+        <div class="group-lbl">{{ grp.label }}</div>
+        <ul class="bullets">{% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+      {% endfor %}
+      {% if role.bullets %}
+      <ul class="bullets">{% for b in role.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="job">
+    <div class="job-title-row">
+      <span class="job-title">{{ job.title }}</span>
+      {% if job.dates %}<span class="job-dates">{{ job.dates }}</span>{% endif %}
+    </div>
+    {% if job.company %}<div class="job-company">{{ job.company }}</div>{% endif %}
+    {% for grp in job.groups %}
+      <div class="group-lbl">{{ grp.label }}</div>
+      <ul class="bullets">{% for b in grp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+    {% endfor %}
+    {% if job.bullets %}
+    <ul class="bullets">{% for b in job.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {# ── PROJECTS — left-border accent ────── #}
+  {% elif section.type == 'projects' %}
+  {% for proj in section.projects %}
+  <div class="proj">
+    {% if proj.name %}<div class="proj-name">{{ proj.name }}</div>{% endif %}
+    <ul class="bullets">{% for b in proj.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+  </div>
+  {% endfor %}
+
+  {# ── EDUCATION ─────────────────────────── #}
+  {% elif section.type == 'education' %}
+  <div class="edu-degree">{{ section.degree }}</div>
+  <div class="edu-school">{{ section.school }}</div>
+  {% for line in section.details %}
+  {% if line.startswith('•') or line.startswith('-') %}
+  <div class="edu-bullet">{{ line }}</div>
+  {% else %}
+  <div class="edu-details">{{ line }}</div>
+  {% endif %}
+  {% endfor %}
+  {% if section.coursework %}
+  <div class="edu-coursework"><span class="edu-coursework-lbl">Relevant Coursework:</span> {{ section.coursework }}</div>
+  {% endif %}
+
+  {# ── ACHIEVEMENTS ──────────────────────── #}
+  {% elif section.type == 'achievements' %}
+  <ul class="bullets">
+    {% for item in section['items'] %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+
+  {# ── LEADERSHIP ────────────────────────── #}
+  {% elif section.type == 'leadership' %}
+  {% for item in section['items'] %}
+  <div class="leader-item">
+    {% if item.label %}<span class="leader-lbl">{{ item.label }}:</span> {% endif %}{{ item.value }}
+  </div>
+  {% endfor %}
+
+  {# ── FALLBACK ──────────────────────────── #}
+  {% else %}
+  {% for line in section.lines %}
+  <div style="font-size:8.8pt;line-height:1.35;padding:0.5px 0;">{{ line }}</div>
+  {% endfor %}
+  {% endif %}
+{% endmacro %}
+
+<!-- Render skills first (technical profile near top) -->
+{% for section in sections if section.type == 'skills' %}
+<section class="section">
+  <h2 class="section-title">{{ section.title }}</h2>
+  {{ render_section_body(section) }}
+</section>
+{% endfor %}
+
+<!-- Render projects before experience -->
+{% for section in sections if section.type == 'projects' %}
+<section class="section">
+  <h2 class="section-title">{{ section.title }}</h2>
+  {{ render_section_body(section) }}
+</section>
+{% endfor %}
+
+<!-- Render experience -->
+{% for section in sections if section.type == 'experience' %}
+<section class="section">
+  <h2 class="section-title">{{ section.title }}</h2>
+  {{ render_section_body(section) }}
+</section>
+{% endfor %}
+
+<!-- Render all remaining sections (education, leadership, achievements, text) in original order -->
+{% for section in sections if section.type not in portfolio_order %}
+<section class="section">
+  <h2 class="section-title">{{ section.title }}</h2>
+  {{ render_section_body(section) }}
+</section>
+{% endfor %}
+
+</body>
+</html>

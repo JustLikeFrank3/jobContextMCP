@@ -1,0 +1,157 @@
+/* Modern Resume Template — styles.css
+   Single-column, ATS-friendly, clean sans-serif.
+   Inline version of this file lives in resume.html <style> block.
+   This file is provided for browser preview use. */
+
+@page {
+    size: letter;
+    margin: 0.45in 0.50in 0.45in 0.50in;
+    @bottom-right {
+        content: "</{{ footer_tag }}>";
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 11pt;
+        font-weight: bold;
+        color: #444;
+        vertical-align: middle;
+    }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Calibri, 'Segoe UI', 'Trebuchet MS', Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.28;
+}
+
+/* ── HEADER ────────────────────────────────────── */
+.header {
+    margin-bottom: 6px;
+    border-bottom: 2px solid #1e3a5f;
+    padding-bottom: 5px;
+}
+
+.header-name {
+    font-size: 21pt;
+    font-weight: bold;
+    color: #1e3a5f;
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+}
+
+.header-tagline {
+    font-size: 10pt;
+    color: #555;
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.header-contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 18px;
+    margin-top: 4px;
+    font-size: 8.6pt;
+    color: #333;
+}
+
+.header-contact span { white-space: nowrap; }
+.contact-lbl { font-weight: bold; color: #1e3a5f; }
+
+/* ── SYNOPSIS ──────────────────────────────────── */
+.synopsis {
+    font-size: 9.2pt;
+    line-height: 1.35;
+    margin-bottom: 6px;
+    color: #1a1a1a;
+}
+
+/* ── SECTIONS ──────────────────────────────────── */
+.section { margin-bottom: 5px; }
+
+.section-title {
+    font-size: 10.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #1e3a5f;
+    border-bottom: 1.2px solid #1e3a5f;
+    padding-bottom: 1px;
+    margin-bottom: 4px;
+    break-after: avoid;
+}
+
+/* ── SKILLS ────────────────────────────────────── */
+.skills-list { list-style: none; padding: 0; }
+
+.skills-list > li {
+    font-size: 8.9pt;
+    line-height: 1.28;
+    padding: 0.4px 0;
+    padding-left: 12px;
+    text-indent: -12px;
+}
+
+.skills-list > li::before { content: "\2022  "; color: #1e3a5f; }
+.skill-lbl { font-weight: bold; }
+
+/* ── EXPERIENCE ────────────────────────────────── */
+.job { margin-bottom: 5px; break-inside: auto; }
+
+.job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    break-after: avoid;
+}
+
+.job-title  { font-weight: bold; font-size: 9.5pt; }
+.job-company { font-size: 9pt; color: #444; }
+.job-dates  { font-size: 8.5pt; font-weight: bold; color: #555; white-space: nowrap; }
+
+.grouped-job { margin-bottom: 5px; break-inside: auto; }
+.grouped-company { font-weight: bold; font-size: 9.5pt; }
+.grouped-dates { font-size: 8.5pt; font-weight: bold; color: #555; break-after: avoid; }
+.sub-role { margin-left: 8px; margin-bottom: 2px; }
+.sub-role-header { font-weight: bold; font-size: 8.8pt; }
+
+.group-lbl {
+    font-weight: bold;
+    font-size: 8.8pt;
+    margin-top: 2px;
+}
+
+.bullets { list-style: none; padding: 0; margin: 1px 0 1px 12px; }
+
+.bullets > li {
+    font-size: 8.7pt;
+    line-height: 1.28;
+    padding: 0.4px 0;
+    padding-left: 12px;
+    text-indent: -12px;
+}
+
+.bullets > li::before { content: "\2022  "; color: #1e3a5f; }
+
+/* ── PROJECTS ──────────────────────────────────── */
+.proj { margin-bottom: 3px; }
+.proj-name { font-weight: bold; font-size: 9.2pt; margin-bottom: 1px; }
+
+/* ── EDUCATION ─────────────────────────────────── */
+.edu-degree { font-weight: bold; font-size: 9.2pt; }
+.edu-school { font-size: 9pt; color: #444; }
+.edu-details { font-size: 8.8pt; }
+.edu-bullet  { font-size: 8.8pt; margin-left: 12px; }
+.edu-coursework { font-size: 8.8pt; margin-top: 3px; }
+.edu-coursework-lbl { font-weight: bold; }
+
+/* ── ACHIEVEMENTS ──────────────────────────────── */
+/* reuses .bullets */
+
+/* ── LEADERSHIP ────────────────────────────────── */
+.leader-item { font-size: 9pt; line-height: 1.3; padding: 0.5px 0; }
+.leader-lbl { font-weight: bold; }
