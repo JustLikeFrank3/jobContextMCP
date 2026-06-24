@@ -140,6 +140,7 @@ _PAGES = [
     ("Digest",      "/dashboard/digest",      "digest"),
     ("Interviews",  "/dashboard/interviews",  "interviews"),
     ("API Keys",    "/dashboard/api-keys",    "api-keys"),
+    ("Settings",    "/dashboard/settings",    "settings"),
 ]
 
 
