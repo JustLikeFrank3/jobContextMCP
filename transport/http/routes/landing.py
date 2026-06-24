@@ -395,6 +395,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
       <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
+        <a class="btn btn-ghost btn-lg" href="/why">Why should I use this?</a>
         <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>

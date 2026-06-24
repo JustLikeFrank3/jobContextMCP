@@ -46,6 +46,10 @@ _PAGES = [
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3 3-5 7-5s7 2 7 5"/><path d="M14 5l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" stroke-width="1.2"/></svg>',
         "Interviews", "/dashboard/interviews", "Upcoming schedule, debrief log, verbatim quotes",
     ),
+    (
+        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="10" r="7"/><path d="M10 7v1"/><path d="M10 10v4" stroke-width="1.8" stroke-linecap="round"/></svg>',
+        "Why jobContext?", "/why", "The case for a persistent career memory layer",
+    ),
 ]
 
 
