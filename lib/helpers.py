@@ -4,8 +4,10 @@ from lib import config
 
 
 def _build_story_entry(stories: list, story: str, tags: list, people: list, title: str) -> dict:
+    existing_ids = [s.get("id") for s in stories if isinstance(s.get("id"), int)]
+    next_id = max(existing_ids) + 1 if existing_ids else 1
     return {
-        "id": len(stories) + 1,
+        "id": next_id,
         "timestamp": datetime.datetime.now().isoformat(),
         "title": title or (story[:60] + ("..." if len(story) > 60 else "")),
         "story": story,
