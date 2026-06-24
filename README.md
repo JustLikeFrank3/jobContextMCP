@@ -86,6 +86,14 @@ Generated from plain `.txt` files — no design tools, no Canva, no InDesign. Th
 
 Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
+> **⚠️ No template selected?** If no template preference is saved in the pipeline, output falls back to the legacy format — Courier New, monospaced, hacker-tag header/footer. It's a genuine aesthetic choice if you want it. But if you haven't actively chosen it, your recruiter may have thoughts.
+>
+> | Legacy Resume | Legacy Cover Letter |
+> |---------------|---------------------|
+> | ![Legacy resume format](docs/legacy-resume-preview.png) | ![Legacy cover letter format](docs/legacy-cl-preview.png) |
+>
+> Select a template in the pipeline and this will never happen to you.
+
 ---
 
 ## The Problem It Solves

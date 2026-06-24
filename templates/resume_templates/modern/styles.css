@@ -5,9 +5,7 @@
 
 @page {
     size: letter;
-    margin: 0.45in 0.50in 0.45in 0.50in;
-    @bottom-right {
-        content: "</{{ footer_tag }}>";
+    margin: 0.45in 0.50in 0.45in 0.50in;}>";
         font-family: 'Courier New', Courier, monospace;
         font-size: 11pt;
         font-weight: bold;
