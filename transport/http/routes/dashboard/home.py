@@ -46,10 +46,6 @@ _PAGES = [
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3 3-5 7-5s7 2 7 5"/><path d="M14 5l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" stroke-width="1.2"/></svg>',
         "Interviews", "/dashboard/interviews", "Upcoming schedule, debrief log, verbatim quotes",
     ),
-    (
-        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="10" r="7"/><path d="M10 7v1"/><path d="M10 10v4" stroke-width="1.8" stroke-linecap="round"/></svg>',
-        "Why jobContext?", "/why", "The case for a persistent career memory layer",
-    ),
 ]
 
 
@@ -124,11 +120,23 @@ async def dashboard_home() -> HTMLResponse:
       cursor: pointer; font-family: inherit;
     }}
     .signout-btn:hover {{ color: #ffdede; border-color: #c0393b; }}
+    .why-link {{
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 0.78rem; text-decoration: none;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 4px 12px; margin-bottom: 16px;
+      transition: color .15s, border-color .15s;
+    }}
+    .why-link:hover {{ color: var(--accent); border-color: var(--accent); }}
   </style>
 </head>
 <body>
   <div class="banner-wrap">{banner_svg()}</div>
   <p class="tagline">Career Command Center</p>
+  <a class="why-link" href="/why">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v.5"/><path d="M8 8v3" stroke-linecap="round"/></svg>
+    Why use jobContext?
+  </a>
   <div class="grid">
     {cards}
   </div>
