@@ -142,6 +142,8 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
         output_filename=req.output_filename,
         kind="resume",
         persona=req.persona,
+        resume_template=job.get("resume_template") or "",
+        resume_style=job.get("resume_style") or "navy",
     )
     return JSONResponse({
         "ok": result.success,
@@ -265,7 +267,11 @@ async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
     save_result = save_resume_txt(output_name, edited)
     pdf_result = ""
     if req.export_pdf:
-        pdf_result = export_resume_pdf(output_name)
+        pdf_result = export_resume_pdf(
+            output_name,
+            template=job.get("resume_template") or "",
+            style=job.get("resume_style") or "navy",
+        )
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_resume": output_name}))
 

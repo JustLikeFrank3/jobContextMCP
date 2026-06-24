@@ -1164,6 +1164,8 @@ def generate_resume(
     role: str,
     job_description: str,
     output_filename: str = "",
+    template: str = "",
+    style: str = "navy",
 ) -> str:
     """
     Generate a tailored resume for a specific company and role.
@@ -1212,7 +1214,7 @@ def generate_resume(
 
     try:
         from tools.export import export_resume_pdf
-        pdf_result = export_resume_pdf(filename)
+        pdf_result = export_resume_pdf(filename, template=template, style=style or "navy")
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 
