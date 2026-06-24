@@ -61,4 +61,13 @@ docs/jobContextMCP-FullDocs/02_monetization_strategy.md
 .github/copilot-instructions.md
 
 # Operator scripts — contain credentials, tenant-specific logic, and private tooling
-scripts/
+# migrate_to_sqlite.py is intentionally excluded: it defines _SCHEMA used by tests
+scripts/*.sh
+scripts/invite_beta_tester.py
+scripts/sync_data_from_azure.sh
+scripts/sync_data_from_production.sh
+scripts/upload_workspace.sh
+scripts/import_job_queue_if_empty.py
+scripts/add_fitment_context_column.py
+scripts/gen_demo_docs.py
+scripts/generate_demo_pdfs.py
