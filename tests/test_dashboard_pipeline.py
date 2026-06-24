@@ -61,6 +61,8 @@ class TestPipelinePage:
         # Board scaffolding + client script markers.
         assert "id='list'" in r.text or 'id="list"' in r.text
         assert "/dashboard/pipeline/evaluate" in r.text
+        assert "Preview Template" in r.text
+        assert "save-template" in r.text
 
 
 # /pipeline/data

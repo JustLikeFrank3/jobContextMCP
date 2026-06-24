@@ -1,4 +1,4 @@
-"""Public marketing landing page for jobContext (served at /). Self-contained — tokens + Google Fonts inlined. Generated from the jobContext Design System."""
+"""Public marketing landing page for jobContext (served at /). Self-contained - tokens + Google Fonts inlined. Generated from the jobContext Design System."""
 from __future__ import annotations
 
 LANDING_HTML: str = r'''<!doctype html>
@@ -6,11 +6,11 @@ LANDING_HTML: str = r'''<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>jobContext &mdash; The memory layer for your career</title>
+<title>jobContext - The memory layer for your career</title>
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
-   jobContext — Color tokens
+   jobContext - Color tokens
    Redesign palette. Anchored on the brand sheet: deep navy ink,
    vivid cyan primary (#06B6D4), confirmation green (#22C55E,
    the "$" in the mark), warm slate neutrals, off-white text.
@@ -22,7 +22,7 @@ LANDING_HTML: str = r'''<!doctype html>
   --ink-950: #070B14;   /* deepest backdrop / behind cards     */
   --ink-900: #0A0F1C;   /* app background (top of gradient)    */
   --ink-850: #0B1220;   /* app background (bottom of gradient) */
-  --ink-800: #0F172A;   /* brand navy — hero / sidebar         */
+  --ink-800: #0F172A;   /* brand navy - hero / sidebar         */
   --ink-700: #111A2B;   /* panel / card surface                */
   --ink-600: #16213A;   /* raised panel / hover surface        */
   --ink-500: #1B2A44;   /* input wells, nested fills           */
@@ -36,7 +36,7 @@ LANDING_HTML: str = r'''<!doctype html>
   /* ---- Brand cyan (primary) ---- */
   --cyan-700: #0673a6;
   --cyan-600: #0894AE;
-  --cyan-500: #06B6D4;  /* PRIMARY — actions, links, focus     */
+  --cyan-500: #06B6D4;  /* PRIMARY - actions, links, focus     */
   --cyan-400: #22C7E0;  /* hover / bright accent               */
   --cyan-300: #6FE0EE;  /* highlight text on dark              */
   --cyan-100: #D1FBFB;  /* faint cyan text                     */
@@ -66,7 +66,7 @@ LANDING_HTML: str = r'''<!doctype html>
   --info:   #06B6D4;
 
   /* ============================================================
-     Semantic aliases — prefer these in components
+     Semantic aliases - prefer these in components
      ============================================================ */
   --bg-app:        var(--ink-900);
   --bg-app-2:      var(--ink-850);
@@ -101,7 +101,7 @@ LANDING_HTML: str = r'''<!doctype html>
 }
 
 /* ============================================================
-   jobContext — Typography tokens
+   jobContext - Typography tokens
    Space Grotesk for everything in the UI (brand sheet: "Clean.
    Modern. Developer friendly."). JetBrains Mono for terminal-style
    surfaces (Daily Digest, code, API tokens, the binary motif).
@@ -123,15 +123,15 @@ LANDING_HTML: str = r'''<!doctype html>
   --fw-extrabold:700; /* @kind font */
 
   /* ---- Type scale (rem, 16px base) ---- */
-  --fs-display: 2.75rem;  /* 44px — hero numerals / marketing  */
-  --fs-h1:      1.6rem;   /* 25.6px — page title               */
-  --fs-h2:      1.2rem;   /* 19.2px — section / card heading   */
-  --fs-h3:      1.0rem;   /* 16px — sub-heading                */
-  --fs-stat:    1.55rem;  /* 24.8px — stat-card big number     */
-  --fs-body:    0.95rem;  /* 15.2px — body / default UI text   */
-  --fs-sm:      0.85rem;  /* 13.6px — secondary / nav          */
-  --fs-xs:      0.78rem;  /* 12.5px — labels, chips            */
-  --fs-2xs:     0.7rem;   /* 11.2px — eyebrow / uppercase key  */
+  --fs-display: 2.75rem;  /* 44px - hero numerals / marketing  */
+  --fs-h1:      1.6rem;   /* 25.6px - page title               */
+  --fs-h2:      1.2rem;   /* 19.2px - section / card heading   */
+  --fs-h3:      1.0rem;   /* 16px - sub-heading                */
+  --fs-stat:    1.55rem;  /* 24.8px - stat-card big number     */
+  --fs-body:    0.95rem;  /* 15.2px - body / default UI text   */
+  --fs-sm:      0.85rem;  /* 13.6px - secondary / nav          */
+  --fs-xs:      0.78rem;  /* 12.5px - labels, chips            */
+  --fs-2xs:     0.7rem;   /* 11.2px - eyebrow / uppercase key  */
 
   /* ---- Line heights ---- */
   --lh-tight:  1.15; /* @kind font */
@@ -161,7 +161,7 @@ LANDING_HTML: str = r'''<!doctype html>
 }
 
 /* ============================================================
-   jobContext — Spacing, radius, shadow, motion tokens
+   jobContext - Spacing, radius, shadow, motion tokens
    ============================================================ */
 :root {
   /* ---- Spacing scale (4px base) ---- */
@@ -266,7 +266,7 @@ LANDING_HTML: str = r'''<!doctype html>
   .micro span { display: inline-flex; align-items: center; gap: 7px; }
   .micro svg { width: 15px; height: 15px; color: var(--green-500); }
 
-  /* hero visual — terminal card */
+  /* hero visual - terminal card */
   .term { background: var(--ink-950); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); overflow: hidden; }
   .term-bar { display: flex; align-items: center; gap: 7px; padding: 12px 15px; border-bottom: 1px solid var(--border-soft); background: var(--ink-900); }
   .term-bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
@@ -417,7 +417,7 @@ LANDING_HTML: str = r'''<!doctype html>
         <div class="g">&nbsp;</div>
         <div class="hl2">Done. I used your <span class="ok">master resume</span>, the</div>
         <div class="hl2">CVS assessment (<span class="ok">fitment 9/10</span>), and your</div>
-        <div class="hl2">platform-migration STAR story &mdash; no</div>
+        <div class="hl2">platform-migration STAR story - no</div>
         <div class="hl2">re-explaining needed.</div>
       </div>
     </div>
@@ -427,7 +427,7 @@ LANDING_HTML: str = r'''<!doctype html>
 <!-- ============ CLIENTS STRIP ============ -->
 <div class="strip">
   <div class="wrap strip-inner">
-    <span class="lbl">Plugs into your AI tools &mdash;</span>
+    <span class="lbl">Plugs into your AI tools -</span>
     <span class="name">Claude</span>
     <span class="name">GitHub Copilot</span>
     <span class="name">Cursor</span>
@@ -443,8 +443,8 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="problem">
       <div class="big">Every new AI chat starts from <span class="x">zero.</span></div>
       <div>
-        <p>You paste your resume again. Re-explain the role. Re-tell the same story about that migration project. The AI is brilliant and amnesiac &mdash; and your career is scattered across tabs, docs, and DMs.</p>
-        <p><b>jobContext is the memory.</b> Import once and your experience, applications, outreach, and interview notes stay in sync &mdash; ready for any assistant, any session.</p>
+        <p>You paste your resume again. Re-explain the role. Re-tell the same story about that migration project. The AI is brilliant and amnesiac - and your career is scattered across tabs, docs, and DMs.</p>
+        <p><b>jobContext is the memory.</b> Import once and your experience, applications, outreach, and interview notes stay in sync - ready for any assistant, any session.</p>
       </div>
     </div>
   </div>
@@ -456,7 +456,7 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="sec-head">
       <div class="sec-eyebrow">One source of truth</div>
       <h2>Your whole career, remembered</h2>
-      <p>Not a job-board. A structured memory of everything that makes you hireable &mdash; and everything you're doing about it.</p>
+      <p>Not a job-board. A structured memory of everything that makes you hireable - and everything you're doing about it.</p>
     </div>
     <div class="bento">
       <div class="feat">
@@ -487,7 +487,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l3-4 3 2 3-5 3 3"/><path d="M3 17h14"/></svg></div>
         <h3>Wellbeing</h3>
-        <p>A mood &amp; energy log with trend lines &mdash; the part of the search nobody tracks.</p>
+        <p>A mood &amp; energy log with trend lines - the part of the search nobody tracks.</p>
       </div>
       <div class="feat span2">
         <div class="txt">
@@ -524,12 +524,12 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar green">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div>
         <h3>You own your data</h3>
-        <p>Plain files and an open schema. Export anytime &mdash; no lock-in, ever.</p>
+        <p>Plain files and an open schema. Export anytime - no lock-in, ever.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></div>
         <h3>Works everywhere</h3>
-        <p>One MCP server, every client &mdash; Claude, Copilot, Cursor, Windsurf, Zed.</p>
+        <p>One MCP server, every client - Claude, Copilot, Cursor, Windsurf, Zed.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
@@ -558,7 +558,7 @@ LANDING_HTML: str = r'''<!doctype html>
       </div>
       <div class="step">
         <h3>Let your AI remember</h3>
-        <p>Every session now starts with full context &mdash; applications, stories, contacts, and all.</p>
+        <p>Every session now starts with full context - applications, stories, contacts, and all.</p>
       </div>
     </div>
   </div>
@@ -569,7 +569,7 @@ LANDING_HTML: str = r'''<!doctype html>
   <div class="wrap">
     <div class="cta-band">
       <h2>Give your AI a memory.</h2>
-      <p>Open-source, self-hosted, and free. Your career has context &mdash; your AI should too.</p>
+      <p>Open-source, self-hosted, and free. Your career has context - your AI should too.</p>
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="/login">Get started</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">Star on GitHub</a>

@@ -911,6 +911,31 @@ function renderBusy(){
     el.list.parentElement.insertBefore(node, el.list);
 }
 
+function effectiveResumeTemplateName(job){
+    return job.selected_resume || job.recommended_resume || ((state.resume_options || [])[0] || '');
+}
+
+function resumeTemplateSelectHtml(job){
+    const options = state.resume_options || [];
+    if(!options.length) return `<span class='hint'>No resume templates available.</span>`;
+    const selected = effectiveResumeTemplateName(job);
+    return `<select id='resume-select-${job.id}' class='resume-template-select'>
+      ${options.map(name => `<option value='${esc(name)}' ${name === selected ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+    </select>`;
+}
+
+function openResumeTemplatePreview(jobId){
+    const options = state.resume_options || [];
+    if(!options.length) return alert('No resume templates available to preview.');
+    const sel = document.getElementById(`resume-select-${jobId}`);
+    const name = sel ? sel.value : '';
+    if(!name) return alert('Please select a resume template to preview.');
+    if(name.includes('..') || name.includes('/') || name.includes('\\')) return alert('Invalid resume template name.');
+    if(!options.includes(name)) return alert('Selected resume template is no longer available.');
+    const href = `/dashboard/materials/file/resume_pdfs/${encodeURIComponent(name)}`;
+    window.open(href, '_blank', 'noopener,noreferrer');
+}
+
 async function action(jobId, type){
     const personaSel = document.getElementById(`persona-select-${jobId}`);
     const persona = personaSel ? personaSel.value : (state.default_persona || 'default');
@@ -919,7 +944,7 @@ async function action(jobId, type){
             setBusy(true, `Running assessment for job #${jobId}...`);
             await post('/dashboard/pipeline/evaluate', { job_id: jobId });
         }
-        if(type === 'select') {
+        if(type === 'save-template') {
             setBusy(true, `Saving selected resume for job #${jobId}...`);
             const sel = document.getElementById(`resume-select-${jobId}`);
             await post('/dashboard/pipeline/select-resume', { job_id: jobId, resume_name: sel ? sel.value : '' });
@@ -1017,6 +1042,14 @@ function render(){
         </div>
         <span class='status ${statusClass}'>${esc(j.status)}</span>
       </div>
+            <div class='detail'>
+                <strong>Resume template:</strong>
+                <div style='display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px'>
+                  ${resumeTemplateSelectHtml(j)}
+                  <button onclick='action(${j.id},"save-template")' aria-label="Save resume template for job ${j.id}">Save Template</button>
+                  <button onclick='openResumeTemplatePreview(${j.id})' aria-label="Preview resume template for job ${j.id}">Preview Template</button>
+                </div>
+            </div>
             <div class='detail'><strong>Assessment:</strong> ${j.assessed ? 'run' : 'not run yet'}</div>
             <div class='detail'><strong>Assessment summary:</strong> ${esc(j.assessment_summary || '')}</div>
             <details class='detail detail-box'>
@@ -1075,6 +1108,7 @@ load();
 .detail-box summary { cursor:pointer; color:#c8d8f4; font-weight:600; }
 .detail-box pre { margin:8px 0 0; white-space:pre-wrap; font: 0.82rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color:#b8c6df; }
 .btnrow { display:flex; flex-wrap: wrap; gap:8px; margin-top:10px; }
+.resume-template-select { min-width:240px; max-width:100%; background:#0a1120; border:1px solid #2a3a5e; border-radius:8px; padding:7px 9px; color:#e0e8ff; font-size:0.82rem; }
 button { background: var(--chip); border:1px solid var(--line); color: var(--text); border-radius: 8px; padding: 8px 10px; cursor:pointer; font-size: 0.82rem; }
 button:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
