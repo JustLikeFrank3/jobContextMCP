@@ -1347,6 +1347,8 @@ def preview_story_retrieval(role: str, job_description: str = "") -> str:
         path=config.PERSONAL_CONTEXT_FILE,
         token_budget=budgets["personal_context_token_budget"],
         max_stories=budgets["max_personal_stories"],
+        boost_tags=_COVER_LETTER_HOOK_TAGS,
+        semantic=True,
     )
     return diag.render()
 
