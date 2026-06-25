@@ -40,11 +40,28 @@ RUN curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/downlo
     && chmod +x /usr/local/bin/tectonic \
     && tectonic --version
 
+# Fixed, user-agnostic cache location for tectonic's LaTeX support bundle.
+# Set before the warm-up below so both build-time and runtime use the same dir
+# regardless of $HOME / the uid the container runs as.
+ENV TECTONIC_CACHE_DIR=/opt/tectonic-cache
+
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
 # Copy application source
 COPY . .
+
+# Pre-fetch tectonic's LaTeX support bundle at build time so the running
+# container never needs outbound network to relay.fullyjustified.net. Compiling
+# the warm-up letter (which \usepackage{TLCresume} + \input{_header}, mirroring
+# the real cover-letter template) caches every package it pulls into
+# TECTONIC_CACHE_DIR. This is the one build step that requires network; the
+# baked cache then makes runtime cover-letter generation fully offline-capable.
+RUN set -eux; \
+    cd templates/latex_assets; \
+    tectonic _warmup.tex; \
+    rm -f _warmup.pdf; \
+    chmod -R a+rX "$TECTONIC_CACHE_DIR"
 
 # Entrypoint selects server mode via START_MODE env var:
 #   START_MODE=mcp  (default) → python server.py       (Claude Desktop / MCP clients)
