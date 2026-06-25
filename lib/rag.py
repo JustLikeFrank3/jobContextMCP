@@ -275,7 +275,7 @@ def format_results(hits: list[dict], header: str = "Search Results") -> str:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "search":
         query = " ".join(sys.argv[2:])

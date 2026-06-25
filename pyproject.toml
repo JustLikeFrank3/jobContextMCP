@@ -12,6 +12,6 @@ omit    = ["tests/*", ".venv/*"]
 [tool.coverage.report]
 show_missing   = true
 skip_covered   = false
-# Current: 80% total. Biggest remaining gap is lib/rag.py (0% — no offline tests).
-# Add tests there for durable headroom before raising this gate further.
+# Current: ~82% total. Next-largest gaps: tools/latex_export.py (~48%),
+# tools/health.py (~49%), tools/resume.py (~55%). Raise this gate as they land.
 fail_under     = 80
