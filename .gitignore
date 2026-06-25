@@ -69,6 +69,7 @@ docs/jobContextMCP-FullDocs/02_monetization_strategy.md
 # Operator scripts — contain credentials, tenant-specific logic, and private tooling
 # docker-entrypoint.sh and migrate_to_sqlite.py are intentionally excluded: needed by Docker/tests
 scripts/invite_beta_tester.py
+scripts/send_update_email.py
 scripts/sync_data_from_azure.sh
 scripts/sync_data_from_production.sh
 scripts/upload_workspace.sh
