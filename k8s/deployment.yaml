@@ -82,6 +82,12 @@ spec:
             - name: ENABLE_REMOTE
               value: "true"
             # Required alongside ENABLE_REMOTE to disable the MCP SDK's
+            - name: SERVER_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: server_base_url
+                  optional: true
             # DNS rebinding check when running behind the AKS nginx ingress.
             - name: DISABLE_REBINDING_CHECK
               value: "true"
