@@ -453,10 +453,9 @@ def generate_resume_latex(
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
 
-        # Copy all files from the latex source dir into the temp workspace
-        for src_file in latex_src.iterdir():
-            if src_file.is_file():
-                shutil.copy2(src_file, tmp_path / src_file.name)
+        # Copy entire latex source dir tree (including sections/ subdirs) into
+        # the temp workspace so \input{sections/skills} and friends resolve.
+        shutil.copytree(str(latex_src), str(tmp_path), dirs_exist_ok=True)
 
         result = subprocess.run(
             [tectonic, str(tmp_path / "resume.tex")],
