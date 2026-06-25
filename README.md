@@ -4,9 +4,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
-  <img src="https://img.shields.io/badge/tests-924%20passing-brightgreen" alt="924 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-77.41%25-brightgreen" alt="77.41% coverage"/>
-  <img src="https://img.shields.io/badge/tools-78-informational" alt="78 MCP tools"/>
+  <img src="https://img.shields.io/badge/tests-931%20passing-brightgreen" alt="931 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-82.43%25-brightgreen" alt="82.43% coverage"/>
+  <img src="https://img.shields.io/badge/tools-80-informational" alt="80 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 <p align="center">
@@ -19,7 +19,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint PDF export, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 77 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 80 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -33,8 +33,8 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 
 | | |
 |---|---|
-| 78 MCP tools | Resume + cover letter generation |
-| 924 passing tests | Job fitment analysis with persona lenses |
+| 80 MCP tools | Resume + cover letter generation |
+| 931 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -168,7 +168,7 @@ graph TB
     PROV["User provisioning\nauto-create on first Entra login"]
   end
 
-  subgraph TOOLS["77 MCP / CLI tools"]
+  subgraph TOOLS["80 MCP / CLI tools"]
     CTX["Context + identity"]
     PIPE["Pipeline + queue + compensation"]
     DOCS["Resume + cover letter generation"]
@@ -603,7 +603,7 @@ brew install python@3.12
 
 # Smoke test: confirm the server imports cleanly and registers all tools
 .venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
-# Expected: OK, 77 tools
+# Expected: OK, 80 tools
 ```
 
 > ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.
@@ -687,7 +687,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 77 tools directly:
+`cli.py` is a first-class client. Invoke any of the 80 tools directly:
 
 ```bash
 # List all tools
@@ -946,7 +946,7 @@ In `.env`:
 MCP_MODE=local
 ```
 
-Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 77 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
+Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 80 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
 
 #### What's live vs. baked-in
 
