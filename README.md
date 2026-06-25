@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version 1.1.0"/>
+  <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
   <img src="https://img.shields.io/badge/tests-924%20passing-brightgreen" alt="924 tests passing"/>
   <img src="https://img.shields.io/badge/coverage-77.41%25-brightgreen" alt="77.41% coverage"/>
-  <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
+  <img src="https://img.shields.io/badge/tools-78-informational" alt="78 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 <p align="center">
@@ -33,7 +33,7 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 
 | | |
 |---|---|
-| 77 MCP tools | Resume + cover letter generation |
+| 78 MCP tools | Resume + cover letter generation |
 | 924 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
@@ -315,7 +315,8 @@ sequenceDiagram
 | `log_mental_health_checkin(mood, energy, ...)` | Log a mood/energy entry |
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
 | `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
-| `reindex_materials()` | **RAG** — (re)build the semantic search index |
+| `reindex_materials()` | **RAG** — (re)build the semantic search index for all materials AND the personal story library |
+| `reindex_stories()` | **RAG** — (re)build only the story semantic embedding index; run after adding stories via `log_personal_story()` or `ingest_anecdote()` to enable semantic cover letter retrieval |
 | `log_personal_story(story, tags, people?, title?)` | **v3** — log a personal story or memory for context-rich writing |
 | `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
 | `ingest_anecdote(story, tags, title?, people?, tone_sample?)` | **v5.2** — single-call bundler: logs to personal context, optionally ingests as tone sample (≥40 words), and reports STAR tag matches |
@@ -1252,7 +1253,13 @@ Then build the RAG index:
 
 This embeds all your materials using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` runs locally with no further API calls.
 
+To also enable **semantic story retrieval** in cover letter generation (so stories that share mission/brand language with a JD — but few literal keywords — score and surface correctly), call `reindex_stories()` once via your MCP client after the initial setup:
 
+```
+reindex_stories()
+```
+
+Re-run it whenever you add new stories via `log_personal_story()` or `ingest_anecdote()`. `reindex_materials()` calls both the materials indexer and `reindex_stories()` automatically.
 
 ---
 
@@ -1509,6 +1516,17 @@ Hardening, per-user API keys, refactor sprint, and coverage push. 860 passing, 8
 - **Cover letter templates** — matching 4-layout system for cover letters with the same theme support.
 - **Per-job template selection** — pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style`. A preview modal with live sandboxed iframe lets you pick format and theme before generating. Selection persists in SQLite per job.
 - **Generate now uses saved template/style** — fixed bug where the Generate Resume button ignored the saved selection and always output the legacy format.
+
+### v1.1.1 *(shipped)*
+
+Bug fixes and hardening. 924 passing, 77.41% coverage.
+
+- **Semantic story retrieval fully functional** — two root-cause bugs fixed: (1) no MCP tool previously could build the story embedding index (`preview_story_retrieval` could report `Semantic retrieval: on/off` but nothing in the deployed path could flip it on); new `reindex_stories()` tool exposes the index builder explicitly; (2) `_load_openai_key()` read from `config.json` on disk, which doesn't exist in AKS (`SQLITE_ONLY=1` mode) — the key lives in the user-context DB there; now tries `lib.config.get_config_value` first (same resolver as the materials indexer), with a file + env fallback. One call to `reindex_stories()` now builds the index and activates semantic retrieval for all subsequent cover letter generations.
+- **Story ID collision fix** — `_build_story_entry` used `len(stories) + 1` as the new story ID; any deletion or concurrent save could collide and silently overwrite an existing story via SQLite `ON CONFLICT DO UPDATE`; fixed to `max(existing_ids) + 1`.
+- **401 auto-redirect** — dashboard pages had no client-side handler for expired sessions; added a global `window.fetch` interceptor in `shared.py` so any 401 response redirects to `/` immediately, across all 9 dashboard pages in one change.
+- **`/why` marketing page** — public route at `GET /why`; self-contained, no auth required; nav link added to landing page and a pill link on the dashboard (opens in new tab).
+- **Template bullet rendering** — standardized all resume template bullet characters to `\2022` (•); prior choices (`\2023`, `\25A0`, `\25B8`) render as empty boxes in WeasyPrint's default font stack.
+- **`scripts/` gitignore hardening** — `docker-entrypoint.sh` and `migrate_to_sqlite.py` are now tracked; unblocks Docker builds (`chmod` in Dockerfile stage 7) and test imports (`scripts.migrate_to_sqlite._SCHEMA`).
 
 ### v1.x planned
 
