@@ -312,7 +312,55 @@ def export_cover_letter_latex(
     return f"✓ PDF exported (LaTeX): {pdf}"
 
 
+def export_resume_latex(
+    company: str,
+    role: str,
+    resume_text: str = "",
+    output_filename: str = "",
+    role_title: str = "Full Stack Software Engineer",
+) -> str:
+    """Pipeline A — LaTeX resume export (tectonic).
+
+    Compiles a ``resume.tex`` from the configured ``latex_resume_dir`` as-is
+    ("compile what's there") and copies the PDF to the workspace resume folder.
+
+    NOTE: unlike export_cover_letter_latex, this pipeline does NOT inject text
+    and has NO bundled-asset fallback. It requires ``latex_resume_dir`` to be
+    set in config and to contain a ``resume.tex`` source file; otherwise it
+    returns an error string. The legacy/portable path is export_resume_pdf
+    (HTML/weasyprint), which works without a LaTeX engine or .tex source.
+
+    Args:
+        company:         Target company (used in the output filename).
+        role:            Target role (used in the output filename).
+        resume_text:     Reserved — not injected by this pipeline (the .tex
+                         source governs layout). Accepted for API symmetry.
+        output_filename: Override the output PDF filename. Defaults to
+                         resume_{company}_{role}_{YYYYMMDD}.pdf.
+        role_title:      Reserved for a future \\def\\role injection.
+
+    Returns:
+        Path to the generated PDF, or an error string.
+    """
+    from tools.latex_export import generate_resume_latex
+
+    try:
+        pdf = generate_resume_latex(
+            resume_text=resume_text,
+            company=company,
+            role=role,
+            role_title=role_title,
+            output_filename=output_filename,
+        )
+    except FileNotFoundError as exc:
+        return f"Error: {exc}"
+    except Exception as exc:  # noqa: BLE001 — surface the compile error to the caller
+        return f"⚠ LaTeX resume export failed: {exc}"
+    return f"✓ PDF exported (LaTeX): {pdf}"
+
+
 def register(mcp) -> None:
     mcp.tool()(export_resume_pdf)
     mcp.tool()(export_cover_letter_pdf)
     mcp.tool()(export_cover_letter_latex)
+    mcp.tool()(export_resume_latex)
