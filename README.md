@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
   <img src="https://img.shields.io/badge/tests-931%20passing-brightgreen" alt="931 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-82.43%25-brightgreen" alt="82.43% coverage"/>
+  <img src="https://img.shields.io/badge/coverage-82.46%25-brightgreen" alt="82.46% coverage"/>
   <img src="https://img.shields.io/badge/tools-80-informational" alt="80 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
