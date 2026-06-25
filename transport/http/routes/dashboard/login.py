@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from transport.http.security import EntraAuthProvider, get_auth_provider
 
 _SERVER_BASE = os.environ.get(
-    "SERVER_BASE_URL", "https://jobcontextmcp.eastus.cloudapp.azure.com"
+    "SERVER_BASE_URL", "https://app.jobcontext.ai"
 )
 
 router = APIRouter()
