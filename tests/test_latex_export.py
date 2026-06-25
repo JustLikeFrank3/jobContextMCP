@@ -140,3 +140,31 @@ def test_export_cover_letter_latex_tool_extracts_body_from_full_letter(monkeypat
 def test_export_cover_letter_latex_tool_requires_body_or_filename():
     msg = export.export_cover_letter_latex(company="Acme", role="SWE")
     assert msg.startswith("Error:")
+
+
+def test_export_resume_latex_tool_success(monkeypatch):
+    """The resume MCP tool returns the compiled PDF path on success."""
+    def fake_generate(*, resume_text, company, role, role_title, output_filename):
+        assert company == "Equifax" and role == "Senior Applied AI Engineer"
+        return Path("/tmp/03-Resume-PDFs/resume_Equifax.pdf")
+
+    monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
+
+    result = export.export_resume_latex(
+        company="Equifax", role="Senior Applied AI Engineer",
+    )
+    assert "PDF exported (LaTeX)" in result
+    assert "resume_Equifax.pdf" in result
+
+
+def test_export_resume_latex_tool_surfaces_unconfigured_dir(monkeypatch):
+    """When latex_resume_dir / resume.tex is missing, the tool returns a clear
+    error string rather than raising."""
+    def fake_generate(**kwargs):
+        raise FileNotFoundError("latex_resume_dir is not set or does not exist in config.json.")
+
+    monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
+
+    msg = export.export_resume_latex(company="Acme", role="SWE")
+    assert msg.startswith("Error:")
+    assert "latex_resume_dir" in msg

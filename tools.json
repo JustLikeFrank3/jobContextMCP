@@ -75,6 +75,16 @@
     ]
   },
   {
+    "name": "export_resume_latex",
+    "parameters": [
+      "company",
+      "role",
+      "resume_text",
+      "output_filename",
+      "role_title"
+    ]
+  },
+  {
     "name": "generate_cover_letter",
     "parameters": [
       "company",
