@@ -235,6 +235,84 @@ def export_cover_letter_pdf(
     return f"✓ PDF exported: {out}"
 
 
+def export_cover_letter_latex(
+    company: str,
+    role: str,
+    body: str = "",
+    filename: str = "",
+    role_title: str = "Full Stack Software Engineer",
+    letter_date: str = "",
+) -> str:
+    """Pipeline A — LaTeX cover letter export (tectonic, with pdflatex fallback).
+
+    Compiles a cover letter to PDF using the TLCresume LaTeX template, producing
+    output identical to the manually-compiled frank-resume-latex versions. This
+    is the PRIMARY cover-letter pipeline; export_cover_letter_pdf is the
+    HTML/weasyprint fallback for environments without a LaTeX engine.
+
+    Provide the letter text one of two ways:
+      - body:     Paste the cover-letter text directly. The template supplies its
+                  own salutation ("Dear Hiring Manager,") and sign-off, so a full
+                  letter is fine — the prose body is extracted automatically (any
+                  leading contact header, "Dear ..." line, and closing block are
+                  stripped). Takes precedence over filename.
+      - filename: Name of a saved .txt in the active cover-letters folder (with
+                  or without .txt). Used when body is empty.
+
+    Args:
+        company:     Target company (used in the letter and output filename).
+        role:        Target role (used in the output filename).
+        body:        Cover-letter text. Takes precedence over filename.
+        filename:    Saved .txt to read when body is empty.
+        role_title:  Title printed under the name in the letterhead
+                     (e.g. "Senior Applied AI Engineer"). Default: Full Stack
+                     Software Engineer.
+        letter_date: Right-aligned date under the letterhead. Defaults to today.
+
+    Returns:
+        Path to the generated PDF, or an error string.
+    """
+    from tools.latex_export import generate_cover_letter_latex
+    from tools.generate import _extract_cover_letter_body
+
+    raw = body
+    if not raw.strip():
+        if not filename:
+            return "Error: provide either body text or a filename from the cover-letters folder."
+        cl_dir = config.get_active_cover_letters_dir()
+        if not filename.endswith(".txt"):
+            filename += ".txt"
+        source = cl_dir / filename
+        if not source.exists():
+            matches = list(cl_dir.glob(f"*{pathlib.Path(filename).stem}*"))
+            if not matches:
+                return f"Error: file not found — {filename}"
+            source = matches[0]
+        try:
+            raw = source.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raw = source.read_text(encoding="latin-1")
+
+    # Strip salutation/header/sign-off so they aren't duplicated by the template.
+    # Fall back to the raw text if the draft is already just the body paragraphs.
+    letter_body = _extract_cover_letter_body(raw) or raw.strip()
+    if not letter_body.strip():
+        return "Error: could not extract a cover-letter body from the provided text."
+
+    try:
+        pdf = generate_cover_letter_latex(
+            body=letter_body,
+            company=company,
+            role=role,
+            role_title=role_title,
+            letter_date=letter_date,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface the compile error to the caller
+        return f"⚠ LaTeX export failed: {exc}"
+    return f"✓ PDF exported (LaTeX): {pdf}"
+
+
 def register(mcp) -> None:
     mcp.tool()(export_resume_pdf)
     mcp.tool()(export_cover_letter_pdf)
+    mcp.tool()(export_cover_letter_latex)

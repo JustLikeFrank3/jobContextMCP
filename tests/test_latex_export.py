@@ -1,6 +1,8 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from tools import latex_export
+from tools import export
 
 
 def test_latex_cover_letter_template_owns_date_and_signature():
@@ -100,3 +102,41 @@ def test_latex_cover_letter_uses_bundled_support_files_when_workspace_missing(mo
 
     assert out.parent.name == "09-Cover-Letter-PDFs"
     assert out.exists()
+
+def test_export_cover_letter_latex_tool_extracts_body_from_full_letter(monkeypatch):
+    """The MCP tool accepts a pasted full letter and passes only the prose body
+    to the LaTeX pipeline (salutation, leading header, and sign-off stripped)."""
+    captured = {}
+
+    def fake_generate(*, body, company, role, role_title, letter_date):
+        captured.update(body=body, company=company, role=role, role_title=role_title)
+        return Path("/tmp/09-Cover-Letter-PDFs/cover_letter_Equifax.pdf")
+
+    monkeypatch.setattr(latex_export, "generate_cover_letter_latex", fake_generate)
+
+    full_letter = (
+        "FRANK VLADMIR MACBRIDE III\n"
+        "Email: frankvmacbride@gmail.com\n\n"
+        "Dear Hiring Manager,\n\n"
+        "I keep the systems boring in production.\n\n"
+        "I own the whole stack end to end.\n\n"
+        "Kindest Regards,\nFrank Vladmir MacBride III"
+    )
+
+    result = export.export_cover_letter_latex(
+        company="Equifax", role="Senior Applied AI Engineer",
+        body=full_letter, role_title="Senior Applied AI Engineer",
+    )
+
+    assert "PDF exported (LaTeX)" in result
+    assert captured["role_title"] == "Senior Applied AI Engineer"
+    # Body must be the prose only — no salutation, header email, or sign-off.
+    assert "boring in production" in captured["body"]
+    assert "Dear Hiring Manager" not in captured["body"]
+    assert "frankvmacbride@gmail.com" not in captured["body"]
+    assert "Kindest Regards" not in captured["body"]
+
+
+def test_export_cover_letter_latex_tool_requires_body_or_filename():
+    msg = export.export_cover_letter_latex(company="Acme", role="SWE")
+    assert msg.startswith("Error:")
