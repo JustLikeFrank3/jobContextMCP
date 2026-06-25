@@ -46,6 +46,46 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
+  badges:
+    needs: test
+    # Only on direct pushes to long-lived branches — never on PRs or manual runs,
+    # and skip the commit the bot itself pushes (guarded by [skip ci] below).
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Measure suite (full, including mocked live_llm)
+        run: pytest --cov --cov-report=xml --junitxml=junit.xml -q
+
+      - name: Regenerate README badges
+        run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md
+
+      - name: Commit badge changes if any
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README badges already current — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: auto-update README badges [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
   sonar:
     needs: test
     runs-on: ubuntu-latest
