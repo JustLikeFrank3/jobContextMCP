@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/branding/banner/jobcontextmcp-readme.svg" alt="jobContext — The memory layer for your career" width="860"/>
+  <img src="docs/branding/banner/banner.svg" alt="jobContext — The memory layer for your career" width="860"/>
 </p>
 
 <p align="center">

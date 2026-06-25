@@ -396,7 +396,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
         <a class="btn btn-ghost btn-lg" href="/why">Why should I use this?</a>
-        <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
+        <a class="btn btn-primary btn-lg" href="/login">Get started, it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
       <div class="micro">
@@ -421,7 +421,7 @@ LANDING_HTML: str = r'''<!doctype html>
         <div class="g">&nbsp;</div>
         <div class="hl2">Done. I used your <span class="ok">master resume</span>, the</div>
         <div class="hl2">CVS assessment (<span class="ok">fitment 9/10</span>), and your</div>
-        <div class="hl2">platform-migration STAR story &mdash; no</div>
+        <div class="hl2">platform-migration STAR story. No</div>
         <div class="hl2">re-explaining needed.</div>
       </div>
     </div>
@@ -431,7 +431,7 @@ LANDING_HTML: str = r'''<!doctype html>
 <!-- ============ CLIENTS STRIP ============ -->
 <div class="strip">
   <div class="wrap strip-inner">
-    <span class="lbl">Plugs into your AI tools &mdash;</span>
+    <span class="lbl">Plugs into your AI tools:</span>
     <span class="name">Claude</span>
     <span class="name">GitHub Copilot</span>
     <span class="name">Cursor</span>
@@ -447,8 +447,8 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="problem">
       <div class="big">Every new AI chat starts from <span class="x">zero.</span></div>
       <div>
-        <p>You paste your resume again. Re-explain the role. Re-tell the same story about that migration project. The AI is brilliant and amnesiac &mdash; and your career is scattered across tabs, docs, and DMs.</p>
-        <p><b>jobContext is the memory.</b> Import once and your experience, applications, outreach, and interview notes stay in sync &mdash; ready for any assistant, any session.</p>
+        <p>You paste your resume again. Re-explain the role. Re-tell the same story about that migration project. The AI is brilliant and amnesiac, and your career is scattered across tabs, docs, and DMs.</p>
+        <p><b>jobContext is the memory.</b> Import once and your experience, applications, outreach, and interview notes stay in sync, ready for any assistant, any session.</p>
       </div>
     </div>
   </div>
@@ -460,7 +460,7 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="sec-head">
       <div class="sec-eyebrow">One source of truth</div>
       <h2>Your whole career, remembered</h2>
-      <p>Not a job-board. A structured memory of everything that makes you hireable &mdash; and everything you're doing about it.</p>
+      <p>Not a job-board. A structured memory of everything that makes you hireable, and everything you're doing about it.</p>
     </div>
     <div class="bento">
       <div class="feat">
@@ -491,7 +491,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l3-4 3 2 3-5 3 3"/><path d="M3 17h14"/></svg></div>
         <h3>Wellbeing</h3>
-        <p>A mood &amp; energy log with trend lines &mdash; the part of the search nobody tracks.</p>
+        <p>A mood &amp; energy log with trend lines. The part of the search nobody tracks.</p>
       </div>
       <div class="feat span2">
         <div class="txt">
@@ -528,12 +528,12 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar green">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div>
         <h3>You own your data</h3>
-        <p>Plain files and an open schema. Export anytime &mdash; no lock-in, ever.</p>
+        <p>Plain files and an open schema. Export anytime. No lock-in, ever.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></div>
         <h3>Works everywhere</h3>
-        <p>One MCP server, every client &mdash; Claude, Copilot, Cursor, Windsurf, Zed.</p>
+        <p>One MCP server, every client: Claude, Copilot, Cursor, Windsurf, Zed.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
@@ -562,7 +562,7 @@ LANDING_HTML: str = r'''<!doctype html>
       </div>
       <div class="step">
         <h3>Let your AI remember</h3>
-        <p>Every session now starts with full context &mdash; applications, stories, contacts, and all.</p>
+        <p>Every session now starts with full context: applications, stories, contacts, and all.</p>
       </div>
     </div>
   </div>
@@ -573,7 +573,7 @@ LANDING_HTML: str = r'''<!doctype html>
   <div class="wrap">
     <div class="cta-band">
       <h2>Give your AI a memory.</h2>
-      <p>Open-source, self-hosted, and free. Your career has context &mdash; your AI should too.</p>
+      <p>Open-source, self-hosted, and free. Your career has context. Your AI should too.</p>
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="/login">Get started</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">Star on GitHub</a>
