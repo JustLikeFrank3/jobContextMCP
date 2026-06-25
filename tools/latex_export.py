@@ -431,7 +431,7 @@ def generate_resume_latex(
 
     # Determine output directory
     if output_dir is None:
-        final_output_dir = cfg.RESUME_FOLDER
+        final_output_dir = cfg.get_active_workspace_folder()
     else:
         final_output_dir = Path(output_dir)
     final_output_dir.mkdir(parents=True, exist_ok=True)
