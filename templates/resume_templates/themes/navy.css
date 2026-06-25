@@ -1,0 +1,15 @@
+/* Navy theme — deep professional blue */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --accent-mid:   #26487a;
+  --accent-dark:  #0f1e35;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}

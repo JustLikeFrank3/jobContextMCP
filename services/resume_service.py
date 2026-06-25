@@ -63,6 +63,10 @@ class ResumeService:
         export_pipeline: str = "html",
         persona: Optional[str] = None,
         selected_resume: Optional[str] = None,
+        resume_template: str = "",
+        resume_style: str = "navy",
+        cl_template: str = "",
+        cl_style: str = "navy",
         on_progress: Optional[ProgressCallback] = None,
     ) -> ResumeResult:
         """Generate a tailored resume or cover letter end-to-end.
@@ -115,7 +119,7 @@ class ResumeService:
         )
 
         if kind == "resume":
-            content = _generate.generate_resume(company, role, jd_with_persona, output_filename)
+            content = _generate.generate_resume(company, role, jd_with_persona, output_filename, template=resume_template, style=resume_style)
         else:
             # The cover-letter header title tracks the assessment's resume
             # recommendation: the MODERN/AI resume variant earns the "AI"
@@ -132,6 +136,8 @@ class ResumeService:
                 output_filename,
                 export_pipeline=export_pipeline,
                 role_title=role_title,
+                cl_template=cl_template,
+                cl_style=cl_style,
             )
 
         # The tool returns a "✓ ..." confirmation string when it ran the full
@@ -162,6 +168,8 @@ class ResumeService:
     def export_existing(
         filename: str,
         kind: str = "resume",
+        resume_template: str = "",
+        resume_style: str = "navy",
         on_progress: Optional[ProgressCallback] = None,
     ) -> str:
         """Export an already-saved .txt file to PDF.
@@ -170,9 +178,11 @@ class ResumeService:
         context-package flow) and now wants the PDF rendered.
 
         Args:
-            filename: The .txt filename in the appropriate folder.
-            kind:     "resume" or "cover_letter".
-            on_progress: Optional progress callback.
+            filename:        The .txt filename in the appropriate folder.
+            kind:            "resume" or "cover_letter".
+            resume_template: Visual layout template (for resumes only).
+            resume_style:    Color theme (for resumes only).
+            on_progress:     Optional progress callback.
 
         Returns:
             The result string from the underlying export tool.
@@ -183,9 +193,9 @@ class ResumeService:
         _emit(on_progress, "exporting", f"Exporting {kind} {filename} to PDF")
 
         if kind == "resume":
-            result = _export.export_resume_pdf(filename)
+            result = _export.export_resume_pdf(filename, template=resume_template, style=resume_style or "navy")
         else:
-            result = _export.export_cover_letter_pdf(filename)
+            result = _export.export_cover_letter_pdf(filename, template=resume_template, style=resume_style or "navy")
 
         _emit(on_progress, "complete", f"{kind} PDF export finished")
         return result

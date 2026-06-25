@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Cover Letter — Modern</title>
+<style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
+@page {
+    size: letter;
+    margin: 0.50in 0.55in 0.50in 0.55in;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Calibri, 'Segoe UI', 'Trebuchet MS', Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.45;
+}
+
+/* ── HEADER ─────────────────────────────────────── */
+.header {
+    border-bottom: 2px solid var(--rule);
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+}
+
+.header-name {
+    font-size: 22pt;
+    font-weight: bold;
+    color: var(--heading);
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+}
+
+.header-contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 18px;
+    margin-top: 5px;
+    font-size: 8.8pt;
+    color: #444;
+}
+
+.header-contact a { color: var(--link); text-decoration: none; }
+
+/* ── LETTER BODY ─────────────────────────────────── */
+.letter-body p {
+    margin-bottom: 9pt;
+}
+
+.letter-body p:last-child {
+    margin-bottom: 0;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-name">{% set full_name = [name_line1, name_line2, name_last, name_suffix] | select('ne', '') | join(' ') %}{{ full_name }}</div>
+    <div class="header-contact">
+        {% if contact.email %}<span>{{ contact.email }}</span>{% endif %}
+        {% if contact.phone %}<span>{{ contact.phone }}</span>{% endif %}
+        {% if contact.linkedin %}<span>{{ contact.linkedin }}</span>{% endif %}
+        {% if contact.github %}<span>{{ contact.github }}</span>{% endif %}
+        {% if contact.city_state %}<span>{{ contact.city_state }}</span>{% endif %}
+    </div>
+</div>
+
+<div class="letter-body">
+    {% for para in paragraphs %}
+    {% if para == para | upper and para | length < 60 %}
+    <p><strong>{{ para }}</strong></p>
+    {% else %}
+    <p>{{ para }}</p>
+    {% endif %}
+    {% endfor %}
+</div>
+
+</body>
+</html>

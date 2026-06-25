@@ -6,6 +6,38 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.1.0] - 2026-06-24
+
+Multi-template document generation: 4 resume layouts x 5 color themes = 20 resume variants, plus a matching 4-layout cover letter system. Template selection is per-job in the pipeline. 924 passing tests.
+
+### Features
+
+- **Resume template system** (`lib/template_loader.py`) -- 4 HTML/CSS layout templates: Modern (single-column, ATS-friendly), Executive (serif, leadership-oriented), Sidebar (two-column dark panel), Portfolio (projects-first). All consume the exact same resume data model; no data-structure changes.
+- **5 color themes** (`templates/resume_templates/themes/`) -- Navy, Slate, Forest, Warm, Classic. Injected as a `<style>` block at render time via CSS custom properties (`--accent`, `--heading`, `--sidebar-bg`, etc.); templates use navy as `:root` defaults and themes override them.
+- **Cover letter template system** -- matching 4-layout templates under `templates/cover_letter_templates/` (Modern, Executive, Sidebar, Portfolio) with the same theme injection mechanism.
+- **Per-job template selection** -- pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style` per job. Selection modal in the pipeline has a Resume/Cover Letter toggle, a format row (4 buttons), and 5 color swatches. Saved selection persists in SQLite via DB migrations v2 (resume) and v3 (CL).
+- **Template preview endpoint** -- `GET /pipeline/preview-template/{template}/{style}` and `GET /pipeline/preview-cl/{template}/{style}` render a live sandboxed iframe preview in the modal; falls back to built-in sample data when no real resume/CL file is present.
+- **`render_resume()` / `render_cover_letter()` API** -- `lib/template_loader.py` exposes `render_resume(resume_data, template, style)` and `render_cover_letter(cl_data, template, style)` for direct rendering, plus `render_resume_to_pdf()` / `render_cover_letter_to_pdf()` for WeasyPrint export.
+
+### Bug fixes
+
+- **Generate Resume now uses saved template/style** -- `tools/generate.py` `generate_resume()` previously called `export_resume_pdf()` with no template/style even when a selection was saved; fixed by threading `template` + `style` all the way from `pipeline_generate_resume` through `ResumeService.generate()` to `export_resume_pdf()`.
+- **Edit Resume PDF export now uses saved template/style** -- `pipeline_edit_resume` was also exporting with the legacy template; fixed.
+- **Cover letter draft HTML export now uses saved CL template/style** -- `_export_cover_letter_draft_html` now accepts and passes `cl_template` / `cl_style`.
+
+### Schema migrations
+
+- Migration v2: `resume_template TEXT`, `resume_style TEXT` columns added to `job_queue`.
+- Migration v3: `cl_template TEXT`, `cl_style TEXT` columns added to `job_queue`.
+- Defensive column access in `_load_job_queue` handles databases that predate the migrations.
+
+### Tests
+
+- 924 passing (up from 860 at v1.0.1); 17 skipped.
+- Two test mocks updated to accept `**kwargs` after `export_resume_pdf` signature change.
+
+---
+
 ## [1.0.1] - 2026-06-22
 
 Multi-tenant hardening, per-user API keys, refactor sprint, and coverage push. 860 passing tests, 82.25% coverage.

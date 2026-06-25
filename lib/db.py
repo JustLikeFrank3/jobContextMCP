@@ -139,14 +139,23 @@ _MIGRATIONS = [
         created_at   TEXT    NOT NULL,
         last_used_at TEXT
     )""",
+    # v2 — resume template + style selection per job card
+    "ALTER TABLE job_queue ADD COLUMN resume_template TEXT",
+    "ALTER TABLE job_queue ADD COLUMN resume_style TEXT",
+    # v3 — cover letter template + style selection per job card
+    "ALTER TABLE job_queue ADD COLUMN cl_template TEXT",
+    "ALTER TABLE job_queue ADD COLUMN cl_style TEXT",
 ]
 
 
-def _apply_migrations(con: sqlite3.Connection) -> None:
+def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
     """Run any _MIGRATIONS statements that haven't been applied yet.
 
     Uses a simple applied_migrations table as a version ledger.
     Idempotent — safe to call on every connection open.
+
+    When *is_global* is True, only migrations that are safe for the global DB
+    (i.e. don't reference per-user tables like job_queue) are applied.
     """
     con.execute(
         "CREATE TABLE IF NOT EXISTS applied_migrations "
@@ -155,6 +164,12 @@ def _apply_migrations(con: sqlite3.Connection) -> None:
     applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
     for i, sql in enumerate(_MIGRATIONS):
         if i >= applied:
+            # Skip per-user table migrations when running on the global DB
+            if is_global and ("job_queue" in sql or "ALTER TABLE" in sql):
+                con.execute(
+                    "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
+                )
+                continue
             con.execute(sql)
             con.execute(
                 "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
@@ -163,7 +178,7 @@ def _apply_migrations(con: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, None, None]:
+def get_connection(path: Path | None = None, is_global: bool = False) -> Generator[sqlite3.Connection, None, None]:
     """
     Yield an open sqlite3 Connection with WAL mode and foreign keys enabled.
 
@@ -171,9 +186,11 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
 
     Parameters
     ----------
-    path : override the default db_path() — useful for tests pointing at data_dev/.
-           When omitted, the per-request user context (lib.user_context) is
-           checked first, then db_path() is used as the final fallback.
+    path      : override the default db_path() — useful for tests pointing at data_dev/.
+                When omitted, the per-request user context (lib.user_context) is
+                checked first, then db_path() is used as the final fallback.
+    is_global : when True, skip per-user table migrations (e.g. ALTER TABLE job_queue)
+                that don't exist in the shared global DB.
     """
     if path is not None:
         resolved = path
@@ -188,7 +205,7 @@ def get_connection(path: Path | None = None) -> Generator[sqlite3.Connection, No
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA journal_mode = WAL")
     # Apply any pending schema migrations (idempotent, cheap when up to date).
-    _apply_migrations(con)
+    _apply_migrations(con, is_global=is_global)
     try:
         yield con
         con.commit()

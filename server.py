@@ -221,6 +221,7 @@ scan_materials_for_tone = tone.scan_materials_for_tone
 
 search_materials = rag.search_materials
 reindex_materials = rag.reindex_materials
+reindex_stories = rag.reindex_stories
 
 get_star_story_context = star.get_star_story_context
 
@@ -228,6 +229,8 @@ draft_outreach_message = outreach.draft_outreach_message
 
 export_resume_pdf = export.export_resume_pdf
 export_cover_letter_pdf = export.export_cover_letter_pdf
+export_cover_letter_latex = export.export_cover_letter_latex
+export_resume_latex = export.export_resume_latex
 
 generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter

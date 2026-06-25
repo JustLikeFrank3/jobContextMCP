@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
 from lib import config
 from lib.io import _load_json, _load_master_context, _now, _save_json
@@ -80,6 +81,10 @@ def _pipeline_payload() -> dict:
             "suggested_edit_resume": _suggest_optimized_resume_for_job(j, optimized_resume_options),
             "last_edited_cover_letter": j.get("last_edited_cover_letter") or "",
             "suggested_edit_cover_letter": _suggest_cover_letter_for_job(j, cover_letter_options),
+            "resume_template": j.get("resume_template") or "",
+            "resume_style": j.get("resume_style") or "",
+            "cl_template": j.get("cl_template") or "",
+            "cl_style": j.get("cl_style") or "",
         })
 
     return {
@@ -139,6 +144,8 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
         output_filename=req.output_filename,
         kind="resume",
         persona=req.persona,
+        resume_template=job.get("resume_template") or "",
+        resume_style=job.get("resume_style") or "navy",
     )
     return JSONResponse({
         "ok": result.success,
@@ -173,6 +180,8 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
         export_pipeline=req.export_pipeline,
         persona=req.persona,
         selected_resume=selected,
+        cl_template=job.get("cl_template") or "",
+        cl_style=job.get("cl_style") or "navy",
     )
     return JSONResponse({
         "ok": result.success,
@@ -262,7 +271,11 @@ async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
     save_result = save_resume_txt(output_name, edited)
     pdf_result = ""
     if req.export_pdf:
-        pdf_result = export_resume_pdf(output_name)
+        pdf_result = export_resume_pdf(
+            output_name,
+            template=job.get("resume_template") or "",
+            style=job.get("resume_style") or "navy",
+        )
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_resume": output_name}))
 
@@ -309,7 +322,7 @@ async def pipeline_cover_letter_draft(draft_name: str) -> FileResponse:
     return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
 
 
-def _export_cover_letter_draft_html(draft_path: Path, role: str) -> str:
+def _export_cover_letter_draft_html(draft_path: Path, role: str, cl_template: str = "", cl_style: str = "navy") -> str:
     """Export a transient .tmp draft through the existing HTML exporter."""
     temp_txt = draft_path.with_name(f"{draft_path.name}.txt")
     try:
@@ -318,6 +331,8 @@ def _export_cover_letter_draft_html(draft_path: Path, role: str) -> str:
             temp_txt.name,
             output_filename=f"{draft_path.stem}.pdf",
             footer_tag=(role or "SOFTWARE ENGINEER").upper(),
+            template=cl_template,
+            style=cl_style or "navy",
         )
     finally:
         temp_txt.unlink(missing_ok=True)
@@ -381,7 +396,11 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
             pdf_result = f"✓ PDF exported: {pdf_path}"
             pdf_href = _material_href_for_pdf(pdf_path)
         else:
-            pdf_result = _export_cover_letter_draft_html(draft_path, job.get("role", ""))
+            pdf_result = _export_cover_letter_draft_html(
+                draft_path, job.get("role", ""),
+                cl_template=job.get("cl_template") or "",
+                cl_style=job.get("cl_style") or "navy",
+            )
             pdf_href = _material_href_for_pdf(_pdf_path_from_export_result(pdf_result))
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_cover_letter": source.name}))
@@ -514,6 +533,224 @@ async def pipeline_remove(req: _JobActionRequest) -> JSONResponse:
     data["jobs"] = jobs
     _save_json(config.JOB_QUEUE_FILE, data)
     return JSONResponse({"ok": True, "removed_job_id": req.job_id})
+
+
+_PREVIEW_FALLBACK_DATA: dict = {
+    "name": "Your Name",
+    "tagline": "Senior Software Engineer",
+    "contact": {
+        "phone": "555-000-0000",
+        "email": "you@example.com",
+        "linkedin": "linkedin.com/in/yourname",
+        "github": "github.com/yourname",
+        "location": "Atlanta, GA",
+        "city_state": "Atlanta, GA",
+        "address": "",
+    },
+    "synopsis": (
+        "Experienced software engineer with 6+ years building high-throughput distributed systems, "
+        "modernizing Java 8 monoliths to cloud-native microservices, and driving AI tool adoption "
+        "across engineering organizations. Strong track record of 98% SLA and 80%+ test coverage."
+    ),
+    "sections": [
+        {
+            "type": "skills", "title": "TECHNICAL SKILLS",
+            "items": [
+                {"label": "Languages", "value": "Java (8–21), Python, TypeScript, SQL"},
+                {"label": "Frameworks", "value": "Spring Boot, FastAPI, Angular 6–18"},
+                {"label": "Cloud / DevOps", "value": "Azure Container Apps, Docker, Kubernetes, Terraform"},
+                {"label": "AI / ML Tooling", "value": "LangGraph, LangChain, OpenAI API, agentic pipelines"},
+            ],
+        },
+        {
+            "type": "experience", "title": "EXPERIENCE",
+            "jobs": [
+                {
+                    "title": "Software Engineer — Level 6",
+                    "company": "General Motors",
+                    "dates": "January 2022 – December 2025",
+                    "groups": [],
+                    "bullets": [
+                        "Modernized 500K+ LOC Java 8 legacy platform to Java 21 / Spring Boot 3.5, achieving 98% SLA.",
+                        "Architected event-driven microservice mesh on Azure Container Apps; reduced deploy time by 40%.",
+                        "Led org-wide AI tool adoption initiative — drove 35%+ usage across 80-person engineering org.",
+                        "Maintained 80%+ test coverage across all owned services via JUnit 5 / Mockito / Testcontainers.",
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "projects", "title": "PERSONAL PROJECTS",
+            "projects": [
+                {
+                    "name": "jobContextMCP — AI-powered job search platform",
+                    "bullets": [
+                        "MCP server exposing 40+ tools for resume generation, fitment analysis, and outreach drafting.",
+                        "Agentic pipeline built with LangGraph; renders PDF resumes via WeasyPrint template system.",
+                        "FastAPI dashboard with real-time SSE streaming and multi-tenant auth via Microsoft Entra ID.",
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "education", "title": "EDUCATION",
+            "degree": "B.S. Internet of Things Engineering",
+            "school": "Florida International University, Miami, FL",
+            "details": ["GPA: 3.85 — Magna Cum Laude"],
+            "coursework": "Cloud Computing, Algorithms, Systems Design, Embedded Systems",
+        },
+        {
+            "type": "leadership", "title": "CERTIFICATIONS & AWARDS",
+            "items": [
+                {"label": "Hackathon 1st Place", "value": "GM Innovation Hackathon 2023"},
+                {"label": "Peer Award", "value": "GM Engineering Excellence — Q3 2024"},
+                {"label": "Certification", "value": "Microsoft Azure Fundamentals (AZ-900)"},
+            ],
+        },
+    ],
+    "footer_tag": "SOFTWARE_ENGINEER",
+}
+
+
+@router.get("/pipeline/preview-template/{template_name}/{style_name}")
+async def pipeline_preview_template(template_name: str, style_name: str = "navy") -> HTMLResponse:
+    """Render the master resume with the requested template+style for inline browser preview."""
+    from lib.resume_parser import _parse_resume_txt as _parse
+    from lib.template_loader import render_resume as _render, VALID_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+
+    if template_name not in _VALID:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown template {template_name!r}. Valid: {sorted(_VALID)}",
+        )
+    if style_name not in _VSTYLES:
+        style_name = "navy"
+
+    data: dict | None = None
+    try:
+        master_path = config.get_active_master_resume_path()
+        if master_path.exists():
+            try:
+                text = master_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = master_path.read_text(encoding="latin-1")
+            data = _parse(text)
+            data["footer_tag"] = "SOFTWARE_ENGINEER"
+    except Exception:
+        pass
+
+    if not data:
+        data = dict(_PREVIEW_FALLBACK_DATA)
+
+    html_str = _render(data, template=template_name, style=style_name)
+    return HTMLResponse(html_str)
+
+
+_PREVIEW_FALLBACK_CL_DATA: dict = {
+    "name_line1": "FRANK",
+    "name_line2": "VLADMIR",
+    "name_last": "MACBRIDE",
+    "name_suffix": "III",
+    "contact": {
+        "address": "",
+        "city_state": "Atlanta, GA",
+        "email": "frankvmacbride@gmail.com",
+        "phone": "1.305.490.1262",
+        "linkedin": "linkedin.com/in/frankvmacbride",
+        "github": "github.com/JustLikeFrank3",
+    },
+    "paragraphs": [
+        "Dear Hiring Manager,",
+        (
+            "I am writing to express my strong interest in the Senior Software Engineer position. "
+            "With four years of experience at General Motors modernizing Java 8 monoliths to "
+            "cloud-native Spring Boot 3 microservices on Azure, I bring both the technical depth "
+            "and the delivery track record your team is looking for."
+        ),
+        (
+            "At GM I led a zero-downtime multi-phase migration from Oracle to Azure PostgreSQL, "
+            "maintained 98% SLA across services supporting thousands of internal users, and drove "
+            "35% AI tool adoption across the engineering organization through hands-on enablement. "
+            "I hold 80% or higher test coverage on every project I ship."
+        ),
+        (
+            "I am excited about the opportunity to bring this background to your team and would "
+            "welcome a conversation about how my experience aligns with your needs."
+        ),
+        "Sincerely,",
+        "Frank Vladmir MacBride III",
+    ],
+    "footer_tag": "SOFTWARE_ENGINEER",
+}
+
+
+class _SelectTemplateRequest(BaseModel):
+    job_id: int
+    template: str
+    style: str
+
+
+@router.post("/pipeline/select-template")
+async def pipeline_select_template(req: _SelectTemplateRequest) -> JSONResponse:
+    """Persist the chosen visual template+style to a job queue entry."""
+    from lib.template_loader import VALID_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+    if req.template not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown template {req.template!r}")
+    if req.style not in _VSTYLES:
+        raise HTTPException(status_code=400, detail=f"Unknown style {req.style!r}")
+    _update_job(req.job_id, lambda j: j.update({
+        "resume_template": req.template,
+        "resume_style": req.style,
+    }))
+    return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
+
+
+@router.post("/pipeline/select-cl-template")
+async def pipeline_select_cl_template(req: _SelectTemplateRequest) -> JSONResponse:
+    """Persist the chosen cover letter visual template+style to a job queue entry."""
+    from lib.template_loader import VALID_CL_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+    if req.template not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown CL template {req.template!r}")
+    if req.style not in _VSTYLES:
+        raise HTTPException(status_code=400, detail=f"Unknown style {req.style!r}")
+    _update_job(req.job_id, lambda j: j.update({
+        "cl_template": req.template,
+        "cl_style": req.style,
+    }))
+    return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
+
+
+@router.get("/pipeline/preview-cl/{template_name}/{style_name}")
+async def pipeline_preview_cl(template_name: str, style_name: str = "navy") -> HTMLResponse:
+    """Render a cover letter preview with the requested template+style."""
+    from lib.resume_parser import _parse_cover_letter_txt as _parse_cl
+    from lib.template_loader import render_cover_letter as _render_cl, VALID_CL_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
+
+    if template_name not in _VALID:
+        raise HTTPException(status_code=400, detail=f"Unknown CL template {template_name!r}")
+    if style_name not in _VSTYLES:
+        style_name = "navy"
+
+    # Try to render from the master cover letter file; fall back to sample data
+    data: dict | None = None
+    try:
+        cl_dir = config.get_active_cover_letters_dir()
+        candidates = sorted(cl_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            try:
+                text = candidates[0].read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = candidates[0].read_text(encoding="latin-1")
+            data = _parse_cl(text)
+            data["footer_tag"] = "SOFTWARE_ENGINEER"
+    except Exception:
+        pass
+
+    if not data:
+        data = dict(_PREVIEW_FALLBACK_CL_DATA)
+
+    html_str = _render_cl(data, template=template_name, style=style_name)
+    return HTMLResponse(html_str)
 
 
 @router.get("/pipeline")
@@ -652,6 +889,71 @@ async def pipeline_board() -> HTMLResponse:
     </div>
 </div>
 
+<!-- Template Preview modal -->
+<div id='templatePreviewOverlay' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:920;overflow-y:auto;padding:16px 10px'>
+  <div style='max-width:1160px;margin:0 auto;background:#0d1526;border:1px solid #2a3a5e;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px'>
+
+    <!-- Header -->
+    <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:12px'>
+      <div>
+        <div style='font-weight:700;font-size:1.05rem'>Template Preview</div>
+        <div id='tpJobLabel' style='color:#8899bb;font-size:0.82rem;margin-top:3px'></div>
+      </div>
+      <button onclick='closeTemplatePreviews()' style='background:none;border:none;font-size:1.4rem;color:#8899bb;cursor:pointer;padding:0 4px;flex-shrink:0'>✕</button>
+    </div>
+
+    <!-- Document type toggle -->
+    <div style='display:flex;gap:6px'>
+      <button id='tpDocResume' onclick='switchDocType("resume")' class='tp-tab' style='font-size:0.82rem;padding:6px 14px'>Resume</button>
+      <button id='tpDocCL'     onclick='switchDocType("cl")'     class='tp-tab' style='font-size:0.82rem;padding:6px 14px'>Cover Letter</button>
+    </div>
+
+    <!-- Format row -->
+    <div>
+      <div style='font-size:0.75rem;color:#556;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px'>Format</div>
+      <div style='display:flex;gap:7px;flex-wrap:wrap'>
+        <button id='tpTab-modern'    onclick='switchFormat("modern")'    class='tp-tab'>Modern</button>
+        <button id='tpTab-executive' onclick='switchFormat("executive")' class='tp-tab'>Executive</button>
+        <button id='tpTab-sidebar'   onclick='switchFormat("sidebar")'   class='tp-tab'>Sidebar</button>
+        <button id='tpTab-portfolio' onclick='switchFormat("portfolio")' class='tp-tab'>Portfolio</button>
+      </div>
+    </div>
+
+    <!-- Style row -->
+    <div>
+      <div style='font-size:0.75rem;color:#556;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px'>Color Style</div>
+      <div style='display:flex;gap:7px;flex-wrap:wrap;align-items:center'>
+        <button id='tpStyle-navy'    onclick='switchStyle("navy")'    class='tp-style-btn' title='Navy'><span class='tp-swatch' style='background:#1e3a5f'></span>Navy</button>
+        <button id='tpStyle-slate'   onclick='switchStyle("slate")'   class='tp-style-btn' title='Slate'><span class='tp-swatch' style='background:#334155'></span>Slate</button>
+        <button id='tpStyle-forest'  onclick='switchStyle("forest")'  class='tp-style-btn' title='Forest'><span class='tp-swatch' style='background:#1a6644'></span>Forest</button>
+        <button id='tpStyle-warm'    onclick='switchStyle("warm")'    class='tp-style-btn' title='Warm'><span class='tp-swatch' style='background:#92400e'></span>Warm</button>
+        <button id='tpStyle-classic' onclick='switchStyle("classic")' class='tp-style-btn' title='Classic'><span class='tp-swatch' style='background:#222'></span>Classic</button>
+      </div>
+    </div>
+
+    <!-- Description + Use This button row -->
+    <div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
+      <div id='tpDesc' style='font-size:0.82rem;color:#8899bb;flex:1;min-width:0'></div>
+      <button id='tpUseBtn' onclick='useSelectedTemplate()' style='background:#1a5a2e;border-color:#2d9e50;color:#c8f0d8;font-weight:600;white-space:nowrap;padding:8px 18px;flex-shrink:0'>Use This Template</button>
+    </div>
+
+    <!-- Loading bar -->
+    <div id='tpLoading' style='display:none;height:3px;background:#1b2943;border-radius:999px;overflow:hidden'>
+      <div style='height:100%;width:35%;background:#06b6d4;animation:slide 1.2s linear infinite'></div>
+    </div>
+
+    <!-- Preview iframe -->
+    <iframe id='tpFrame' src='about:blank' title='Resume template preview'
+      style='width:100%;height:68vh;border:1px solid #2a3a5e;border-radius:10px;background:#fff;transition:opacity .15s'
+    ></iframe>
+
+    <!-- Footer note -->
+    <div style='font-size:0.77rem;color:#556;text-align:right'>
+      Preview uses your master resume. Actual export uses the selected optimized resume.
+    </div>
+  </div>
+</div>
+
 <script>
 const el = {
   summary: document.getElementById('summary'),
@@ -668,6 +970,161 @@ let editCoverLetterDraftName = '';
 let editCoverLetterDraftHref = '';
 let editCoverLetterPdfHref = '';
 let editCoverLetterAccepted = false;
+
+/* ── Template Preview ──────────────────────────────── */
+const TEMPLATE_META = {
+  modern:    { label: 'Modern',    desc: 'Single-column, sans-serif, ATS-friendly. Clean section headers. Standard corporate layout. Best for most SWE roles.' },
+  executive: { label: 'Executive', desc: 'Larger serif type, centered header, prominent left-bordered summary. Best for senior, principal, staff, or director roles.' },
+  sidebar:   { label: 'Sidebar',   desc: 'Two-column layout. Left sidebar holds contact, skills, and education. Main column: summary, experience, projects.' },
+  portfolio: { label: 'Portfolio', desc: 'Projects section first, GitHub highlighted near the top. Best for open-source contributors and technical creators.' },
+};
+const STYLE_META = {
+  navy:    { label: 'Navy',    desc: 'Deep professional blue.' },
+  slate:   { label: 'Slate',   desc: 'Cool gray-blue, understated.' },
+  forest:  { label: 'Forest',  desc: 'Deep green, natural and calm.' },
+  warm:    { label: 'Warm',    desc: 'Amber and golden brown accents.' },
+  classic: { label: 'Classic', desc: 'Black and white. Maximum ATS compatibility.' },
+};
+let tpCurrentFormat = 'modern';
+let tpCurrentStyle  = 'navy';
+let tpCurrentJobId  = null;
+let tpDocType = 'resume';   // 'resume' | 'cl'
+
+function _setActiveFmt(name) {
+  Object.keys(TEMPLATE_META).forEach(t => {
+    const btn = document.getElementById(`tpTab-${t}`);
+    if (!btn) return;
+    if (t === name) {
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    }
+  });
+}
+
+function _setActiveStyle(name) {
+  Object.keys(STYLE_META).forEach(s => {
+    const btn = document.getElementById(`tpStyle-${s}`);
+    if (!btn) return;
+    if (s === name) {
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    }
+  });
+}
+
+function _setActiveDocType(dt) {
+  ['resume','cl'].forEach(d => {
+    const btn = document.getElementById(d === 'resume' ? 'tpDocResume' : 'tpDocCL');
+    if (!btn) return;
+    if (d === dt) {
+      btn.style.background = '#1a3a6e'; btn.style.borderColor = '#3a5aae'; btn.style.color = '#d0e4ff';
+    } else {
+      btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+    }
+  });
+}
+
+function _loadPreview() {
+  const frame = document.getElementById('tpFrame');
+  const loading = document.getElementById('tpLoading');
+  frame.style.opacity = '0.35';
+  loading.style.display = 'block';
+  const base = tpDocType === 'cl' ? 'preview-cl' : 'preview-template';
+  frame.src = `/dashboard/pipeline/${base}/${tpCurrentFormat}/${tpCurrentStyle}`;
+  const fmt = TEMPLATE_META[tpCurrentFormat] || {};
+  const sty = STYLE_META[tpCurrentStyle] || {};
+  const docLabel = tpDocType === 'cl' ? '[Cover Letter] ' : '';
+  document.getElementById('tpDesc').textContent =
+    `${docLabel}${fmt.desc || ''} ${sty.desc ? '| ' + sty.desc : ''}`.trim();
+}
+
+function switchDocType(dt) {
+  tpDocType = dt;
+  _setActiveDocType(dt);
+  _loadPreview();
+}
+
+function switchFormat(name) {
+  if (!TEMPLATE_META[name]) return;
+  tpCurrentFormat = name;
+  _setActiveFmt(name);
+  _loadPreview();
+}
+
+function switchStyle(name) {
+  if (!STYLE_META[name]) return;
+  tpCurrentStyle = name;
+  _setActiveStyle(name);
+  _loadPreview();
+}
+
+async function useSelectedTemplate() {
+  if (!tpCurrentJobId) { alert('No job selected.'); return; }
+  const btn = document.getElementById('tpUseBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  const endpoint = tpDocType === 'cl'
+    ? '/dashboard/pipeline/select-cl-template'
+    : '/dashboard/pipeline/select-template';
+  try {
+    await post(endpoint, {
+      job_id: tpCurrentJobId,
+      template: tpCurrentFormat,
+      style: tpCurrentStyle,
+    });
+    btn.textContent = 'Saved!';
+    btn.style.background = '#0d3a1e';
+    await load();
+  } catch(e) {
+    btn.textContent = 'Error — retry?';
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Use This Template';
+      btn.style.background = '#1a5a2e';
+    }, 2200);
+  }
+}
+
+function openTemplatePreviews(jobId, company, role, savedTemplate, savedStyle, savedClTemplate, savedClStyle, startDocType) {
+  tpCurrentJobId = jobId;
+  const label = (company && role) ? `${company} \u2014 ${role}` : 'Master Resume';
+  document.getElementById('tpJobLabel').textContent = `Previewing for: ${label}`;
+  document.getElementById('templatePreviewOverlay').style.display = 'block';
+  tpDocType = startDocType || 'resume';
+  _setActiveDocType(tpDocType);
+  // Restore saved selection for the active doc type
+  const tmpl = tpDocType === 'cl' ? savedClTemplate : savedTemplate;
+  const sty  = tpDocType === 'cl' ? savedClStyle   : savedStyle;
+  tpCurrentFormat = (tmpl && TEMPLATE_META[tmpl]) ? tmpl : 'modern';
+  tpCurrentStyle  = (sty && STYLE_META[sty]) ? sty : 'navy';
+  _setActiveFmt(tpCurrentFormat);
+  _setActiveStyle(tpCurrentStyle);
+  _loadPreview();
+}
+
+function closeTemplatePreviews() {
+  document.getElementById('templatePreviewOverlay').style.display = 'none';
+}
+
+(function() {
+  const frame = document.getElementById('tpFrame');
+  if (frame) {
+    frame.addEventListener('load', function() {
+      this.style.opacity = '1';
+      document.getElementById('tpLoading').style.display = 'none';
+    });
+  }
+  const overlay = document.getElementById('templatePreviewOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === this) closeTemplatePreviews();
+    });
+  }
+})();
+/* ─────────────────────────────────────────────────── */
 
 function esc(s){ return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 
@@ -1026,6 +1483,8 @@ function render(){
 
       ${j.fitment_score ? `<div class='detail'><strong>Fitment score:</strong> ${esc(j.fitment_score)}</div>` : ''}
       ${j.decision_notes ? `<div class='detail'><strong>Notes:</strong> ${esc(j.decision_notes)}</div>` : ''}
+      ${j.resume_template ? `<div class='detail'><strong>Resume template:</strong> <span class='tp-selection-badge'>${esc(j.resume_template)} / ${esc(j.resume_style || 'navy')}</span></div>` : ''}
+      ${j.cl_template ? `<div class='detail'><strong>Cover letter template:</strong> <span class='tp-selection-badge'>${esc(j.cl_template)} / ${esc(j.cl_style || 'navy')}</span></div>` : ''}
       <div class='btnrow'>
         <button onclick='action(${j.id},"eval")' ${disabledEval}>${evalLabel}</button>
         <button onclick='action(${j.id},"resume")'>Generate Resume</button>
@@ -1037,16 +1496,35 @@ function render(){
         <button onclick='action(${j.id},"applied")' ${disabledApplied}>Applied</button>
                 <button onclick='action(${j.id},"unqueue")'>Unqueue</button>
                 <button class='danger' onclick='action(${j.id},"remove")'>Remove</button>
+        <button class='tp-btn' onclick='openTemplatePreviews(${j.id}, "${esc(j.company)}", "${esc(j.role)}", ${JSON.stringify(j.resume_template||null)}, ${JSON.stringify(j.resume_style||null)}, ${JSON.stringify(j.cl_template||null)}, ${JSON.stringify(j.cl_style||null)}, "resume")' title='Choose resume visual format and color theme'>Choose Template</button>
       </div>
     </article>`;
   }).join('');
 }
 
 async function load(){
-  const res = await fetch('/dashboard/pipeline/data', { credentials: 'same-origin' });
-  if(!res.ok){ el.list.innerHTML = `<div class='empty'>Failed to load (${res.status})</div>`; return; }
-  state = await res.json();
-  render();
+  try {
+    const res = await fetch('/dashboard/pipeline/data', { credentials: 'same-origin' });
+    if(!res.ok){
+      const msg = `Failed to load pipeline data (HTTP ${res.status}). Check server logs.`;
+      el.list.innerHTML = `<div class='empty'>${msg}</div>`;
+      console.error('[pipeline] data fetch failed:', res.status, res.statusText);
+      return;
+    }
+    let json;
+    try {
+      json = await res.json();
+    } catch(parseErr) {
+      el.list.innerHTML = `<div class='empty'>Pipeline data response is not valid JSON. The server may have returned an error page. Check the Console for details.</div>`;
+      console.error('[pipeline] JSON parse error — server may be redirecting to login or returning HTML:', parseErr);
+      return;
+    }
+    state = json;
+    render();
+  } catch(networkErr) {
+    el.list.innerHTML = `<div class='empty'>Network error loading pipeline data: ${String(networkErr)}</div>`;
+    console.error('[pipeline] network error in load():', networkErr);
+  }
 }
 
 el.q.addEventListener('input', render);
@@ -1079,6 +1557,16 @@ button { background: var(--chip); border:1px solid var(--line); color: var(--tex
 button:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); color: #ffdede; }
+button.tp-btn {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: #a0e8f0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--chip));
+}
+button.tp-btn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--chip)); }
+.tp-tab { font-size: 0.85rem; font-weight: 600; padding: 8px 16px; }
+.tp-style-btn { font-size: 0.82rem; font-weight: 600; padding: 6px 12px; display:inline-flex; align-items:center; gap:6px; }
+.tp-swatch { display:inline-block; width:12px; height:12px; border-radius:50%; border:1px solid rgba(255,255,255,.2); flex-shrink:0; }
+.tp-selection-badge { background:color-mix(in srgb,var(--accent) 18%,var(--chip)); color:var(--accent-bright,#60c4d8); border-radius:5px; padding:1px 7px; font-size:0.78rem; font-weight:600; }
 """
 
     return HTMLResponse(

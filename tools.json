@@ -56,11 +56,32 @@
     ]
   },
   {
+    "name": "export_cover_letter_latex",
+    "parameters": [
+      "company",
+      "role",
+      "body",
+      "filename",
+      "role_title",
+      "letter_date"
+    ]
+  },
+  {
     "name": "export_resume_pdf",
     "parameters": [
       "filename",
       "footer_tag",
       "output_filename"
+    ]
+  },
+  {
+    "name": "export_resume_latex",
+    "parameters": [
+      "company",
+      "role",
+      "resume_text",
+      "output_filename",
+      "role_title"
     ]
   },
   {

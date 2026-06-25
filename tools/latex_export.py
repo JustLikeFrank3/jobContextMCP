@@ -190,6 +190,28 @@ def _tectonic_bin() -> str:
     )
 
 
+def _pdflatex_bin() -> str | None:
+    """Locate a ``pdflatex`` binary (TeX Live / MiKTeX), or None if unavailable.
+
+    Used as a fallback compiler when tectonic is not installed, or when it is
+    installed but cannot download its support bundle (offline or
+    network-restricted environments such as locked-down CI/cloud sandboxes).
+    Unlike ``_tectonic_bin`` this returns None rather than raising, so the
+    caller can decide whether a fallback is possible.
+    """
+    found = shutil.which("pdflatex")
+    if found:
+        return found
+    for candidate in [
+        "/usr/bin/pdflatex",
+        "/usr/local/bin/pdflatex",
+        "/Library/TeX/texbin/pdflatex",
+    ]:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
 def _resolve_support_file(latex_src: Path | None, name: str) -> Path:
     """Resolve a required LaTeX support file from workspace or bundled assets."""
     if latex_src is not None:
@@ -202,6 +224,63 @@ def _resolve_support_file(latex_src: Path | None, name: str) -> Path:
     raise FileNotFoundError(
         f"Required LaTeX support file not found: {name}. "
         f"Checked {'workspace and ' if latex_src else ''}bundled assets at {_BUNDLED_LATEX_ASSETS_DIR}."
+    )
+
+
+def _compile_tex(tex_file: Path, tmp_path: Path, expected_pdf: Path) -> Path:
+    """Compile ``tex_file`` to PDF inside ``tmp_path``, returning ``expected_pdf``.
+
+    Tries tectonic first (the primary engine, which produces output identical
+    to the manually-compiled letters).  If tectonic is unavailable, or it runs
+    but fails — most commonly because it cannot reach its support-bundle host
+    in an offline/firewalled environment — it falls back to a local TeX Live
+    ``pdflatex`` install.  Two pdflatex passes are run so ``hyperref`` links
+    resolve.  Raises RuntimeError aggregating both engines' errors only when
+    neither can produce the PDF.
+    """
+    errors: list[str] = []
+
+    try:
+        tectonic = _tectonic_bin()
+    except FileNotFoundError as exc:
+        tectonic = None
+        errors.append(str(exc))
+
+    if tectonic is not None:
+        result = subprocess.run(
+            [tectonic, str(tex_file)],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0 and expected_pdf.exists():
+            return expected_pdf
+        errors.append(f"tectonic compilation failed:\n{result.stderr}\n{result.stdout}")
+
+    pdflatex = _pdflatex_bin()
+    if pdflatex is not None:
+        result = None
+        # nonstopmode (without -halt-on-error) lets pdflatex recover from
+        # non-fatal issues and still emit a PDF, mirroring tectonic's leniency;
+        # success is judged by whether the PDF was actually produced.
+        for _ in range(2):  # second pass resolves hyperref references
+            result = subprocess.run(
+                [pdflatex, "-interaction=nonstopmode", str(tex_file)],
+                cwd=str(tmp_path),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        if expected_pdf.exists():
+            return expected_pdf
+        tail = (result.stdout[-2000:] if result else "")
+        errors.append(f"pdflatex compilation failed:\n{tail}")
+    else:
+        errors.append("pdflatex not found (install a TeX Live distribution to enable the fallback).")
+
+    raise RuntimeError(
+        "LaTeX compilation failed; tried tectonic then pdflatex.\n\n" + "\n\n".join(errors)
     )
 
 
@@ -272,8 +351,6 @@ def generate_cover_letter_latex(
         body=tex_body,
     )
 
-    tectonic = _tectonic_bin()
-
     # Compile in a temp directory that shares the latex project's working
     # directory so that \input{_header} and \usepackage{TLCresume} resolve.
     with tempfile.TemporaryDirectory() as tmp:
@@ -287,24 +364,7 @@ def generate_cover_letter_latex(
             src_file = _resolve_support_file(latex_src, name)
             (tmp_path / name).symlink_to(src_file)
 
-        result = subprocess.run(
-            [tectonic, str(tex_file)],
-            cwd=str(tmp_path),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"tectonic compilation failed:\n{result.stderr}\n{result.stdout}"
-            )
-
-        compiled_pdf = tmp_path / "cover_letter.pdf"
-        if not compiled_pdf.exists():
-            raise FileNotFoundError(
-                "tectonic reported success but cover_letter.pdf was not produced."
-            )
-
+        compiled_pdf = _compile_tex(tex_file, tmp_path, tmp_path / "cover_letter.pdf")
         shutil.copy2(compiled_pdf, final_pdf)
 
     return final_pdf

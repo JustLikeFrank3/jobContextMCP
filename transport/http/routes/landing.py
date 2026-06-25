@@ -6,7 +6,7 @@ LANDING_HTML: str = r'''<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>jobContext — The memory layer for your career</title>
+<title>jobContext &mdash; The memory layer for your career</title>
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
@@ -350,6 +350,8 @@ LANDING_HTML: str = r'''<!doctype html>
     .bento, .pillars, .steps { grid-template-columns: 1fr; }
     .feat.span2 { grid-column: span 1; flex-direction: column; align-items: flex-start; }
     h1.hl { font-size: 2.6rem; }
+  }
+  @media (max-width: 640px) {
     .nav-links .lnk { display: none; }
   }
 </style>
@@ -372,6 +374,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
     <div class="nav-links">
+      <a class="lnk" href="/why">Why</a>
       <a class="lnk" href="#features">Features</a>
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#pillars">Why it's safe</a>
@@ -390,8 +393,9 @@ LANDING_HTML: str = r'''<!doctype html>
     <div>
       <span class="eyebrow"><span class="dot"></span>Open-source · Model Context Protocol</span>
       <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
-      <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, and interviews. Your whole professional story, ready for any AI assistant. Your career has context. Your AI should too.</p>
+      <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
+        <a class="btn btn-ghost btn-lg" href="/why">Why should I use this?</a>
         <a class="btn btn-primary btn-lg" href="/login">Get started, it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>

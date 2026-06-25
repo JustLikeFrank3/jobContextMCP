@@ -33,7 +33,7 @@ def _now_iso() -> str:
 
 def _global_conn():
     """Context manager that always opens the global (non-tenant) database."""
-    return _db.get_connection(path=_db.global_db_path())
+    return _db.get_connection(path=_db.global_db_path(), is_global=True)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
