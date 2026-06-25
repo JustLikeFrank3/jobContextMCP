@@ -13,6 +13,7 @@ data:
       "data_folder":               "/app/data",
       "resume_folder":             "/app/data/workspace",
       "leetcode_folder":           "/app/data/workspace/leetcode",
+      "latex_resume_dir":          "/app/templates/latex_assets",
       "job_assessments_dir":       "07-Job-Assessments",
       "interview_prep_docs_dir":   "08-Interview-Prep-Docs",
       "optimized_resumes_dir":     "01-Current-Optimized",

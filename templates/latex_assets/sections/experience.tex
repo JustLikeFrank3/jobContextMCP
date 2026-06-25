@@ -1,0 +1,41 @@
+%====================
+% EXPERIENCE 0 — jobContext
+%====================
+\subsection{{Founder \& Lead AI Engineer \hfill February 2026 --- Present}}
+\subtext{jobContext \textendash{} jobcontext.ai \hfill Remote, Atlanta, GA}
+\begin{zitemize}
+\item Built and operate a production multi-tenant SaaS on Azure Kubernetes Service (AKS) with Microsoft Entra ID authentication and strict per-tenant data isolation; implemented request-scoped tenant context using Python contextvars with a transparent file-I/O resolver that reroutes every read and write to per-user storage, closing a cross-tenant data-leak class identified during single-user to multi-tenant migration.
+\item Implemented 80 MCP tools across domain modules (job pipeline tracking, resume and cover letter generation, RAG semantic search, STAR story library, tone/voice profiling, contact relationship management); 931 passing tests at 82\% line coverage.
+\item Built a full RAG semantic search pipeline: OpenAI text-embedding-3-small embeddings with FAISS vector index and chunk-level retrieval over resumes, cover letters, interview prep, STAR stories, and tone samples; indexes a complete job-search corpus for under \$0.10.
+\item Engineered a LangGraph multi-stage resume-generation pipeline (StateGraph: load context, RAG retrieval, draft, review, and conditional revise nodes) demonstrating stateful agent orchestration and retrieval-augmented generation.
+\item Shipped multiple client surfaces from a single tool layer: stdio MCP, an HTTP transport with seven server-rendered dashboards (job pipeline Kanban, materials browser, rejection funnel, LinkedIn metrics, contact follow-up queue, mental-health trends), and a mobile share-sheet workflow.
+\end{zitemize}
+
+%====================
+% EXPERIENCE A — Level 6
+%====================
+\subsection{{Software Engineer, Level 6 \hfill January 2024 --- December 2025}}
+\subtext{General Motors \textendash{} Georgia IT Innovation Center \hfill Atlanta, GA}
+\begin{zitemize}
+\item Led dual-track migration of MADM: Cloud Foundry to Azure Container Apps and Oracle to PostgreSQL Flexible Server with zero downtime.
+\item Upgraded full technology stack independently: Spring Boot 2.x to 3.5.4, Java 17 to 21, Angular to 18; built complete Azure infrastructure using Terraform IaC including Container Apps, Key Vault, and Azure Functions.
+\item Implemented OAuth2/MSAL/Entra ID authentication for MADM; designed integration patterns subsequently adopted by the DSS and NADPA teams.
+\item Provisioned Azure Managed Identities for cross-service database access across teams within enterprise network boundaries.
+\item Drove 35\%+ organizational adoption of GitHub Copilot and Claude AI through hands-on demos and technical seminars.
+\item Automated CI/CD pipelines via GitHub Actions; achieved 98\% security fitness and 95\% tech fitness scores across owned services.
+\item Maintained 80\%+ test coverage across all owned services using JUnit, Mockito, and MockMVC.
+\end{zitemize}
+
+%====================
+% EXPERIENCE B — Level 5
+%====================
+\subsection{{Software Engineer, Level 5 \hfill January 2022 --- December 2023}}
+\subtext{General Motors \textendash{} Georgia IT Innovation Center \hfill Atlanta, GA}
+\begin{zitemize}
+\item Modernized MADM UI and API: Java 8 to 17, Spring Boot 2.1 to 2.5, Angular 6 to 14.
+\item Resolved critical Azure DevOps pipeline failures; implemented multiload functionality for DataStage ETL operations.
+\item Built automated ETL monitoring framework and configured DataStage table loads for data warehouse operations.
+\item Mentored multiple teams through cloud migrations, reducing implementation time by 60\%+.
+\item Led modernization of legacy OCF workloads to Kubernetes; streamlined CI/CD pipelines via GitHub Actions.
+\item Maintained comprehensive wiki documentation enabling knowledge transfer across rotating teams.
+\end{zitemize}

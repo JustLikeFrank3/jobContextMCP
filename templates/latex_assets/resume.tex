@@ -1,0 +1,39 @@
+\documentclass[letter,10pt]{article}
+\usepackage[utf8]{inputenc}
+
+\usepackage{TLCresume}
+\geometry{bottom=.5in}  % override TLCresume default of 1in
+
+%====================
+% CONTACT INFORMATION
+%====================
+\def\name{Frank Vladmir MacBride III}
+\def\phone{+1.305.490.1262}
+\def\city{Atlanta, GA}
+\def\email{frankvmacbride@gmail.com}
+\def\linkedin{frankvmacbride}
+\def\github{JustLikeFrank3}
+\def\website{jobcontext.ai}
+\def\role{Full-Stack Software Engineer}
+
+\input{_header}
+\begin{document}
+\pagestyle{empty}
+\printheader
+
+\section{Skills}
+\input{sections/skills}
+
+\section{Professional Experience}
+\input{sections/experience}
+
+\section{Projects}
+\input{sections/personalprojects}
+
+\section{Education}
+\input{sections/education}
+
+\section{Leadership \& Certifications}
+\input{sections/leadership}
+
+\end{document}
