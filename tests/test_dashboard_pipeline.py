@@ -207,7 +207,7 @@ class TestResumeEditDialog:
 
         monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
         monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
-        monkeypatch.setattr(pl, "export_resume_pdf", lambda filename: f"✓ PDF exported: {filename}.pdf")
+        monkeypatch.setattr(pl, "export_resume_pdf", lambda filename, **kw: f"✓ PDF exported: {filename}.pdf")
 
         r = http_client_noauth.post(
             "/dashboard/pipeline/edit-resume",

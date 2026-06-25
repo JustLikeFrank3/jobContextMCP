@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"/>
-  <img src="https://img.shields.io/badge/tests-923%20passing-brightgreen" alt="923 tests passing"/>
+  <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
+  <img src="https://img.shields.io/badge/tests-924%20passing-brightgreen" alt="924 tests passing"/>
   <img src="https://img.shields.io/badge/coverage-77.41%25-brightgreen" alt="77.41% coverage"/>
-  <img src="https://img.shields.io/badge/tools-77-informational" alt="77 MCP tools"/>
+  <img src="https://img.shields.io/badge/tools-78-informational" alt="78 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
 </p>
 <p align="center">
@@ -33,8 +33,8 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 
 | | |
 |---|---|
-| 77 MCP tools | Resume + cover letter generation |
-| 923 passing tests | Job fitment analysis with persona lenses |
+| 78 MCP tools | Resume + cover letter generation |
+| 924 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -68,11 +68,41 @@ The browser dashboard turns the local MCP workspace into a job-search command ce
 
 ### Generated documents
 
-| Resume | Cover Letter |
-|--------|-------------|
-| ![Resume demo](docs/demo-resume.png) | ![Cover letter demo](docs/demo-cover-letter.png) |
-
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
+
+### Resume template gallery
+
+4 layout formats x 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
+
+| Sidebar resume | Sidebar cover letter |
+|----------------|----------------------|
+| ![Sidebar resume](docs/demo/demo_resume_sidebar.png) | ![Sidebar cover letter](docs/demo/demo_coverletter_sidebar.png) |
+| Two-column: contact/skills sidebar + experience/projects main | Matching sidebar layout for the cover letter |
+
+| Modern resume | Modern cover letter |
+|---------------|---------------------|
+| ![Modern resume](docs/demo/demo_resume_modern.png) | ![Modern cover letter](docs/demo/demo_coverletter_modern.png) |
+| Single-column, ATS-friendly, clean typography | Clean header band, flush prose paragraphs |
+
+| Executive resume | Executive cover letter |
+|------------------|------------------------|
+| ![Executive resume](docs/demo/demo_resume_executive_p1.png) | ![Executive cover letter](docs/demo/demo_coverletter_executive.png) |
+| Centered letterhead, serif, achievement-focused | Matching executive letterhead |
+
+| Portfolio resume | Portfolio cover letter |
+|------------------|------------------------|
+| ![Portfolio resume](docs/demo/demo_resume_portfolio.png) | ![Portfolio cover letter](docs/demo/demo_coverletter_portfolio.png) |
+| Projects-first, GitHub-prominent, technical profile | Accent-strip header, project-centric intro |
+
+Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
+
+> **⚠️ No template selected?** If no template preference is saved in the pipeline, output falls back to the legacy format — Courier New, monospaced, hacker-tag header/footer. It's a genuine aesthetic choice if you want it. But if you haven't actively chosen it, your recruiter may have thoughts.
+>
+> | Legacy resume | Legacy cover letter |
+> |---------------|---------------------|
+> | ![Legacy resume](docs/demo/demo_resume_legacy.png) | ![Legacy cover letter](docs/demo/demo_coverletter_legacy.png) |
+>
+> Select a template in the pipeline and this will never happen to you.
 
 ---
 
@@ -285,7 +315,8 @@ sequenceDiagram
 | `log_mental_health_checkin(mood, energy, ...)` | Log a mood/energy entry |
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
 | `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
-| `reindex_materials()` | **RAG** — (re)build the semantic search index |
+| `reindex_materials()` | **RAG** — (re)build the semantic search index for all materials AND the personal story library |
+| `reindex_stories()` | **RAG** — (re)build only the story semantic embedding index; run after adding stories via `log_personal_story()` or `ingest_anecdote()` to enable semantic cover letter retrieval |
 | `log_personal_story(story, tags, people?, title?)` | **v3** — log a personal story or memory for context-rich writing |
 | `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
 | `ingest_anecdote(story, tags, title?, people?, tone_sample?)` | **v5.2** — single-call bundler: logs to personal context, optionally ingests as tone sample (≥40 words), and reports STAR tag matches |
@@ -1222,7 +1253,13 @@ Then build the RAG index:
 
 This embeds all your materials using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` runs locally with no further API calls.
 
+To also enable **semantic story retrieval** in cover letter generation (so stories that share mission/brand language with a JD — but few literal keywords — score and surface correctly), call `reindex_stories()` once via your MCP client after the initial setup:
 
+```
+reindex_stories()
+```
+
+Re-run it whenever you add new stories via `log_personal_story()` or `ingest_anecdote()`. `reindex_materials()` calls both the materials indexer and `reindex_stories()` automatically.
 
 ---
 
@@ -1366,7 +1403,7 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 - Job header format: `Title | Company, Location | Month YYYY - Month YYYY` (three pipe-delimited parts).
 - Bullets must use `•` (Unicode U+2022) — not `-` or `*`.
 - Contact block uses labeled fields: `phone:`, `email:`, `linkedin:` (lowercase, colon suffix).
-- Target length: 650–800 words (one tight page in Courier New 9.2pt).
+- Target length: 650–800 words (one tight page in the selected resume template).
 
 **Cover letter**
 - Target: **380–430 words** in the letter body for a full one-page render.
@@ -1382,22 +1419,23 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 
 ---
 
-## PDF Template Demo
+## PDF Export
 
-The repo includes two fake-identity demo files so you can preview the PDF output without using real data:
+Resume and cover letter PDFs are generated from plain `.txt` source files via WeasyPrint — no design tools required. The output uses whichever template and color theme you select in the pipeline (4 layouts x 5 themes = 20 combinations). Template and theme are saved per-job so each application can have its own presentation.
 
 ```bash
-# Generate the demo PDFs after setup:
+# Generate a PDF using a specific template and theme:
 python -c "
-from tools.export import export_resume_pdf, export_cover_letter_pdf
-export_resume_pdf('Nobody MacFakename Resume - Demo Software Engineer.txt')
-export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Engineer.txt')
+from tools.export import export_resume_pdf
+export_resume_pdf(
+    'Your Resume.txt',
+    template='sidebar',
+    style='slate'
+)
 "
 ```
 
-PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
-
-Demo screenshots are stored under `docs/` so README image links stay on-repo and do not expose private application documents.
+PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. Available templates: `modern`, `executive`, `sidebar`, `portfolio`. Available themes: `navy`, `slate`, `forest`, `warm`, `classic`.
 
 ---
 
@@ -1468,6 +1506,27 @@ Hardening, per-user API keys, refactor sprint, and coverage push. 860 passing, 8
 - **Refactor** — three monolithic files split into focused modules (`lib/resume_parser.py`, `pipeline_helpers.py`, `tools/generate_prompts.py`); all public symbols re-exported, no call-site changes
 - **Coverage 82.25%** — 860 passing (up from 627 at v1.0.0); 164 new tests for `lib/resume_parser.py` (9% → 88%); new suites for RAG, story retrieval, GitHub metrics, LangGraph pipeline, project scanner, and dashboard pipeline
 - **CI** — `workflow_dispatch` trigger + test + SonarCloud scan jobs added to deploy pipeline; coverage badge on README
+
+### v1.1 *(shipped)*
+
+4 resume layouts x 5 color themes = 20 presentation variants. Cover letter templates to match. Template selection is per-job in the pipeline. 924 passing, 77.41% coverage.
+
+- **Resume template system** (`lib/template_loader.py`) — Modern (single-column, ATS-friendly), Executive (serif, leadership-oriented), Sidebar (two-column with contact/skills panel), Portfolio (projects-first). All render from the same `.txt` data model; only the presentation changes.
+- **5 color themes** — Navy, Slate, Forest, Warm, Classic. Injected as CSS custom properties at render time; themes override template defaults without modifying template files.
+- **Cover letter templates** — matching 4-layout system for cover letters with the same theme support.
+- **Per-job template selection** — pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style`. A preview modal with live sandboxed iframe lets you pick format and theme before generating. Selection persists in SQLite per job.
+- **Generate now uses saved template/style** — fixed bug where the Generate Resume button ignored the saved selection and always output the legacy format.
+
+### v1.1.1 *(shipped)*
+
+Bug fixes and hardening. 924 passing, 77.41% coverage.
+
+- **Semantic story retrieval fully functional** — two root-cause bugs fixed: (1) no MCP tool previously could build the story embedding index (`preview_story_retrieval` could report `Semantic retrieval: on/off` but nothing in the deployed path could flip it on); new `reindex_stories()` tool exposes the index builder explicitly; (2) `_load_openai_key()` read from `config.json` on disk, which doesn't exist in AKS (`SQLITE_ONLY=1` mode) — the key lives in the user-context DB there; now tries `lib.config.get_config_value` first (same resolver as the materials indexer), with a file + env fallback. One call to `reindex_stories()` now builds the index and activates semantic retrieval for all subsequent cover letter generations.
+- **Story ID collision fix** — `_build_story_entry` used `len(stories) + 1` as the new story ID; any deletion or concurrent save could collide and silently overwrite an existing story via SQLite `ON CONFLICT DO UPDATE`; fixed to `max(existing_ids) + 1`.
+- **401 auto-redirect** — dashboard pages had no client-side handler for expired sessions; added a global `window.fetch` interceptor in `shared.py` so any 401 response redirects to `/` immediately, across all 9 dashboard pages in one change.
+- **`/why` marketing page** — public route at `GET /why`; self-contained, no auth required; nav link added to landing page and a pill link on the dashboard (opens in new tab).
+- **Template bullet rendering** — standardized all resume template bullet characters to `\2022` (•); prior choices (`\2023`, `\25A0`, `\25B8`) render as empty boxes in WeasyPrint's default font stack.
+- **`scripts/` gitignore hardening** — `docker-entrypoint.sh` and `migrate_to_sqlite.py` are now tracked; unblocks Docker builds (`chmod` in Dockerfile stage 7) and test imports (`scripts.migrate_to_sqlite._SCHEMA`).
 
 ### v1.x planned
 

@@ -206,7 +206,7 @@ def test_generate_resume_success_and_api_error_paths(isolated_server, monkeypatc
     monkeypatch.setattr(generate, "_model", lambda: "gpt-test")
 
     import tools.export as export_mod
-    monkeypatch.setattr(export_mod, "export_resume_pdf", lambda *_: "pdf")
+    monkeypatch.setattr(export_mod, "export_resume_pdf", lambda *_, **__: "pdf")
     monkeypatch.setattr(generate, "_chat_completion_create", lambda *_a, **_k: _FakeResponse("resume body"))
     ok = generate.generate_resume("Acme", "Engineer", "JD")
     assert "✓ Resume generated" in ok

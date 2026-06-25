@@ -1,0 +1,15 @@
+/* Classic theme — black & white, no accent color, maximum ATS compatibility */
+:root {
+  --accent:       #111111;
+  --accent-light: #444444;
+  --accent-mid:   #222222;
+  --accent-dark:  #000000;
+  --heading:      #111111;
+  --rule:         #666666;
+  --sidebar-bg:   #1a1a1a;
+  --sidebar-text: #f0f0f0;
+  --sidebar-head: #bbbbbb;
+  --chip-bg:      #eeeeee;
+  --chip-text:    #222222;
+  --link:         #333333;
+}

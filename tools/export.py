@@ -1,9 +1,23 @@
 """
-PDF export tool — v4
+PDF export tool — v5
 
-export_resume_pdf(filename, footer_tag?, output_filename?)
+export_resume_pdf(filename, footer_tag?, output_filename?, template?, style?)
     Reads a .txt resume from 01-Current-Optimized/, parses it,
-    renders via resume.html template, and writes a PDF to 03-Resume-PDFs/.
+    renders via the selected template, and writes a PDF to 03-Resume-PDFs/.
+
+    template selects the visual layout (default: "" uses legacy resume.html):
+        ""          — legacy Courier New monospaced layout (backward compat)
+        "modern"    — clean single-column sans-serif, ATS-friendly
+        "executive" — larger type, prominent summary, achievement-emphasis
+        "sidebar"   — two-column; left sidebar for skills/contact/education
+        "portfolio" — projects-first, GitHub-prominent, technical creator
+
+    style selects the color theme (only applied when template is set):
+        "navy"      — deep professional blue (default)
+        "slate"     — cool gray-blue
+        "forest"    — deep green
+        "warm"      — amber / golden brown
+        "classic"   — black & white, maximum ATS compatibility
 
 export_cover_letter_pdf(filename, output_filename?)
     Reads a .txt cover letter from 02-Cover-Letters/, parses it,
@@ -16,6 +30,7 @@ from jinja2 import Environment, FileSystemLoader
 import weasyprint
 
 from lib import config
+from lib.template_loader import render_resume_to_pdf as _render_resume_to_pdf, VALID_TEMPLATES, VALID_STYLES
 from lib.resume_parser import (
     _derive_footer_tag,
     _parse_resume_txt,
@@ -88,18 +103,35 @@ def export_resume_pdf(
     filename: str,
     footer_tag: str = "",
     output_filename: str = "",
+    template: str = "",
+    style: str = "navy",
 ) -> str:
     """
-    Export a .txt resume to PDF using the Frank MacBride Canva-style template.
+    Export a .txt resume to PDF.
 
     Args:
         filename:        Filename inside 01-Current-Optimized/ (with or without .txt).
         footer_tag:      Text for the </TAG> footer (auto-detected from filename if omitted).
         output_filename: Output PDF filename (defaults to same stem + .pdf).
+        template:        Visual layout. One of: modern, executive, sidebar, portfolio.
+                         Leave empty ("") to use the default legacy layout.
+        style:           Color theme (only used when template is set).
+                         One of: navy, slate, forest, warm, classic. Default: navy.
 
     Returns:
-        Path to the generated PDF.
+        Path to the generated PDF, or an error string.
     """
+    if template and template not in VALID_TEMPLATES:
+        return (
+            f"Error: unknown template {template!r}. "
+            f"Valid options: {sorted(VALID_TEMPLATES)} or leave empty for default."
+        )
+    if style and style not in VALID_STYLES:
+        return (
+            f"Error: unknown style {style!r}. "
+            f"Valid options: {sorted(VALID_STYLES)}."
+        )
+
     opt_dir = config.get_active_optimized_resumes_dir()
 
     # Resolve filename
@@ -123,7 +155,12 @@ def export_resume_pdf(
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem)
-    _render_pdf("resume.html", data, out)
+
+    if template:
+        _render_resume_to_pdf(data, out, template=template, style=style or "navy")
+    else:
+        _render_pdf("resume.html", data, out)
+
     return f"✓ PDF exported: {out}"
 
 
@@ -131,6 +168,8 @@ def export_cover_letter_pdf(
     filename: str,
     output_filename: str = "",
     footer_tag: str = "SOFTWARE ENGINEER",
+    template: str = "",
+    style: str = "navy",
 ) -> str:
     """Pipeline B — HTML/weasyprint cover letter export.
 
@@ -142,15 +181,31 @@ def export_cover_letter_pdf(
     manually-compiled frank-resume-latex versions) use
     tools.latex_export.generate_cover_letter_latex() instead.
 
-    Export a .txt cover letter to PDF using the Frank MacBride two-column template.
-
     Args:
         filename:        Filename inside 02-Cover-Letters/ (with or without .txt).
         output_filename: Output PDF filename (defaults to same stem + .pdf).
+        footer_tag:      Text for the </TAG> footer.
+        template:        Visual layout. One of: modern, executive, sidebar, portfolio.
+                         Leave empty ("") to use the default legacy layout.
+        style:           Color theme. One of: navy, slate, forest, warm, classic.
 
     Returns:
         Path to the generated PDF.
     """
+    from lib.template_loader import (
+        render_cover_letter_to_pdf as _render_cl_to_pdf,
+        VALID_CL_TEMPLATES,
+        VALID_STYLES,
+    )
+
+    if template and template not in VALID_CL_TEMPLATES:
+        return (
+            f"Error: unknown CL template {template!r}. "
+            f"Valid options: {sorted(VALID_CL_TEMPLATES)} or leave empty for default."
+        )
+    if style and style not in VALID_STYLES:
+        return f"Error: unknown style {style!r}. Valid options: {sorted(VALID_STYLES)}."
+
     cl_dir = config.get_active_cover_letters_dir()
 
     if not filename.endswith(".txt"):
@@ -172,7 +227,11 @@ def export_cover_letter_pdf(
 
     stem = source.stem
     out = _resolve_output_path(output_filename, stem, _cover_letter_pdf_folder_name())
-    _render_pdf("cover_letter.html", data, out)
+
+    if template:
+        _render_cl_to_pdf(data, out, template=template, style=style or "navy")
+    else:
+        _render_pdf("cover_letter.html", data, out)
     return f"✓ PDF exported: {out}"
 
 

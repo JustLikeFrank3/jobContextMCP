@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Cover Letter — Executive</title>
+<style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
+@page {
+    size: letter;
+    margin: 0.52in 0.60in 0.52in 0.60in;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    font-size: 10.8pt;
+    color: #1c1c1c;
+    background: #fff;
+    line-height: 1.50;
+}
+
+/* ── LETTERHEAD ──────────────────────────────────── */
+.letterhead {
+    text-align: center;
+    border-bottom: 2.5px solid var(--rule);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+}
+
+.letterhead-name {
+    font-size: 24pt;
+    font-weight: bold;
+    color: var(--heading);
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+}
+
+.letterhead-contact {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0 22px;
+    margin-top: 6px;
+    font-size: 9pt;
+    color: #555;
+    font-family: Calibri, Arial, sans-serif;
+}
+
+.sep {
+    color: var(--accent);
+    font-size: 7pt;
+    vertical-align: 1px;
+    margin: 0 2px;
+}
+
+/* ── LETTER BODY ─────────────────────────────────── */
+.letter-body p {
+    margin-bottom: 10pt;
+    text-align: justify;
+}
+
+.letter-body p:last-child {
+    margin-bottom: 0;
+    text-align: left;
+}
+</style>
+</head>
+<body>
+
+<div class="letterhead">
+    <div class="letterhead-name">{% set full_name = [name_line1, name_line2, name_last, name_suffix] | select('ne', '') | join(' ') %}{{ full_name }}</div>
+    <div class="letterhead-contact">
+        {% if contact.city_state %}<span>{{ contact.city_state }}</span>{% endif %}
+        {% if contact.email %}<span>{{ contact.email }}</span>{% endif %}
+        {% if contact.phone %}<span>{{ contact.phone }}</span>{% endif %}
+        {% if contact.linkedin %}<span>{{ contact.linkedin }}</span>{% endif %}
+        {% if contact.github %}<span>{{ contact.github }}</span>{% endif %}
+    </div>
+</div>
+
+<div class="letter-body">
+    {% for para in paragraphs %}
+    {% if para == para | upper and para | length < 60 %}
+    <p><strong>{{ para }}</strong></p>
+    {% else %}
+    <p>{{ para }}</p>
+    {% endif %}
+    {% endfor %}
+</div>
+
+</body>
+</html>

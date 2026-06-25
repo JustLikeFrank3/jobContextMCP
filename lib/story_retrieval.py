@@ -114,12 +114,25 @@ def _strip_query_chrome(text: str) -> str:
 
 
 def _load_openai_key(path: Path) -> str:
-    """Best-effort config lookup without importing lib.config.
+    """Best-effort config lookup.
 
-    ``path`` is usually ``data/personal_context.json``; config.json lives one
-    directory above ``data`` in this project. Keeping this lookup local avoids a
-    dependency cycle and keeps keyword retrieval usable when no API key exists.
+    Priority order:
+    1. lib.config.get_config_value — user-context-aware (works in AKS/SQLite-only
+       deployments where the key lives in the DB, not on disk).
+    2. config.json on disk — for local single-user deployments.
+    3. OPENAI_API_KEY environment variable — CI / container fallback.
+
+    The lib.config import is guarded so keyword-only retrieval still works when
+    the module is loaded in environments where lib.config isn't wired up.
     """
+    try:
+        from lib import config as _cfg
+        key = _cfg.get_config_value("openai_api_key", "")
+        if key:
+            return str(key)
+    except Exception:
+        pass
+
     cfg_path = path.parent.parent / "config.json"
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -265,16 +278,36 @@ class StoryIndex:
 
 # ── Index cache (rebuilds only when the file changes) ────────────────────────
 
-_INDEX_CACHE: dict[str, tuple[float, int, StoryIndex]] = {}
+_INDEX_CACHE: dict[str, tuple[Any, Any, "StoryIndex"]] = {}
 
 
-def _get_index(path: Path) -> StoryIndex:
-    key = str(path)
+def _story_revision(path: Path) -> tuple[Any, Any]:
+    """Return a cache-invalidation key for the story library at *path*.
+
+    In SQLite-only deployments the JSON file is never written, so
+    ``path.stat()`` always returns the same stale mtime.  We derive the
+    revision from the loaded story data instead: (count, latest_timestamp).
+    That is cheap (one DB query) and correctly detects every append or edit.
+    Falls back to file-stat when the file exists and SQLite is not active so
+    local (non-Docker) workflows behave exactly as before.
+    """
+    _USE_SQLITE = os.environ.get("USE_SQLITE", "").strip().lower() in ("1", "true", "yes")
+    _SQLITE_ONLY = os.environ.get("SQLITE_ONLY", "").strip().lower() in ("1", "true", "yes")
+    if _USE_SQLITE and _SQLITE_ONLY:
+        stories = _load_json(path, {"stories": []}).get("stories", [])
+        count = len(stories)
+        latest = max((s.get("timestamp", "") for s in stories), default="")
+        return (count, latest)
     try:
         stat = path.stat()
-        revision = (stat.st_mtime, stat.st_size)
+        return (stat.st_mtime, stat.st_size)
     except OSError:
-        revision = (0.0, 0)
+        return (0.0, 0)
+
+
+def _get_index(path: Path) -> "StoryIndex":
+    key = str(path)
+    revision = _story_revision(path)
 
     cached = _INDEX_CACHE.get(key)
     if cached and (cached[0], cached[1]) == revision:
@@ -343,8 +376,7 @@ def _load_semantic_index(path: Path) -> tuple[list[dict], object]:
     if np is None:
         raise RuntimeError("numpy package is not available")
 
-    stat = path.stat()
-    revision = (stat.st_mtime, stat.st_size)
+    revision = _story_revision(path)
     key = str(path)
     cached = _SEMANTIC_CACHE.get(key)
     if cached and (cached[0], cached[1]) == revision:

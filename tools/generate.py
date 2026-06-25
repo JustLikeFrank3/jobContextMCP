@@ -1164,6 +1164,8 @@ def generate_resume(
     role: str,
     job_description: str,
     output_filename: str = "",
+    template: str = "",
+    style: str = "navy",
 ) -> str:
     """
     Generate a tailored resume for a specific company and role.
@@ -1212,7 +1214,7 @@ def generate_resume(
 
     try:
         from tools.export import export_resume_pdf
-        pdf_result = export_resume_pdf(filename)
+        pdf_result = export_resume_pdf(filename, template=template, style=style or "navy")
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 
@@ -1238,6 +1240,8 @@ def generate_cover_letter(
     output_filename: str = "",
     export_pipeline: str = "html",
     role_title: str = "Full Stack Software Engineer",
+    cl_template: str = "",
+    cl_style: str = "navy",
 ) -> str:
     """
     Generate a tailored cover letter for a specific company and role.
@@ -1300,7 +1304,7 @@ def generate_cover_letter(
         else:
             from tools.export import export_cover_letter_pdf
 
-            pdf_result = export_cover_letter_pdf(filename, footer_tag=role_title.upper())
+            pdf_result = export_cover_letter_pdf(filename, footer_tag=role_title.upper(), template=cl_template, style=cl_style or "navy")
     except Exception as exc:
         pdf_result = f"⚠ PDF export failed: {exc}"
 
@@ -1343,6 +1347,8 @@ def preview_story_retrieval(role: str, job_description: str = "") -> str:
         path=config.PERSONAL_CONTEXT_FILE,
         token_budget=budgets["personal_context_token_budget"],
         max_stories=budgets["max_personal_stories"],
+        boost_tags=_COVER_LETTER_HOOK_TAGS,
+        semantic=True,
     )
     return diag.render()
 

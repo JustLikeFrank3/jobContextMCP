@@ -1,0 +1,25 @@
+% Build-time warm-up document.
+%
+% This is NOT used at runtime. Its only job is to be compiled once during the
+% Docker image build so tectonic downloads and caches its LaTeX support bundle
+% (and every package the real cover-letter template pulls in) into
+% TECTONIC_CACHE_DIR. With the bundle baked into the image, the running
+% container can compile cover letters with no outbound network access.
+%
+% It mirrors the preamble of the real cover-letter template
+% (tools/latex_export.py :: _TEX_TEMPLATE) so the same package set is fetched.
+\documentclass[letter,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{TLCresume}
+\usepackage{parskip}
+\def\name{Warm Up}
+\def\phone{000-000-0000}
+\def\city{Anywhere, USA}
+\def\email{warmup@example.com}
+\def\linkedin{warmup}
+\def\github{warmup}
+\def\role{Warm Up}
+\input{_header}
+\begin{document}\pagestyle{empty}\printheader
+Warm-up document to pre-cache the tectonic support bundle at image build time.
+\end{document}

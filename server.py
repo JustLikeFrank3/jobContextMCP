@@ -221,6 +221,7 @@ scan_materials_for_tone = tone.scan_materials_for_tone
 
 search_materials = rag.search_materials
 reindex_materials = rag.reindex_materials
+reindex_stories = rag.reindex_stories
 
 get_star_story_context = star.get_star_story_context
 
