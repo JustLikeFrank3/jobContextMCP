@@ -7,6 +7,19 @@ LANDING_HTML: str = r'''<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>jobContext &mdash; The memory layer for your career</title>
+<!-- Open Graph / LinkedIn / Facebook -->
+<meta property="og:type"        content="website" />
+<meta property="og:url"         content="https://jobcontext.ai/" />
+<meta property="og:title"       content="jobContext &mdash; The memory layer for your career" />
+<meta property="og:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, resume generation, interview prep &mdash; all in one place." />
+<meta property="og:image"       content="https://jobcontext.ai/og-image.png" />
+<meta property="og:image:width"  content="1200" />
+<meta property="og:image:height" content="627" />
+<!-- Twitter / X card -->
+<meta name="twitter:card"        content="summary_large_image" />
+<meta name="twitter:title"       content="jobContext &mdash; The memory layer for your career" />
+<meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, resume generation, interview prep &mdash; all in one place." />
+<meta name="twitter:image"       content="https://jobcontext.ai/og-image.png" />
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================

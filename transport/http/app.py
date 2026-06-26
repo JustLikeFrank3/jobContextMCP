@@ -85,8 +85,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/setup",
             "/architecture",
             "/privacy",
-            "/terms",
-            "/logged-out",
+            "/terms",            "/og-image",            "/logged-out",
             "/login",
             "/why",
             "/dashboard/login",
@@ -264,6 +263,11 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():
         return FileResponse(_static / "favicon.ico", media_type="image/x-icon")
+
+    @app.get("/og-image.png", include_in_schema=False)
+    async def og_image():
+        """Open Graph image for LinkedIn / social previews (1200x627 SVG served as image/svg+xml)."""
+        return FileResponse(_static / "og-image.svg", media_type="image/svg+xml")
 
     @app.get("/favicon.svg", include_in_schema=False)
     async def favicon_svg():
