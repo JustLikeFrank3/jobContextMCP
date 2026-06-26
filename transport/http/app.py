@@ -31,8 +31,10 @@ from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
+from transport.http.routes.architecture import architecture_html
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
+from transport.http.routes.setup import setup_html
 from transport.http.routes.why import why_html
 
 if TYPE_CHECKING:
@@ -78,6 +80,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/health",
             "/oauth/",
             "/logout",
+            "/setup",
+            "/architecture",
             "/logged-out",
             "/login",
             "/why",
@@ -221,6 +225,14 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/why", include_in_schema=False)
     async def _why_page() -> HTMLResponse:
         return HTMLResponse(why_html())
+
+    @app.get("/setup", include_in_schema=False)
+    async def _setup_page() -> HTMLResponse:
+        return HTMLResponse(setup_html())
+
+    @app.get("/architecture", include_in_schema=False)
+    async def _architecture_page() -> HTMLResponse:
+        return HTMLResponse(architecture_html())
 
     @app.get("/login", include_in_schema=False)
     async def _login_page(next: str = "/dashboard") -> HTMLResponse:

@@ -596,6 +596,9 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="foot-links">
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
+      <a href="/why">Why jobContext</a>
+      <a href="/setup">Getting started</a>
+      <a href="/architecture">Architecture</a>
       <a href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a href="/login">Sign in</a>
     </div>
