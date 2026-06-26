@@ -290,6 +290,10 @@ def get_active_cover_letters_dir() -> Path:
     return get_active_workspace_subdir("cover_letters_dir", "02-Cover-Letters")
 
 
+def get_active_resume_pdfs_dir() -> Path:
+    return get_active_workspace_subdir("resume_pdfs_dir", "03-Resume-PDFs")
+
+
 def get_active_reference_materials_dir() -> Path:
     return get_active_workspace_subdir("reference_materials_dir", "06-Reference-Materials")
 

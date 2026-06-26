@@ -429,9 +429,10 @@ def generate_resume_latex(
             "latex_resume_dir. See the frank-resume-latex project for a starting template."
         )
 
-    # Determine output directory
+    # Determine output directory — must use the tenant-scoped resolver so
+    # multi-user deployments never write to the global workspace path.
     if output_dir is None:
-        final_output_dir = cfg.get_active_workspace_folder()
+        final_output_dir = cfg.get_active_resume_pdfs_dir()
     else:
         final_output_dir = Path(output_dir)
     final_output_dir.mkdir(parents=True, exist_ok=True)
