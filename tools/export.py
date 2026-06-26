@@ -359,8 +359,32 @@ def export_resume_latex(
     return f"✓ PDF exported (LaTeX): {pdf}"
 
 
+# ---------------------------------------------------------------------------
+# LaTeX asset read / write (server-side content injection)
+# ---------------------------------------------------------------------------
+
+from tools.latex_export import (  # noqa: E402 — local import after heavy deps
+    _BUNDLED_LATEX_ASSETS_DIR,
+    _READABLE_LATEX_ASSETS,
+    _WRITABLE_LATEX_SECTIONS,
+    read_latex_asset,
+    write_latex_section,
+)
+
+__all__ = [
+    "export_resume_pdf",
+    "export_cover_letter_pdf",
+    "export_cover_letter_latex",
+    "export_resume_latex",
+    "read_latex_asset",
+    "write_latex_section",
+]
+
+
 def register(mcp) -> None:
     mcp.tool()(export_resume_pdf)
     mcp.tool()(export_cover_letter_pdf)
     mcp.tool()(export_cover_letter_latex)
     mcp.tool()(export_resume_latex)
+    mcp.tool()(read_latex_asset)
+    mcp.tool()(write_latex_section)
