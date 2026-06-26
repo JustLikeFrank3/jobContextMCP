@@ -75,9 +75,9 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   <div class="page-eyebrow">Legal</div>
   <h1>Terms of Service</h1>
   <div class="meta">
-    <strong>Effective date:</strong> [DATE] &nbsp;&middot;&nbsp;
+    <strong>Effective date:</strong> June 26, 2026 &nbsp;&middot;&nbsp;
     <strong>Operator:</strong> Frank MacBride &nbsp;&middot;&nbsp;
-    <a href="mailto:support@jobcontext.ai">support@jobcontext.ai</a>
+    <a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a>
   </div>
 
   <div class="summary-box">
@@ -146,7 +146,7 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   <p>These Terms are governed by the laws of the State of Georgia, United States, without regard to its conflict-of-laws rules. You agree to the exclusive jurisdiction of the state and federal courts located in Georgia for any dispute.</p>
 
   <h2>16. Contact</h2>
-  <p><a href="mailto:support@jobcontext.ai">support@jobcontext.ai</a><br>Frank MacBride</p>
+  <p><a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a><br>Frank MacBride</p>
 </div>
 
 <footer>

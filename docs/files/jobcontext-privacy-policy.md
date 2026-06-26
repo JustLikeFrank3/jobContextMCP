@@ -1,8 +1,8 @@
 # jobContext Privacy Policy
 
-**Effective date:** [DATE]
+**Effective date:** June 26, 2026
 **Operator:** Frank MacBride
-**Contact:** [privacy@jobcontext.ai]
+**Contact:** admin@jobcontext.ai
 
 ---
 
@@ -25,7 +25,7 @@ If you do not agree with this policy, do not use the Service.
 
 ## 1. Who this policy covers
 
-This policy covers people who sign in to and use jobContext (our "users"). It also explains how we handle information a user records about other people, such as recruiters or referral contacts. If you are one of those third parties and have a question about your information, contact us at [privacy@jobcontext.ai], though note that the user who recorded your information controls it and is your first point of contact.
+This policy covers people who sign in to and use jobContext (our "users"). It also explains how we handle information a user records about other people, such as recruiters or referral contacts. If you are one of those third parties and have a question about your information, contact us at admin@jobcontext.ai, though note that the user who recorded your information controls it and is your first point of contact.
 
 ## 2. Information we collect
 
@@ -106,7 +106,7 @@ You can:
 - **Export** your data.
 - **Delete** individual items, categories of data (including all wellbeing check-ins), or your entire account.
 
-Depending on where you live, you may have additional rights under laws such as the California Consumer Privacy Act. To exercise any right not available directly in the Service, contact us at [privacy@jobcontext.ai]. We will not discriminate against you for exercising your rights.
+Depending on where you live, you may have additional rights under laws such as the California Consumer Privacy Act. To exercise any right not available directly in the Service, contact us at admin@jobcontext.ai. We will not discriminate against you for exercising your rights.
 
 ## 10. Security
 
@@ -123,5 +123,5 @@ We may update this policy as the Service evolves. If we make material changes, w
 ## 13. Contact
 
 Questions about this policy or your data:
-[privacy@jobcontext.ai]
+admin@jobcontext.ai
 Frank MacBride

@@ -80,9 +80,9 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   <div class="page-eyebrow">Legal</div>
   <h1>Privacy Policy</h1>
   <div class="meta">
-    <strong>Effective date:</strong> [DATE] &nbsp;&middot;&nbsp;
+    <strong>Effective date:</strong> June 26, 2026 &nbsp;&middot;&nbsp;
     <strong>Operator:</strong> Frank MacBride &nbsp;&middot;&nbsp;
-    <a href="mailto:privacy@jobcontext.ai">privacy@jobcontext.ai</a>
+    <a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a>
   </div>
 
   <div class="summary-box">
@@ -98,7 +98,7 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   </div>
 
   <h2>1. Who this policy covers</h2>
-  <p>This policy covers people who sign in to and use jobContext (our &ldquo;users&rdquo;). It also explains how we handle information a user records about other people, such as recruiters or referral contacts. If you are one of those third parties and have a question about your information, contact us at <a href="mailto:privacy@jobcontext.ai">privacy@jobcontext.ai</a>.</p>
+  <p>This policy covers people who sign in to and use jobContext (our &ldquo;users&rdquo;). It also explains how we handle information a user records about other people, such as recruiters or referral contacts. If you are one of those third parties and have a question about your information, contact us at <a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a>.</p>
 
   <h2>2. Information we collect</h2>
   <p>We collect only what we need to run the Service.</p>
@@ -135,7 +135,7 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   <p>We keep your data for as long as your account is active. You can delete individual items or your entire account at any time. When you delete your account, we remove your data from active systems. Residual copies in backups are purged on our standard cycle.</p>
 
   <h2>9. Your choices and rights</h2>
-  <p>You can access, correct, export, and delete your information at any time through the Service. Depending on where you live, you may have additional rights under laws such as the California Consumer Privacy Act. To exercise any right not available directly in the Service, contact us at <a href="mailto:privacy@jobcontext.ai">privacy@jobcontext.ai</a>.</p>
+  <p>You can access, correct, export, and delete your information at any time through the Service. Depending on where you live, you may have additional rights under laws such as the California Consumer Privacy Act. To exercise any right not available directly in the Service, contact us at <a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a>.</p>
 
   <h2>10. Security</h2>
   <p>We protect your data with Microsoft Entra ID authentication and per-user data isolation. No system is perfectly secure, but we work to safeguard your information. If we become aware of a breach affecting your personal information, we will notify you as required by law.</p>
@@ -147,7 +147,7 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
   <p>We may update this policy as the Service evolves. If we make material changes, we will notify you through the Service or by email and update the effective date. Your continued use after an update means you accept the revised policy.</p>
 
   <h2>13. Contact</h2>
-  <p><a href="mailto:privacy@jobcontext.ai">privacy@jobcontext.ai</a><br>Frank MacBride</p>
+  <p><a href="mailto:admin@jobcontext.ai">admin@jobcontext.ai</a><br>Frank MacBride</p>
 </div>
 
 <footer>
