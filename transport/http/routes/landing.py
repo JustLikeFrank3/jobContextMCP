@@ -599,6 +599,8 @@ LANDING_HTML: str = r'''<!doctype html>
       <a href="/why">Why jobContext</a>
       <a href="/setup">Getting started</a>
       <a href="/architecture">Architecture</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
       <a href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a href="/login">Sign in</a>
     </div>

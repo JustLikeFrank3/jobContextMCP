@@ -34,7 +34,9 @@ from transport.http.routes.dashboard import router as dashboard_router
 from transport.http.routes.architecture import architecture_html
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
+from transport.http.routes.privacy import privacy_html
 from transport.http.routes.setup import setup_html
+from transport.http.routes.terms import terms_html
 from transport.http.routes.why import why_html
 
 if TYPE_CHECKING:
@@ -82,6 +84,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/logout",
             "/setup",
             "/architecture",
+            "/privacy",
+            "/terms",
             "/logged-out",
             "/login",
             "/why",
@@ -233,6 +237,14 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/architecture", include_in_schema=False)
     async def _architecture_page() -> HTMLResponse:
         return HTMLResponse(architecture_html())
+
+    @app.get("/privacy", include_in_schema=False)
+    async def _privacy_page() -> HTMLResponse:
+        return HTMLResponse(privacy_html())
+
+    @app.get("/terms", include_in_schema=False)
+    async def _terms_page() -> HTMLResponse:
+        return HTMLResponse(terms_html())
 
     @app.get("/login", include_in_schema=False)
     async def _login_page(next: str = "/dashboard") -> HTMLResponse:
