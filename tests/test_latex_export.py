@@ -279,3 +279,134 @@ class TestLatexExportTenantIsolation:
         # Neither path is a parent of the other (no shared workspace root)
         assert not str(pdf_a).startswith(str(pdf_b.parent))
         assert not str(pdf_b).startswith(str(pdf_a.parent))
+
+
+# ---------------------------------------------------------------------------
+# read_latex_asset tests
+# ---------------------------------------------------------------------------
+
+def test_read_latex_asset_returns_file_contents(monkeypatch, tmp_path):
+    """read_latex_asset returns the content of an allowlisted file."""
+    bundled = tmp_path / "latex_assets"
+    bundled.mkdir()
+    (bundled / "TLCresume.sty").write_text("\\ProvidesPackage{TLCresume}", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    result = latex_export.read_latex_asset("TLCresume.sty")
+    assert "ProvidesPackage" in result
+
+
+def test_read_latex_asset_reads_section_file(monkeypatch, tmp_path):
+    """read_latex_asset resolves files in sections/ subdirectory."""
+    bundled = tmp_path / "latex_assets"
+    sections = bundled / "sections"
+    sections.mkdir(parents=True)
+    (sections / "synopsis.tex").write_text("\\noindent My summary.", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    result = latex_export.read_latex_asset("sections/synopsis.tex")
+    assert "My summary" in result
+
+
+def test_read_latex_asset_rejects_unlisted_file(monkeypatch, tmp_path):
+    """read_latex_asset raises PermissionError for files not in the allowlist."""
+    bundled = tmp_path / "latex_assets"
+    bundled.mkdir()
+    (bundled / "secret.tex").write_text("secret", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    import pytest
+    with pytest.raises(PermissionError, match="allowlist"):
+        latex_export.read_latex_asset("secret.tex")
+
+
+def test_read_latex_asset_raises_if_file_missing(monkeypatch, tmp_path):
+    """read_latex_asset raises FileNotFoundError when an allowlisted file doesn't exist."""
+    bundled = tmp_path / "latex_assets"
+    bundled.mkdir()
+    # Don't create TLCresume.sty
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        latex_export.read_latex_asset("TLCresume.sty")
+
+
+# ---------------------------------------------------------------------------
+# write_latex_section tests
+# ---------------------------------------------------------------------------
+
+def test_write_latex_section_creates_file(monkeypatch, tmp_path):
+    """write_latex_section writes content to sections/ and returns confirmation."""
+    bundled = tmp_path / "latex_assets"
+    sections = bundled / "sections"
+    sections.mkdir(parents=True)
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    result = latex_export.write_latex_section("synopsis.tex", "\\noindent Tailored summary.")
+
+    target = sections / "synopsis.tex"
+    assert target.exists()
+    assert target.read_text(encoding="utf-8") == "\\noindent Tailored summary."
+    assert "✓" in result
+    assert "synopsis.tex" in result
+
+
+def test_write_latex_section_overwrites_existing_content(monkeypatch, tmp_path):
+    """write_latex_section replaces existing file content."""
+    bundled = tmp_path / "latex_assets"
+    sections = bundled / "sections"
+    sections.mkdir(parents=True)
+    (sections / "synopsis.tex").write_text("old content", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    latex_export.write_latex_section("synopsis.tex", "new content")
+
+    assert (sections / "synopsis.tex").read_text(encoding="utf-8") == "new content"
+
+
+def test_write_latex_section_rejects_unlisted_file(monkeypatch, tmp_path):
+    """write_latex_section raises PermissionError for files not in the writable allowlist."""
+    bundled = tmp_path / "latex_assets"
+    sections = bundled / "sections"
+    sections.mkdir(parents=True)
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    import pytest
+    with pytest.raises(PermissionError, match="allowlist"):
+        latex_export.write_latex_section("TLCresume.sty", "malicious override")
+
+
+def test_write_latex_section_rejects_path_traversal(monkeypatch, tmp_path):
+    """write_latex_section rejects filenames not in the allowlist (blocks path traversal)."""
+    bundled = tmp_path / "latex_assets"
+    bundled.mkdir()
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    import pytest
+    with pytest.raises(PermissionError):
+        latex_export.write_latex_section("../../server.py", "pwned")
+
+
+def test_read_write_roundtrip(monkeypatch, tmp_path):
+    """Write a section then read it back — content must survive the roundtrip."""
+    bundled = tmp_path / "latex_assets"
+    (bundled / "sections").mkdir(parents=True)
+
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    content = "\\begin{zitemize}\n\\item Led migration.\n\\end{zitemize}"
+    latex_export.write_latex_section("experience.tex", content)
+
+    # Add to readable allowlist for this test (experience.tex is already there)
+    result = latex_export.read_latex_asset("sections/experience.tex")
+    assert "Led migration" in result
+
