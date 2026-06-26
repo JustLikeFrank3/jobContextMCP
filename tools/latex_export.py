@@ -482,6 +482,104 @@ def generate_resume_latex(
 
 
 # ---------------------------------------------------------------------------
+# LaTeX asset read / write helpers (server-side Claude content injection)
+# ---------------------------------------------------------------------------
+
+#: Allowlist of filenames Claude is permitted to read from the bundled assets.
+_READABLE_LATEX_ASSETS: set[str] = {
+    "TLCresume.sty",
+    "resume.tex",
+    "_header.tex",
+    "_warmup.tex",
+    "sections/synopsis.tex",
+    "sections/skills.tex",
+    "sections/experience.tex",
+    "sections/personalprojects.tex",
+    "sections/education.tex",
+    "sections/leadership.tex",
+}
+
+#: Allowlist of section files Claude is permitted to overwrite (no sty/tex root).
+_WRITABLE_LATEX_SECTIONS: set[str] = {
+    "synopsis.tex",
+    "skills.tex",
+    "experience.tex",
+    "personalprojects.tex",
+    "education.tex",
+    "leadership.tex",
+}
+
+
+def read_latex_asset(filename: str) -> str:
+    """Read a file from the bundled LaTeX resume assets.
+
+    Allows the AI to inspect TLCresume.sty, resume.tex, _header.tex, and any
+    section file so it understands the available macros before writing content.
+
+    Args:
+        filename: Relative path within templates/latex_assets/, e.g.
+                  ``"TLCresume.sty"`` or ``"sections/experience.tex"``.
+
+    Returns:
+        The file content as a string.
+
+    Raises:
+        PermissionError: If the filename is not in the readable allowlist.
+        FileNotFoundError: If the file does not exist.
+    """
+    if filename not in _READABLE_LATEX_ASSETS:
+        raise PermissionError(
+            f"'{filename}' is not in the readable LaTeX asset allowlist. "
+            f"Allowed files: {sorted(_READABLE_LATEX_ASSETS)}"
+        )
+    target = _BUNDLED_LATEX_ASSETS_DIR / filename
+    if not target.exists():
+        raise FileNotFoundError(f"LaTeX asset not found: {target}")
+    return target.read_text(encoding="utf-8")
+
+
+def write_latex_section(section_filename: str, content: str) -> str:
+    """Overwrite a section file in the bundled LaTeX resume assets.
+
+    Use this to inject tailored content (summary, experience, skills) into the
+    resume before calling ``export_resume_latex``.  Only files in
+    ``templates/latex_assets/sections/`` are writable.  The base template files
+    (``TLCresume.sty``, ``resume.tex``, ``_header.tex``) are read-only.
+
+    Workflow::
+
+        1. read_latex_asset("TLCresume.sty")        # understand macros
+        2. read_latex_asset("sections/experience.tex")  # see current content
+        3. write_latex_section("synopsis.tex", "...")   # inject tailored summary
+        4. write_latex_section("experience.tex", "...")  # inject tailored bullets
+        5. export_resume_latex(company="Acme", role="Staff Engineer")
+
+    Args:
+        section_filename: Bare filename within ``sections/``, e.g.
+                          ``"synopsis.tex"`` or ``"experience.tex"``.
+                          Do NOT include the ``sections/`` prefix.
+        content:          Full LaTeX content to write.  Must be valid LaTeX
+                          compatible with TLCresume.sty (zitemize, subsection,
+                          skills macros, etc.).
+
+    Returns:
+        Confirmation string with the file path written.
+
+    Raises:
+        PermissionError: If the filename is not in the writable allowlist.
+    """
+    if section_filename not in _WRITABLE_LATEX_SECTIONS:
+        raise PermissionError(
+            f"'{section_filename}' is not in the writable sections allowlist. "
+            f"Writable: {sorted(_WRITABLE_LATEX_SECTIONS)}"
+        )
+    target = _BUNDLED_LATEX_ASSETS_DIR / "sections" / section_filename
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return f"✓ Written: {target} ({len(content)} chars)"
+
+
+# ---------------------------------------------------------------------------
 # Listing helper (used by the pipeline dashboard)
 # ---------------------------------------------------------------------------
 

@@ -231,6 +231,8 @@ export_resume_pdf = export.export_resume_pdf
 export_cover_letter_pdf = export.export_cover_letter_pdf
 export_cover_letter_latex = export.export_cover_letter_latex
 export_resume_latex = export.export_resume_latex
+read_latex_asset = export.read_latex_asset
+write_latex_section = export.write_latex_section
 
 generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter
