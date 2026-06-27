@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import logging
-import random
 import threading
 import time
+from random import SystemRandom
 from typing import Any
 
 _LOG = logging.getLogger(__name__)
+# Cryptographically-seeded RNG used only for retry-backoff jitter. Avoids the
+# non-secure global PRNG so static analysers don't flag it (Sonar S2245 / B311).
+_RNG = SystemRandom()
 _CHAT_LOCK = threading.Lock()
 _LAST_CHAT_CALL = 0.0
 _MIN_CHAT_INTERVAL_SECONDS = 12.0
@@ -87,7 +90,7 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                     payload,
                 )
                 if status_code == 429 and attempt < max_attempts:
-                    backoff = _retry_after_seconds(exc, min(60.0, (2 ** attempt) + random.random()))
+                    backoff = _retry_after_seconds(exc, min(60.0, (2 ** attempt) + _RNG.random()))
                     _LOG.info("openai.chat retry_sleep label=%s wait=%.2fs", label, backoff)
                     time.sleep(backoff)
                     continue

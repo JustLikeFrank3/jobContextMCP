@@ -350,7 +350,9 @@ if __name__ == "__main__":
 
         uvicorn.run(
             app,
-            host=os.getenv("MCP_HOST", "0.0.0.0"),
+            # Binding is operator-controlled via MCP_HOST; 0.0.0.0 is the
+            # documented default for containerized/remote deployment. nosec B104
+            host=os.getenv("MCP_HOST", "0.0.0.0"),  # nosec B104
             port=int(os.getenv("MCP_PORT", "8000")),
         )
     else:

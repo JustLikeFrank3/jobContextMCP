@@ -29,7 +29,9 @@ class HttpSettings:
     @property
     def bind_host(self) -> str:
         """The address actually passed to uvicorn (respects ENABLE_REMOTE)."""
-        return "0.0.0.0" if self.enable_remote else self.host
+        # 0.0.0.0 only when the operator explicitly opts in via ENABLE_REMOTE;
+        # the safe default remains 127.0.0.1. nosec B104
+        return "0.0.0.0" if self.enable_remote else self.host  # nosec B104
 
     @property
     def auth_enabled(self) -> bool:

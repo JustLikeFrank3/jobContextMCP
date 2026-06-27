@@ -436,11 +436,17 @@ def _save_job_queue(con, data: dict) -> None:
     # Sync-delete: remove jobs no longer in the incoming dataset so that
     # explicit removals (pipeline_remove endpoint) are reflected in SQLite.
     if incoming_ids:
-        placeholders = ",".join("?" * len(incoming_ids))
-        con.execute(
-            f"DELETE FROM job_queue WHERE id NOT IN ({placeholders})",
-            incoming_ids,
-        )
+        # Compute stale rows in Python and delete them with a fully
+        # parameterized statement, avoiding a dynamically-built IN clause
+        # (Sonar S3649 / B608).
+        keep = set(incoming_ids)
+        stale = [
+            (row[0],)
+            for row in con.execute("SELECT id FROM job_queue")
+            if row[0] not in keep
+        ]
+        if stale:
+            con.executemany("DELETE FROM job_queue WHERE id = ?", stale)
     elif jobs == []:
         # All jobs removed — clear the table entirely.
         con.execute("DELETE FROM job_queue")
@@ -535,11 +541,15 @@ def _save_people(con, data: dict) -> None:
         )
     # Sync-delete: remove people no longer in the incoming dataset.
     if incoming_ids:
-        placeholders = ",".join("?" * len(incoming_ids))
-        con.execute(
-            f"DELETE FROM people WHERE id NOT IN ({placeholders})",
-            incoming_ids,
-        )
+        # Parameterized stale-row delete (no dynamic IN clause; Sonar S3649 / B608).
+        keep = set(incoming_ids)
+        stale = [
+            (row[0],)
+            for row in con.execute("SELECT id FROM people")
+            if row[0] not in keep
+        ]
+        if stale:
+            con.executemany("DELETE FROM people WHERE id = ?", stale)
 
 
 def _save_interviews(con, data: dict) -> None:
