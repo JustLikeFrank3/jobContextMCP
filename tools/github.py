@@ -31,6 +31,18 @@ from typing import Any
 _GITHUB_API = "https://api.github.com"
 
 
+def _open_https(req: "urllib.request.Request", timeout: float):
+    """Open an HTTPS request, rejecting any non-HTTPS scheme.
+
+    All callers build URLs from the ``_GITHUB_API`` constant, so the scheme is
+    always ``https``. This explicit guard prevents a ``file:``/custom-scheme URL
+    from ever reaching ``urlopen`` and satisfies static analysers (B310 / SSRF).
+    """
+    if req.type != "https":
+        raise ValueError(f"refusing non-HTTPS request scheme: {req.type!r}")
+    return urllib.request.urlopen(req, timeout=timeout)  # nosec B310 - scheme checked above
+
+
 def _is_offline() -> bool:
     return os.environ.get("JOBCONTEXTMCP_OFFLINE", "").lower() in ("1", "true", "yes")
 
@@ -45,7 +57,7 @@ def _http_get_json(url: str, timeout: float = 5.0) -> Any:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with _open_https(req, timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -199,7 +211,7 @@ def _fetch_traffic(slug: str, kind: str, token: str) -> dict[str, Any] | None:
     }
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with _open_https(req, 10) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except (OSError, ValueError):
         return None
