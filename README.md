@@ -4,8 +4,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
-  <img src="https://img.shields.io/badge/tests-943%20passing-brightgreen" alt="943 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-82.93%25-brightgreen" alt="82.93% coverage"/>
+  <img src="https://img.shields.io/badge/tests-1003%20passing-brightgreen" alt="1003 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-81.19%25-brightgreen" alt="81.19% coverage"/>
   <img src="https://img.shields.io/badge/tools-82-informational" alt="82 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
@@ -32,7 +32,7 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 | | |
 |---|---|
 | 82 MCP tools | Resume + cover letter generation |
-| 943 passing tests | Job fitment analysis with persona lenses |
+| 1003 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
