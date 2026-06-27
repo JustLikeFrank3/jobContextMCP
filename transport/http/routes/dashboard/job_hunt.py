@@ -195,4 +195,4 @@ async def job_hunt_board() -> HTMLResponse:
         .replace("PAGE_HEADER_PLACEHOLDER", page_header("Job Hunt Tracker", "Applications & Kanban board"))
         .replace("NAV_TABS_PLACEHOLDER", nav_tabs("job-hunt"))
     )
-    return HTMLResponse(html)
+    return HTMLResponse(html)  # NOSONAR

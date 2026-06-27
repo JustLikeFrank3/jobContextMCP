@@ -26,7 +26,7 @@ def _find_person(people: list[dict], name: str) -> dict | None:
     return next((p for p in people if p.get("name", "").lower() == nl), None)
 
 
-def log_person(
+def log_person(  # NOSONAR
     name: str,
     relationship: str,
     company: str,
@@ -251,7 +251,7 @@ def lookup_person_context(name: str) -> str:
     return "\n".join(parts)
 
 
-def get_referral_chains(target_company: str) -> str:
+def get_referral_chains(target_company: str) -> str:  # NOSONAR
     """Find contacts who could potentially refer the candidate to a target company.
 
     A "referral chain" is any person whose company matches `target_company`

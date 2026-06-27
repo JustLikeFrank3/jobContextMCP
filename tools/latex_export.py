@@ -374,6 +374,8 @@ def generate_cover_letter_latex(
 # Resume pipeline
 # ---------------------------------------------------------------------------
 
+_RESUME_TEX = "resume.tex"
+
 def generate_resume_latex(
     resume_text: str,  # noqa: ARG001  (reserved for future template injection)
     company: str,
@@ -420,7 +422,7 @@ def generate_resume_latex(
             "latex_resume_dir is not set or does not exist in config.json. "
             "Add the absolute path to your frank-resume-latex folder to use LaTeX resume export."
         )
-    resume_tex = latex_src / "resume.tex"
+    resume_tex = latex_src / _RESUME_TEX
 
     if not resume_tex.exists():
         raise FileNotFoundError(
@@ -459,7 +461,7 @@ def generate_resume_latex(
         shutil.copytree(str(latex_src), str(tmp_path), dirs_exist_ok=True)
 
         result = subprocess.run(
-            [tectonic, str(tmp_path / "resume.tex")],
+            [tectonic, str(tmp_path / _RESUME_TEX)],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -488,7 +490,7 @@ def generate_resume_latex(
 #: Allowlist of filenames Claude is permitted to read from the bundled assets.
 _READABLE_LATEX_ASSETS: set[str] = {
     "TLCresume.sty",
-    "resume.tex",
+    _RESUME_TEX,
     "_header.tex",
     "_warmup.tex",
     "sections/synopsis.tex",

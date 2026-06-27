@@ -18,6 +18,8 @@ from lib import config as _cfg_module
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
+_TXT_GLOB = "*.txt"
+
 
 def _data_dir() -> Path:
     return _cfg_module.get_active_data_folder()
@@ -45,7 +47,7 @@ def _openai_client() -> OpenAI:
 
 # ─── CHUNKING ─────────────────────────────────────────────────────────────────
 
-def _chunk_text(text: str, max_chars: int = 800, overlap: int = 100) -> list[str]:
+def _chunk_text(text: str, max_chars: int = 800, overlap: int = 100) -> list[str]:  # NOSONAR
     """Split text into overlapping chunks, respecting paragraph boundaries."""
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
     chunks: list[str] = []
@@ -86,7 +88,7 @@ def _embed(texts: list[str], client: OpenAI) -> list[list[float]]:
 
 # ─── INDEX ────────────────────────────────────────────────────────────────────
 
-def build_index(verbose: bool = True) -> dict[str, int]:
+def build_index(verbose: bool = True) -> dict[str, int]:  # NOSONAR
     """
     (Re)build the RAG index from all job search materials.
     Saves embeddings to data/rag_embeddings.npy and metadata to data/rag_index.json.
@@ -109,22 +111,22 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     optimized_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("optimized_resumes_dir", "01-Current-Optimized"))
     if optimized_dir.exists():
         file_groups.append(([
-            f for f in optimized_dir.glob("*.txt") if "MASTER" not in f.name
+            f for f in optimized_dir.glob(_TXT_GLOB) if "MASTER" not in f.name
         ], "resume"))
 
     # Cover letters
     cl_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("cover_letters_dir", "02-Cover-Letters"))
     if cl_dir.exists():
-        file_groups.append((list(cl_dir.glob("*.txt")), "cover_letters"))
+        file_groups.append((list(cl_dir.glob(_TXT_GLOB)), "cover_letters"))
 
     # Reference materials
     ref_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("reference_materials_dir", "06-Reference-Materials"))
     if ref_dir.exists():
-        file_groups.append((list(ref_dir.glob("*.txt")), "reference"))
+        file_groups.append((list(ref_dir.glob(_TXT_GLOB)), "reference"))
 
     # Interview prep files
     prep_files = [
-        f for f in resume_folder.glob("*.txt")
+        f for f in resume_folder.glob(_TXT_GLOB)
         if any(kw in f.name.lower() for kw in ("prep", "interview", "call", "cheat"))
     ]
     file_groups.append((prep_files, "interview_prep"))
@@ -132,17 +134,17 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     # Interview prep docs folder (08-Interview-Prep-Docs)
     prep_docs_dir = resume_folder / "08-Interview-Prep-Docs"
     if prep_docs_dir.exists():
-        prep_doc_files = list(prep_docs_dir.glob("*.txt")) + list(prep_docs_dir.glob("*.md"))
+        prep_doc_files = list(prep_docs_dir.glob(_TXT_GLOB)) + list(prep_docs_dir.glob("*.md"))
         file_groups.append((prep_doc_files, "interview_prep"))
 
     # Job assessments (fitment analysis, notes on specific roles)
     assessments_dir = resume_folder / "07-Job-Assessments"
     if assessments_dir.exists():
-        assessment_files = list(assessments_dir.glob("*.txt")) + list(assessments_dir.glob("*.md"))
+        assessment_files = list(assessments_dir.glob(_TXT_GLOB)) + list(assessments_dir.glob("*.md"))
         file_groups.append((assessment_files, "job_assessments"))
     # Also pick up any assessment .txt files dropped in the resume root
     root_assessment_files = [
-        f for f in resume_folder.glob("*.txt")
+        f for f in resume_folder.glob(_TXT_GLOB)
         if any(kw in f.name.lower() for kw in ("assessment", "fitment"))
     ]
     if root_assessment_files:

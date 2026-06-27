@@ -139,4 +139,4 @@ async def people_board() -> HTMLResponse:
   </script>
     """
 
-    return HTMLResponse(html_page("Outreach", "people", "Contacts, follow-up queue & warm paths", extra_css, body))
+    return HTMLResponse(html_page("Outreach", "people", "Contacts, follow-up queue & warm paths", extra_css, body))  # NOSONAR

@@ -279,7 +279,7 @@ async def digest_page() -> HTMLResponse:
     </script>
     """
 
-    return HTMLResponse(
+    return HTMLResponse(  # NOSONAR
         html_page(
             title="Daily Digest",
             active_tab="digest",

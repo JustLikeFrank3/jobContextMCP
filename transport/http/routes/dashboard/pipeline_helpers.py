@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from lib import config
 from lib.io import _load_json, _load_master_context, _save_json
 
-_COMPACT_TOKEN_RE = r"[^A-Za-z0-9]+"
+_SLUG_RE = r"[^A-Za-z0-9]+"
 
 class _JobActionRequest(BaseModel):
     job_id: int = Field(..., ge=1)
@@ -89,7 +89,7 @@ def _update_job(job_id: int, mutate) -> dict:
 
 
 def _list_resume_options() -> list[str]:
-    display_name = re.sub(r"[^A-Za-z0-9]+", "_", config.get_contact_name("Resume")).strip("_") or "Resume"
+    display_name = re.sub(_SLUG_RE, "_", config.get_contact_name("Resume")).strip("_") or "Resume"
     target_names = [f"{display_name}_Resume.pdf", f"{display_name}_Resume_MODERN.pdf"]
 
     # Resume choices are intentionally locked to exactly these two PDFs.
@@ -223,13 +223,13 @@ def _suggest_optimized_resume_for_job(job: dict, options: list[str]) -> str:
 
     haystacks = [job.get("company", ""), job.get("role", "")]
     tokens = [
-        re.sub(_COMPACT_TOKEN_RE, "", token.lower())
+        re.sub(_SLUG_RE, "", token.lower())
         for text in haystacks
         for token in re.findall(r"[A-Za-z0-9]+", text)
         if len(token) >= 4
     ]
     for name in options:
-        compact = re.sub(_COMPACT_TOKEN_RE, "", name.lower())
+        compact = re.sub(_SLUG_RE, "", name.lower())
         if any(token and token in compact for token in tokens):
             return name
     return options[0]
@@ -244,13 +244,13 @@ def _suggest_cover_letter_for_job(job: dict, options: list[str]) -> str:
 
     haystacks = [job.get("company", ""), job.get("role", "")]
     tokens = [
-        re.sub(_COMPACT_TOKEN_RE, "", token.lower())
+        re.sub(_SLUG_RE, "", token.lower())
         for text in haystacks
         for token in re.findall(r"[A-Za-z0-9]+", text)
         if len(token) >= 4
     ]
     for name in options:
-        compact = re.sub(_COMPACT_TOKEN_RE, "", name.lower())
+        compact = re.sub(_SLUG_RE, "", name.lower())
         if any(token and token in compact for token in tokens):
             return name
     return options[0]
@@ -264,7 +264,7 @@ def _resume_edit_output_name(source_name: str, company: str, role: str, output_f
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     source_stem = Path(source_name).stem
     raw_suffix = f"{company}_{role}".strip("_") or "Edited"
-    suffix = re.sub(r"[^A-Za-z0-9]+", "_", raw_suffix).strip("_")
+    suffix = re.sub(_SLUG_RE, "_", raw_suffix).strip("_")
     return f"{source_stem} - Edited {suffix}_{stamp}.txt"
 
 
@@ -276,7 +276,7 @@ def _cover_letter_edit_output_name(source_name: str, company: str, role: str, ou
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     source_stem = Path(source_name).stem
     raw_suffix = f"{company}_{role}".strip("_") or "Edited"
-    suffix = re.sub(r"[^A-Za-z0-9]+", "_", raw_suffix).strip("_")
+    suffix = re.sub(_SLUG_RE, "_", raw_suffix).strip("_")
     return f"{source_stem} - Edited {suffix}_{stamp}.txt"
 
 

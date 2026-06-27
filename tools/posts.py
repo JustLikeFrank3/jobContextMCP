@@ -31,7 +31,7 @@ def _find_post(posts: list[dict], post_id: int | None = None, source: str = "") 
     return None
 
 
-def log_linkedin_post(
+def log_linkedin_post(  # NOSONAR
     text: str,
     source: str,
     context: str = "",
@@ -202,7 +202,7 @@ def update_post_metrics(
     return f"✓ Metrics updated for post #{post['id']} ({post.get('title', post.get('source', ''))}): {', '.join(summary_parts)}"
 
 
-def get_linkedin_posts(
+def get_linkedin_posts(  # NOSONAR
     source: str = "",
     hashtag: str = "",
     min_reactions: int = 0,

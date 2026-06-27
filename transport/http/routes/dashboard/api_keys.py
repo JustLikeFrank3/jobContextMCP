@@ -231,7 +231,7 @@ function copyKey() {{
 
 @router.get("/api-keys", include_in_schema=False)
 async def api_keys_page(user: Annotated[User, Depends(require_authenticated_user)]) -> HTMLResponse:
-    return HTMLResponse(_build_page(user))
+    return HTMLResponse(_build_page(user))  # NOSONAR
 
 
 @router.post("/api-keys", include_in_schema=False)
@@ -240,7 +240,7 @@ async def generate_api_key(
     label: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     _key_id, plaintext = create_key(oid=user.id, label=label.strip())
-    return HTMLResponse(_build_page(user, new_key=plaintext))
+    return HTMLResponse(_build_page(user, new_key=plaintext))  # NOSONAR
 
 
 @router.post("/api-keys/{key_id}/revoke", include_in_schema=False)

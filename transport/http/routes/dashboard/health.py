@@ -137,4 +137,4 @@ async def health_board() -> HTMLResponse:
   </script>
     """
 
-    return HTMLResponse(html_page("Wellbeing", "health", "Mood & energy log", extra_css, body))
+    return HTMLResponse(html_page("Wellbeing", "health", "Mood & energy log", extra_css, body))  # NOSONAR

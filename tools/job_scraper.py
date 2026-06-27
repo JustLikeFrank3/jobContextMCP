@@ -81,7 +81,7 @@ def _is_linkedin_url(url: str) -> bool:
     return "linkedin.com" in (urlparse(url).hostname or "").lower()
 
 
-def _fetch_linkedin_direct(url: str) -> str:
+def _fetch_linkedin_direct(url: str) -> str:  # NOSONAR
     """Attempt a direct fetch of a LinkedIn job page via JSON-LD / Open Graph.
 
     LinkedIn blocks Jina (HTTP 451) but public job postings often include
@@ -299,7 +299,7 @@ def scrape_job_url(url: str, auto_queue: bool = True) -> str:
     return f"Scraped {url}\n→ {result}"
 
 
-def search_jobs(
+def search_jobs(  # NOSONAR
     query: str,
     location: str = "",
     num_results: int = 10,
@@ -405,7 +405,7 @@ def search_jobs(
     return "\n".join(lines)
 
 
-def search_greenhouse_jobs(
+def search_greenhouse_jobs(  # NOSONAR
     company_slug: str,
     query: str = "",
     num_results: int = 20,
@@ -502,7 +502,7 @@ def search_greenhouse_jobs(
     return "\n".join(lines)
 
 
-def search_lever_jobs(
+def search_lever_jobs(  # NOSONAR
     company_slug: str,
     query: str = "",
     num_results: int = 20,

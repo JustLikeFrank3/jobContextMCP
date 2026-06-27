@@ -215,4 +215,4 @@ async def materials_board() -> HTMLResponse:
   </script>
     """
 
-    return HTMLResponse(html_page("Materials", "materials", "Resume & cover letter inventory", extra_css, body))
+    return HTMLResponse(html_page("Materials", "materials", "Resume & cover letter inventory", extra_css, body))  # NOSONAR

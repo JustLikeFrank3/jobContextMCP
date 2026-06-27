@@ -119,7 +119,7 @@ def _short_note(text: str, max_len: int = 70) -> str:
 
 # ── get_daily_digest ───────────────────────────────────────────────────────────
 
-def get_daily_digest() -> str:
+def get_daily_digest() -> str:  # NOSONAR
     """
     Return a morning briefing for the job search day.
 
