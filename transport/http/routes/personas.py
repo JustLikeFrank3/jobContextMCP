@@ -18,7 +18,7 @@ async def list_personas() -> dict[str, list[str]]:
     return {"personas": PersonaService.list_personas()}
 
 
-@router.get("/{name}")
+@router.get("/{name}", responses={404: {"description": "Persona not found"}})
 async def get_persona(name: str) -> dict:
     try:
         p = PersonaService.get(name)

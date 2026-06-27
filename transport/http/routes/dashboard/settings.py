@@ -5,10 +5,12 @@ POST /dashboard/settings/ai-key — save / clear OpenAI API key in user config.j
 """
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from transport.http.auth import require_authenticated_user
@@ -17,6 +19,8 @@ from .shared import BASE_CSS, html_page, nav_tabs, page_header
 from .assets import logo_svg
 
 router = APIRouter()
+
+_CONFIG_FILENAME = "config.json"
 
 _EXTRA_CSS = """
   .settings-section {
@@ -122,14 +126,19 @@ _EXTRA_CSS = """
 
 def _user_config_path(user: User) -> Path | None:
     """Return the path to the user's config.json, or None if no data dir."""
+    from lib.user_context import get_data_folder_override
+
     try:
-        from lib.user_context import get_data_folder_override
         override = get_data_folder_override()
-        if override:
-            return override / "config.json"
     except Exception:
-        pass
-    return None
+        return None
+    if not override:
+        return None
+    root = override.resolve()
+    config_path = (override / _CONFIG_FILENAME).resolve()
+    if root != config_path.parent and root not in config_path.parents:
+        raise HTTPException(status_code=400, detail="Invalid config path")
+    return config_path
 
 
 def _read_user_config(path: Path) -> dict:
@@ -154,7 +163,7 @@ def _build_page(user: User, flash: str = "", flash_type: str = "ok") -> str:
     flash_html = ""
     if flash:
         cls = "flash-ok" if flash_type == "ok" else "flash-err"
-        flash_html = f'<div class="{cls}">{flash}</div>'
+        flash_html = f'<div class="{cls}">{html.escape(flash)}</div>'
 
     status_html = (
         '<span class="key-status set">✓ API key configured</span>'
@@ -206,8 +215,8 @@ def _build_page(user: User, flash: str = "", flash_type: str = "ok") -> str:
 
 @router.get("/settings", include_in_schema=False)
 async def settings_page(
-    saved: str = "",
-    user: User = Depends(require_authenticated_user),
+    user: Annotated[User, Depends(require_authenticated_user)],
+    saved: Annotated[str, Query()] = "",
 ) -> HTMLResponse:
     flash = "✓ Settings saved." if saved == "1" else ""
     return HTMLResponse(_build_page(user, flash=flash))
@@ -215,9 +224,9 @@ async def settings_page(
 
 @router.post("/settings/ai-key", include_in_schema=False)
 async def save_ai_key(
-    openai_key: str = Form(default=""),
-    action: str = Form(default="save"),
-    user: User = Depends(require_authenticated_user),
+    user: Annotated[User, Depends(require_authenticated_user)],
+    openai_key: Annotated[str, Form()] = "",
+    action: Annotated[str, Form()] = "save",
 ) -> HTMLResponse:
     config_path = _user_config_path(user)
     if not config_path:

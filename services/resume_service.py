@@ -43,7 +43,7 @@ class ResumeResult:
     kind: str
     content: str
     pdf_exported: bool = False
-    notes: list[str] = None
+    notes: Optional[list[str]] = None
 
     def __post_init__(self):
         if self.notes is None:

@@ -99,6 +99,14 @@ def _pipeline_payload() -> dict:
     }
 
 
+def _safe_child_path(parent: Path, filename: str, *, detail: str = "Invalid path") -> Path:
+    root = parent.resolve()
+    candidate = (parent / filename).resolve()
+    if root != candidate.parent and root not in candidate.parents:
+        raise HTTPException(status_code=400, detail=detail)
+    return candidate
+
+
 @router.get("/pipeline/data")
 async def pipeline_data() -> JSONResponse:
     return JSONResponse(_pipeline_payload())
@@ -324,7 +332,11 @@ async def pipeline_cover_letter_draft(draft_name: str) -> FileResponse:
 
 def _export_cover_letter_draft_html(draft_path: Path, role: str, cl_template: str = "", cl_style: str = "navy") -> str:
     """Export a transient .tmp draft through the existing HTML exporter."""
-    temp_txt = draft_path.with_name(f"{draft_path.name}.txt")
+    temp_txt = _safe_child_path(
+        draft_path.parent,
+        f"{draft_path.name}.txt",
+        detail="Invalid cover-letter export path",
+    )
     try:
         temp_txt.write_text(draft_path.read_text(encoding="utf-8"), encoding="utf-8")
         return export_cover_letter_pdf(
@@ -438,7 +450,7 @@ async def pipeline_accept_cover_letter_edit(req: _CoverLetterAcceptRequest) -> J
     if draft not in _list_cover_letter_drafts(source.name):
         raise HTTPException(status_code=400, detail="Draft does not belong to this cover letter")
 
-    backup = source.with_name(f"{source.name}.bak")
+    backup = _safe_child_path(source.parent, f"{source.name}.bak", detail="Invalid cover-letter backup path")
     backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     source.write_text(draft.read_text(encoding="utf-8"), encoding="utf-8")
     deleted = _delete_cover_letter_drafts(source.name)

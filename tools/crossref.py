@@ -413,8 +413,8 @@ def run_contact_crossref(fb_folder: str = "") -> str:
 
     lines += [
         "",
-        f"Saved: contact_crossref.json",
-        f"Updated: linkedin_connections.json (facebook_match per connection)",
+        "Saved: contact_crossref.json",
+        "Updated: linkedin_connections.json (facebook_match per connection)",
     ]
     return "\n".join(lines)
 
@@ -480,7 +480,6 @@ def get_contact_crossref(insight: str = "", name: str = "") -> str:
             return f"No contacts in '{insight}' bucket."
         lines = [f"{insight.replace('_', ' ')} ({bucket['count']} contacts):", ""]
         for c in contacts:
-            platforms = ", ".join(k for k in ("facebook", "linkedin", "internal") if k in c)
             hints = "; ".join(c.get("action_hints", []))
             fb_rel = c.get("facebook", {}).get("relationship", "")
             li_co  = c.get("linkedin", {}).get("company", "")
@@ -581,11 +580,11 @@ def get_fb_outreach_queue(
     page  = regular[offset: offset + limit]
 
     lines = [
-        f"FB → LinkedIn Outreach Queue",
+        "FB → LinkedIn Outreach Queue",
         f"{len(queue)} FB {'friends' if not include_pending else 'contacts'} not yet on LinkedIn"
         + (f"  |  {len(priority)} also in your tracker" if priority else ""),
         "",
-        f"Active job targets (AI: flag anyone you recognize at these companies):",
+        "Active job targets (AI: flag anyone you recognize at these companies):",
         "  " + ", ".join(target_companies[:20]) + ("..." if len(target_companies) > 20 else ""),
         "",
         f"Showing {offset + 1}–{offset + len(page)} of {total} regular + {len(priority)} pinned"

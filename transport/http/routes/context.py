@@ -23,7 +23,7 @@ router = APIRouter(
 )
 
 
-@router.post("/stories/search", response_model=StorySearchResponse)
+@router.post("/stories/search")
 async def stories_search(req: StorySearchRequest) -> StorySearchResponse:
     result = _star.get_star_story_context(
         tag=req.tag, company=req.company, role_type=req.role_type,
@@ -31,6 +31,6 @@ async def stories_search(req: StorySearchRequest) -> StorySearchResponse:
     return StorySearchResponse(tag=req.tag, results=result)
 
 
-@router.get("/tone/profile", response_model=ToneProfileResponse)
+@router.get("/tone/profile")
 async def tone_profile() -> ToneProfileResponse:
     return ToneProfileResponse(profile=_tone.get_tone_profile())

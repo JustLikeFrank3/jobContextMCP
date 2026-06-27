@@ -137,7 +137,7 @@ def _load_openai_key(path: Path) -> str:
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     except Exception:
-        return ""
+        return str(os.environ.get("OPENAI_API_KEY") or "")
     return str(cfg.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or "")
 
 

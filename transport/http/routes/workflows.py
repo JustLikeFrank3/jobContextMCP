@@ -29,7 +29,7 @@ async def list_workflows() -> dict[str, list[str]]:
     return {"workflows": WorkflowService.list_workflows()}
 
 
-@router.post("/{name}")
+@router.post("/{name}", responses={404: {"description": "Workflow not found"}})
 async def run_workflow(name: str, inputs: dict[str, Any]) -> dict[str, Any]:
     try:
         return WorkflowService.run(name, inputs)
@@ -37,7 +37,7 @@ async def run_workflow(name: str, inputs: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.post("/{name}/stream")
+@router.post("/{name}/stream", responses={404: {"description": "Workflow not found"}})
 async def run_workflow_stream(name: str, inputs: dict[str, Any]):
     # Validate workflow name up-front so 404 surfaces immediately rather than
     # as an error event inside the SSE stream.
