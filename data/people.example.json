@@ -1,26 +1,38 @@
-# Example people.json for jobContextMCP
-# Copy to people.json and customize with your contacts.
-[
-  {
-    "name": "Jane Doe",
-    "relationship": "recruiter",
-    "company": "TechCorp",
-    "context": "Reached out via LinkedIn about a backend role.",
-    "tags": ["recruiter", "backend", "linkedin"],
-    "contact_info": "jane.doe@techcorp.com",
-    "outreach_status": "contacted",
-    "notes": "Followed up after initial message.",
-    "sent_message": "Hi Jane, thanks for reaching out..."
-  },
-  {
-    "name": "John Smith",
-    "relationship": "former coworker",
-    "company": "General Motors",
-    "context": "Worked together on the MADM app migration.",
-    "tags": ["gm", "coworker", "cloud"],
-    "contact_info": "john.smith@gm.com",
-    "outreach_status": "none",
-    "notes": "Great reference for cloud migration projects.",
-    "sent_message": ""
-  }
-]
+{
+  "people": [
+    {
+      "id": 1,
+      "timestamp": "2026-01-01T00:00:00",
+      "name": "Jane Doe",
+      "relationship": "recruiter",
+      "company": "Example Corp",
+      "context": "Reached out via LinkedIn about a backend role.",
+      "tags": [
+        "recruiter",
+        "backend",
+        "linkedin"
+      ],
+      "contact_info": "jane.doe@example.com",
+      "outreach_status": "contacted",
+      "notes": "Followed up after initial message.",
+      "last_updated": "2026-01-01T00:00:00"
+    },
+    {
+      "id": 2,
+      "timestamp": "2026-01-02T00:00:00",
+      "name": "John Smith",
+      "relationship": "former coworker",
+      "company": "Previous Employer",
+      "context": "Worked together on cloud migration project.",
+      "tags": [
+        "coworker",
+        "cloud",
+        "reference"
+      ],
+      "contact_info": "john.smith@example.com",
+      "outreach_status": "none",
+      "notes": "Strong reference for cloud migration projects.",
+      "last_updated": "2026-01-02T00:00:00"
+    }
+  ]
+}

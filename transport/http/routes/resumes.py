@@ -25,7 +25,7 @@ router = APIRouter(
 )
 
 
-@router.post("/generate", response_model=ResumeGenerateResponse)
+@router.post("/generate")
 async def generate(req: ResumeGenerateRequest) -> ResumeGenerateResponse:
     result = ResumeService.generate(
         company=req.company,
@@ -33,6 +33,7 @@ async def generate(req: ResumeGenerateRequest) -> ResumeGenerateResponse:
         job_description=req.job_description,
         output_filename=req.output_filename,
         kind=req.kind,
+        export_pipeline=req.export_pipeline,
         persona=req.persona,
     )
     return ResumeGenerateResponse(
@@ -55,6 +56,7 @@ async def generate_stream(req: ResumeGenerateRequest):
             job_description=req.job_description,
             output_filename=req.output_filename,
             kind=req.kind,
+            export_pipeline=req.export_pipeline,
             persona=req.persona,
             on_progress=cb,
         ),

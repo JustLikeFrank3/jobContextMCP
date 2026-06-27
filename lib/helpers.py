@@ -4,8 +4,10 @@ from lib import config
 
 
 def _build_story_entry(stories: list, story: str, tags: list, people: list, title: str) -> dict:
+    existing_ids = [s.get("id") for s in stories if isinstance(s.get("id"), int)]
+    next_id = max(existing_ids) + 1 if existing_ids else 1
     return {
-        "id": len(stories) + 1,
+        "id": next_id,
         "timestamp": datetime.datetime.now().isoformat(),
         "title": title or (story[:60] + ("..." if len(story) > 60 else "")),
         "story": story,
@@ -76,14 +78,17 @@ def _build_tone_sample_entry(samples: list, text: str, source: str, context: str
 
 
 def _scan_dirs(category: str) -> list:
+    ws = config.get_active_workspace_folder()
+    cover_letters_dir = config.get_active_cover_letters_dir()
+    optimized_dir = config.get_active_optimized_resumes_dir()
     mapping: dict = {
-        "cover_letters": [config.RESUME_FOLDER / "02-Cover-Letters"],
-        "resumes": [config.RESUME_FOLDER / "01-Current-Optimized"],
-        "misc": [config.RESUME_FOLDER],
+        "cover_letters": [cover_letters_dir],
+        "resumes": [optimized_dir],
+        "misc": [ws],
         "all": [
-            config.RESUME_FOLDER / "02-Cover-Letters",
-            config.RESUME_FOLDER / "01-Current-Optimized",
-            config.RESUME_FOLDER,
+            cover_letters_dir,
+            optimized_dir,
+            ws,
         ],
     }
-    return mapping.get(category.lower(), [config.RESUME_FOLDER / "02-Cover-Letters"])
+    return mapping.get(category.lower(), [cover_letters_dir])

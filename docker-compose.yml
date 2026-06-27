@@ -17,9 +17,14 @@ services:
 
     # ── Secrets / model config ──────────────────────────────────────────────
     environment:
+      USE_SQLITE: ${USE_SQLITE:-1}
+      SQLITE_ONLY: ${SQLITE_ONLY:-0}
       MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
       MCP_HOST: ${MCP_HOST:-0.0.0.0}
       MCP_PORT: ${MCP_PORT:-8000}
+      # Owner's Entra OID — gates owner-only features (LaTeX export, etc.)
+      # Set this to your Azure AD Object ID (portal → AAD → Users → your profile → Object ID)
+      ENTRA_OWNER_OID: ${ENTRA_OWNER_OID:-}
 
     # ── Volumes ─────────────────────────────────────────────────────────────
     volumes:

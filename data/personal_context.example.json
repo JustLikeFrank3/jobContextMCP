@@ -4,9 +4,56 @@
       "id": 1,
       "timestamp": "2026-01-01T00:00:00",
       "title": "Short label for quick scanning",
-      "story": "The full story text — as much detail as you want. Written in first person. This is what the AI will read to understand you.",
-      "tags": ["family", "motivation", "career"],
-      "people": ["Person Name"]
+      "story": "The full story text — first person. This is what the AI reads to understand you.",
+      "tags": [
+        "family",
+        "motivation",
+        "career"
+      ],
+      "people": [
+        "Person Name"
+      ]
     }
-  ]
+  ],
+  "star_stories": [
+    {
+      "id": "star_001",
+      "title": "Solved production outage in 30 minutes",
+      "tags": [
+        "incident_response",
+        "leadership",
+        "debugging"
+      ],
+      "situation": "Production database hit 100% CPU during peak traffic.",
+      "task": "Identify root cause and restore service before the SLA window expired.",
+      "action": "Isolated the runaway query, killed the session, deployed an index hotfix.",
+      "result": "Service restored within 30 minutes, well inside SLA. Root cause documented for the team.",
+      "metric_bullets": [
+        "30-minute resolution vs 2-hour SLA",
+        "Zero customer-impacting downtime after mitigation"
+      ],
+      "framing_hints": "Great answer for 'tell me about a time you handled a crisis' or 'describe your debugging process'.",
+      "source": "Real incident at Example Corp, January 2026",
+      "notes": "Pair with the postmortem doc when going deeper."
+    }
+  ],
+  "hbdi_profile": {
+    "assessed_at": "2026-01-01T00:00:00",
+    "scores": {
+      "A": 3,
+      "B": 2,
+      "C": 1,
+      "D": 4
+    },
+    "primary": "D",
+    "responses": {
+      "q1_no_spec_project": "Sketched a system diagram first, then prototyped.",
+      "q2_critical_feedback": "Thanked the reviewer and revised within 24h.",
+      "q3_tedious_finish": "Broke into checklists; finished but felt drained.",
+      "q4_senior_disagreement": "Asked clarifying questions, presented data, accepted final call."
+    },
+    "notes": "Primary D (experimental/visionary) with strong A (analytical) backup."
+  },
+  "star_metrics": {},
+  "company_framing": {}
 }

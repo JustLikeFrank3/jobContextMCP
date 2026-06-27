@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="jobContext">
+<title>jobContext</title>
+<rect width="64" height="64" rx="14" fill="#0F172A"></rect>
+<g transform="translate(9 15) scale(0.125)">
+<path d="M263.3 87.0 A 80 80 0 1 0 263.3 213.0" fill="none" stroke="#06B6D4" stroke-width="46" stroke-linecap="round"></path>
+<circle cx="84" cy="54" r="27" fill="#FFFFFF"></circle>
+<path d="M84 98 L84 207 Q84 250 41 250" fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"></path>
+</g>
+</svg>

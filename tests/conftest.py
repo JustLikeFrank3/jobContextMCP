@@ -66,12 +66,40 @@ def isolated_server(tmp_path: Path):
     _write(lc_dir  / "quick_ref.md",      "[TEST QUICK REFERENCE]")
     # Stub reference files required by _reconfigure
     _write(res_dir / "template_format.txt",    "[TEST TEMPLATE FORMAT]")
-    _write(res_dir / "gm_awards.txt",           "[TEST GM AWARDS]")
+    _write(res_dir / "achievements.txt",      "[TEST ACHIEVEMENTS]")
     _write(res_dir / "feedback_received.txt",   "[TEST FEEDBACK]")
     _write(res_dir / "skills_shorter.txt",      "[TEST SKILLS]")
 
     # Minimal status so get_job_hunt_status() has something to read
     _write_json(data_dir / "status.json", {"applications": [], "pipeline_summary": "TEST"})
+
+    # Minimal personal context — metrics and framing required by STAR context tests.
+    # Values are generic synthetic test data; they must satisfy the numeric/keyword
+    # assertions in test_star_context.py without encoding any real user information.
+    _write_json(data_dir / "personal_context.json", {
+        "stories": [],
+        "star_metrics": {
+            "testing":        ["80%+ test coverage across unit, integration, and end-to-end suites"],
+            "quality":        ["98% SLA on production service throughout all migration phases"],
+            "craftsmanship":  ["TDD enforced from first commit — no QA buffer to fall back on"],
+            "solo-developer": ["Sole developer across 500K+ line codebase with no feature freeze"],
+            "cloud":          ["On-prem to Azure Container Apps migration with zero downtime"],
+            "ai":             ["Drove 35%+ AI tooling adoption across the engineering org"],
+            "leadership":     ["Led cross-functional initiatives without formal authority"],
+            "modernization":  ["Major framework upgrade across 500K+ lines, no regressions"],
+            "ford":           ["Family legacy in manufacturing — quality built in, not bolted on"],
+        },
+        "company_framing": {
+            "ford": {
+                "legacy": "50-year family legacy in automotive manufacturing — quality as an inherited value",
+                "angle":  "Quality built in from the ground up, not added as an afterthought",
+            },
+            "fanduel": {
+                "values": "Scale, speed, and uptime under real-time load",
+                "angle":  "Testing rigor is what lets you ship fast without eroding trust",
+            },
+        },
+    })
 
     fake_cfg = {
         "resume_folder":              str(res_dir),
@@ -84,7 +112,7 @@ def isolated_server(tmp_path: Path):
         "resume_template_png":        "resume_template.png",
         "cover_letter_template_png":  "cover_letter_template.png",
         "template_format_path":       "template_format.txt",
-        "gm_awards_path":             "gm_awards.txt",
+        "achievements_path":           "achievements.txt",
         "feedback_received_path":     "feedback_received.txt",
         "skills_shorter_path":        "skills_shorter.txt",
     }
@@ -101,7 +129,7 @@ def isolated_server(tmp_path: Path):
         "resume_template_png":        srv.RESUME_TEMPLATE_PNG.name,
         "cover_letter_template_png":  srv.COVER_LETTER_TEMPLATE_PNG.name,
         "template_format_path":       srv.TEMPLATE_FORMAT.name,
-        "gm_awards_path":             srv.GM_AWARDS.name,
+        "achievements_path":           srv.ACHIEVEMENTS.name,
         "feedback_received_path":     srv.FEEDBACK_RECEIVED.name,
         "skills_shorter_path":        srv.SKILLS_SHORTER.name,
     }
@@ -157,12 +185,29 @@ _FAKE_COVER = "FAKE COVER LETTER CONTENT"
 
 @pytest.fixture(autouse=True)
 def _mock_llm(request, monkeypatch):
-    """Stub out LLM generate calls for all tests unless marked live_llm."""
+    """Stub out LLM generate calls for all tests unless marked live_llm.
+
+    Also forces get_llm_client() to return (None, None) so the fitment /
+    assessment path (run_job_assessment, evaluate_queued_job, JobAnalysisService)
+    takes its deterministic offline context-pack fallback instead of making a
+    live OpenAI/Ollama request. Without this, those tests silently hit the real
+    API and pass or fail depending on network/rate-limit state.
+
+    Tests that genuinely need the live-LLM code path (with their own mocked
+    client) opt out via @pytest.mark.live_llm.
+
+    _LAST_CHAT_CALL is reset to 0.0 for every test (including live_llm ones)
+    so the process-local rate-smoothing gate never sleeps during the test suite.
+    """
+    import lib.openai_calls as _oc
+    monkeypatch.setattr(_oc, "_LAST_CHAT_CALL", 0.0)
+
     if request.node.get_closest_marker("live_llm"):
         yield
         return
     monkeypatch.setattr("tools.generate.generate_resume", lambda *a, **kw: _FAKE_RESUME)
     monkeypatch.setattr("tools.generate.generate_cover_letter", lambda *a, **kw: _FAKE_COVER)
+    monkeypatch.setattr("lib.config.get_llm_client", lambda task="": (None, None))
     try:
         import workflows.langgraph.resume_graph as rg
         monkeypatch.setattr(rg, "generate_resume", lambda *a, **kw: _FAKE_RESUME)

@@ -1,0 +1,15 @@
+/* Slate theme — cool gray-blue */
+:root {
+  --accent:       #334155;
+  --accent-light: #475569;
+  --accent-mid:   #3d4f63;
+  --accent-dark:  #1e293b;
+  --heading:      #1e293b;
+  --rule:         #475569;
+  --sidebar-bg:   #334155;
+  --sidebar-text: #e2e8f0;
+  --sidebar-head: #94a3b8;
+  --chip-bg:      #e2e8f0;
+  --chip-text:    #334155;
+  --link:         #475569;
+}

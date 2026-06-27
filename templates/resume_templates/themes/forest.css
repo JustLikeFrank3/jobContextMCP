@@ -1,0 +1,15 @@
+/* Forest theme — deep green */
+:root {
+  --accent:       #1a6644;
+  --accent-light: #2d9e6a;
+  --accent-mid:   #1f7a50;
+  --accent-dark:  #0f3d28;
+  --heading:      #1a6644;
+  --rule:         #1a6644;
+  --sidebar-bg:   #1a6644;
+  --sidebar-text: #e6f4ee;
+  --sidebar-head: #8fd4b0;
+  --chip-bg:      #d4f0e2;
+  --chip-text:    #1a6644;
+  --link:         #2d9e6a;
+}

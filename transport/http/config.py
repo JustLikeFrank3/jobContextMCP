@@ -29,7 +29,9 @@ class HttpSettings:
     @property
     def bind_host(self) -> str:
         """The address actually passed to uvicorn (respects ENABLE_REMOTE)."""
-        return "0.0.0.0" if self.enable_remote else self.host
+        # 0.0.0.0 only when the operator explicitly opts in via ENABLE_REMOTE;
+        # the safe default remains 127.0.0.1. nosec B104
+        return "0.0.0.0" if self.enable_remote else self.host  # nosec B104
 
     @property
     def auth_enabled(self) -> bool:
@@ -43,6 +45,14 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_port(default: int = 8000) -> int:
+    """Read PORT from environment, ignoring empty or non-integer values."""
+    raw = os.environ.get("PORT", "").strip()
+    if raw.isdigit():
+        return int(raw)
+    return default
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> HttpSettings:
     """Build and cache HttpSettings from the current process environment."""
@@ -50,7 +60,7 @@ def get_settings() -> HttpSettings:
     cors = tuple(o.strip() for o in cors_raw.split(",") if o.strip()) if cors_raw else ()
     return HttpSettings(
         host=os.environ.get("HOST", "127.0.0.1"),
-        port=int(os.environ.get("PORT", "8000")),
+        port=_env_port(8000),
         enable_remote=_env_bool("ENABLE_REMOTE", False),
         api_key=os.environ.get("API_KEY") or None,
         cors_origins=cors,

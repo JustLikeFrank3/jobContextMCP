@@ -13,7 +13,7 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 _ROOT = Path(__file__).resolve().parents[4]
 
 _LOGO_SVG_PATH   = _ROOT / "docs" / "branding" / "logo"   / "jobcontextmcp-mark-dark.svg"
-_BANNER_SVG_PATH = _ROOT / "docs" / "branding" / "banner" / "jobcontextmcp-readme.svg"
+_BANNER_SVG_PATH = _ROOT / "docs" / "branding" / "banner" / "banner.svg"
 
 
 def logo_svg() -> str:

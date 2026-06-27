@@ -1,22 +1,46 @@
 <p align="center">
-  <img src="docs/branding/banner/jobcontextmcp-readme.svg" alt="JobContextMCP" width="860"/>
+  <img src="docs/branding/banner/banner.svg" alt="jobContext — The memory layer for your career" width="860"/>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.9.0-blue" alt="Version 0.9.0"/>
-  <img src="https://img.shields.io/badge/tests-523%2F523-brightgreen" alt="Tests 523/523"/>
-  <img src="https://img.shields.io/badge/tools-73-informational" alt="73 MCP tools"/>
+  <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
+  <img src="https://img.shields.io/badge/tests-1003%20passing-brightgreen" alt="1003 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-81.19%25-brightgreen" alt="81.19% coverage"/>
+  <img src="https://img.shields.io/badge/tools-82-informational" alt="82 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
 </p>
 
 # JobContextMCP
 
-A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives GitHub Copilot, Claude, Cursor, Windsurf, Zed, and other MCP-compatible AI assistants persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, or interview prep from scratch.
+A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server and local dashboard that gives the GitHub Copilot app, GitHub Copilot in VS Code, Claude Desktop, Cursor, Windsurf, Zed, browser/mobile workflows, CLI scripts, and other MCP-compatible or HTTP-capable clients persistent, structured memory of your job search — so you never have to re-explain your resume, pipeline status, interview prep, outreach context, application history, or portfolio metrics from scratch.
 
-Built in Python using [FastMCP](https://github.com/jlowin/fastmcp).
+Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint PDF export, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 73 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, and scheduled tasks can consume the same tools as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 82 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
+
+---
+
+## TL;DR
+
+JobContextMCP gives AI assistants access to structured job-search context that persists across sessions.
+
+Instead of re-explaining your resume, applications, interview history, outreach, and portfolio every session, the platform provides that context through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
+
+Available as a local MCP server, local dashboard, or cloud-hosted multi-user deployment on Azure AKS.
+
+| | |
+|---|---|
+| 82 MCP tools | Resume + cover letter generation |
+| 1003 passing tests | Job fitment analysis with persona lenses |
+| SQLite persistence + JSON fallback | Interview prep + debrief logging |
+| Local RAG semantic search | Outreach + relationship tracking |
+| Azure AKS deployment | Microsoft Entra ID authentication |
+| Multi-user isolated workspaces | Web dashboard (pipeline, digest, materials) |
+
+**Works with:** GitHub Copilot · VS Code · Claude Desktop · Cursor · Windsurf · Zed · HTTP clients · CLI automation
+
+Originally built to solve my own job search after being laid off. Now evolving into a multi-user platform.
 
 ---
 
@@ -32,11 +56,51 @@ If you're in the same situation, it's yours.
 
 ## Output
 
-| Resume | Cover Letter |
-|--------|-------------|
-| ![Resume demo](docs/demo-resume.png) | ![Cover letter demo](docs/demo-cover-letter.png) |
+### Web dashboard
+
+![JobContextMCP Dashboard v1](docs/jobContextMCP%20Dashboard%20v1.png)
+
+The browser dashboard turns the local MCP workspace into a job-search command center: daily digest (including a NEEDS DECISION section surfacing unevaluated queue items), pipeline triage, cover-letter edit dialog with LLM-powered revision and draft versioning, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
+
+**Edit Cover Letter** — each queued job card exposes an Edit button that opens a modal with a source cover-letter selector, read-only source preview, instructions textarea, and optional PDF export. Each edit run writes a versioned draft (`{stem}.edit1.tmp`, `.edit2.tmp`, …) so the source is never overwritten mid-session. After review: **Accept Changes** promotes the latest draft to canonical source (backing up the original to `{stem}.bak`) and cleans up all `.editN.tmp` files; **Cancel** deletes all drafts and leaves the source untouched.
+
+### Generated documents
 
 Generated from plain `.txt` files — no design tools, no Canva, no InDesign. The templates live in `templates/` and render via WeasyPrint.
+
+### Resume template gallery
+
+4 layout formats x 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
+
+| Sidebar resume | Sidebar cover letter |
+|----------------|----------------------|
+| ![Sidebar resume](docs/demo/demo_resume_sidebar.png) | ![Sidebar cover letter](docs/demo/demo_coverletter_sidebar.png) |
+| Two-column: contact/skills sidebar + experience/projects main | Matching sidebar layout for the cover letter |
+
+| Modern resume | Modern cover letter |
+|---------------|---------------------|
+| ![Modern resume](docs/demo/demo_resume_modern.png) | ![Modern cover letter](docs/demo/demo_coverletter_modern.png) |
+| Single-column, ATS-friendly, clean typography | Clean header band, flush prose paragraphs |
+
+| Executive resume | Executive cover letter |
+|------------------|------------------------|
+| ![Executive resume](docs/demo/demo_resume_executive_p1.png) | ![Executive cover letter](docs/demo/demo_coverletter_executive.png) |
+| Centered letterhead, serif, achievement-focused | Matching executive letterhead |
+
+| Portfolio resume | Portfolio cover letter |
+|------------------|------------------------|
+| ![Portfolio resume](docs/demo/demo_resume_portfolio.png) | ![Portfolio cover letter](docs/demo/demo_coverletter_portfolio.png) |
+| Projects-first, GitHub-prominent, technical profile | Accent-strip header, project-centric intro |
+
+Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
+
+> **⚠️ No template selected?** If no template preference is saved in the pipeline, output falls back to the legacy format — Courier New, monospaced, hacker-tag header/footer. It's a genuine aesthetic choice if you want it. But if you haven't actively chosen it, your recruiter may have thoughts.
+>
+> | Legacy resume | Legacy cover letter |
+> |---------------|---------------------|
+> | ![Legacy resume](docs/demo/demo_resume_legacy.png) | ![Legacy cover letter](docs/demo/demo_coverletter_legacy.png) |
+>
+> Select a template in the pipeline and this will never happen to you.
 
 ---
 
@@ -52,109 +116,174 @@ This MCP server solves that by giving any AI assistant a set of tools it can cal
 
 ---
 
+## Feature Map
+
+JobContextMCP is now more than a stdio MCP server. The current branch combines:
+
+| Area | Included capabilities |
+|------|----------------------|
+| Authentication + multi-user | Entra ID OAuth2 PKCE browser login for AKS-hosted dashboard; JWT validation (v1/v2 audience); per-user data isolation via `ContextVar` — each guest gets their own SQLite DB, workspace folder, and JSON partition; owner OID routes to full corpus; auto-provisioning with placeholder resume on first login; logout button on all dashboard pages |
+| Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
+| Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
+| Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
+| Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export |
+| Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
+| People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
+| Interview prep | Upcoming interviews, interview debrief logs, interview context assembly, quick-reference context, LeetCode cheatsheets, prep-document generation |
+| Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
+| Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
+| Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, Entra-authenticated dashboard routes, LangGraph workflow streaming |
+
+---
+
 ## Architecture
 
 ```mermaid
 graph TB
-    AI["GitHub Copilot / Claude / Cursor / Windsurf / Zed"]
+  subgraph CLIENTS["Clients"]
+    COPILOT["GitHub Copilot app / Copilot in VS Code / Claude / Cursor / Windsurf / Zed\nMCP stdio or Streamable HTTP"]
+    CLI["cli.py / cron / launchd / scripts"]
+    DASH["Browser — Entra PKCE login\ndashboard + pipeline"]
+    HTTPCLIENT["HTTP / REST / SSE clients"]
+  end
 
-    AI -->|MCP protocol| SERVER
+  COPILOT -->|"MCP stdio / streamable-http"| MCP["FastMCP server"]
+  CLI -->|"direct tool registry"| TOOLS
+  DASH -->|"PKCE flow → jc_session cookie"| ENTRA["Entra ID auth middleware\nJWT validate · oid extraction\nContextVar data routing"]
+  HTTPCLIENT -->|"REST / SSE"| HTTP["HTTP API + dashboard router"]
+  ENTRA --> HTTP
 
-    subgraph SERVER["JobContextMCP  —  FastMCP server"]
-        direction TB
+  HTTP --> SERVICES
+  MCP --> TOOLS
+  SERVICES --> TOOLS
 
-        subgraph CTX["Context & Identity"]
-            T1["get_session_context()"]
-            T2["read_master_resume()"]
-            T3["get_personal_context()"]
-            T4["get_tone_profile() · log_tone_sample()"]
-            T5["get_star_story_context()"]
-        end
+  subgraph SERVICES["Service layer"]
+    PERSONA["Persona service"]
+    WORKFLOW["LangGraph workflow service"]
+    RAG["RAG / semantic search"]
+    LLM["OpenAI / Ollama / Azure AI Foundry"]
+    PDF["HTML/WeasyPrint PDF export"]
+    PROV["User provisioning\nauto-create on first Entra login"]
+  end
 
-        subgraph PIPELINE["Application Pipeline"]
-            T6["get_job_hunt_status() · update_application()"]
-            T6b["log_application_event() · log_rejection() · get_rejections()"]
-            T6c["update_compensation() · get_compensation_comparison()"]
-            T6d["queue_job() · get_job_queue() · evaluate_queued_job() · decide_job()"]
-            T7["assess_job_fitment() · get_customization_strategy()"]
-            T8["generate_resume() · generate_cover_letter()"]
-            T9["save_resume_txt() · save_cover_letter_txt() · resume_diff()"]
-            T10["export_resume_pdf() · export_cover_letter_pdf()"]
-        end
+  subgraph TOOLS["82 MCP / CLI tools"]
+    CTX["Context + identity"]
+    PIPE["Pipeline + queue + compensation"]
+    DOCS["Resume + cover letter generation"]
+    INTERVIEW["Interview prep + debriefs"]
+    OUTREACH["People + outreach + replies"]
+    ANALYTICS["Digest + weekly summary + rejections"]
+    PORTFOLIO["GitHub stats + portfolio metrics"]
+    SETUP["Workspace setup + diagnostics"]
+  end
 
-        subgraph INTERVIEW["Interview Prep"]
-            T11["get_interview_quick_reference()"]
-            T12["get_leetcode_cheatsheet()"]
-            T13["generate_interview_prep_context()"]
-        end
+  subgraph FILES["Storage (local stdio mode)"]
+    CONFIG["config.json"]
+    SQLITE["SQLite — jobcontextmcp.db\napplications, events, people, tone\ninterviews, queue, rejections, posts"]
+    DATA["JSON fallback files\n(dual-write, same schema as SQLite)"]
+    MATERIALS["Resume folder\n01-Current-Optimized to 09-Cover-Letter-PDFs"]
+    INDEX["RAG / scan / portfolio metric caches"]
+    PROJECTS["LeetCode + side projects"]
+  end
 
-        subgraph NETWORK["Outreach & People"]
-            T14["draft_outreach_message() · review_message()"]
-            T15["log_person() · get_people() · get_person()"]
-            T19["log_linkedin_post() · update_post_metrics() · get_linkedin_posts()"]
-            T23["run_contact_crossref() · get_contact_crossref()"]
-        end
+  subgraph AKS_FILES["Storage (AKS mode)"]
+    AKS_OWNER["Owner corpus — /app/data/\nFull SQLite DB + workspace (ENTRA_OWNER_OID)"]
+    AKS_USERS["Per-user partitions — /app/data/users/{oid}/\nIsolated SQLite + workspace per guest\nAuto-provisioned with placeholder resume"]
+    BLOB["Azure Blob Storage — jcmcpstore/workspace\nSidecar syncs PVC → blob every 15 min"]
+  end
 
-        subgraph UTIL["Utilities"]
-            T16["scan_project_for_skills()"]
-            T16b["get_daily_digest() · weekly_summary()"]
-            T17["search_materials() · reindex_materials()"]
-            T18["log_mental_health_checkin() · get_mental_health_log()"]
-        end
-
-        subgraph SETUP["Setup & Identity"]
-            T20["check_workspace()"]
-            T21["setup_workspace(name, email, ...)"]
-            T22["run_hbdi_assessment() · get_hbdi_profile()"]
-        end
-    end
-
-    subgraph FILES["Your Files  —  local, gitignored"]
-        F1["Master resume .txt\nSTAR stories · tone samples\npipeline · contacts · health log"]
-        F2["Generated resumes + cover letters .txt\nExported PDFs"]
-        F3["LeetCode folder\nSide project folder"]
-    end
-
-    CTX --> F1
-    PIPELINE --> F1
-    PIPELINE --> F2
-    INTERVIEW --> F3
-    UTIL --> F3
-    UTIL --> F1
+  SERVICES --> CONFIG
+  TOOLS --> SQLITE
+  TOOLS --> DATA
+  TOOLS --> MATERIALS
+  TOOLS --> INDEX
+  TOOLS --> PROJECTS
+  TOOLS --> AKS_OWNER
+  TOOLS --> AKS_USERS
+  ENTRA --> AKS_USERS
+  AKS_OWNER --> BLOB
+  AKS_USERS --> BLOB
 ```
 
-### End-to-End: Job Description → Submitted Application
+### Module structure
+
+| Module | Contents |
+|--------|----------|
+| `server.py` | FastMCP server — tool registration, startup, config sync |
+| `tools/generate.py` | Resume + cover letter generation logic |
+| `tools/generate_prompts.py` | Format-spec and system-prompt string constants |
+| `tools/export.py` | PDF rendering + MCP tool wrappers |
+| `lib/resume_parser.py` | `.txt` → structured-dict parsers (resume + cover letter) |
+| `transport/http/routes/dashboard/pipeline.py` | Pipeline route handlers |
+| `transport/http/routes/dashboard/pipeline_helpers.py` | Request models, data-access, scoring helpers |
+| `lib/auth.py` | Entra ID JWT validation + `EntraAuthMiddleware` |
+| `lib/user_context.py` | Per-request `ContextVar` data routing |
+| `lib/db.py` | SQLite connection helper |
+
+### Entra ID Login Flow (AKS dashboard)
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Landing as Landing Page (/)
+    participant Entra as Microsoft Entra ID
+    participant MW as UserDataContextMiddleware
+    participant Store as User Data Partition
+
+    Browser->>Landing: GET /
+    Landing-->>Browser: Banner + Sign In button (PKCE challenge generated)
+    Browser->>Entra: Redirect → /authorize?code_challenge=...
+    Entra-->>Browser: Auth code (after Microsoft login)
+    Browser->>MW: GET /dashboard/callback?code=...
+    MW->>Entra: POST /token (code + verifier + client_secret)
+    Entra-->>MW: JWT access token (contains oid claim)
+    MW->>MW: validate_token() — accept CLIENT_ID or api://CLIENT_ID audience
+    MW->>Store: provision_user_data(oid) — idempotent\ncreate SQLite DB + workspace dirs + placeholder resume
+    MW-->>Browser: Set jc_session cookie → redirect /dashboard/
+
+    note over MW,Store: Owner OID → /app/data/ (full corpus)\nAll others → /app/data/users/{oid}/ (isolated)
+```
+
+### End-to-End: Mobile/Dashboard Pipeline Flow
 
 ```mermaid
 sequenceDiagram
     participant You
-    participant Copilot
-    participant MCP as MCP Server
-    participant Files as Your Files
+    participant UI as Dashboard or Phone
+    participant API as FastAPI HTTP Layer
+    participant Tools as MCP Tool Layer
+    participant LLM as OpenAI, Ollama, or Copilot Fallback
+    participant Store as Data Partition (ContextVar-scoped)
 
-    You->>Copilot: Session opens
-    Copilot->>MCP: get_session_context()
-    MCP->>Files: master resume + awards + peer feedback
-    MCP->>Files: tone samples (voice calibration)
-    MCP->>Files: STAR stories + personal context
-    MCP->>Files: live pipeline + contacts
-    MCP-->>Copilot: Full context bundle (~70KB)
-    Note over Copilot: Fully contextualized — no re-explaining
+    note over API,Store: ContextVar set by UserDataContextMiddleware per request\nOwner → /app/data/  ·  Guest → /app/data/users/{oid}/
 
-    You->>Copilot: Paste job description
-    Copilot->>MCP: assess_job_fitment(company, role, jd)
-    MCP-->>Copilot: Fitment score + gaps + emphasis strategy
-    Copilot->>MCP: generate_resume(company, role, jd)
-    MCP->>Files: Read master resume + customization strategy
-    MCP->>Files: Write tailored resume .txt
-    MCP->>Files: Parse .txt → render WeasyPrint PDF
-    MCP-->>Copilot: resume saved + PDF exported
-    Copilot->>MCP: generate_cover_letter(company, role, jd)
-    MCP->>Files: Write cover letter .txt (≤400 words enforced)
-    MCP->>Files: Parse .txt → render two-column sidebar PDF
-    MCP-->>Copilot: cover letter saved + PDF exported
-    Copilot->>MCP: update_application(company, role, "applied")
-    Note over You,Files: Resume PDF + Cover Letter PDF ready to submit
+    You->>UI: Paste or queue job description
+    UI->>API: POST /jobs/queue
+    API->>Tools: queue_job(company, role, jd, source)
+    Tools->>Store: Save pending queue item
+
+    You->>UI: Open Pipeline and click Assess
+    UI->>API: Evaluate queued job by id, company, or role
+    API->>Tools: evaluate_queued_job or run_job_assessment
+    Tools->>Store: Load resume, stories, tone, interviews, pipeline
+    Tools->>LLM: Optional persona-aware assessment
+    LLM-->>Tools: Score, gaps, angles, recommendation
+    Tools->>Store: Save assessment and mark evaluated
+    Tools-->>UI: Fitment card with recommendation
+
+    You->>UI: Choose resume variant and generate materials
+    UI->>API: Generate resume or cover letter
+    API->>Tools: generate_resume or generate_cover_letter
+    Tools->>Store: Read master resume, tone, stories, selected variant
+    Tools->>LLM: Generate or return Copilot-ready context package
+    Tools->>Store: Save text output
+    Tools->>Store: Export WeasyPrint PDF
+
+    You->>UI: Add to pipeline or dismiss
+    UI->>API: Decide queued job
+    API->>Tools: decide_job add or dismiss
+    Tools->>Store: Update pipeline and immutable event log
+    Tools-->>UI: Pipeline state, generated files, next action
 ```
 
 ---
@@ -184,7 +313,8 @@ sequenceDiagram
 | `log_mental_health_checkin(mood, energy, ...)` | Log a mood/energy entry |
 | `get_mental_health_log(days?)` | Recent check-in history with trend summary |
 | `search_materials(query, category?)` | **RAG** — semantic search across all indexed materials |
-| `reindex_materials()` | **RAG** — (re)build the semantic search index |
+| `reindex_materials()` | **RAG** — (re)build the semantic search index for all materials AND the personal story library |
+| `reindex_stories()` | **RAG** — (re)build only the story semantic embedding index; run after adding stories via `log_personal_story()` or `ingest_anecdote()` to enable semantic cover letter retrieval |
 | `log_personal_story(story, tags, people?, title?)` | **v3** — log a personal story or memory for context-rich writing |
 | `get_personal_context(tag?, person?)` | **v3** — retrieve stories filtered by tag or person |
 | `ingest_anecdote(story, tags, title?, people?, tone_sample?)` | **v5.2** — single-call bundler: logs to personal context, optionally ingests as tone sample (≥40 words), and reports STAR tag matches |
@@ -194,9 +324,9 @@ sequenceDiagram
 | `get_star_story_context(tag, company?, role_type?)` | **v3** — retrieve STAR stories, metric bullets, and company-specific framing hints |
 | `draft_outreach_message(contact, company, context, message_type?)` | **v4** — package tone profile, personal context, and writing instructions for AI-drafted outreach |
 | `export_resume_pdf(filename, footer_tag?, output_filename?)` | **v4** — parse a .txt resume and render it to PDF |
-| `export_cover_letter_pdf(filename, output_filename?)` | **v4** — parse a .txt cover letter and render it to PDF with two-column sidebar |
+| `export_cover_letter_pdf(filename, output_filename?, footer_tag?)` | **v4** — parse a .txt cover letter and render it to PDF with two-column sidebar and configurable footer/title tag |
 | `generate_resume(company, role, job_description, output_filename?)` | **v4.1** — generate tailored resume via OpenAI API (or context package for Copilot), auto-save + export PDF |
-| `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate tailored cover letter, auto-save + export PDF |
+| `generate_cover_letter(company, role, job_description, output_filename?)` | **v4.1** — generate tailored cover letter, auto-save + export PDF; now cleans scraped JD noise and uses semantic story retrieval for mission/brand hooks |
 | `log_linkedin_post(text, source, context?, posted_date?, url?, hashtags?, links?, title?)` | **v4.8** — store a LinkedIn post with metadata; auto-ingests as tone sample by default |
 | `update_post_metrics(post_id?, source?, impressions?, reactions?, ...)` | **v4.8** — update engagement metrics and audience demographics on a stored post |
 | `get_linkedin_posts(source?, hashtag?, min_reactions?, include_text?)` | **v4.8** — retrieve posts with filterable aggregate metrics summary |
@@ -210,7 +340,7 @@ sequenceDiagram
 | `resume_diff(file_a, file_b)` | **v5** — unified diff between two resume `.txt` files with added/removed line summary |
 | `review_message(text)` | **v5** — tone review for outreach drafts: flags corporate phrases, desperation signals, hedging, weak openers, missing CTAs |
 | `check_workspace()` | **v0.6** — diagnostic scan: reports present/missing `config.json`, data files, workspace directories, master resume word count, and OpenAI key status |
-| `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, all 7 data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
+| `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` | **v0.6** — conversational bootstrapper: creates `config.json`, core runtime data files, and resume directories `01–08` from a single chat; idempotent — safe to re-run |
 | `run_hbdi_assessment(q1_no_spec_project, q2_critical_feedback, q3_tedious_finish, q4_senior_disagreement, score_a, score_b, score_c, score_d)` | **v0.6** — HBDI cognitive style profiler: scores A/B/C/D quadrants, generates interview framing advice calibrated to your primary style, saves profile to personal context |
 | `get_hbdi_profile()` | **v0.6** — retrieve stored HBDI profile with quadrant synthesis and interview framing advice |
 | `log_interview(company, role, interview_date, interview_type, interviewer?, what_landed?, what_didnt?, verbatim_quotes?, surfaced_priorities?, comp_signals?, follow_up_commitments?, ...)` | **v0.6.2** — structured debrief logger for recruiter screens, hiring manager calls, panels, and onsite loops; captures verbatim quotes, HM priorities absent from the JD, process details, and follow-ups |
@@ -221,23 +351,37 @@ sequenceDiagram
 | `run_contact_crossref(fb_folder?)` | **v0.6.3** — ingest a Facebook export folder and cross-reference confirmed friends, pending requests, and removed connections against LinkedIn connections and your internal people tracker; writes `contact_crossref.json` and updates per-connection `facebook_match` metadata in `linkedin_connections.json`; re-runnable on any fresh export |
 | `get_contact_crossref(insight?, name?)` | **v0.6.3** — query the cross-platform registry by insight bucket (`all_three_platforms`, `fb_friend_and_linkedin`, `fb_removed_still_on_linkedin`, etc.) or look up any contact by name; returns platform presence, relationship type, and action hints |
 | `get_github_stats(username)` | **v0.7** — public GitHub profile + top non-fork repos via REST (stars, forks, language, last-pushed); uses `GITHUB_TOKEN` env if set; offline stub via `JOBCONTEXTMCP_OFFLINE=1` |
+| `refresh_portfolio_metrics()` | **v0.9** — snapshots GitHub clone/view traffic for configured repositories into durable local history so GitHub's rolling 14-day traffic window is not lost |
+| `get_portfolio_metrics()` | **v0.9** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones from local history |
 | `get_upcoming_interviews(days_ahead?)` | **v0.7** — filters logged interviews to a forward window (default 14 days); sorted soonest-first with "today" / "in Nd" labels |
 | `get_referral_chains(target_company)` | **v0.7** — groups contacts into `direct` (company match) and `adjacent` (company mentioned in tags/context/notes) for referral planning |
 | `draft_reply(incoming_message, contact?, company?, intent?)` | **v0.7** — package tone profile, personal context, contact context, and intent-specific posture (`accept` / `decline_polite` / `decline_compensation` / `request_info` / `delay` / `enthusiastic_yes`) for AI-drafted replies to inbound messages |
+| `scrape_job_url(url, auto_queue?)` | **v0.8** — fetch any job posting URL via Jina Reader, extract company/role/JD, and optionally queue it; works with Greenhouse, Lever, Ashby, Workday, and most company career pages |
+| `search_jobs(query, location?, num_results?, auto_queue?)` | **v0.8** — search Google Jobs via SerpAPI; requires `serpapi_key` in config; `auto_queue=True` pipelines all results directly |
+| `search_greenhouse_jobs(company_slug, query?, num_results?, auto_queue?)` | **v0.8** — browse all open roles on any Greenhouse job board; free, no API key required |
+| `search_lever_jobs(company_slug, query?, num_results?, auto_queue?)` | **v0.8** — browse all open roles on any Lever job board; free, no API key required |
+| `generate_resume_agent(company, role, job_description)` | **v0.9** — LangGraph multi-stage resume pipeline: `assess → draft → review → [revise →] finalize`; higher-quality output than a single LLM call; falls back to `generate_resume()` context-packing when no LLM is configured |
+| `get_all_star_context()` | **v0.9** — dump the complete STAR library in one call: all personal stories, all metric bullets by category, all company framing hints; used at session boot for full interview prep picture |
+| `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
+| `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
+| `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
 
 ---
 
-## v0.7 — HTTP transport, personas, and LangGraph workflows
+## v0.7–v0.9 — HTTP transport, mobile dashboard, personas, LangGraph workflows, and portfolio metrics
 
-Three additions in v0.7 turn the server from a stdio-only MCP tool into a remote-capable workflow engine.
+The v0.7–v0.9 line turns the project from a stdio-only MCP server into a local job-search operating layer. MCP tools, REST/SSE APIs, dashboard routes, mobile/LAN access, persona-aware generation, workflow streaming, and portfolio analytics all share the same local data files.
 
 ### HTTP + SSE transport (FastAPI)
 
 A new `transport/http/` package exposes core capabilities over REST + Server-Sent Events for clients that don't speak MCP (mobile, browser, scripts, Open WebUI):
 
 ```bash
-# From the project root
-.venv/bin/uvicorn transport.http.main:app --host 0.0.0.0 --port 8765
+# From the project root (reads HOST / PORT / ENABLE_REMOTE / API_KEY from environment)
+PORT=8000 .venv/bin/python -m transport.http.main
+
+# LAN / Tailscale access
+ENABLE_REMOTE=true PORT=8000 .venv/bin/python -m transport.http.main
 ```
 
 Endpoints:
@@ -246,10 +390,164 @@ Endpoints:
 - `GET /context/session` — same payload as the MCP `get_session_context()` tool
 - `POST /resumes/generate` — sync resume generation; body `{ "company", "role", "job_description", "persona?" }`
 - `POST /resumes/generate/stream` — same call, SSE stream of progress events
-- `GET /jobs` / `POST /jobs/queue` / `POST /jobs/decide` — pipeline ops
+- `POST /jobs/evaluate` — queue + assess a pasted job description
+- `POST /jobs/ingest-url` — fetch a job URL, queue it, and run fitment evaluation; used by the iOS Share Sheet shortcut. Works best with canonical ATS pages (Greenhouse, Lever, Ashby, Workday, company career sites). For LinkedIn postings, use LinkedIn as the discovery layer — tap **Apply** to reach the employer's ATS page, then share that URL instead.
+- `POST /jobs/decide` — add or dismiss an evaluated job
 - `GET /personas` / `GET /personas/{name}` — list/inspect persona configs
 - `GET /workflows` / `POST /workflows/{name}` / `POST /workflows/{name}/stream` — invoke LangGraph workflows
-- All write endpoints require `Authorization: Bearer <token>` when `JOBCONTEXTMCP_HTTP_TOKEN` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
+- `GET /dashboard/` and focused `/dashboard/*` routes — browser/mobile UI over the same services
+- All write endpoints require `Authorization: Bearer <token>` when `API_KEY` is set in the environment; bind to `127.0.0.1` for LAN-only use or expose over Tailscale.
+
+### Web dashboard quick start (local + phone)
+
+The dashboard at `/dashboard/` is the visual layer over the same local data and services exposed through MCP/HTTP. Current views include:
+
+- **Home / Daily Digest** — follow-ups, stale applications, upcoming interviews, recent rejections, post metrics, wellbeing nudges, and priority focus areas. The digest page is available at `GET /dashboard/digest`; `POST /dashboard/digest/generate` regenerates the parsed briefing with a spinner, timestamp, and collapsible sections.
+- **Pipeline** — queue jobs, evaluate fitment, inspect assessment details, select resume variants, generate tailored resumes and cover letters, export PDFs, add/dismiss jobs, and remove queued items from one job-id-driven flow.
+- **Job Hunt** — application status, immutable event history, next steps, compensation data, and stale-item cleanup.
+- **Materials** — generated resumes, cover letters, PDFs, reference files, diffs, and exports.
+- **Rejections** — rejection logging, filtering, stage/reason pattern analysis, and digest integration.
+- **Posts** — LinkedIn post logging, metrics updates, source/hashtag filters, and tone-sample reuse.
+- **Outreach / People** — people lookup, slim scans, contact detail views, referral planning, message review, and reply-drafting context.
+- **Wellbeing** — mood/energy logs, trend summaries, and job-search sustainability check-ins.
+- **Portfolio** — GitHub public repo stats and durable traffic snapshots for resume/STAR-ready project metrics.
+
+When `API_KEY` is configured, browser login uses the same token model as the HTTP API. `/dashboard/login` sets an HTTP-only `jc_session` cookie for the local dashboard, `/dashboard/logout` clears it, and API-style calls can still use `Authorization: Bearer <token>`. The auth provider reads settings fresh at request time so changing the token does not require stale in-memory state cleanup.
+
+Use the helper script so you don't have to remember startup flags each time:
+
+```bash
+# LAN / Tailscale access (prints your IPs on startup)
+bash scripts/start_server.sh
+
+# Local machine only
+PORT=8000 .venv/bin/python -m transport.http.main
+
+# Check what's running on port 8000
+lsof -i tcp:8000
+
+# Stop it
+lsof -ti tcp:8000 | xargs kill
+```
+
+When running in LAN mode, open:
+
+```text
+http://<YOUR_MAC_LAN_IP>:8000/dashboard/
+```
+
+Notes:
+- Mac and phone must be on the same Wi-Fi.
+- If browser can't connect, allow incoming connections for Terminal/Python in macOS Firewall.
+- If you expose LAN access, set `API_KEY` in your environment before running.
+- For AI/LLM/RAG roles, the pipeline can recommend the Modern/AI resume variant and pass that selection through to cover-letter title/export settings.
+
+### iOS Share Sheet shortcut setup
+
+The mobile pipeline starts from any app that exposes a job URL to the iOS Share Sheet. The shortcut posts the shared URL to `POST /jobs/ingest-url`; the server fetches the posting, parses company/role/JD text, queues it, runs fitment evaluation, and makes the result visible in `/dashboard/pipeline`.
+
+**Recommended source URLs:** Greenhouse, Lever, Ashby, Workday, and direct company career pages. These sites serve the canonical job description to any HTTP client and are consistently parseable.
+
+**LinkedIn note:** LinkedIn restricts automated access to its job pages, so sharing a `linkedin.com/jobs/view/` URL won't extract the posting. Use LinkedIn as the discovery layer instead:
+
+```
+Find on LinkedIn → tap Apply → ATS page opens → Share ATS URL → shortcut queues it
+```
+
+This is actually a better data source. ATS pages typically have more complete job descriptions, accurate location requirements, salary data when posted, and fewer formatting artifacts than LinkedIn's copy. "Ingested directly from the employer's ATS" is also a cleaner story than scraping LinkedIn.
+
+For jobs without an Apply button or with a broken ATS link, the Pipeline page has a **＋ Add Job** button — paste the company, role, and JD text directly.
+
+Prerequisites:
+
+1. Start the dashboard in LAN / Tailscale mode on your Mac:
+
+  ```bash
+  bash scripts/start_server.sh
+  ```
+
+2. Confirm your phone can open the dashboard URL printed by the script, for example:
+
+  ```text
+  http://192.168.68.66:8000/dashboard/
+  ```
+
+3. If `API_KEY` is set, keep that token handy. The shortcut must send the same bearer token as the dashboard/API.
+
+Create the Shortcut:
+
+1. Open **Shortcuts** on iPhone or iPad.
+2. Tap **+** and name it `Queue Job in JobContextMCP`.
+3. Tap the shortcut info button and enable **Show in Share Sheet**.
+4. Under **Share Sheet Types**, allow **URLs** and **Safari Web Pages**. Optional: also allow **Text** if you sometimes share copied URLs as text.
+5. Add action: **Receive URLs from Share Sheet**.
+6. Add action: **Get URLs from Input**. This normalizes Safari pages into a plain URL.
+7. Add action: **Get Contents of URL**.
+  - URL: `http://<YOUR_MAC_LAN_IP>:8000/jobs/ingest-url`
+  - Method: `POST`
+  - Headers:
+    - `Content-Type`: `application/json`
+    - `Authorization`: `Bearer <API_KEY>` *(only if auth is enabled)*
+  - Request Body: `JSON`
+  - JSON fields:
+    - `url`: the output of **Get URLs from Input**
+    - `source`: `ios_share_sheet`
+    - `persona`: optional, for example `faang_technical` or `executive_polish`
+8. Add action: **Show Result** using the response from **Get Contents of URL**.
+9. Optional final action: **Open URLs** with `http://<YOUR_MAC_LAN_IP>:8000/dashboard/pipeline` so the shortcut drops you into the queued job list.
+
+Usage:
+
+1. Find a job on LinkedIn (or anywhere else).
+2. Tap **Apply** — this opens the employer's ATS page in Safari.
+3. Tap **Share** from Safari.
+4. Choose **Queue Job in JobContextMCP**.
+5. Wait for the response, then open the dashboard Pipeline page to review the assessment, choose a resume variant, generate materials, and queue/apply.
+
+Troubleshooting:
+
+- If the shortcut returns `401`, the `Authorization` header is missing or the token does not match `API_KEY`.
+- If it cannot connect, confirm the Mac and phone are on the same Wi-Fi, the dashboard is running (`bash scripts/start_server.sh`), and macOS Firewall allows Python/Terminal incoming connections.
+- If `/jobs/ingest-url` returns a LinkedIn-blocked message, you shared the LinkedIn URL instead of the ATS URL. Tap Apply on the LinkedIn page first to get to the employer's site, then share.
+- If the Mac changes networks, the LAN IP can change. Run `lsof -i tcp:8000` to confirm the server is up and re-check the IP printed at startup.
+
+### Per-user API keys
+
+Each authenticated user can generate personal programmatic access tokens from the dashboard at `/dashboard/api-keys`. Unlike the global `API_KEY` environment variable (which is admin-level), per-user keys are scoped to your own data partition and are the recommended credential for iOS Shortcuts, CLI scripts, and any automation tool that needs to call HTTP endpoints without a browser session.
+
+Keys start with `jcmcp_` and are shown once at generation time. Multiple keys can be active simultaneously — one per device or script — and each can be revoked individually without affecting other keys or your browser session.
+
+**Generate a key:**
+
+1. Open the dashboard and click **API Keys** in the top nav.
+2. Enter a label (e.g. `iPhone Shortcut` or `Home Mac CLI`).
+3. Click **Generate key**.
+4. Copy the full `jcmcp_...` token immediately. It is shown once; if you lose it, revoke and regenerate.
+
+**Use with iOS Shortcuts:**
+
+In the **Get Contents of URL** action of your shortcut, expand **Headers** and add:
+
+| Header name | Value |
+|-------------|-------|
+| `Authorization` | `Bearer jcmcp_<paste-token-here>` |
+
+The per-user key is scoped to your own workspace — it cannot read or write another user's data even if the server URL is shared. If you previously used the global `API_KEY` in your shortcut, replace it with your per-user token here.
+
+**Use from scripts or the CLI:**
+
+```bash
+# Single request
+curl -H "Authorization: Bearer jcmcp_<your-token>" \
+  https://your-server/context/session
+
+# Set for the session
+export JCMCP_TOKEN="jcmcp_<your-token>"
+curl -H "Authorization: Bearer $JCMCP_TOKEN" \
+  https://your-server/jobs/evaluate
+```
+
+**Revocation:** Dashboard → **API Keys** → **Revoke** next to the key. Takes effect immediately on all clients using that token.
 
 ### Persona configs
 
@@ -285,12 +583,30 @@ Pick **one** of the two approaches below. Docker is recommended for sharing with
 
 #### Option A — Local Python
 
+> Requires **Python 3.10+** (the `mcp` package floor). **3.12 recommended** to match the [Dockerfile](Dockerfile) and guarantee wheel availability for `numpy`, `weasyprint`, and the rest of the native-extension dependencies.
+
 ```bash
 git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+
+# macOS: install Python 3.12 via Homebrew if you don't already have it
+brew install python@3.12
+
+# Create the venv with an EXPLICIT 3.12 binary — don't rely on bare `python3`,
+# which on a stock macOS box is Apple's Command Line Tools 3.9.6 and will fail
+# on `mcp>=1.3.0` (requires Python >=3.10).
+/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+
+# Smoke test: confirm the server imports cleanly and registers all tools
+.venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
+# Expected: OK, 82 tools
 ```
+
+> ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.
+
+> **PDF export native libs (optional, macOS):** WeasyPrint needs Cairo, Pango, and GDK-Pixbuf at runtime. Install with `brew install cairo pango gdk-pixbuf libffi`. You can skip this if you only use Docker for PDF export — the Dockerfile installs these inside the container. All other tools work without these libs; only `export_resume_pdf` and `export_cover_letter_pdf` will fail.
 
 #### Option B — Docker
 
@@ -369,7 +685,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 73 tools directly:
+`cli.py` is a first-class client. Invoke any of the 82 tools directly:
 
 ```bash
 # List all tools
@@ -387,13 +703,87 @@ This means automation scripts, cron jobs, and CI pipelines can consume the same 
 
 #### AI clients
 
+##### GitHub Copilot app *(HTTP/SSE — requires remote endpoint)*
+
+The standalone GitHub Copilot desktop application connects to MCP servers over HTTP or SSE — it does not run local stdio processes. You need the HTTP transport running (locally accessible or deployed to a server).
+
+1. Open the Copilot app → **Settings → MCP servers**
+2. Click **+ Add server**
+3. Enter a **Server name** (e.g. `jobContextMCP`)
+4. Select the **HTTP** tab (for streamable-http) or **SSE** tab
+5. Set the **URL** to your endpoint:
+   - Streamable-HTTP: `https://your-server/mcp`
+   - SSE: `https://your-server/sse`
+   - Local (if running uvicorn): `http://localhost:8765/mcp`
+6. Click **Save**
+
+If your server is configured with `JOBCONTEXTMCP_HTTP_TOKEN`, the app will prompt for authentication. If deployed on Azure with Entra ID, an OAuth login flow will appear — sign in with your Microsoft account.
+
+> **Verified:** HTTP transport with Azure-hosted endpoint confirmed working with the Copilot app as of June 2026. See [HTTP + SSE transport](#http--sse-transport-fastapi) for deployment details.
+
+---
+
 ##### VS Code + GitHub Copilot *(recommended — zero extra config)*
 
-`.vscode/mcp.json` is already committed and uses `${workspaceFolder}` relative paths. Once the `.venv` exists and you open this folder in VS Code, the server starts automatically — no extra configuration needed.
+`.vscode/mcp.json` is already committed. It points to `run_mcp.sh`, a small dispatcher that reads `MCP_MODE` from `.env` and starts either Docker or the local `.venv` — so you never need to edit the JSON file to switch modes.
+
+**Switch modes in `.env`:**
+
+```dotenv
+MCP_MODE=docker   # docker compose run --rm -i jobcontextmcp  (default)
+MCP_MODE=local    # .venv/bin/python3 server.py  (faster iteration, no rebuild)
+```
+
+After changing `MCP_MODE`, reload the MCP server in VS Code: **Command Palette → MCP: List Servers → restart jobContextMCP**.
 
 > ⚠️ **Do not add the server via the VS Code UI** (the plug icon → "Add MCP Server" flow). This writes a broken entry to your global `~/Library/Application Support/Code/User/mcp.json` using `python` instead of `python3` with no `cwd` — it silently conflicts with the workspace config and causes intermittent tool failures. If tools behave flakily, open that global file and remove any duplicate `jobContextMCP` entry.
 
-> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+> **Multi-root workspaces:** Drop a copy of `.vscode/mcp.json` and `scripts/run_mcp.sh` into any other workspace root (e.g. your Resume folder) and VS Code auto-starts from either window.
+
+##### VS Code + AKS (Streamable HTTP)
+
+The committed `.vscode/mcp.json` includes a second server entry that connects to the server running in AKS over the MCP Streamable HTTP transport (`protocolVersion: 2025-03-26`). To use it, swap the stdio entry for the HTTP entry (or keep both and pick at session start):
+
+```jsonc
+// .vscode/mcp.json — AKS HTTP mode
+{
+  "servers": {
+    "jobContextMCP": {
+      "type": "http",
+      "url": "http://localhost:8099/mcp"
+    }
+  }
+}
+```
+
+This requires a `kubectl` port-forward to be active. The easiest way is the built-in VS Code task:
+
+**Command Palette → Tasks: Run Task → AKS port-forward**
+
+Or run it manually:
+
+```bash
+kubectl port-forward svc/jcmcp 8099:80 -n jcmcp &
+```
+
+Then in VS Code: **Command Palette → MCP: Restart Server**.
+
+Verify the AKS pod is healthy before connecting:
+
+```bash
+kubectl get pods -n jcmcp          # should show 2/2 Running (main + workspace-sync sidecar)
+curl http://localhost:8099/health  # {"status":"ok","version":"0.7.0-dev",...}
+```
+
+> **Dashboard access (Entra auth):** The `/dashboard/` routes on the AKS pod require Entra ID login. Open `http://localhost:8099/` in a browser — you'll see the landing page with a **Sign In** button that triggers the PKCE flow. After login the dashboard is fully accessible. MCP tool calls over the HTTP transport do not require dashboard auth — they go directly to `/mcp`.
+
+The port-forward is a local tunnel only — nothing is exposed publicly. When you're done, kill it:
+
+```bash
+pkill -f "port-forward svc/jcmcp"
+```
+
+The AKS deployment uses `USE_SQLITE=1` and `SQLITE_ONLY=1` (skips JSON writes for mapped tables), workload identity for keyless Azure AI Foundry auth, and seeds `jobcontextmcp.db` from Azure Blob Storage on first boot. A `workspace-sync` sidecar container runs alongside the main server and pushes all workspace files and the SQLite DB back to Blob Storage every 15 minutes — so data survives pod replacement without any manual backup. See `k8s/` and `scripts/provision_aks.sh` for the full infrastructure.
 
 ##### Claude Desktop
 
@@ -489,6 +879,9 @@ Add to `~/.config/zed/settings.json` under `"context_servers"`:
 #### Docker — stdio (Claude Desktop)
 
 If you built with Docker, point Claude Desktop at the container instead of a local Python process.
+
+> **VS Code users:** `run_mcp.sh` handles this automatically based on `MCP_MODE` in `.env` — no manual JSON editing needed. The instructions below are for Claude Desktop and other clients that don't read `.env`.
+
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
@@ -528,6 +921,232 @@ Control the port via `MCP_PORT` in `.env`.
 
 ---
 
+### 2b. Local development workflow
+
+If you're adding tools, modifying services, or debugging — run in `local` mode. Docker is the right call for sharing, releases, and CI; it's the wrong call for iteration. A `docker compose build` after every code change is ~30s of friction per loop. A local-venv restart is ~0.5s.
+
+#### The dispatcher: `scripts/run_mcp.sh`
+
+[`.vscode/mcp.json`](.vscode/mcp.json) always points at [`scripts/run_mcp.sh`](scripts/run_mcp.sh). That script reads `MCP_MODE` from [`.env`](.env.example) and dispatches to either Docker or your local venv. CLI/inherited env vars take precedence over `.env`, so you can override ad-hoc without editing the file:
+
+```bash
+MCP_MODE=local  ./scripts/run_mcp.sh   # forces local, ignoring .env
+MCP_MODE=docker ./scripts/run_mcp.sh   # forces docker, ignoring .env
+```
+
+The script also auto-resolves the venv path — it tries `.venv/bin/python3` first, then falls back to `.venv.nosync/bin/python3` (the iCloud "don't sync" suffix convention) so the same script works whether your repo lives on an iCloud-synced or external volume.
+
+#### Flip to local for development
+
+In `.env`:
+
+```dotenv
+MCP_MODE=local
+```
+
+Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 82 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
+
+#### What's live vs. baked-in
+
+[`docker-compose.yml`](docker-compose.yml) bind-mounts `./data` and `./config.json` into the container, so **data changes (JSON state, RAG index, embeddings) are live in both modes**. But the Python source is `COPY .`'d into the image at [Dockerfile build time](Dockerfile), so **code changes in Docker mode require a rebuild** before they take effect.
+
+| Mode | Code changes | Data changes | Restart cycle |
+|---|---|---|---|
+| `local` | Live on MCP restart | Live (same files) | Restart MCP server in VS Code (~0.5s) |
+| `docker` | Requires image rebuild | Live (bind-mounted) | `docker compose build jobcontextmcp` + restart MCP server (~30s+) |
+
+For a fast inner loop while developing tools, services, or transport code: stay in `local`, restart between edits, and only flip to `docker` for release-validation smoke tests.
+
+#### Validate the Docker image before tagging a release
+
+Before cutting a release tag or publishing the image, smoke-test it end-to-end:
+
+```bash
+# Flip to docker temporarily
+sed -i '' 's/^MCP_MODE=local$/MCP_MODE=docker/' .env
+docker compose build jobcontextmcp
+# Restart MCP server in VS Code → confirm `Discovered N tools` matches local mode
+# Optionally run a few critical tool calls (get_job_hunt_status, check_workspace, etc.)
+
+# Flip back to local for continued development
+sed -i '' 's/^MCP_MODE=docker$/MCP_MODE=local/' .env
+```
+
+Other clients (Claude Desktop, automation scripts, CI pipelines) read straight from the published image — `MCP_MODE` only affects the VS Code dispatcher.
+
+#### Verify mode parity
+
+A quick sanity check that local and Docker register the same tool set:
+
+```bash
+.venv/bin/python3 -c "import server; print('local:', len(server.mcp._tool_manager.list_tools()))"
+docker compose run --rm jobcontextmcp python3 -c "import server; print('docker:', len(server.mcp._tool_manager.list_tools()))"
+# Both should print the same count
+```
+
+If the counts diverge, the most likely cause is uncommitted code changes (local sees them; Docker image doesn't until you rebuild).
+
+#### Sync data from a separate production workspace
+
+If you maintain TWO clones — a production one (e.g. in iCloud) where you actually use the tool for job hunting, and a separate dev clone for code changes — you'll want fresh data in the dev clone before testing features against real state. [`scripts/sync_data_from_production.sh`](scripts/sync_data_from_production.sh) handles this.
+
+It's a one-way `rsync` (production → dev) wrapped with safety rails: pre-sync tarball snapshot to [`backups/`](backups), dry-run mode, confirmation prompt, refusal to sync if source and destination resolve to the same path, refusal to sync from an empty source, automatic pruning of old backups, and an exclude list for `.DS_Store` / `.bak*` clutter. Code, config, and workspace files are never touched — only `data/`.
+
+Configure the source in [`.env`](.env.example):
+
+```dotenv
+DATA_SYNC_SOURCE=/absolute/path/to/production/jobContextMCP/data
+BACKUP_RETENTION=10
+```
+
+Then:
+
+```bash
+./scripts/sync_data_from_production.sh --dry-run   # preview
+./scripts/sync_data_from_production.sh             # snapshot + sync (prompts)
+./scripts/sync_data_from_production.sh --yes       # snapshot + sync (no prompt; for cron/launchd)
+./scripts/sync_data_from_production.sh --no-backup # skip snapshot (faster, riskier)
+./scripts/sync_data_from_production.sh --help      # usage
+```
+
+Or from VS Code: **Command Palette → "Tasks: Run Task" → "Sync data from production"** (also: preview, or no-backup variants). Tasks are defined in [.vscode/tasks.json](.vscode/tasks.json).
+
+Dual benefit: dev tests run against current job-hunt state, AND the `backups/` folder accumulates timestamped tarballs of your data on non-cloud storage — a useful safety net since the canonical `data/` lives in iCloud.
+
+#### Enabling SQLite (optional but recommended)
+
+By default the server reads and writes JSON files under `data/`. A SQLite layer is available and used in the AKS deployment — all reads come from `jobcontextmcp.db`; all writes go to both SQLite and JSON simultaneously, so you can roll back to JSON at any time.
+
+One-time migration from existing JSON:
+
+```bash
+.venv/bin/python scripts/migrate_to_sqlite.py
+# Expected: ✅ Done — 2077 rows, 1.3 MB → jobcontextmcp.db
+```
+
+Enable in `.env`:
+
+```dotenv
+USE_SQLITE=1
+```
+
+With `USE_SQLITE=1`, all 9 data collections (applications, people, job queue, interviews, rejections, tone samples, LinkedIn posts/connections, contact log, contact crossref) read from SQLite. All saves dual-write to both stores — no data loss if you revert.
+
+---
+
+### Option C — AKS (Azure Kubernetes Service)
+
+The `k8s/` directory contains production Kubernetes manifests and a one-shot idempotent provisioner for running the HTTP server (dashboard + REST API) on Azure Kubernetes Service. The MCP stdio server continues to run locally via `run_mcp.sh`; AKS hosts the dashboard and REST endpoints.
+
+**Prerequisites:** Azure CLI (`az`), `kubectl`, an active Azure subscription.
+
+```bash
+# 1. Log in
+az login
+
+# 2. Migrate local JSON data to SQLite (produces data/jobcontextmcp.db)
+.venv/bin/python scripts/migrate_to_sqlite.py
+
+# 3. Upload workspace files to Blob Storage
+./scripts/upload_workspace.sh
+
+# 4. Provision all Azure infrastructure and deploy
+#    Idempotent — safe to re-run at any time.
+export LLM_PROVIDER=foundry
+export AZURE_FOUNDRY_ENDPOINT=https://your-resource.services.ai.azure.com
+export AZURE_FOUNDRY_DEPLOYMENT=gpt-4.1-mini
+./scripts/provision_aks.sh
+```
+
+`provision_aks.sh` creates or no-ops on: resource group, Azure Container Registry, Storage Account, AKS cluster (OIDC issuer + workload identity), managed identity, federated credential, RBAC role assignments, k8s namespace, ServiceAccount, Secrets, ConfigMap, PVC, ClusterIP Service. Builds and pushes the Docker image to ACR. Writes `.env.deploy` with all resolved resource IDs.
+
+On each pod start, the `seed-workspace` init container authenticates via workload identity federated token (no API keys in the pod), syncs workspace files from Blob Storage, and seeds `jobcontextmcp.db` from Blob on first boot only — runtime writes are preserved across restarts.
+
+**LLM provider options:**
+
+| Provider | Auth | API key required? |
+|---|---|---|
+| `openai` | `OPENAI_API_KEY` in k8s Secret | Yes |
+| `foundry` | `DefaultAzureCredential` via workload identity | No |
+| `ollama` | Self-hosted endpoint URL | No |
+
+**Verify a live deployment:**
+
+```bash
+kubectl get pods -n jcmcp
+kubectl port-forward svc/jcmcp 8099:80 -n jcmcp
+
+curl http://localhost:8099/health
+# {"status":"ok","service":"jobContextMCP","version":"0.7.0-dev",...}
+
+curl http://localhost:8099/dashboard/job-hunt/data \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['applications']), 'applications from SQLite')"
+```
+
+#### Entra ID authentication (AKS dashboard)
+
+The AKS-hosted dashboard uses Microsoft Entra ID (formerly Azure AD) for browser-based login. Any Microsoft account user can be invited as a B2B guest; each guest gets their own isolated data partition on first login (blank SQLite DB + full workspace tree + placeholder resume).
+
+**Required Entra app registration settings:**
+
+| Setting | Value |
+|---|---|
+| `signInAudience` | `AzureADMyOrg` (single-tenant) |
+| Redirect URI | `https://<your-domain>/dashboard/callback` (or `http://localhost:8099/dashboard/callback` for port-forward) |
+| `accessTokenAcceptedVersion` | `null` (v1 tokens) or `2` (v2 tokens) — auth layer accepts both |
+| Client secret | Rotate via **Azure Portal → App registrations → Certificates & secrets** |
+
+**Important:** creating the app registration does NOT automatically create the service principal in your tenant. Run this once after registration:
+
+```bash
+az ad sp create --id <CLIENT_ID>
+```
+
+Without this step, token exchange returns `AADSTS7000229 service principal not found`.
+
+**Patch the k8s secret and rotate credentials:**
+
+```bash
+# Patch all Entra values into the secret at once
+kubectl create secret generic jcmcp-app-secrets \
+  --from-literal=entra_client_id=<CLIENT_ID> \
+  --from-literal=entra_tenant_id=<TENANT_ID> \
+  --from-literal=entra_client_secret=<CLIENT_SECRET> \
+  --from-literal=entra_redirect_uri=https://<your-domain>/dashboard/callback \
+  --from-literal=entra_owner_oid=<YOUR_ENTRA_OID> \
+  -n jcmcp --dry-run=client -o yaml | kubectl apply -f -
+
+# Rolling restart to pick up the new secret
+kubectl rollout restart deployment/jcmcp -n jcmcp
+kubectl rollout status deployment/jcmcp -n jcmcp
+```
+
+**Invite a guest user:**
+
+```bash
+az rest --method POST \
+  --uri "https://graph.microsoft.com/v1.0/invitations" \
+  --headers "Content-Type=application/json" \
+  --body '{
+    "invitedUserEmailAddress": "guest@example.com",
+    "inviteRedirectUrl": "https://<your-domain>/dashboard/login",
+    "sendInvitationMessage": true
+  }'
+```
+
+The guest must accept the Entra invitation before their first login. After acceptance their data partition is auto-provisioned on first dashboard visit — no manual `setup_workspace()` required.
+
+**Per-user data isolation:**
+
+| User | Data path | Rule |
+|---|---|---|
+| Service owner (`ENTRA_OWNER_OID`) | `/app/data/` | Full corpus; all tools, pipeline, and generated materials |
+| Any other authenticated user | `/app/data/users/{entra_oid}/` | Isolated SQLite DB + workspace; placeholder resume seeded on first login |
+
+The `UserDataContextMiddleware` handles routing transparently — tools and dashboard routes read and write the caller's partition with no code changes required.
+
+
+
 ### 3. First-session setup via chat
 
 Once the server is running, open a chat with your AI assistant and call:
@@ -555,7 +1174,7 @@ setup_workspace(
 
 This single call:
 - Creates `config.json` with your contact info and OpenAI key slot
-- Initializes all 7 data files (`status.json`, `personal_context.json`, `tone_samples.json`, `rejections.json`, `mental_health_log.json`, `linkedin_posts.json`, `people.json`)
+- Initializes the core runtime data files used by the dashboard, MCP tools, and CLI
 - Creates all 8 resume subdirectories (`01-Current-Optimized` through `08-Interview-Prep-Docs`) inside `workspace/resumes/`
 - Saves your master resume `.txt` and creates a LeetCode practice scaffold in `workspace/leetcode/`
 
@@ -595,6 +1214,35 @@ Add your OpenAI API key to `config.json` (created by `setup_workspace()`):
 "openai_model": "gpt-4o-mini"
 ```
 
+Generation and assessment can also use profile-specific model routing. Set `llm_provider` to `openai` or `ollama`, then override assessment-heavy calls without changing the default generation model:
+
+```json
+"llm_provider": "openai",
+"openai_model": "gpt-4o-mini",
+"openai_model_assessment": "gpt-4o-mini",
+"ollama_base_url": "http://localhost:11434/v1",
+"ollama_model": "llama3.1:8b",
+"ollama_model_assessment": "qwen2.5:14b"
+```
+
+For local Ollama generation, install/run Ollama, pull the models you configure, and switch the provider:
+
+```bash
+ollama pull llama3.1:8b
+ollama pull qwen2.5:14b
+```
+
+```json
+"llm_provider": "ollama",
+"ollama_base_url": "http://localhost:11434/v1",
+"ollama_model": "llama3.1:8b",
+"ollama_model_assessment": "qwen2.5:14b"
+```
+
+The project talks to Ollama through its OpenAI-compatible `/v1` API, so the same resume generation, fitment assessment, dashboard pipeline, and LangGraph workflow paths can run against either OpenAI cloud models or local Ollama models. RAG embeddings still require an OpenAI embedding key unless you replace the embedding backend.
+
+Prompt assembly is budget-aware. Optional `generation_budgets` settings bound the master resume, tone profile, personal stories, job description, and final prompt ceiling; the tone selector favors recent/diverse writing samples and cover-letter story selection can use semantic embeddings when an OpenAI key is available. The semantic caches are local generated files under `data/` and are gitignored.
+
 Then build the RAG index:
 
 ```bash
@@ -603,7 +1251,13 @@ Then build the RAG index:
 
 This embeds all your materials using `text-embedding-3-small`. Cost is typically under $0.10 for a full index. Once built, `search_materials()` runs locally with no further API calls.
 
+To also enable **semantic story retrieval** in cover letter generation (so stories that share mission/brand language with a JD — but few literal keywords — score and surface correctly), call `reindex_stories()` once via your MCP client after the initial setup:
 
+```
+reindex_stories()
+```
+
+Re-run it whenever you add new stories via `log_personal_story()` or `ingest_anecdote()`. `reindex_materials()` calls both the materials indexer and `reindex_stories()` automatically.
 
 ---
 
@@ -639,8 +1293,9 @@ The `.github/copilot-instructions.md` in each folder tells Copilot to call `get_
 Data files the server reads at runtime (all resolved relative to `resume_folder` in `config.json`):
 - `01-Current-Optimized/` — master source resume + all customized versions
 - `02-Cover-Letters/` — cover letter `.txt` files
-- `03-Resume-PDFs/` — exported PDFs land here
+- `03-Resume-PDFs/` — exported resume PDFs land here
 - `06-Reference-Materials/` — resume template, award citations, peer feedback, skills variants
+- `09-Cover-Letter-PDFs/` — exported cover-letter PDFs land here (config key: `cover_letter_pdfs_dir`, default `"09-Cover-Letter-PDFs"`)
 
 ---
 
@@ -711,6 +1366,10 @@ When in doubt: if something made you proud, surprised a colleague, landed in a c
 saved `.txt` + exported PDF. They load the master resume, tone profile, and job-fitment
 strategy automatically — no manual context assembly needed.
 
+Cover-letter generation also pulls relevant personal stories from `personal_context.json`. For mission/brand-heavy roles it can use semantic story retrieval, cached OpenAI embeddings, and hook-tag boosts so abstract company language still finds the strongest human angle instead of only matching literal resume keywords. Long scraped job pages are cleaned before prompting, so LinkedIn navigation chrome and sign-in metadata do not crowd out the actual JD or personal context.
+
+Prompt budgeting is retrieval-first: the generator bounds fixed context sections, packs tone samples by recency/diversity, computes the remaining personal-story budget dynamically, then enforces a final prompt ceiling before calling the model. If semantic retrieval is available, the top cover-letter story is marked as the primary hook so the opener uses a concrete mission/brand connection instead of generic enthusiasm.
+
 ### With OpenAI key (fully automated)
 Add `openai_api_key` (and optionally `openai_model`) to `config.json`:
 
@@ -742,14 +1401,15 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 - Job header format: `Title | Company, Location | Month YYYY - Month YYYY` (three pipe-delimited parts).
 - Bullets must use `•` (Unicode U+2022) — not `-` or `*`.
 - Contact block uses labeled fields: `phone:`, `email:`, `linkedin:` (lowercase, colon suffix).
-- Target length: 650–800 words (one tight page in Courier New 9.2pt).
+- Target length: 650–800 words (one tight page in the selected resume template).
 
 **Cover letter**
-- Hard max: **325 words** in the letter body.
-- Exactly **4 paragraphs** — Para 1: hook + role + company; Para 2: technical achievement + metric; Para 3: second differentiator; Para 4: short closer (1–2 sentences).
-- No date, no address block, no Re: line, no company name in the body.
+- Target: **380–430 words** in the letter body for a full one-page render.
+- Exactly **4 paragraphs** — Para 1: genuine personal/company hook + role; Para 2: technical achievement + grounded metric; Para 3: distinct artifacts and differentiators; Para 4: short closer.
+- No address block or Re: line.
 - Salutation: `Dear Hiring Manager,` — no variations.
 - No bullets, no bold, no headers inside the body — prose only.
+- Metrics and compensation claims must be grounded in the master resume, interview notes, or JD; unsupported percentages, salary ranges, and generic hype phrases are stripped or rejected by prompt rules and sanitizers.
 
 > These constraints are baked into the prompts. Deviations cause PDF rendering errors because the
 > templates have fixed dimensions. If you add your own generation logic, copy the format specs
@@ -757,20 +1417,23 @@ itself, then calls `save_resume_txt` / `export_resume_pdf`.
 
 ---
 
-## PDF Template Demo
+## PDF Export
 
-The repo includes two fake-identity demo files so you can preview the PDF output without using real data:
+Resume and cover letter PDFs are generated from plain `.txt` source files via WeasyPrint — no design tools required. The output uses whichever template and color theme you select in the pipeline (4 layouts x 5 themes = 20 combinations). Template and theme are saved per-job so each application can have its own presentation.
 
 ```bash
-# Generate the demo PDFs after setup:
+# Generate a PDF using a specific template and theme:
 python -c "
-from tools.export import export_resume_pdf, export_cover_letter_pdf
-export_resume_pdf('Nobody MacFakename Resume - Demo Software Engineer.txt')
-export_cover_letter_pdf('Nobody MacFakename Cover Letter - Demo Software Engineer.txt')
+from tools.export import export_resume_pdf
+export_resume_pdf(
+    'Your Resume.txt',
+    template='sidebar',
+    style='slate'
+)
 "
 ```
 
-PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` files are in `01-Current-Optimized/` and `02-Cover-Letters/` respectively.
+PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. Available templates: `modern`, `executive`, `sidebar`, `portfolio`. Available themes: `navy`, `slate`, `forest`, `warm`, `classic`.
 
 ---
 
@@ -780,18 +1443,18 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 
 ---
 
-## Roadmap
+## Roadmap / Release Status
 
 ### v0.6 *(shipped)*
 
-- **`setup_workspace()`** — conversational bootstrapper: creates `config.json`, all 7 data files, `workspace/resumes/` subdirectories `01–08`, and a LeetCode scaffold from a single chat; zero manual JSON editing
+- **`setup_workspace()`** — conversational bootstrapper: creates `config.json`, core runtime data files, `workspace/resumes/` subdirectories `01–08`, and a LeetCode scaffold from a single chat; zero manual JSON editing
 - **`check_workspace()`** — diagnostic scan: reports what's present, missing, or misconfigured; run any time files go missing
 - **`run_hbdi_assessment()`** — HBDI cognitive style profiler: saves primary/secondary quadrant profile + interview framing advice to personal context
 - **`get_hbdi_profile()`** — retrieve stored HBDI profile with quadrant synthesis
 
 ### v0.7 *(shipped)*
 
-- **HTTP + SSE transport** (`transport/http/`) — FastAPI app exposing `/health`, `/context/session`, `/resumes/generate[/stream]`, `/jobs`, `/personas`, `/workflows[/{name}[/stream]]`. Optional bearer-token auth via `JOBCONTEXTMCP_HTTP_TOKEN`. Lets the iPad (or any HTTP client) drive the server without an MCP shim.
+- **HTTP + SSE transport** (`transport/http/`) — FastAPI app exposing `/health`, `/context/session`, `/resumes/generate[/stream]`, `/jobs`, `/personas`, `/workflows[/{name}[/stream]]`. Optional bearer-token auth via `API_KEY` env var. Lets the iPad (or any HTTP client) drive the server without an MCP shim.
 - **LangGraph resume workflow** (`workflows/langgraph/resume_graph.py`) — `load_context → draft → review → (revise → review){0..N} → output` with per-node SSE progress streaming through `services/workflow_service.py`.
 - **Persona configs** (`services/persona_service.py`, `data/personas/*.json`) — bundled `default` / `executive_polish` / `faang_technical` / `startup_founder` presets; user overrides via `<data_folder>/personas/`. Persona-aware `generate_resume()` and `/resumes/generate`.
 - **`get_github_stats(username)`** — public GitHub profile + top non-fork repos via stdlib urllib; offline stub for tests via `JOBCONTEXTMCP_OFFLINE=1`.
@@ -801,10 +1464,73 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. The source `.txt` fi
 - **`cli.py --schedule <tool> [--time HH:MM]`** — emits ready-to-paste crontab + macOS launchd plist for any registered tool.
 - **Auto-discovering tool registry** — `server.py` and `cli.py` load tool modules from a single list; new tools are picked up by adding the module to `_TOOL_MODULES` / `_discover_tools`.
 
-### Planned — v0.8
+### v0.8 *(shipped)*
 
-- **Honcho persistent memory layer** *(deferred from v0.7)* — opt-in episodic memory on top of the persona system; seeds STAR stories, tone samples, and contact context, then queries before generation so the model has cross-session memory without re-reading every JSON file. Gated behind `honcho_api_key`.
-- **Mobile-first web UI** — thin SPA over the v0.7 HTTP transport for iPad-from-bed workflows (queue a job, review fitment, draft reply) without needing VS Code tunnel.
+- **Mobile-first local dashboard** — dashboard pages over the v0.7 HTTP transport for daily digest, pipeline, job hunt, materials, rejections, posts, outreach, people, and wellbeing.
+- **Dashboard authentication** — token-backed `/dashboard/login` and `/dashboard/logout` with an HTTP-only `jc_session` cookie, plus bearer-token compatibility for API clients.
+- **Daily digest UI** — parsed briefing sections, timestamped regeneration, collapsible content, and dashboard-first triage.
+- **Job-id-based pipeline actions** — assess, select resume, generate materials, export PDFs, unqueue, remove, add, and dismiss without relying on brittle company/role matching alone.
+- **Inline assessment details** — fitment scores, gaps, angles, and recommendations visible directly in the pipeline.
+- **Resume-variant-aware generation/export** — dashboard selections pass through to cover-letter title/export settings.
+- **HTML/WeasyPrint cover-letter PDF export** — dashboard export button renders cover letters via the WeasyPrint HTML template.
+
+### v0.9 *(shipped)*
+
+- **`refresh_portfolio_metrics()`** — snapshots GitHub clone/view traffic for configured repositories into durable local history so GitHub's rolling 14-day traffic window is not lost.
+- **`get_portfolio_metrics()`** — returns resume/STAR-ready GitHub portfolio metrics with trailing-14-day momentum and cumulative observed clones.
+- **Portfolio analytics for applications** — durable project evidence can feed resumes, STAR stories, and interview prep without hand-copying GitHub traffic screenshots.
+- **GitHub Copilot app (HTTP/SSE)** — confirmed working via the app's Settings → MCP servers UI; no config file required.
+
+### v1.0 *(shipped)*
+
+v1.0 completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform:
+
+- **Entra ID browser authentication** — full PKCE OAuth2 login flow for the AKS-hosted dashboard; JWT validation (v1 + v2 audiences); secure `jc_session` cookie; logout from every page.
+- **Per-user data isolation** — each authenticated user (guest or tenant member) gets their own isolated SQLite DB, workspace folder tree, and JSON partition. The service owner routes to the full corpus; everyone else is scoped to `/app/data/users/{oid}/`. Auto-provisioned on first login with a placeholder resume so the setup flow works immediately.
+- **Root landing page** — browser-friendly `/` with project banner and Sign In CTA, replacing the bare 404.
+- **MCP Streamable HTTP transport (`2025-03-26`)** — VS Code + GitHub Copilot (and any HTTP MCP client) can connect to the live AKS pod over the standard transport via `kubectl port-forward`.
+- **SQLite + dual-write persistence** — all pipeline writes go to both SQLite and JSON; reads come from SQLite when `USE_SQLITE=1`; `SQLITE_ONLY=1` skips JSON for production AKS.
+- **AKS production deployment** — fully automated `provision_aks.sh`, workspace-sync sidecar, workload identity, Azure Blob Storage backup, ConfigMap-driven config.
+- **Cover-letter editor with draft versioning** — dashboard edit dialog with live preview, `.editN.tmp` versioning, accept/cancel/discard flow.
+- **Semantic personal-story retrieval** — embedding-assisted story selection for cover letter generation; retrieval diagnostics; hook-tag boosts.
+- **Provider-agnostic LLM** — OpenAI / Azure AI Foundry (`DefaultAzureCredential`) / Ollama via `get_llm_client()`.
+
+### v1.0.1 *(shipped)*
+
+Hardening, per-user API keys, refactor sprint, and coverage push. 860 passing, 82.25% coverage.
+
+- **Multi-tenant hardening** — owner's contact info, STAR metrics, and company framing no longer leak to unconfigured user sessions; `get_contact_info()` returns `{}` for users without a configured contact block; `_STAR_METRICS` and `_COMPANY_FRAMING` loaded exclusively from per-user `personal_context.json`
+- **Per-user API keys** — `/dashboard/api-keys` — personal programmatic access tokens per user account, scoped to the user's own data partition; labeled per-device, individually revokable; recommended credential for iOS Shortcuts and CLI automation
+- **Refactor** — three monolithic files split into focused modules (`lib/resume_parser.py`, `pipeline_helpers.py`, `tools/generate_prompts.py`); all public symbols re-exported, no call-site changes
+- **Coverage 82.25%** — 860 passing (up from 627 at v1.0.0); 164 new tests for `lib/resume_parser.py` (9% → 88%); new suites for RAG, story retrieval, GitHub metrics, LangGraph pipeline, project scanner, and dashboard pipeline
+- **CI** — `workflow_dispatch` trigger + test + SonarCloud scan jobs added to deploy pipeline; coverage badge on README
+
+### v1.1 *(shipped)*
+
+4 resume layouts x 5 color themes = 20 presentation variants. Cover letter templates to match. Template selection is per-job in the pipeline. 924 passing, 77.41% coverage.
+
+- **Resume template system** (`lib/template_loader.py`) — Modern (single-column, ATS-friendly), Executive (serif, leadership-oriented), Sidebar (two-column with contact/skills panel), Portfolio (projects-first). All render from the same `.txt` data model; only the presentation changes.
+- **5 color themes** — Navy, Slate, Forest, Warm, Classic. Injected as CSS custom properties at render time; themes override template defaults without modifying template files.
+- **Cover letter templates** — matching 4-layout system for cover letters with the same theme support.
+- **Per-job template selection** — pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style`. A preview modal with live sandboxed iframe lets you pick format and theme before generating. Selection persists in SQLite per job.
+- **Generate now uses saved template/style** — fixed bug where the Generate Resume button ignored the saved selection and always output the legacy format.
+
+### v1.1.1 *(shipped)*
+
+Bug fixes and hardening. 924 passing, 77.41% coverage.
+
+- **Semantic story retrieval fully functional** — two root-cause bugs fixed: (1) no MCP tool previously could build the story embedding index (`preview_story_retrieval` could report `Semantic retrieval: on/off` but nothing in the deployed path could flip it on); new `reindex_stories()` tool exposes the index builder explicitly; (2) `_load_openai_key()` read from `config.json` on disk, which doesn't exist in AKS (`SQLITE_ONLY=1` mode) — the key lives in the user-context DB there; now tries `lib.config.get_config_value` first (same resolver as the materials indexer), with a file + env fallback. One call to `reindex_stories()` now builds the index and activates semantic retrieval for all subsequent cover letter generations.
+- **Story ID collision fix** — `_build_story_entry` used `len(stories) + 1` as the new story ID; any deletion or concurrent save could collide and silently overwrite an existing story via SQLite `ON CONFLICT DO UPDATE`; fixed to `max(existing_ids) + 1`.
+- **401 auto-redirect** — dashboard pages had no client-side handler for expired sessions; added a global `window.fetch` interceptor in `shared.py` so any 401 response redirects to `/` immediately, across all 9 dashboard pages in one change.
+- **`/why` marketing page** — public route at `GET /why`; self-contained, no auth required; nav link added to landing page and a pill link on the dashboard (opens in new tab).
+- **Template bullet rendering** — standardized all resume template bullet characters to `\2022` (•); prior choices (`\2023`, `\25A0`, `\25B8`) render as empty boxes in WeasyPrint's default font stack.
+- **`scripts/` gitignore hardening** — `docker-entrypoint.sh` and `migrate_to_sqlite.py` are now tracked; unblocks Docker builds (`chmod` in Dockerfile stage 7) and test imports (`scripts.migrate_to_sqlite._SCHEMA`).
+
+### v1.x planned
+
+- `POST /jobs/ingest` — single-blob mobile intake (no per-field prompts).
+- Public setup path hardening for fresh users (clone → setup → dashboard → first application).
+- Harden dashboard edge cases and empty-state UX.
 
 ---
 

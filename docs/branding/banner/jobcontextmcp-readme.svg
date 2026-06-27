@@ -1,47 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 180">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0f1b2d"/>
-      <stop offset="100%" stop-color="#1e2d3d"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Background -->
-  <rect width="860" height="180" fill="url(#bg)" rx="14"/>
-
-  <!-- Icon: nested svg keeps clipPath in local 0-100 coords -->
-  <svg x="18" y="15" width="150" height="150" viewBox="0 0 100 100" overflow="visible">
-    <defs>
-      <clipPath id="s-lens">
-        <circle cx="42" cy="42" r="30"/>
-      </clipPath>
-    </defs>
-    <line x1="64" y1="64" x2="88" y2="88" stroke="#3FA8A8" stroke-width="10" stroke-linecap="round"/>
-    <circle cx="42" cy="42" r="30" fill="#0f1b2d"/>
-    <g clip-path="url(#s-lens)">
-      <!-- 00100100 binary, 4x2 grid centered at (42,42), pitch 11, cell 9x9 -->
-      <!-- Row 0 (y=32): 0 0 1 0 -->
-      <rect x="21" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-      <rect x="32" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-      <rect x="43" y="32" width="9" height="9" fill="#3FA8A8" rx="1.5"/>
-      <rect x="54" y="32" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-      <!-- Row 1 (y=43): 0 1 0 0 -->
-      <rect x="21" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-      <rect x="32" y="43" width="9" height="9" fill="#3FA8A8" rx="1.5"/>
-      <rect x="43" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-      <rect x="54" y="43" width="9" height="9" fill="#2a4a6e" rx="1.5"/>
-    </g>
-    <circle cx="42" cy="42" r="30" fill="none" stroke="#EDEDED" stroke-width="6"/>
-  </svg>
-
-  <!-- Wordmark -->
-  <text x="195" y="79" dominant-baseline="middle"
-    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
-    font-weight="700" font-size="68" letter-spacing="-1"
-  ><tspan fill="#EDEDED">JobContext</tspan><tspan fill="#3FA8A8">MCP</tspan></text>
-  <!-- Subtitle -->
-  <text x="196" y="122" dominant-baseline="middle"
-    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
-    font-weight="400" font-size="21" fill="#7a9ab8" letter-spacing="0.5"
-  >An AI Persistent Job Search Assistant</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="jobContext the memory layer for your career">
+  <title>jobContext the memory layer for your career</title>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A0F1C"/><stop offset="1" stop-color="#0B1220"/></linearGradient></defs>
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1280" height="3" fill="#06B6D4"/>
+  <path d="M262.0 125.2 A 48.0 48.0 0 1 0 262.0 200.8" fill="none" stroke="#06B6D4" stroke-width="27.6" stroke-linecap="round"/>
+  <text x="176.4" y="113.5" font-family="ui-monospace,monospace" font-size="5.2" font-weight="700" fill="#2DD4EE" opacity="0.21" text-anchor="middle">0</text><text x="185.5" y="115.2" font-family="ui-monospace,monospace" font-size="5.6" font-weight="700" fill="#2DD4EE" opacity="0.23" text-anchor="middle">1</text><text x="180.7" y="122.1" font-family="ui-monospace,monospace" font-size="5.6" font-weight="700" fill="#2DD4EE" opacity="0.43" text-anchor="middle">0</text><text x="194.5" y="116.9" font-family="ui-monospace,monospace" font-size="6.0" font-weight="700" fill="#2DD4EE" opacity="0.26" text-anchor="middle">0</text><text x="189.4" y="124.3" font-family="ui-monospace,monospace" font-size="6.0" font-weight="700" fill="#2DD4EE" opacity="0.43" text-anchor="middle">1</text><text x="184.2" y="131.7" font-family="ui-monospace,monospace" font-size="6.0" font-weight="700" fill="#2DD4EE" opacity="0.43" text-anchor="middle">0</text><text x="203.6" y="118.7" font-family="ui-monospace,monospace" font-size="6.4" font-weight="700" fill="#2DD4EE" opacity="0.28" text-anchor="middle">1</text><text x="212.6" y="120.4" font-family="ui-monospace,monospace" font-size="6.8" font-weight="700" fill="#2DD4EE" opacity="0.30" text-anchor="middle">1</text><text x="221.7" y="122.1" font-family="ui-monospace,monospace" font-size="7.3" font-weight="700" fill="#2DD4EE" opacity="0.33" text-anchor="middle">1</text><text x="230.7" y="123.8" font-family="ui-monospace,monospace" font-size="7.7" font-weight="700" fill="#2DD4EE" opacity="0.35" text-anchor="middle">0</text><text x="239.8" y="125.6" font-family="ui-monospace,monospace" font-size="8.1" font-weight="700" fill="#2DD4EE" opacity="0.37" text-anchor="middle">0</text><text x="248.8" y="127.3" font-family="ui-monospace,monospace" font-size="8.5" font-weight="700" fill="#2DD4EE" opacity="0.40" text-anchor="middle">1</text><text x="257.9" y="129.0" font-family="ui-monospace,monospace" font-size="8.9" font-weight="700" fill="#2DD4EE" opacity="0.42" text-anchor="middle">0</text><text x="266.9" y="130.7" font-family="ui-monospace,monospace" font-size="9.4" font-weight="700" fill="#2DD4EE" opacity="0.45" text-anchor="middle">1</text><text x="276.0" y="132.4" font-family="ui-monospace,monospace" font-size="9.8" font-weight="700" fill="#2DD4EE" opacity="0.47" text-anchor="middle">1</text>
+  <circle cx="154.4" cy="105.4" r="16.2" fill="#fff"/>
+  <path d="M154.4 131.8 L154.4 197.2 Q154.4 223.0 128.6 223.0" fill="none" stroke="#fff" stroke-width="24.0" stroke-linecap="round"/>
+  <text x="340" y="143" font-family="'Space Grotesk',sans-serif" font-size="76" font-weight="700" letter-spacing="-2"><tspan fill="#FFFFFF">job</tspan><tspan fill="#06B6D4">Context</tspan></text>
+  <text x="343" y="192" font-family="'Space Grotesk',sans-serif" font-size="29" font-weight="500" fill="#D7E3F8">The memory layer for your career.</text>
+  <text x="343" y="232" font-family="ui-monospace,'JetBrains Mono',monospace" font-size="18" font-weight="600" fill="#6FE0EE" letter-spacing="0.5" opacity="0.9">Your career has context. Your AI should too.</text>
 </svg>

@@ -18,7 +18,10 @@ Tools provided:
   - Outreach drafting and contacts management (v4)
   - LinkedIn post tracking with engagement metrics (v4.8)
 """
+import os
+
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from lib import config
 from lib.config import _load_config
@@ -60,25 +63,27 @@ from tools import (
     crossref,
     job_queue,
     job_scraper,
+    github,
 )
 
 
 def _sync_config_exports() -> None:
     global _cfg
-    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, DATA_FOLDER
+    global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, SIDE_PROJECT_REPOS, DATA_FOLDER
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE, SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE, INTERVIEWS_FILE
-    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, FB_FRIENDS_FOLDER
+    global CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE, GITHUB_METRICS_FILE, FB_FRIENDS_FOLDER
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
-    global GM_AWARDS, FEEDBACK_RECEIVED, SKILLS_SHORTER
+    global ACHIEVEMENTS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE
-    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY
+    global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY, LATEX_RESUME_DIR, OWNER_OID
 
     _cfg = config._cfg
 
     RESUME_FOLDER = config.RESUME_FOLDER
     LEETCODE_FOLDER = config.LEETCODE_FOLDER
     SIDE_PROJECT_FOLDERS = config.SIDE_PROJECT_FOLDERS
+    SIDE_PROJECT_REPOS = config.SIDE_PROJECT_REPOS
     DATA_FOLDER = config.DATA_FOLDER
 
     STATUS_FILE = config.STATUS_FILE
@@ -92,6 +97,7 @@ def _sync_config_exports() -> None:
     INTERVIEWS_FILE = config.INTERVIEWS_FILE
     CONTACT_CROSSREF_FILE = config.CONTACT_CROSSREF_FILE
     LINKEDIN_CONNECTIONS_FILE = config.LINKEDIN_CONNECTIONS_FILE
+    GITHUB_METRICS_FILE = config.GITHUB_METRICS_FILE
     FB_FRIENDS_FOLDER = config.FB_FRIENDS_FOLDER
 
     MASTER_RESUME = config.MASTER_RESUME
@@ -101,13 +107,15 @@ def _sync_config_exports() -> None:
     RESUME_TEMPLATE_PNG = config.RESUME_TEMPLATE_PNG
     COVER_LETTER_TEMPLATE_PNG = config.COVER_LETTER_TEMPLATE_PNG
     TEMPLATE_FORMAT = config.TEMPLATE_FORMAT
-    GM_AWARDS = config.GM_AWARDS
+    ACHIEVEMENTS = config.ACHIEVEMENTS
     FEEDBACK_RECEIVED = config.FEEDBACK_RECEIVED
     SKILLS_SHORTER = config.SKILLS_SHORTER
     INTERVIEW_PREP_FOLDER = config.INTERVIEW_PREP_FOLDER
     JOB_QUEUE_FILE = config.JOB_QUEUE_FILE
     JOB_ASSESSMENTS_FOLDER = config.JOB_ASSESSMENTS_FOLDER
     SERPAPI_KEY = config.SERPAPI_KEY
+    OWNER_OID = config.OWNER_OID
+    LATEX_RESUME_DIR = config.LATEX_RESUME_DIR
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -118,11 +126,26 @@ def _reconfigure(cfg: dict) -> None:
 _sync_config_exports()
 
 
+# Disable the MCP SDK's localhost-only DNS rebinding check only when running
+# behind a reverse proxy (AKS nginx-ingress + TLS) where the proxy is the
+# security boundary.  ENABLE_REMOTE alone is not sufficient — it is also set
+# for local LAN / Tailscale stdio binds where the rebinding check should stay
+# on.  Require an explicit DISABLE_REBINDING_CHECK=true opt-out to minimise
+# exposure surface.
+_transport_security: TransportSecuritySettings | None = None
+_behind_proxy = (
+    os.getenv("ENABLE_REMOTE", "false").lower() in ("1", "true", "yes")
+    and os.getenv("DISABLE_REBINDING_CHECK", "false").lower() in ("1", "true", "yes")
+)
+if _behind_proxy:
+    _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
 mcp = FastMCP(
     "jobContextMCP",
+    transport_security=_transport_security,
     instructions=(
-        "You are Frank MacBride's personal job search assistant. "
-        "You have direct filesystem access to his resume materials, job hunt status, "
+        "You are a tenant-scoped job search assistant. "
+        "You have direct filesystem access to the current user's resume materials, job hunt status, "
         "and interview prep files. Use the available tools to retrieve context before "
         "generating resumes, cover letters, prep docs, or assessments. "
         "Always read the master resume before generating any application material."
@@ -157,6 +180,7 @@ crossref.register(mcp)
 job_queue.register(mcp)
 setup.register(mcp)
 job_scraper.register(mcp)
+github.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
@@ -191,10 +215,13 @@ get_personal_context = context.get_personal_context
 
 log_tone_sample = tone.log_tone_sample
 get_tone_profile = tone.get_tone_profile
+get_tone_profile_budgeted = tone.get_tone_profile_budgeted
+get_cover_letter_tone_profile_budgeted = tone.get_cover_letter_tone_profile_budgeted
 scan_materials_for_tone = tone.scan_materials_for_tone
 
 search_materials = rag.search_materials
 reindex_materials = rag.reindex_materials
+reindex_stories = rag.reindex_stories
 
 get_star_story_context = star.get_star_story_context
 
@@ -202,9 +229,14 @@ draft_outreach_message = outreach.draft_outreach_message
 
 export_resume_pdf = export.export_resume_pdf
 export_cover_letter_pdf = export.export_cover_letter_pdf
+export_cover_letter_latex = export.export_cover_letter_latex
+export_resume_latex = export.export_resume_latex
+read_latex_asset = export.read_latex_asset
+write_latex_section = export.write_latex_section
 
 generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter
+preview_story_retrieval = generate.preview_story_retrieval
 
 log_person = people.log_person
 get_people = people.get_people
@@ -275,11 +307,15 @@ run_contact_crossref = crossref.run_contact_crossref
 get_contact_crossref = crossref.get_contact_crossref
 get_fb_outreach_queue = crossref.get_fb_outreach_queue
 
+get_github_stats = github.get_github_stats
+refresh_portfolio_metrics = github.refresh_portfolio_metrics
+get_portfolio_metrics = github.get_portfolio_metrics
+
 _TOOL_MODULES = [
     session, job_hunt, resume, fitment, interview, interviews, project_scanner,
     health, context, tone, rag, star, outreach, export, generate,
     langgraph_pipeline, people, posts, rejections, digest, compensation,
-    ingest, hbdi, crossref, job_queue, setup, job_scraper,
+    ingest, hbdi, crossref, job_queue, setup, job_scraper, github,
 ]
 
 
@@ -288,9 +324,35 @@ if __name__ == "__main__":
 
     transport = os.getenv("MCP_TRANSPORT", "stdio")
     if transport in ("sse", "streamable-http"):
-        mcp.run(
-            transport=transport,
-            host=os.getenv("MCP_HOST", "0.0.0.0"),
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.middleware import Middleware
+        from starlette.responses import JSONResponse as _JSONResponse
+        from starlette.routing import Mount, Route
+
+        from lib.auth import EntraAuthMiddleware, oauth_discovery_json
+
+        def _oauth_discovery(request):  # noqa: ANN001
+            return _JSONResponse(oauth_discovery_json())
+
+        mcp_app = mcp.streamable_http_app()
+
+        app = Starlette(
+            routes=[
+                Route(
+                    "/.well-known/oauth-authorization-server",
+                    _oauth_discovery,
+                ),
+                Mount("/", app=mcp_app),
+            ],
+            middleware=[Middleware(EntraAuthMiddleware)],
+        )
+
+        uvicorn.run(
+            app,
+            # Binding is operator-controlled via MCP_HOST; 0.0.0.0 is the
+            # documented default for containerized/remote deployment. nosec B104
+            host=os.getenv("MCP_HOST", "0.0.0.0"),  # nosec B104
             port=int(os.getenv("MCP_PORT", "8000")),
         )
     else:

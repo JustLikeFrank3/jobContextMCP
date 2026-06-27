@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Cover Letter — Sidebar</title>
+<style>
+/* ── THEME DEFAULTS (navy) — overridden by injected theme block ─── */
+:root {
+  --accent:       #1e3a5f;
+  --accent-light: #2d5a9e;
+  --accent-mid:   #26487a;
+  --accent-dark:  #0f1e35;
+  --heading:      #1e3a5f;
+  --rule:         #1e3a5f;
+  --sidebar-bg:   #1e3a5f;
+  --sidebar-text: #e8eef8;
+  --sidebar-head: #a8c0e8;
+  --chip-bg:      #dde8f8;
+  --chip-text:    #1e3a5f;
+  --link:         #2d5a9e;
+}
+
+@page {
+    size: letter;
+    margin: 0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    background: #fff;
+    line-height: 1.45;
+}
+
+/* ── LAYOUT ──────────────────────────────────────── */
+.layout {
+    display: flex;
+    flex-direction: row;
+    min-height: 100%;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────── */
+.sidebar {
+    width: 195px;
+    flex-shrink: 0;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    padding: 22px 12px 22px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.sidebar-name {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #fff;
+    line-height: 1.12;
+    word-break: break-word;
+}
+
+.sb-section-title {
+    font-size: 7pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--sidebar-head);
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--accent-mid, var(--accent-light));
+    padding-bottom: 3px;
+}
+
+.sb-item {
+    font-size: 8pt;
+    line-height: 1.45;
+    color: var(--sidebar-text);
+    word-break: break-word;
+    margin-bottom: 2px;
+}
+
+.sb-lbl {
+    font-weight: bold;
+    color: var(--sidebar-head);
+    font-size: 7.4pt;
+}
+
+/* ── MAIN CONTENT ────────────────────────────────── */
+.main {
+    flex: 1;
+    padding: 0.44in 0.44in 0.44in 0.28in;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-header {
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    border-bottom: 1.5px solid var(--rule);
+}
+
+.main-title {
+    font-size: 9pt;
+    font-weight: bold;
+    color: var(--heading);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* ── LETTER BODY ─────────────────────────────────── */
+.letter-body {
+    flex: 1;
+}
+
+.letter-body p {
+    margin-bottom: 9pt;
+    font-size: 10pt;
+}
+
+.letter-body p:last-child {
+    margin-bottom: 0;
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-name">{% set full_name = [name_line1, name_line2, name_last, name_suffix] | select('ne', '') | join(' ') %}{{ full_name }}</div>
+
+    <div>
+      <div class="sb-section-title">Contact</div>
+      {% if contact.email %}
+      <div class="sb-lbl">Email</div>
+      <div class="sb-item">{{ contact.email }}</div>
+      {% endif %}
+      {% if contact.phone %}
+      <div class="sb-lbl">Phone</div>
+      <div class="sb-item">{{ contact.phone }}</div>
+      {% endif %}
+      {% if contact.linkedin %}
+      <div class="sb-lbl">LinkedIn</div>
+      <div class="sb-item">{{ contact.linkedin }}</div>
+      {% endif %}
+      {% if contact.github %}
+      <div class="sb-lbl">GitHub</div>
+      <div class="sb-item">{{ contact.github }}</div>
+      {% endif %}
+      {% if contact.city_state %}
+      <div class="sb-lbl">Location</div>
+      <div class="sb-item">{{ contact.city_state }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+    <div class="main-header">
+      <div class="main-title">Cover Letter</div>
+    </div>
+
+    <div class="letter-body">
+      {% for para in paragraphs %}
+      {% if para == para | upper and para | length < 60 %}
+      <p><strong>{{ para }}</strong></p>
+      {% else %}
+      <p>{{ para }}</p>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

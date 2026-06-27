@@ -45,16 +45,16 @@ def log_person(
 
     Args:
         name:            Full name of the person.
-        relationship:    How Frank knows them (e.g. 'former coworker', 'recruiter',
+        relationship:    How the candidate knows them (e.g. 'former coworker', 'recruiter',
                          'hiring manager', 'referral contact', 'friend').
         company:         Current or last known company.
-        context:         Background info — who they are, how Frank knows them,
+        context:         Background info — who they are, how the candidate knows them,
                          anything relevant about them.
         tags:            Searchable tags (e.g. ['gm', 'ai', 'java', 'recruiter']).
         contact_info:    LinkedIn URL, email, phone, etc. Optional.
         outreach_status: One of: 'none', 'drafted', 'sent', 'responded'. Default 'none'.
         notes:           Running notes about the relationship or interactions.
-        sent_message:    The actual text of a message Frank sent to this person.
+        sent_message:    The actual text of a message the candidate sent to this person.
                          When provided, automatically ingests it as a tone sample.
 
     Returns:
@@ -252,7 +252,7 @@ def lookup_person_context(name: str) -> str:
 
 
 def get_referral_chains(target_company: str) -> str:
-    """Find contacts who could potentially refer Frank to a target company.
+    """Find contacts who could potentially refer the candidate to a target company.
 
     A "referral chain" is any person whose company matches `target_company`
     (case-insensitive substring) and whose `outreach_status` is not already

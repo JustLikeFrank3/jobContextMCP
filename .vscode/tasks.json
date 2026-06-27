@@ -1,0 +1,134 @@
+{
+    // ─────────────────────────────────────────────────────────────────────────
+    // VS Code tasks for jobContextMCP development.
+    //
+    // Invoke via Command Palette → "Tasks: Run Task" (⇧⌘P → start typing "run task").
+    // Or bind to a keyboard shortcut: Command Palette → "Preferences: Open Keyboard
+    // Shortcuts (JSON)" and add a binding for the "workbench.action.tasks.runTask"
+    // command with the task label as args.
+    //
+    // Tasks here are committed to the repo (.vscode/settings.json is the only
+    // gitignored .vscode file). Add anything generic enough to be useful to any
+    // contributor working on this codebase.
+    // ─────────────────────────────────────────────────────────────────────────
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Sync data from production (preview)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--dry-run"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Show what would change without touching files. Useful before running the real sync."
+        },
+        {
+            "label": "Sync data from production",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Pull fresh data/ from the production iCloud workspace and snapshot a backup. One-way: production → dev. Requires DATA_SYNC_SOURCE in .env."
+        },
+        {
+            "label": "Sync data from production (no backup, fast)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_production.sh",
+            "args": ["--yes", "--no-backup"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Same as above but skip the pre-sync tarball. Use only when you've just snapshotted moments ago."
+        },
+        {
+            "label": "Sync data from Azure (preview)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--dry-run"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "List blobs in Azure for your OID — shows what would download, no files touched."
+        },
+        {
+            "label": "Sync data from Azure (quick, no backup)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--quick", "--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Download Azure blob data → iCloud production workspace. No backup. One-way: Azure → iCloud → dev."
+        },
+        {
+            "label": "Sync data from Azure (full, with backup)",
+            "type": "shell",
+            "command": "./scripts/sync_data_from_azure.sh",
+            "args": ["--full", "--yes"],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Download Azure blob data → iCloud production workspace. Creates timestamped backup first."
+        },
+        {
+            "label": "AKS port-forward",
+            "type": "shell",
+            "command": "kubectl port-forward svc/jcmcp 8099:80 -n jcmcp",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^(Forwarding from)",
+                    "file": 1,
+                    "line": 1,
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Forwarding from",
+                    "endsPattern": "Forwarding from"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "detail": "Port-forward AKS jcmcp service to localhost:8099. Required for the MCP HTTP server. Runs in background."
+        }
+    ]
+}

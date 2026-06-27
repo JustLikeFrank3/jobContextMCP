@@ -4,9 +4,188 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Planned
+---
 
-- **`POST /jobs/ingest`** — single-input job intake for mobile. Body is `{jd, source?}` only; server-side parses `company` and `role` from the JD (heuristics first, LLM-assisted fallback), runs queue + evaluate in one call, and returns the standard evaluate response plus a `parsed: {company, role, confidence}` block. On low confidence, response sets `needs_confirmation: true` so the client can prompt for the missing field(s). Motivation: iPad Shortcuts "Ask for Input" placeholder text is visually indistinguishable from a typed value, leading users to submit literal placeholder strings; share-sheet → single-blob ingestion sidesteps the prompt-per-field UX entirely.
+## [1.1.0] - 2026-06-24
+
+Multi-template document generation: 4 resume layouts x 5 color themes = 20 resume variants, plus a matching 4-layout cover letter system. Template selection is per-job in the pipeline. 924 passing tests.
+
+### Features
+
+- **Resume template system** (`lib/template_loader.py`) -- 4 HTML/CSS layout templates: Modern (single-column, ATS-friendly), Executive (serif, leadership-oriented), Sidebar (two-column dark panel), Portfolio (projects-first). All consume the exact same resume data model; no data-structure changes.
+- **5 color themes** (`templates/resume_templates/themes/`) -- Navy, Slate, Forest, Warm, Classic. Injected as a `<style>` block at render time via CSS custom properties (`--accent`, `--heading`, `--sidebar-bg`, etc.); templates use navy as `:root` defaults and themes override them.
+- **Cover letter template system** -- matching 4-layout templates under `templates/cover_letter_templates/` (Modern, Executive, Sidebar, Portfolio) with the same theme injection mechanism.
+- **Per-job template selection** -- pipeline cards store `resume_template`, `resume_style`, `cl_template`, `cl_style` per job. Selection modal in the pipeline has a Resume/Cover Letter toggle, a format row (4 buttons), and 5 color swatches. Saved selection persists in SQLite via DB migrations v2 (resume) and v3 (CL).
+- **Template preview endpoint** -- `GET /pipeline/preview-template/{template}/{style}` and `GET /pipeline/preview-cl/{template}/{style}` render a live sandboxed iframe preview in the modal; falls back to built-in sample data when no real resume/CL file is present.
+- **`render_resume()` / `render_cover_letter()` API** -- `lib/template_loader.py` exposes `render_resume(resume_data, template, style)` and `render_cover_letter(cl_data, template, style)` for direct rendering, plus `render_resume_to_pdf()` / `render_cover_letter_to_pdf()` for WeasyPrint export.
+
+### Bug fixes
+
+- **Generate Resume now uses saved template/style** -- `tools/generate.py` `generate_resume()` previously called `export_resume_pdf()` with no template/style even when a selection was saved; fixed by threading `template` + `style` all the way from `pipeline_generate_resume` through `ResumeService.generate()` to `export_resume_pdf()`.
+- **Edit Resume PDF export now uses saved template/style** -- `pipeline_edit_resume` was also exporting with the legacy template; fixed.
+- **Cover letter draft HTML export now uses saved CL template/style** -- `_export_cover_letter_draft_html` now accepts and passes `cl_template` / `cl_style`.
+
+### Schema migrations
+
+- Migration v2: `resume_template TEXT`, `resume_style TEXT` columns added to `job_queue`.
+- Migration v3: `cl_template TEXT`, `cl_style TEXT` columns added to `job_queue`.
+- Defensive column access in `_load_job_queue` handles databases that predate the migrations.
+
+### Tests
+
+- 924 passing (up from 860 at v1.0.1); 17 skipped.
+- Two test mocks updated to accept `**kwargs` after `export_resume_pdf` signature change.
+
+---
+
+## [1.0.1] - 2026-06-22
+
+Multi-tenant hardening, per-user API keys, refactor sprint, and coverage push. 860 passing tests, 82.25% coverage.
+
+### Security / Multi-tenant hardening
+
+- Full data-leakage fix for beta user sessions — owner's contact info, STAR metrics, and company framing no longer fall through to unconfigured user sessions:
+  - `lib/config.py` `get_contact_info()` returns `{}` for users without a configured contact block; no fallback to owner defaults
+  - `_STAR_METRICS` and `_COMPANY_FRAMING` removed from `tools/star.py` module constants; STAR context now comes exclusively from per-user `personal_context.json`
+  - `tools/generate.py` cover letter generation uses `get_contact_info()` throughout; unconfigured users get a generic filename instead of the owner's name
+- Owner OID gating (`ENTRA_OWNER_OID`) — the LaTeX cover letter button only renders for the service owner; all other users see HTML/WeasyPrint export only
+- `GM_AWARDS` → `ACHIEVEMENTS` throughout codebase; backward-compatible fallback in `lib/io.py` reads either key from existing JSON files
+
+### Features
+
+- **Per-user API keys** (`lib/api_keys.py`, `/dashboard/api-keys`) — each authenticated user can generate personal programmatic access tokens scoped to their own data partition; used for iOS Shortcuts, CLI automation, and other HTTP clients without sharing the global admin key or requiring a browser session; keys start with `jcmcp_`, can be labeled per-device, and are individually revokable
+
+### Bug fixes
+
+- `lib/db.py` — database directory created on connect if absent; fixes `sqlite3.OperationalError` on first boot in fresh user partitions
+- Logout consolidated to `POST /logout`; `jc_session` cookie cleared before Entra end-session redirect so re-login always starts fresh
+- `k8s/deployment.yaml` — `DISABLE_REBINDING_CHECK=true` added alongside `ENABLE_REMOTE=true`; the MCP SDK's DNS rebinding protection was responding `421` to all `/mcp` requests from the AKS ingress because `Host: jobcontextmcp.eastus.cloudapp.azure.com` is not `localhost`
+- `lib/resume_parser.py` — `_YEAR_RE` reverted to non-capturing group `(?:19|20)` to fix date-range parsing regression introduced during parser extraction
+
+### Refactoring
+
+- Split three monolithic source files into focused single-responsibility modules:
+  - `tools/export.py` 1,035 → 184 lines; all `.txt` resume/cover-letter parsers extracted to `lib/resume_parser.py`
+  - `transport/http/routes/dashboard/pipeline.py` 1,696 → 1,080 lines; request models, data-access helpers, and scoring logic extracted to `pipeline_helpers.py`
+  - `tools/generate.py` 1,618 → 1,351 lines; all format-spec and system-prompt constants extracted to `tools/generate_prompts.py`
+  - All public symbols re-exported from their original modules — no call-site changes required
+
+### CI/CD
+
+- `deploy.yml` — `workflow_dispatch` trigger with branch/tag selector for manual deploys from any branch in the GitHub Actions UI
+- `deploy.yml` — test job and SonarCloud scan added to the deploy pipeline
+
+### Tests
+
+- 860 passing (up from 627 at v1.0.0); 17 skipped; coverage 82.25%
+- `lib/resume_parser.py` coverage 9% → 88% (164 new tests)
+- New suites: `test_openai_calls`, `test_rag_tools`, `test_story_retrieval_coverage`, `test_github_metrics_coverage`, `test_langgraph_pipeline_coverage`, `test_project_scanner_coverage`, `test_dashboard_pipeline`
+
+---
+
+## [1.0.0] - 2026-06-19
+
+Completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform. 77 tools, 627 tests, production-verified on AKS with Entra ID auth, per-user data isolation, and GitHub Copilot app HTTP/SSE connectivity confirmed.
+
+### Multi-tenant Entra ID authentication
+
+- Full PKCE OAuth2 login flow for the AKS-hosted dashboard — `/dashboard/login`, `/dashboard/callback`, `/dashboard/logout`. JWT validation accepts both bare `CLIENT_ID` and `api://CLIENT_ID` audiences (Entra v1/v2 compat). Secure `jc_session` HTTP-only cookie; logout button on every dashboard page.
+- Per-user data isolation via `lib/user_context.py` `ContextVar` — every authenticated user gets their own SQLite DB, workspace folder tree, and JSON partition under `/app/data/users/{entra_oid}/`. Owner OID (`ENTRA_OWNER_OID`) bypasses isolation and routes to the full corpus.
+- Auto-provisioning on first login — `lib/user_provisioning.py` idempotently creates the user data directory, initializes a blank `jobcontextmcp.db` (all 16 tables), creates workspace subdirs `01`–`09`, and writes a placeholder master resume so generation tools work immediately.
+- Workspace file isolation — `lib/config.py` `get_active_workspace_folder()` returns the user-scoped path; `lib/helpers.py` `_scan_dirs()` uses it dynamically.
+- Guest user invitation support via Entra B2B — invited users are auto-provisioned on first login with isolated data partitions.
+- Root landing page at `/` — project banner SVG + Sign In CTA; previously returned bare FastAPI 404.
+
+### SQLite persistence + dual-write layer
+
+- `lib/db.py` connection helper + `scripts/migrate_to_sqlite.py` one-shot migration from JSON.
+- `lib/io_sqlite.py` dual-write adapter — all writes go to SQLite AND JSON simultaneously; reads from SQLite when `USE_SQLITE=1`.
+- 9 table handlers: applications + events, job queue, people, interviews, rejections, tone samples, health log, LinkedIn posts, personal context.
+- Sync-delete on save — dismissed/removed entries don't linger in SQLite.
+- `SQLITE_ONLY=1` skips JSON writes for SQLite-mapped tables (default on in AKS, default off locally).
+- 36 new round-trip + sync-delete tests.
+
+### AKS production deployment
+
+- Full `k8s/` manifests: PVC (5Gi Premium SSD), ConfigMap, Deployment, Service.
+- Workload identity + federated credential — zero secrets in production.
+- Init container seeds all 9 workspace dirs from Azure Blob Storage on pod start.
+- `workspace-sync` sidecar pushes PVC workspace files + SQLite DB back to blob every 15 min — survives pod replacement without data loss (worst-case 15 min).
+- `scripts/provision_aks.sh` — idempotent one-shot provisioner for all Azure infrastructure.
+- `scripts/upload_workspace.sh` — config-driven bulk uploader for all 9 workspace subdirs.
+- Provider-agnostic LLM via `lib/config.get_llm_client()`: OpenAI / Azure AI Foundry (keyless `DefaultAzureCredential`) / Ollama.
+
+### MCP Streamable HTTP transport (`2025-03-26`)
+
+- `transport/http/app.py` mounts `mcp.streamable_http_app()` at `/mcp`; verified `protocolVersion: 2025-03-26`.
+- `.vscode/mcp.json` includes both stdio (local/Docker) and HTTP (AKS) entries.
+- `AKS port-forward` VS Code background task in `.vscode/tasks.json`.
+- **GitHub Copilot app** — verified working via Settings → MCP servers GUI (HTTP tab, URL = deployed endpoint, no config file editing). Entra ID OAuth flow on save.
+
+### Dashboard: daily digest + cover-letter editor
+
+- `GET /dashboard/digest` + `POST /dashboard/digest/generate` — browser digest with collapsible sections, spinner, timestamps, **NEEDS DECISION** queue section.
+- Cover-letter edit dialog with draft versioning (`{stem}.edit1.tmp`, …) — source never overwritten mid-session. Accept/cancel/discard flow.
+- `09-Cover-Letter-PDFs/` dedicated output folder (previously mixed into `03-Resume-PDFs/`).
+- Job-id-based pipeline actions — assess, select resume, generate materials, export PDFs, unqueue, remove, add, dismiss without brittle company/role string matching.
+- Inline assessment details — fitment scores, gaps, angles, and recommendations visible in the pipeline.
+- Cover-letter narrative routing — `PRIMARY COVER LETTER HOOK` from personal context surfaced when a matching company story exists; cross-company hooks filtered.
+- Semantic personal-story retrieval — `lib/story_retrieval.py` blends keyword scores with OpenAI embeddings, mission queries, and hook-tag boosts for cover letter generation.
+- NEEDS DECISION in `get_daily_digest()` — queue items now appear in digest and TODAY'S FOCUS.
+
+### Fixes
+
+- iOS Share Sheet URL whitespace/non-printable char stripping.
+- Jina scraper 4xx tolerance when body has content.
+- `_save_json` double `write_text` call removed.
+- Init container: `az login` federated token, `--overwrite true`, 0-byte DB guard.
+- Dashboard auth provider settings staleness on token rotation.
+- `IndentationError` CrashLoopBackOff in root route — Python AST check added as pre-commit gate.
+- JWT audience mismatch (`api://CLIENT_ID` vs bare) — both accepted.
+- `transport/http/config.py` `_env_port()` port validation fix.
+- `workspace-sync` sidecar — `Storage Blob Data Contributor` role required (not just `Reader`).
+- All shell scripts pass shellcheck.
+
+### Tests
+
+627 passing (up from 591 at last main merge).
+
+### Upgrade notes
+
+- Run `python scripts/migrate_to_sqlite.py` once to bootstrap `data/jobcontextmcp.db` from existing JSON.
+- Set `USE_SQLITE=1` in `.env` to activate SQLite reads/writes.
+- AKS users: run `./scripts/upload_workspace.sh` before the next pod restart to seed all workspace dirs into blob.
+- No tool API changes — existing `config.json` and data files work as-is.
+
+## [0.9.0] - 2026-06-01
+
+Adds local LLM support via Ollama, a LangGraph-powered resume agent tool, three new context tools, and a verified GitHub Copilot app (HTTP/SSE) client path. Tool count 65 → 73. Full suite 523/523 green.
+
+### Added
+
+- **Ollama provider support** (`lib/config.py` — `get_llm_client()`) — new factory function returns `(client, model_name)` for whichever LLM provider is configured. Setting `llm_provider = "ollama"` in `config.json` routes all generation calls to a local Ollama server via the OpenAI-compatible API (`base_url = ollama_base_url`, `api_key = "ollama"`). Defaults to `"openai"` when not set. Config keys:
+  - `llm_provider` — `"openai"` (default) or `"ollama"`
+  - `ollama_base_url` — default `http://localhost:11434/v1`
+  - `ollama_model` — default `llama3.1:8b`
+  - All three generation paths (`generate_resume`, `generate_cover_letter`, `generate_resume_agent`) and the fitment path (`run_job_assessment`) now call `get_llm_client()` instead of constructing their own OpenAI clients.
+
+- **`generate_resume_agent(company, role, job_description)`** (`tools/langgraph_pipeline.py`) — LangGraph multi-stage resume pipeline exposed as an MCP tool. Runs a 4-node `StateGraph`: `load_context → retrieve (RAG) → draft → review → [revise →] finalize`. Each node has a narrow mandate so no context is lost between stages. Falls back to `generate_resume()` context-packing when no LLM client is configured. Returns header with pipeline summary (revision count, final review excerpt) prepended to the finished draft.
+
+- **`get_all_star_context()`** (`tools/star.py`) — full STAR library dump in one call: all personal stories with tags and people, all resume metric bullets organized by category (`cloud_migration`, `testing`, `ai_adoption`, etc.), and all company-specific framing hints. Intended for session boot when a complete interview prep picture is needed without filtering by tag.
+
+- **`get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)`** (`tools/crossref.py`) — prioritized queue of Facebook friends who are not yet LinkedIn connections. Sorted by recency (most recently added FB friend first) to surface the freshest relationships. Active job target companies are pulled from `status.json` and included in the header so the AI can flag contacts who work at target companies. Supports pagination (`limit` / `offset`) and optional inclusion of pending FB requests (`include_pending=True`).
+
+- **`save_job_assessment(company, content, filename?, source?)`** (`tools/fitment.py`) — saves a generated fitment assessment to `07-Job-Assessments/` as a `.md` file. Optional `source` parameter saves into a named subfolder (e.g. `07-Job-Assessments/Miguel Referral/`) for intake-source organization. Filename defaults to `{Company} - Fitment Assessment.md`.
+
+### Changed
+
+- **`server.py` — missing exports wired** — `run_job_assessment`, session/star/health tool aliases, and `_TOOL_MODULES` list added to module-level exports; `JOB_ASSESSMENTS_FOLDER` and `SERPAPI_KEY` added to `_sync_config_exports()` so downstream tools and tests resolve these correctly.
+- **`cli.py` — tool discovery fixed** — `job_scraper` and `job_queue` modules added to `_discover_tools()` so all 73 tools are callable via the CLI.
+- **`tools.json` regenerated** — static tool manifest rebuilt from live server registry; count 65 → 73.
+
+### Client Support
+
+- **GitHub Copilot app (HTTP/SSE) — verified** — the standalone GitHub Copilot desktop application connects via its **Settings → MCP servers** GUI. Select HTTP or SSE transport, enter your deployed endpoint URL (e.g. `https://your-server/mcp`), and save. No config file editing required. OAuth/Entra ID login prompt appears when auth is configured on the server. Verified working with Azure-hosted endpoint.
 
 ## [0.8.0] - 2026-05-29
 
@@ -102,7 +281,7 @@ Built during an active job search after a layoff. What began as a few tools to s
 
 ### Fixed
 - **Cover letter closing** — sign-off changed from `Sincerely,` to `Kindest Regards,`; new rule in `_COVER_LETTER_FORMAT_SPEC` instructs the model to sign the name in Title Case (not ALL CAPS) with the name on its own line below the closing
-- **Filename casing (`name.title()` bug)** — `_safe_filename()` was calling `.title()` on the name from config, mangling roman numerals: "Frank Vladmir MacBride III" → "Frank Vladmir Macbride Iii"; removed the `.title()` call; the name in `config.json` is now used verbatim
+- **Filename casing (`name.title()` bug)** — `_safe_filename()` was calling `.title()` on the name from config, mangling roman numerals: "Frank MacBride" → "Frank Macbride"; removed the `.title()` call; the name in `config.json` is now used verbatim
 - **"Kindest Regards, Name" merged on one line** — `_parse_cover_letter_txt()` in `export.py` now detects closing salutations (`Kindest Regards,`, `Sincerely,`, `Best Regards,`, `Best,`) merged with the signature on the same line and splits them into separate paragraphs for correct PDF rendering
 
 ### Added
@@ -329,8 +508,8 @@ Built during an active job search after a layoff. What began as a few tools to s
 - `templates/resume.html` — increased bottom page margin (`0.42in` → `0.52in`) and changed footer `vertical-align` from `bottom` to `middle` so the `</ROLE>` tag no longer sits flush against the paper edge
 - `templates/cover_letter.html` — name sidebar font size bumped from `15pt` to `18pt` for better visual weight
 - `tools/export.py` `_parse_cover_letter_txt` — salutation lines (`Dear …`, `To whom …`, `Hello`, `Hi`) were being mistakenly parsed as the author's name; now excluded from name detection and correctly fall back to the hardcoded default
-- `tools/export.py` — closing salutation now normalised to `"Kindest regards,"` on its own line with `"Frank Vladmir MacBride III"` as a separate line below; replaces the old single-line `"Best regards, Frank V. MacBride III"` across all cover letters
-- `tools/export.py` — full middle name **Vladmir** added to the cover-letter sidebar default (`FRANK VLADMIR MACBRIDE III`) and all generated signatures
+- `tools/export.py` — closing salutation now normalised to `"Kindest regards,"` on its own line with `"Frank MacBride"` as a separate line below; replaces the old single-line `"Best regards, Frank V. MacBride III"` across all cover letters
+- `tools/export.py` — cover-letter sidebar default and generated signatures now use `FRANK MACBRIDE`
 
 ## [0.4.0] - 2026-02-21
 

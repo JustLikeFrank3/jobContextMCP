@@ -10,9 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Health
-# ──────────────────────────────────────────────────────────────────────────────
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
@@ -21,9 +19,7 @@ class HealthResponse(BaseModel):
     auth_enabled: bool
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Jobs
-# ──────────────────────────────────────────────────────────────────────────────
 
 class JobEvaluateRequest(BaseModel):
     company: str = Field(..., min_length=1)
@@ -46,6 +42,27 @@ class JobEvaluateResponse(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class JobIngestUrlRequest(BaseModel):
+    url: str = Field(..., min_length=8)
+    source: str = "share_sheet"
+    persona: str | None = Field(
+        default=None,
+        description="Optional persona name to bias fitment evaluation.",
+    )
+
+
+class JobIngestUrlResponse(BaseModel):
+    url: str
+    company: str
+    role: str
+    queued: bool
+    evaluated: bool
+    queue_status: str
+    fitment_context: str
+    notes: list[str] = Field(default_factory=list)
+    message: str = ""
+
+
 class JobDecisionRequest(BaseModel):
     company: str = Field(..., min_length=1)
     role: str = Field(..., min_length=1)
@@ -58,9 +75,7 @@ class JobDecisionResponse(BaseModel):
     result: str
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Resumes
-# ──────────────────────────────────────────────────────────────────────────────
 
 class ResumeGenerateRequest(BaseModel):
     company: str = Field(..., min_length=1)
@@ -68,6 +83,7 @@ class ResumeGenerateRequest(BaseModel):
     job_description: str = Field(..., min_length=1)
     output_filename: str = ""
     kind: Literal["resume", "cover_letter"] = "resume"
+    export_pipeline: Literal["html", "latex"] = "html"
     persona: str | None = Field(
         default=None,
         description="Optional persona name. Defaults to 'default' if omitted.",
@@ -84,9 +100,7 @@ class ResumeGenerateResponse(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Stories (STAR) + Tone
-# ──────────────────────────────────────────────────────────────────────────────
 
 class StorySearchRequest(BaseModel):
     tag: str = Field(..., min_length=1, description="STAR tag, e.g. 'ai_adoption', 'leadership'.")
@@ -103,9 +117,7 @@ class ToneProfileResponse(BaseModel):
     profile: str
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # SSE event envelope
-# ──────────────────────────────────────────────────────────────────────────────
 
 class StreamEvent(BaseModel):
     """Serialized form of a services.ProgressEvent for SSE consumers."""

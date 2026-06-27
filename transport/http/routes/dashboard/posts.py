@@ -110,7 +110,7 @@ async def posts_board() -> HTMLResponse:
     }
 
     async function boot() {
-      const res = await fetch('/dashboard/posts/data', { headers: window._authHeaders });
+      const res = await fetch('/dashboard/posts/data', { credentials: 'same-origin' });
       const data = await res.json();
       allPosts = data.posts || [];
 

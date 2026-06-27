@@ -58,7 +58,7 @@ class TestAuth:
             "company": "X", "role": "Y", "job_description": "z",
         })
         assert r.status_code == 401
-        assert "Missing Authorization" in r.json()["detail"]
+        assert "Missing credentials" in r.json()["detail"]
 
     def test_wrong_key_rejected(self, http_client_authed):
         r = http_client_authed.post(
@@ -67,7 +67,7 @@ class TestAuth:
             json={"company": "X", "role": "Y", "job_description": "z"},
         )
         assert r.status_code == 401
-        assert "Invalid API key" in r.json()["detail"]
+        assert "Invalid credentials" in r.json()["detail"]
 
     def test_valid_key_accepted(self, http_client_authed):
         r = http_client_authed.post(
@@ -225,6 +225,8 @@ class TestDashboardEndpoints:
         assert "folders" in body
         assert "optimized_resumes" in body
         assert "cover_letters" in body
+        assert "cover_letter_pdfs" in body
+        assert "cover_letter_pdfs" in body["folders"]
         assert "tracked_applications" in body
         assert "gap" in body
         assert "untracked_resume_files" in body
@@ -233,7 +235,7 @@ class TestDashboardEndpoints:
         r = http_client_noauth.get("/dashboard/")
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]
-        assert "jobContextMCP" in r.text
+        assert "jobContext" in r.text
 
     def test_rejections_dashboard_page_renders(self, http_client_noauth):
         r = http_client_noauth.get("/dashboard/rejections")
@@ -408,3 +410,50 @@ class TestWorkflowEndpoints:
     def test_stream_unknown_workflow_returns_404(self, http_client_noauth):
         r = http_client_noauth.post("/workflows/nope/stream", json={})
         assert r.status_code == 404
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public marketing / legal pages (no auth required)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestPublicPages:
+    """All public routes must return 200 text/html and non-empty HTML bodies.
+
+    These routes serve static HTML strings — tests just verify the route is
+    wired, the function is reachable, and the content-type is correct.
+    """
+
+    @pytest.mark.parametrize("path", [
+        "/",
+        "/why",
+        "/setup",
+        "/architecture",
+        "/privacy",
+        "/terms",
+    ])
+    def test_public_page_returns_200_html(self, http_client_noauth, path):
+        r = http_client_noauth.get(path)
+        assert r.status_code == 200
+        ct = r.headers.get("content-type", "")
+        assert "text/html" in ct
+        assert len(r.text) > 500
+
+    def test_landing_page_contains_jobcontext(self, http_client_noauth):
+        r = http_client_noauth.get("/")
+        assert r.status_code == 200
+        assert "jobContext" in r.text or "JobContextMCP" in r.text
+
+    def test_why_page_contains_content(self, http_client_noauth):
+        r = http_client_noauth.get("/why")
+        assert r.status_code == 200
+        assert len(r.text) > 1000
+
+    def test_privacy_page_contains_content(self, http_client_noauth):
+        r = http_client_noauth.get("/privacy")
+        assert r.status_code == 200
+        assert len(r.text) > 500
+
+    def test_terms_page_contains_content(self, http_client_noauth):
+        r = http_client_noauth.get("/terms")
+        assert r.status_code == 200
+        assert len(r.text) > 500

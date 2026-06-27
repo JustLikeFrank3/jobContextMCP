@@ -2,57 +2,9 @@ from lib import config
 from lib.io import _load_json
 
 
-_STAR_METRICS: dict[str, list[str]] = {
-    "testing": [
-        "80%+ code coverage across JUnit, Mockito, Jest, and Selenium",
-        "Sole developer — no QA team, so quality was self-enforced from the first commit",
-        "TDD across full stack: Postgres → Spring Boot → Angular",
-        "Zero production regressions attributed to test gaps during 4-year GM tenure",
-    ],
-    "quality": [
-        "98% SLA compliance on production forecasting app used by senior GM leadership",
-        "Self-enforced standards as the only dev — nowhere else to point if it broke",
-        "Legacy codebase modernization (500K+ lines) with no service interruptions",
-    ],
-    "craftsmanship": [
-        "Built-in quality, not bolted-on: TDD, clean migration paths, no shortcuts",
-        "Java 8→21 + Spring Boot 2.2→3.5.4 while keeping prod healthy throughout",
-        "Zero-downtime Oracle→PostgreSQL migration under live traffic",
-    ],
-    "solo-developer": [
-        "Sole developer across 500K+ line codebase for 4 years",
-        "Owned backend (Java/Spring Boot), frontend (Angular), database (PostgreSQL), and CI/CD",
-        "No QA buffer — testing rigor was personal, not procedural",
-        "98% SLA maintained throughout two major migrations and a modernization",
-    ],
-    "cloud": [
-        "Led PCF → OCF → Azure Container Apps migration with zero downtime",
-        "Oracle → PostgreSQL migration under live production traffic",
-        "Terraform IaC for Azure provisioning",
-        "98% SLA maintained throughout cloud transition period",
-    ],
-    "ai": [
-        "Drove 35%+ GitHub Copilot/Claude adoption in engineering org (3.5x the target)",
-        "Built AI-augmented workflows and coached peers on prompt engineering",
-        "AI adoption recognized by leadership as exceptional contribution",
-    ],
-    "leadership": [
-        "ERG JumpStart President — led without formal authority",
-        "Angular Developer Group Admin — drove cross-team knowledge sharing",
-        "3.5x AI adoption target through grassroots coaching, not mandate",
-    ],
-    "modernization": [
-        "Java 8→21, Spring Boot 2.2→3.5.4 across 500K+ lines — no feature freeze",
-        "Angular 6→18 migration with no regressions to business analysts",
-        "Zero-downtime database migration: Oracle → PostgreSQL",
-        "98% SLA held throughout all modernization phases",
-    ],
-    "ford": [
-        "Grandfather spent 50 years at Ford — service manager at 19 during the Depression",
-        "Grandfather story: 1934 Ford Fire Truck brass threads, machined to tolerances that looked stripped decades later",
-        "Quality as inherited value, not process compliance — built in from the start",
-    ],
-}
+# Metrics are loaded per-user from personal_context.json at runtime.
+# This dict is intentionally empty — do not add hardcoded data here.
+_STAR_METRICS: dict[str, list[str]] = {}
 
 _STAR_RELATED: dict[str, list[str]] = {
     "testing": ["quality", "craftsmanship", "solo-developer"],
@@ -67,37 +19,9 @@ _STAR_RELATED: dict[str, list[str]] = {
     "grandfather": ["ford", "craftsmanship", "quality"],
 }
 
-_COMPANY_FRAMING: dict[str, dict[str, str]] = {
-    "ford": {
-        "connection": "Grandfather's 50-year Ford career + 1934 Ford Fire Truck precision story",
-        "values": "Craftsmanship, durability, legacy, precision under constraint",
-        "angle": "Quality as an inherited value — built in from the Depression era forward",
-    },
-    "fanduel": {
-        "values": "Scale, speed, uptime — real-time odds, millions of concurrent users",
-        "angle": "Testing rigor is what lets you ship fast without destroying trust",
-    },
-    "mercedes": {
-        "values": "Zero defect, German engineering precision, no tolerance for corner-cutting",
-        "angle": "Self-enforced quality under resource constraint parallels the MB engineering ethos",
-    },
-    "airbnb": {
-        "values": "Trust platform — guests and hosts depend on reliability",
-        "angle": "Solo ownership of uptime, because someone is always depending on it",
-    },
-    "reddit": {
-        "values": "Scale, distributed systems, real-time feeds, developer culture",
-        "angle": "Ownership mentality — built like you're the one on-call when it pages",
-    },
-    "microsoft": {
-        "values": "Engineering excellence, AI-first thinking, developer empowerment",
-        "angle": "AI adoption story (3.5x target) maps directly to Microsoft's Copilot ecosystem",
-    },
-    "google": {
-        "values": "Scale, reliability, SRE culture, code quality",
-        "angle": "SLA obsession and testing rigor as cultural fit, not resume line item",
-    },
-}
+# Company framing is loaded per-user from personal_context.json at runtime.
+# This dict is intentionally empty — do not add hardcoded data here.
+_COMPANY_FRAMING: dict[str, dict[str, str]] = {}
 
 
 def get_star_story_context(
@@ -110,6 +34,10 @@ def get_star_story_context(
 
     story_data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     all_stories = story_data.get("stories", [])
+    # Read per-user metrics and framing from the data file — never from the
+    # hardcoded module constants which contain the owner's personal data.
+    star_metrics: dict = story_data.get("star_metrics", {})
+    company_framing: dict = story_data.get("company_framing", {})
 
     related = _STAR_RELATED.get(tag_lower, [])
     search_tags = {tag_lower} | set(related)
@@ -129,15 +57,15 @@ def get_star_story_context(
 
     metrics: list[str] = []
     for t in [tag_lower] + related:
-        for m in _STAR_METRICS.get(t, []):
+        for m in star_metrics.get(t, []):
             if m not in metrics:
                 metrics.append(m)
 
     company_lower = company.lower().strip()
     framing = None
-    for key in _COMPANY_FRAMING:
+    for key in company_framing:
         if key in company_lower:
-            framing = _COMPANY_FRAMING[key]
+            framing = company_framing[key]
             break
 
     header = f"tag='{tag}'"
@@ -202,6 +130,10 @@ def get_all_star_context() -> str:
     """Dump the full STAR context: all personal stories, all metric bullets by category, and all company framing hints. Used at session boot to load the complete interview prep picture."""
     story_data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     all_stories = story_data.get("stories", [])
+    # Read per-user metrics and framing from the data file — never from the
+    # hardcoded module constants which contain the owner's personal data.
+    star_metrics: dict = story_data.get("star_metrics", {})
+    company_framing: dict = story_data.get("company_framing", {})
 
     lines = ["═══ STAR CONTEXT (full boot dump) ═══", ""]
 
@@ -221,20 +153,30 @@ def get_all_star_context() -> str:
         lines.append("")
 
     # All STAR metrics by category
-    lines.append("── RESUME METRICS BY CATEGORY ──")
-    for category, bullets in _STAR_METRICS.items():
-        lines.append(f"\n  [{category}]")
-        for b in bullets:
-            lines.append(f"    • {b}")
-    lines.append("")
+    if star_metrics:
+        lines.append("── RESUME METRICS BY CATEGORY ──")
+        for category, bullets in star_metrics.items():
+            lines.append(f"\n  [{category}]")
+            for b in bullets:
+                lines.append(f"    • {b}")
+        lines.append("")
+    else:
+        lines.append("── RESUME METRICS BY CATEGORY ──")
+        lines.append("  No metrics logged yet. Add star_metrics to your personal_context.json.")
+        lines.append("")
 
     # All company framing hints
-    lines.append("── COMPANY FRAMING HINTS ──")
-    for company, framing in _COMPANY_FRAMING.items():
-        lines.append(f"\n  [{company.upper()}]")
-        for k, v in framing.items():
-            lines.append(f"    {k}: {v}")
-    lines.append("")
+    if company_framing:
+        lines.append("── COMPANY FRAMING HINTS ──")
+        for company, framing in company_framing.items():
+            lines.append(f"\n  [{company.upper()}]")
+            for k, v in framing.items():
+                lines.append(f"    {k}: {v}")
+        lines.append("")
+    else:
+        lines.append("── COMPANY FRAMING HINTS ──")
+        lines.append("  No company framing logged yet.")
+        lines.append("")
 
     return "\n".join(lines)
 

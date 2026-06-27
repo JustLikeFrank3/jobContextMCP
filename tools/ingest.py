@@ -88,7 +88,7 @@ def ingest_anecdote(
     if not tone_logged and tone_sample and word_count >= 40:
         pass  # already noted above
     elif not tone_sample:
-        lines.append("\nTip: set tone_sample=True to also calibrate Frank's voice profile from this story.")
+        lines.append("\nTip: set tone_sample=True to also calibrate the candidate's voice profile from this story.")
 
     return "\n".join(lines)
 

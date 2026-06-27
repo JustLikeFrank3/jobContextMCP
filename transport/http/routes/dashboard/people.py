@@ -108,7 +108,7 @@ async def people_board() -> HTMLResponse:
     }
 
     async function boot() {
-      const res = await fetch('/dashboard/people/data', { headers: window._authHeaders });
+      const res = await fetch('/dashboard/people/data', { credentials: 'same-origin' });
       const data = await res.json();
       allPeople = data.recent || [];
 

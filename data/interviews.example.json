@@ -2,10 +2,10 @@
   "interviews": [
     {
       "id": 1,
-      "timestamp": "2026-03-03 19:35",
+      "timestamp": "2026-01-15 19:35",
       "company": "Example Corp",
       "role": "Senior Software Engineer, Platform",
-      "interview_date": "2026-03-03 19:00",
+      "interview_date": "2026-01-15 19:00",
       "interview_type": "recruiter_screen",
       "interview_format": "video",
       "interviewer": "Jane Recruiter",
@@ -17,7 +17,7 @@
         "Concrete metric from prior role (98% SLA) instead of vague 'improved reliability'"
       ],
       "what_didnt": [
-        "Stumbled on the 'why are you looking?' question; recovered but not gracefully"
+        "Stumbled on 'why are you looking?'; recovered but not gracefully"
       ],
       "verbatim_quotes": [
         {
@@ -29,14 +29,18 @@
       "surfaced_priorities": [
         "Team is rebuilding observability stack in Q3 — Datadog → OpenTelemetry migration is the unstated theme"
       ],
-      "process_details": "Next round: 45min coding (45min) + 30min systems design with HM. Scheduling via Calendly within a week.",
-      "comp_signals": "Range $180-210k confirmed; recruiter said the top end is in play for senior level.",
+      "process_details": "Next: 45min coding + 30min systems design with HM. Scheduling via Calendly within a week.",
+      "comp_signals": "Range $180-210k confirmed; recruiter said top end is in play for senior level.",
       "follow_up_commitments": [
         "Send link to side project repo by EOD"
       ],
-      "tags": ["example", "platform", "warm-intro"],
+      "tags": [
+        "example",
+        "platform",
+        "warm-intro"
+      ],
       "notes": "Example record — replace with real interview debriefs.",
-      "last_updated": "2026-03-03 19:35"
+      "last_updated": "2026-01-15 19:35"
     }
   ]
 }

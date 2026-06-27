@@ -14,26 +14,27 @@ from typing import Optional
 import numpy as np
 from openai import OpenAI
 
+from lib import config as _cfg_module
+
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-_HERE = Path(__file__).parent
+
+def _data_dir() -> Path:
+    return _cfg_module.get_active_data_folder()
 
 
-def _load_config() -> dict:
-    return json.loads((_HERE / "config.json").read_text(encoding="utf-8"))
+def _index_file() -> Path:
+    return _data_dir() / "rag_index.json"
 
 
-_cfg        = _load_config()
-_DATA_DIR   = Path(_cfg["data_folder"])
-_INDEX_FILE = _DATA_DIR / "rag_index.json"
-_EMBED_FILE = _DATA_DIR / "rag_embeddings.npy"
-_OPENAI_KEY = _cfg.get("openai_api_key", "")
+def _embed_file() -> Path:
+    return _data_dir() / "rag_embeddings.npy"
 
 
 # ─── CLIENT ───────────────────────────────────────────────────────────────────
 
 def _openai_client() -> OpenAI:
-    key = _load_config().get("openai_api_key", "")
+    key = _cfg_module.get_config_value("openai_api_key", "")
     if not key:
         raise ValueError(
             "openai_api_key not set in config.json. "
@@ -91,34 +92,33 @@ def build_index(verbose: bool = True) -> dict[str, int]:
     Saves embeddings to data/rag_embeddings.npy and metadata to data/rag_index.json.
     Returns chunk counts per category.
     """
-    cfg     = _load_config()
     oai     = _openai_client()
 
-    resume_folder   = Path(cfg["resume_folder"])
-    leetcode_folder = Path(cfg["leetcode_folder"])
+    resume_folder   = _cfg_module.get_active_workspace_folder()
+    leetcode_folder = _cfg_module.get_active_leetcode_folder()
 
     # Gather all files to index
     file_groups: list[tuple[list[Path], str]] = []
 
     # Master resume
-    master = resume_folder / cfg["master_resume_path"]
+    master = _cfg_module.MASTER_RESUME
     if master.exists():
         file_groups.append(([master], "resume"))
 
     # All resumes
-    optimized_dir = resume_folder / cfg["optimized_resumes_dir"]
+    optimized_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("optimized_resumes_dir", "01-Current-Optimized"))
     if optimized_dir.exists():
         file_groups.append(([
             f for f in optimized_dir.glob("*.txt") if "MASTER" not in f.name
         ], "resume"))
 
     # Cover letters
-    cl_dir = resume_folder / cfg["cover_letters_dir"]
+    cl_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("cover_letters_dir", "02-Cover-Letters"))
     if cl_dir.exists():
         file_groups.append((list(cl_dir.glob("*.txt")), "cover_letters"))
 
     # Reference materials
-    ref_dir = resume_folder / cfg["reference_materials_dir"]
+    ref_dir = _cfg_module.get_active_workspace_path(_cfg_module.get_config_value("reference_materials_dir", "06-Reference-Materials"))
     if ref_dir.exists():
         file_groups.append((list(ref_dir.glob("*.txt")), "reference"))
 
@@ -128,6 +128,12 @@ def build_index(verbose: bool = True) -> dict[str, int]:
         if any(kw in f.name.lower() for kw in ("prep", "interview", "call", "cheat"))
     ]
     file_groups.append((prep_files, "interview_prep"))
+
+    # Interview prep docs folder (08-Interview-Prep-Docs)
+    prep_docs_dir = resume_folder / "08-Interview-Prep-Docs"
+    if prep_docs_dir.exists():
+        prep_doc_files = list(prep_docs_dir.glob("*.txt")) + list(prep_docs_dir.glob("*.md"))
+        file_groups.append((prep_doc_files, "interview_prep"))
 
     # Job assessments (fitment analysis, notes on specific roles)
     assessments_dir = resume_folder / "07-Job-Assessments"
@@ -144,8 +150,11 @@ def build_index(verbose: bool = True) -> dict[str, int]:
 
     # LeetCode
     lc_files = [
-        p for name in (cfg["leetcode_cheatsheet_path"], cfg["quick_reference_path"])
-        if (p := leetcode_folder / name).exists()
+        p for name in (
+            _cfg_module.get_config_value("leetcode_cheatsheet_path", ""),
+            _cfg_module.get_config_value("quick_reference_path", ""),
+        )
+        if name and (p := leetcode_folder / name).exists()
     ]
     file_groups.append((lc_files, "leetcode"))
 
@@ -186,9 +195,9 @@ def build_index(verbose: bool = True) -> dict[str, int]:
             print(f"  {min(i + 100, len(all_chunks))}/{len(all_chunks)}")
 
     # Save
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    np.save(str(_EMBED_FILE), np.array(all_embeddings, dtype=np.float32))
-    _INDEX_FILE.write_text(json.dumps({
+    _data_dir().mkdir(parents=True, exist_ok=True)
+    np.save(str(_embed_file()), np.array(all_embeddings, dtype=np.float32))
+    _index_file().write_text(json.dumps({
         "chunks":   all_chunks,
         "metadata": all_metadata,
     }, ensure_ascii=False), encoding="utf-8")
@@ -210,7 +219,7 @@ def search(
     Semantic search across indexed materials.
     Returns list of {text, source, category, score} dicts.
     """
-    if not _INDEX_FILE.exists() or not _EMBED_FILE.exists():
+    if not _index_file().exists() or not _embed_file().exists():
         raise FileNotFoundError(
             "RAG index not found. Run reindex_materials() first."
         )
@@ -218,10 +227,10 @@ def search(
     oai = _openai_client()
 
     # Load index
-    index_data = json.loads(_INDEX_FILE.read_text(encoding="utf-8"))
+    index_data = json.loads(_index_file().read_text(encoding="utf-8"))
     chunks     = index_data["chunks"]
     metadata   = index_data["metadata"]
-    embeddings = np.load(str(_EMBED_FILE))  # shape: (N, dim)
+    embeddings = np.load(str(_embed_file()))  # shape: (N, dim)
 
     # Filter by category if requested
     if category:
@@ -266,7 +275,7 @@ def format_results(hits: list[dict], header: str = "Search Results") -> str:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "search":
         query = " ".join(sys.argv[2:])

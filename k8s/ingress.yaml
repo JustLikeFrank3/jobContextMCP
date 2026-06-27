@@ -1,0 +1,86 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jcmcp
+  namespace: jcmcp
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - jobcontextmcp.eastus.cloudapp.azure.com
+      secretName: jcmcp-tls
+    - hosts:
+        - jobcontext.ai
+        - www.jobcontext.ai
+        - app.jobcontext.ai
+      secretName: jcmcp-tls-jobcontext-ai
+    - hosts:
+        - job-context.com
+        - www.job-context.com
+      secretName: jcmcp-tls-job-context-com
+  rules:
+    - host: jobcontextmcp.eastus.cloudapp.azure.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80
+    - host: jobcontext.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80
+    - host: www.jobcontext.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80
+    - host: app.jobcontext.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80
+    - host: job-context.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80
+    - host: www.job-context.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jcmcp
+                port:
+                  number: 80

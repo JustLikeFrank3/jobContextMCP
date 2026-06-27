@@ -19,10 +19,12 @@ _MINIMAL = dict(
 
 def _patch_here(monkeypatch, tmp_path: Path, module):
     """Redirect _HERE and derived path constants in tools.setup to tmp_path."""
-    monkeypatch.setattr(module, "_HERE", tmp_path)
+    import lib.config as cfg
+    monkeypatch.setattr(module, "_HERE",          tmp_path)
     monkeypatch.setattr(module, "_WORKSPACE_ROOT", tmp_path / "workspace")
-    monkeypatch.setattr(module, "_RESUMES_ROOT",   tmp_path / "workspace" / "resumes")
-    monkeypatch.setattr(module, "_LEETCODE_ROOT",  tmp_path / "workspace" / "leetcode")
+    monkeypatch.setattr(cfg,    "RESUME_FOLDER",   tmp_path / "workspace" / "resumes")
+    monkeypatch.setattr(cfg,    "LEETCODE_FOLDER", tmp_path / "workspace" / "leetcode")
+    monkeypatch.setattr(cfg,    "DATA_FOLDER",     tmp_path / "data")
 
 
 # ── check_workspace ────────────────────────────────────────────────────────────

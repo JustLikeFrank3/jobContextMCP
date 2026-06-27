@@ -1,0 +1,46 @@
+\documentclass[letter,10pt]{article}
+\usepackage[utf8]{inputenc}
+
+\usepackage{TLCresume}
+\geometry{margin=.3in}  % uniform margins, overrides TLCresume defaults (top=.15in, bottom=1in)
+\usepackage{titlesec}
+\titlespacing*{\section}{0em}{0.1em}{0em}
+\titlespacing*{\subsection}{0em}{0em}{0em}
+\setlist[itemize]{itemsep=0pt,parsep=0pt,topsep=0pt,partopsep=0pt}
+
+%====================
+% CONTACT INFORMATION
+%====================
+\def\name{Frank Vladmir MacBride III}
+\def\phone{+1.305.490.1262}
+\def\city{Atlanta, GA}
+\def\email{frankvmacbride@gmail.com}
+\def\linkedin{frankvmacbride}
+\def\github{JustLikeFrank3}
+\def\website{jobcontext.ai}
+\def\role{Full-Stack Software Engineer}
+
+\input{_header}
+\begin{document}
+\pagestyle{empty}
+\printheader
+
+\section{Summary}
+\input{sections/synopsis}
+
+\section{Skills}
+\input{sections/skills}
+
+\section{Professional Experience}
+\input{sections/experience}
+
+\section{Projects}
+\input{sections/personalprojects}
+
+\section{Education}
+\input{sections/education}
+
+\section{Leadership \& Certifications}
+\input{sections/leadership}
+
+\end{document}

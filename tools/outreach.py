@@ -57,7 +57,7 @@ _MESSAGE_TYPE_INSTRUCTIONS = {
 
 _DEFAULT_INSTRUCTION = (
     "Write a professional, personable outreach message appropriate for the described context. "
-    "Keep it concise. Avoid AI-sounding openers. Write in Frank's voice as defined by the tone profile."
+    "Keep it concise. Avoid AI-sounding openers. Write in the candidate's voice as defined by the tone profile."
 )
 
 
@@ -105,7 +105,7 @@ def draft_outreach_message(
     message_type: str = "",
 ) -> str:
     """
-    Package everything needed to draft an outreach message in Frank's voice.
+    Package everything needed to draft an outreach message in the candidate's voice.
 
     Args:
         contact:      Name of the person being messaged.
@@ -152,7 +152,7 @@ def draft_outreach_message(
         ),
         "──── APPLICATION STATUS ────",
         company_status,
-        "──── FRANK'S VOICE (tone profile) ────",
+        "──── CANDIDATE'S VOICE (tone profile) ────",
         tone_profile,
         "──── PERSONAL CONTEXT (for relevant stories if applicable) ────",
         personal_ctx,
@@ -160,7 +160,7 @@ def draft_outreach_message(
         (
             f"Using everything above, draft a {resolved_type.replace('_', ' ')} message "
             f"to {contact} at {company}. Write it ready to send — no placeholders, "
-            "no [INSERT NAME], no notes to Frank about what to change. "
+            "no [INSERT NAME], no editorial notes to the sender about what to change. "
             "Just the message."
         ),
     ]
@@ -320,16 +320,16 @@ def draft_reply(
 ) -> str:
     """Package context for replying to an incoming message (recruiter, HM, contact).
 
-    Returns a context block bundling: the incoming text, Frank's tone profile,
+    Returns a context block bundling: the incoming text, the candidate's tone profile,
     relevant personal context, job-hunt status for the company (if any), known
     contact context, and tactical reply instructions. The AI uses this to draft
     a short, on-voice reply.
 
     Args:
-        incoming_message: Verbatim text of the message Frank received.
+        incoming_message: Verbatim text of the message received.
         contact:          Name of the sender (looked up via people DB if known).
         company:          Company they represent (for status pull).
-        intent:           Frank's intended response posture: 'accept',
+        intent:           The candidate's intended response posture: 'accept',
                           'decline_polite', 'decline_compensation', 'request_info',
                           'delay', 'enthusiastic_yes', or free-form. Optional.
 
@@ -379,7 +379,7 @@ def draft_reply(
         "──── INCOMING MESSAGE ────",
         incoming_message.strip(),
         "",
-        "──── FRANK'S TONE PROFILE ────",
+        "──── CANDIDATE'S TONE PROFILE ────",
         tone,
         "",
         "──── PERSONAL CONTEXT (use only if relevant) ────",

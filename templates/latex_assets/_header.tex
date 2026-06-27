@@ -1,0 +1,35 @@
+%====================
+% Header: Contact
+% Rendered as ordinary body content (NOT a fancyhdr page style) so no page
+% reserves header space. This permanently kills the page-2 header "ghost".
+%====================
+\providecommand{\website}{}  % optional — define \def\website{jobcontext.ai} in the .tex to render a third link
+\newcommand{\printheader}{%
+  \noindent
+  \begin{minipage}[t]{0.32\textwidth}
+    \raggedright
+    \phone \\
+    \city \\
+    \href{mailto:\email}{\email}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.36\textwidth}
+    \centering
+    {\Huge \skills{\name}}\\[.15em]
+    {\color{highlight}\Large \role}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.30\textwidth}
+    \raggedleft
+    \ifx\linkedin\empty\else
+      \href{https://www.linkedin.com/in/\linkedin}{linkedin.com/in/\linkedin} \\
+    \fi
+    \ifx\github\empty\else
+      \href{https://github.com/\github}{github.com/\github} \\
+    \fi
+    \ifx\website\empty\else
+      \href{https://\website}{\website}
+    \fi
+  \end{minipage}%
+  \par\vspace{2pt}%
+  \noindent{\color{highlight}\rule{\textwidth}{1pt}}%
+  \par\vspace{0pt}%
+}

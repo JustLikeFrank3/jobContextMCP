@@ -1,8 +1,10 @@
 import textwrap
 from pathlib import Path
+import re
 
 from lib.io import _load_master_context
 from lib import config
+from lib.openai_calls import create_chat_completion
 from tools.interviews import get_interview_context
 
 _ASSESSMENT_SYSTEM = textwrap.dedent("""\
@@ -30,17 +32,103 @@ _ASSESSMENT_SYSTEM = textwrap.dedent("""\
     ## COMP ASSESSMENT
     One paragraph on whether the posted comp range matches the candidate's level
     and market value. Include any negotiation notes.
+    BUG GUARD (ingestion workflow): The job description you receive may be
+    truncated or may omit compensation entirely. Only reference comp numbers
+    that appear verbatim in the provided job description. If no comp range is
+    present, write exactly "No compensation range was provided in the posting."
+    and stop. Never invent, estimate, or infer a "competitive range" — a
+    fabricated number here poisons downstream negotiation prep.
 
     ## RECOMMENDATION
     One sentence: Apply aggressively / Apply with caveats / Do not apply.
     Follow with 2-3 sentences of reasoning.
 
     Be direct. No filler. No hedge language. If the fit is weak, say so.
+    GLOBAL ANTI-FABRICATION RULE: Every claim in every section must be grounded
+    in either the provided master resume or the provided job description. If a
+    detail is not present in your inputs, do not assert it as fact.
+
+    AI PLATFORM CALIBRATION RULE: If the master resume includes explicit work
+    building MCP servers, RAG / semantic search, vector embeddings, LangGraph
+    workflows, OpenAI API integrations, dashboard/HTTP transports for AI tools,
+    or AI tool adoption programs, surface that evidence in STRONG MATCHES and
+    KEY ANGLES for AI Platform / Agent Platform / LLM / RAG roles. Do not call
+    the candidate's AI platform experience "absent" merely because it comes
+    from a side project or platform project rather than a formal ML-model title.
+    You may still distinguish AI platform engineering from ML model training,
+    but the distinction must acknowledge the concrete AI platform evidence.
 """)
 
 
+_AI_ROLE_KEYWORDS = (
+    "ai",
+    "llm",
+    "rag",
+    "agent",
+    "copilot",
+    "machine learning",
+    "generative",
+    "prompt",
+    "model context protocol",
+    "mcp",
+)
+
+_AI_EVIDENCE_KEYWORDS = (
+    "ai",
+    "llm",
+    "rag",
+    "copilot",
+    "claude",
+    "openai",
+    "model context protocol",
+    "mcp",
+    "fastmcp",
+    "langgraph",
+    "agent",
+    "semantic search",
+    "faiss",
+    "vector",
+    "embedding",
+    "prompt",
+)
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    if " " in keyword or "/" in keyword or "-" in keyword:
+        return keyword in text
+    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
+
+
+def _is_ai_focused(role: str, job_description: str) -> bool:
+    text = f"{role}\n{job_description}".lower()
+    return any(_contains_keyword(text, keyword) for keyword in _AI_ROLE_KEYWORDS)
+
+
+def _extract_ai_platform_evidence(master: str, limit: int = 10) -> str:
+    """Pull concrete AI-platform evidence to the front of assessment prompts.
+
+    The full master resume can be long enough that side-project AI platform work
+    gets underweighted by the LLM. This deterministic excerpt keeps MCP/RAG/
+    LangGraph/OpenAI evidence visible for AI Platform and Agent Platform roles.
+    """
+    evidence: list[str] = []
+    for raw in master.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if any(_contains_keyword(lower, keyword) for keyword in _AI_EVIDENCE_KEYWORDS):
+            evidence.append(line)
+        if len(evidence) >= limit:
+            break
+
+    if not evidence:
+        return ""
+    return "\n".join(f"- {line}" for line in evidence)
+
+
 def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
-    """Package Frank's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
+    """Package the candidate's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
 
     When `persona` is set, prepends the persona's prompt block to the context
     pack so the consuming agent reads it as a role-specific lens (e.g.
@@ -49,6 +137,15 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
     master = _load_master_context()
     interview_block = get_interview_context(company=company, role=role)
     interview_section = f"\n\n{interview_block}" if interview_block else ""
+    ai_evidence_section = ""
+    if _is_ai_focused(role, job_description):
+        ai_evidence = _extract_ai_platform_evidence(master)
+        if ai_evidence:
+            ai_evidence_section = (
+                "──── AI PLATFORM EVIDENCE EXTRACTED FROM MASTER RESUME ────\n"
+                "Use this evidence when assessing AI Platform / Agent Platform fit.\n"
+                f"{ai_evidence}\n\n"
+            )
 
     persona_section = ""
     if persona:
@@ -67,44 +164,43 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
         f"Role:    {role}\n\n"
         f"{persona_section}"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
-        f"──── FRANK'S MASTER RESUME ────\n{master}"
+        f"{ai_evidence_section}"
+        f"──── CANDIDATE MASTER RESUME ────\n{master}"
         f"{interview_section}"
     )
 
 
 def get_customization_strategy(role_type: str) -> str:
-    """Return a resume customization strategy for a given role type. Valid values: testing, cloud, data_engineering, backend, fullstack, ai_innovation, iot. Advises which skills and stories to lead with."""
+    """Return a resume customization strategy for a given role type. Valid values: testing, cloud, data_engineering, backend, fullstack, ai_innovation, iot. Advises which skills and stories to lead with based on the candidate's master resume."""
     strategies = {
         "testing": (
-            "Lead with JUnit/Mockito/Selenium expertise, 80%+ coverage metrics, TDD practices. "
-            "Feature the 'prevented production defects' story. "
-            "Highlight Karma/Jest for frontend testing."
+            "Lead with testing expertise, coverage metrics, and TDD practices. "
+            "Feature any story about defect prevention or quality improvements. "
+            "Highlight both backend (JUnit/Mockito) and frontend (Karma/Jest) testing if present."
         ),
         "cloud": (
-            "Lead with Azure Container Apps, Terraform IaC, zero-downtime PCF→OCF→Azure migration. "
-            "Emphasize containerization, CI/CD pipelines, and infrastructure-as-code."
+            "Lead with cloud platform experience, infrastructure-as-code, and migration work. "
+            "Emphasize containerization, CI/CD pipelines, and zero-downtime deployment stories."
         ),
         "data_engineering": (
-            "Lead with IBM DataStage, PySpark ETL pipelines, Oracle→PostgreSQL migration. "
-            "Emphasize data modeling, multi-source integration, and warehouse work."
+            "Lead with ETL pipeline experience, data migration work, and warehouse projects. "
+            "Emphasize data modeling, multi-source integration, and throughput improvements."
         ),
         "backend": (
-            "Lead with microservices architecture, event-driven pub/sub, Spring Boot, "
-            "98% SLA compliance on production forecasting app. "
-            "Emphasize distributed systems debugging, on-call rotation, observability."
+            "Lead with microservices architecture, event-driven messaging, and API ownership. "
+            "Emphasize SLA compliance, distributed systems debugging, on-call experience, and observability."
         ),
         "fullstack": (
-            "Lead with Java/Spring Boot + Angular/TypeScript full ownership. "
-            "Emphasize API design, end-to-end modernization, cross-functional product work."
+            "Lead with end-to-end ownership across backend APIs and frontend interfaces. "
+            "Emphasize API design, modernization work, and cross-functional product collaboration."
         ),
         "ai_innovation": (
-            "Lead with GitHub Copilot champion story: 35% org adoption, 3.5x target. "
-            "Emphasize technical evangelism, AI tooling adoption, and measurable team impact."
+            "Lead with AI tooling adoption and technical evangelism stories. "
+            "Emphasize measurable team impact, org-wide adoption metrics, and agentic/LLM platform work."
         ),
         "iot": (
-            "Lead with IoT Engineering degree, RetrosPiCam project (FastAPI + Raspberry Pi + servo HAT), "
-            "hardware/software integration, and Azure edge/cloud connectivity. "
-            "Tie in LiveVox latency work (2.8ms web, 12.7ms iOS) as embedded-adjacent."
+            "Lead with hardware/software integration experience and IoT or embedded adjacent projects. "
+            "Highlight edge/cloud connectivity, latency work, and real-time data handling."
         ),
     }
     result = strategies.get(role_type.lower())
@@ -129,7 +225,8 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
 
-    folder = config.JOB_ASSESSMENTS_FOLDER
+    _assessments_folder = config.get_active_job_assessments_dir()
+    folder = _assessments_folder
     if source:
         # Sanitise source into a safe folder name
         safe_source = source.strip().replace("/", "-").replace("\\", "-")
@@ -139,7 +236,7 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(cleaned, encoding="utf-8")
 
-    relative = target.relative_to(config.JOB_ASSESSMENTS_FOLDER)
+    relative = target.relative_to(_assessments_folder)
     return f"\u2713 Saved job assessment: {relative}"
 
 
@@ -159,7 +256,7 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     """
     try:
         from lib.config import get_llm_client
-        client, model = get_llm_client()
+        client, model = get_llm_client(task="assessment")
     except Exception:
         return "✗ Failed to load LLM client. Check config.json llm_provider settings."
     if client is None:
@@ -177,18 +274,31 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
             persona_note = f" (persona warning: {exc})"
 
     master = _load_master_context()
-    candidate_name = config._cfg.get("name", "the candidate")
+    candidate_name = config.get_contact_name("the candidate")
+    ai_evidence_msg = ""
+    if _is_ai_focused(role, job_description):
+        ai_evidence = _extract_ai_platform_evidence(master)
+        if ai_evidence:
+            ai_evidence_msg = (
+                "AI PLATFORM EVIDENCE EXTRACTED FROM MASTER RESUME:\n"
+                "This is high-signal context for AI Platform / Agent Platform roles. "
+                "Do not ignore it when scoring direct platform fit.\n"
+                f"{ai_evidence}"
+            )
     user_msg = "\n\n".join([
         f"CANDIDATE: {candidate_name}",
         f"TARGET COMPANY: {company}",
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
+        ai_evidence_msg,
         f"MASTER RESUME / FULL CAREER CONTEXT:\n{master}",
         "Now produce the fitment assessment.",
-    ])
+    ]).replace("\n\n\n", "\n\n")
 
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
+            label="fitment_assessment",
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},

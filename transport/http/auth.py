@@ -1,50 +1,49 @@
-"""Bearer-token API key authentication.
+"""Route-level auth dependencies.
 
-Reads API_KEY from environment via transport.http.config. If API_KEY is
-unset, authentication is bypassed entirely (LAN-only / local-dev mode); a
-warning is logged at startup so this is not silent in production.
-
-Use as a FastAPI dependency:
-
-    from fastapi import APIRouter, Depends
-    from transport.http.auth import require_api_key
-
-    router = APIRouter(dependencies=[Depends(require_api_key)])
+This module now delegates authentication decisions to an AuthProvider
+abstraction (see transport.http.security), so routes are not coupled to a
+single API key implementation.
 """
 
-import logging
+from fastapi import Cookie, Header, HTTPException, status
 
-from fastapi import Header, HTTPException, status
-
-from transport.http.config import get_settings
+from transport.http.security import User, get_auth_provider
 
 
-_logger = logging.getLogger(__name__)
+def require_authenticated_user(
+    authorization: str | None = Header(default=None),
+    jc_session: str | None = Cookie(default=None),
+) -> User:
+    """Return authenticated User or raise 401.
 
-
-async def require_api_key(authorization: str | None = Header(default=None)) -> None:
-    """Validate the Authorization header against the configured API_KEY.
-
-    Accepts both "Bearer <key>" and bare "<key>" formats for client
-    convenience. Raises 401 if API_KEY is set and the header is missing or
-    does not match. No-op when API_KEY is not configured.
+    Accepts bearer header and browser session cookie. Concrete validation is
+    handled by the active AuthProvider.
     """
-    settings = get_settings()
-    if not settings.auth_enabled:
-        return
+    provider = get_auth_provider()
+    user = provider.authenticate_request(authorization=authorization, session_token=jc_session)
+    if user:
+        return user
 
-    if not authorization:
+    has_candidate = bool((authorization and authorization.strip()) or (jc_session and jc_session.strip()))
+    if not has_candidate:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
+            detail="Missing credentials",
         )
 
-    token = authorization.strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+    )
 
-    if token != settings.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-        )
+
+def require_api_key(
+    authorization: str | None = Header(default=None),
+    jc_session: str | None = Cookie(default=None),
+) -> None:
+    """Back-compat dependency used across existing routes.
+
+    Routes currently depending on `require_api_key` do not need to change; we
+    internally validate through `require_authenticated_user`.
+    """
+    require_authenticated_user(authorization=authorization, jc_session=jc_session)
