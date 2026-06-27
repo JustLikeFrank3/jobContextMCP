@@ -72,7 +72,7 @@ def ingest_anecdote(
         logged.append(f"tone profile skipped (only {word_count} words, min 40)")
 
     # 3. Detect STAR-relevant tags
-    matched_star = sorted(set(t.lower() for t in tags) & _STAR_TAGS)
+    matched_star = sorted({t.lower() for t in tags} & _STAR_TAGS)
 
     lines = [f"✓ Anecdote ingested — {len(logged)} destination(s):"]
     for item in logged:

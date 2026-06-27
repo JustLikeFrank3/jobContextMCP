@@ -11,7 +11,7 @@ router = APIRouter(tags=["health"])
 _VERSION = "0.7.0-dev"
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health() -> HealthResponse:
     settings = get_settings()
     return HealthResponse(

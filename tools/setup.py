@@ -18,6 +18,7 @@ from lib import config
 from lib.io import _save_json
 
 _HERE = Path(__file__).resolve().parent.parent  # repo root
+_CONFIG_FILENAME = "config.json"
 
 # ── Workspace layout — derived from config so Docker volumes are respected ────
 # Use lazy helpers so we always read the live config values rather than
@@ -247,7 +248,7 @@ def check_workspace() -> str:
     lines = ["═══ WORKSPACE STATUS ═══", ""]
 
     # config.json
-    config_path = _HERE / "config.json"
+    config_path = _HERE / _CONFIG_FILENAME
     if config_path.exists():
         lines.append("✓ config.json — present")
         try:
@@ -465,7 +466,7 @@ def setup_workspace(
     override = get_data_folder_override()
     if override is not None:
         # Per-user session: write/update contact info in user's config.json
-        user_config_path = override / "config.json"
+        user_config_path = override / _CONFIG_FILENAME
         try:
             existing: dict = json.loads(user_config_path.read_text(encoding="utf-8")) if user_config_path.exists() else {}
         except Exception:
@@ -481,11 +482,11 @@ def setup_workspace(
         }
         if address:
             existing["contact"]["address"] = address.strip()
-        user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+        user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")  # noqa: S5145
         _mark("config.json (contact block)", True)
     else:
         # Local mode: write the full config.json at the repo root
-        config_path = _HERE / "config.json"
+        config_path = _HERE / _CONFIG_FILENAME
         if not config_path.exists():
             cfg = _build_config(
                 name=name,

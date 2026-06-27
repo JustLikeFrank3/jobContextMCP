@@ -54,7 +54,12 @@ def get_mental_health_log(days: int = 14) -> str:
     lines = [f"═══ MENTAL HEALTH LOG (last {days} days) ═══", ""]
     for e in reversed(recent):
         eng = e.get("energy", 0)
-        bar = "🟥" if eng <= 3 else "🟨" if eng <= 6 else "🟩"
+        if eng <= 3:
+            bar = "🟥"
+        elif eng <= 6:
+            bar = "🟨"
+        else:
+            bar = "🟩"
         prod = "✓" if e.get("productive") else "–"
         lines.append(
             f"{e['date']}  {bar}  mood: {e['mood']:<12}  energy: {eng}/10  productive: {prod}"

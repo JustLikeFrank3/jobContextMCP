@@ -15,7 +15,11 @@ from typing import Any
 # ── locate config.json ────────────────────────────────────────────────────────
 
 _HERE = Path(__file__).parent.parent          # jobContextMCP/ root
-_CONFIG_PATH = _HERE / "config.json"
+_CONFIG_FILENAME = "config.json"
+_MASTER_RESUME_PATH = "01-Current-Optimized/Resume - MASTER SOURCE.txt"
+_LEETCODE_CHEATSHEET_FILENAME = "GM_Interview_Cheatsheet.md"
+_QUICK_REFERENCE_FILENAME = "INTERVIEW_DAY_QUICK_REFERENCE.md"
+_CONFIG_PATH = _HERE / _CONFIG_FILENAME
 _EXAMPLE_PATH = _HERE / "config.example.json"
 _ACTIVE_CONFIG_CTX: ContextVar[dict[str, Any] | None] = ContextVar("active_config_ctx", default=None)
 
@@ -95,17 +99,16 @@ JOB_QUEUE_FILE: Path            = DATA_FOLDER / "job_queue.json"
 
 # ── resume / reference file paths ────────────────────────────────────────────
 
-MASTER_RESUME: Path = _resume_path("master_resume_path",
-                                   "01-Current-Optimized/Resume - MASTER SOURCE.txt")
+MASTER_RESUME: Path = _resume_path("master_resume_path", _MASTER_RESUME_PATH)
 
 LEETCODE_CHEATSHEET: Path = (
-    LEETCODE_FOLDER / _cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")
+    LEETCODE_FOLDER / _cfg.get("leetcode_cheatsheet_path", _LEETCODE_CHEATSHEET_FILENAME)
     if _cfg.get("leetcode_folder")
     else Path()
 )
 
 QUICK_REFERENCE: Path = (
-    LEETCODE_FOLDER / _cfg.get("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md")
+    LEETCODE_FOLDER / _cfg.get("quick_reference_path", _QUICK_REFERENCE_FILENAME)
     if _cfg.get("leetcode_folder")
     else Path()
 )
@@ -209,7 +212,7 @@ def get_active_config() -> dict[str, Any]:
 
     override = get_data_folder_override()
     if override is not None:
-        user_config_path = override / "config.json"
+        user_config_path = override / _CONFIG_FILENAME
         if user_config_path.exists():
             try:
                 user_cfg = json.loads(user_config_path.read_text(encoding="utf-8"))
@@ -239,7 +242,7 @@ def get_contact_info() -> dict[str, Any]:
     override = get_data_folder_override()
     if override is not None:
         # Per-user session: prefer the user's own config.json if present.
-        user_config_path = override / "config.json"
+        user_config_path = override / _CONFIG_FILENAME
         if user_config_path.exists():
             try:
                 user_cfg = json.loads(user_config_path.read_text(encoding="utf-8"))
@@ -317,12 +320,12 @@ def get_active_latex_resume_dir() -> Path:
 
 def get_active_leetcode_cheatsheet_path() -> Path:
     folder = get_active_leetcode_folder()
-    return folder / str(get_config_value("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md")) if str(folder) else Path()
+    return folder / str(get_config_value("leetcode_cheatsheet_path", _LEETCODE_CHEATSHEET_FILENAME)) if str(folder) else Path()
 
 
 def get_active_quick_reference_path() -> Path:
     folder = get_active_leetcode_folder()
-    return folder / str(get_config_value("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md")) if str(folder) else Path()
+    return folder / str(get_config_value("quick_reference_path", _QUICK_REFERENCE_FILENAME)) if str(folder) else Path()
 
 
 def get_active_master_resume_path() -> Path:
@@ -330,7 +333,7 @@ def get_active_master_resume_path() -> Path:
     candidates = sorted(optimized_dir.glob("*MASTER SOURCE.txt")) if optimized_dir.exists() else []
     if candidates:
         return candidates[0]
-    relative = str(get_config_value("master_resume_path", "01-Current-Optimized/Resume - MASTER SOURCE.txt"))
+    relative = str(get_config_value("master_resume_path", _MASTER_RESUME_PATH))
     return get_active_workspace_folder() / relative
 
 
@@ -498,8 +501,7 @@ def _reconfigure(cfg: dict) -> None:
     def _res(key: str, fallback: str) -> Path:
         return RESUME_FOLDER / cfg.get(key, fallback)
 
-    MASTER_RESUME       = _res("master_resume_path",
-                               "01-Current-Optimized/Resume - MASTER SOURCE.txt")
+    MASTER_RESUME       = _res("master_resume_path", _MASTER_RESUME_PATH)
     TEMPLATE_FORMAT     = _res("template_format_path",
                                "06-Reference-Materials/Resume - Template Format.txt")
     ACHIEVEMENTS        = _res("achievements_path",
@@ -514,8 +516,8 @@ def _reconfigure(cfg: dict) -> None:
                                      "06-Reference-Materials/cover_letter_template.png")
 
     lc = LEETCODE_FOLDER
-    LEETCODE_CHEATSHEET = lc / cfg.get("leetcode_cheatsheet_path", "GM_Interview_Cheatsheet.md") if str(lc) else Path()
-    QUICK_REFERENCE     = lc / cfg.get("quick_reference_path", "INTERVIEW_DAY_QUICK_REFERENCE.md") if str(lc) else Path()
+    LEETCODE_CHEATSHEET = lc / cfg.get("leetcode_cheatsheet_path", _LEETCODE_CHEATSHEET_FILENAME) if str(lc) else Path()
+    QUICK_REFERENCE     = lc / cfg.get("quick_reference_path", _QUICK_REFERENCE_FILENAME) if str(lc) else Path()
 
     INTERVIEW_PREP_FOLDER  = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
     JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")

@@ -84,7 +84,7 @@ def _fetch(username: str) -> dict[str, Any]:
         repos = _http_get_json(
             f"{_GITHUB_API}/users/{username}/repos?per_page=100&sort=updated"
         )
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         return {
             "profile": None,
             "top_repos": [],
@@ -236,7 +236,7 @@ def _load_history() -> dict[str, Any]:
 def _save_history(data: dict[str, Any]) -> None:
     path = _metrics_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")  # noqa: S5145
 
 
 def _merge_buckets(existing: dict[str, Any], payload: dict[str, Any], key: str) -> None:

@@ -6,6 +6,9 @@ POST /dashboard/api-keys/{id}/revoke — revoke a key
 """
 from __future__ import annotations
 
+import html
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -143,8 +146,9 @@ _INSTRUCTIONS_HTML = """
 
 
 def _key_row_html(key_id: int, label: str, created_at: str, last_used_at: str | None) -> str:
+    safe_label = html.escape(label) if label else ""
     used = f'<span class="key-meta">{last_used_at[:10]}</span>' if last_used_at else '<span class="never-used">Never</span>'
-    label_display = label or "<em style='color:var(--muted)'>unlabeled</em>"
+    label_display = safe_label or "<em style='color:var(--muted)'>unlabeled</em>"
     return f"""<tr>
       <td><span class="key-label">{label_display}</span></td>
       <td><span class="key-meta">{created_at[:10]}</span></td>
@@ -163,6 +167,7 @@ def _build_page(user: User, new_key: str | None = None) -> str:
 
     flash_html = ""
     if new_key:
+        safe_new_key = html.escape(new_key)
         flash_html = f"""
 <div class="flash" id="new-key-flash">
   <h2>✅ New API key generated — copy it now</h2>
@@ -171,15 +176,15 @@ def _build_page(user: User, new_key: str | None = None) -> str:
     If you lose it, revoke this key and generate a new one.
   </div>
   <div class="key-display">
-    <code id="new-key-val">{new_key}</code>
+    <code id="new-key-val">{safe_new_key}</code>
     <button class="copy-btn" onclick="copyKey()">Copy</button>
   </div>
   <div class="shortcut-steps">
     <strong>iOS Shortcut:</strong> Open your Shortcut → <em>Get Contents of URL</em>
     action → expand <em>Headers</em> → add header name <code>Authorization</code>,
-    value <code>Bearer {new_key}</code>.<br>
+    value <code>Bearer {safe_new_key}</code>.<br>
     <strong>CLI / script:</strong>
-    <code>curl -H "Authorization: Bearer {new_key}" https://your-host/tools/...</code>
+    <code>curl -H "Authorization: Bearer {safe_new_key}" https://your-host/tools/...</code>
   </div>
 </div>
 <script>
@@ -225,14 +230,14 @@ function copyKey() {{
 
 
 @router.get("/api-keys", include_in_schema=False)
-async def api_keys_page(user: User = Depends(require_authenticated_user)) -> HTMLResponse:
+async def api_keys_page(user: Annotated[User, Depends(require_authenticated_user)]) -> HTMLResponse:
     return HTMLResponse(_build_page(user))
 
 
 @router.post("/api-keys", include_in_schema=False)
 async def generate_api_key(
-    label: str = Form(default=""),
-    user: User = Depends(require_authenticated_user),
+    user: Annotated[User, Depends(require_authenticated_user)],
+    label: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     _key_id, plaintext = create_key(oid=user.id, label=label.strip())
     return HTMLResponse(_build_page(user, new_key=plaintext))
@@ -241,7 +246,7 @@ async def generate_api_key(
 @router.post("/api-keys/{key_id}/revoke", include_in_schema=False)
 async def revoke_api_key(
     key_id: int,
-    user: User = Depends(require_authenticated_user),
+    user: Annotated[User, Depends(require_authenticated_user)],
 ) -> RedirectResponse:
     revoke_key(key_id, user.id)  # oid guard: silently ignores wrong-owner attempts
     return RedirectResponse(url="/dashboard/api-keys", status_code=303)

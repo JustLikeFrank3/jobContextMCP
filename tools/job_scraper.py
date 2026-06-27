@@ -59,6 +59,12 @@ _SERPAPI_BASE      = "https://serpapi.com/search.json"
 _GREENHOUSE_BASE   = "https://boards-api.greenhouse.io/v1/boards"
 _LEVER_BASE        = "https://api.lever.co/v0/postings"
 _HTTP_TIMEOUT      = 20  # seconds
+_UNKNOWN_ROLE      = "Unknown Role"
+_AUTO_QUEUED_HEADER = "─── AUTO-QUEUED ───"
+_SCRAPE_JOB_URL_TIP = (
+    "Tip: call scrape_job_url(link) on any listing above to fetch the full JD "
+    "and queue it for fitment review."
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -356,7 +362,7 @@ def search_jobs(
     queued_lines: list[str] = []
 
     for i, job in enumerate(jobs_results[:num_results], 1):
-        title   = job.get("title", "Unknown Role")
+        title   = job.get("title", _UNKNOWN_ROLE)
         company = job.get("company_name", "Unknown Company")
         loc     = job.get("location", "")
         via     = job.get("via", "")
@@ -391,13 +397,10 @@ def search_jobs(
             queued_lines.append(f"  {company} — {title}: {result}")
 
     if queued_lines:
-        lines.append("─── AUTO-QUEUED ───")
+        lines.append(_AUTO_QUEUED_HEADER)
         lines.extend(queued_lines)
     else:
-        lines.append(
-            "Tip: call scrape_job_url(link) on any listing above to fetch the full JD "
-            "and queue it for fitment review."
-        )
+        lines.append(_SCRAPE_JOB_URL_TIP)
 
     return "\n".join(lines)
 
@@ -462,7 +465,7 @@ def search_greenhouse_jobs(
     queued_lines: list[str] = []
 
     for i, job in enumerate(jobs[:num_results], 1):
-        title    = job.get("title", "Unknown Role")
+        title    = job.get("title", _UNKNOWN_ROLE)
         loc_obj  = job.get("location") or {}
         loc      = loc_obj.get("name", "") if isinstance(loc_obj, dict) else str(loc_obj)
         job_url  = job.get("absolute_url", "")
@@ -491,13 +494,10 @@ def search_greenhouse_jobs(
             queued_lines.append(f"  {title}: {result}")
 
     if queued_lines:
-        lines.append("─── AUTO-QUEUED ───")
+        lines.append(_AUTO_QUEUED_HEADER)
         lines.extend(queued_lines)
     else:
-        lines.append(
-            "Tip: call scrape_job_url(link) on any listing above to fetch the full JD "
-            "and queue it for fitment review."
-        )
+        lines.append(_SCRAPE_JOB_URL_TIP)
 
     return "\n".join(lines)
 
@@ -563,7 +563,7 @@ def search_lever_jobs(
     queued_lines: list[str] = []
 
     for i, job in enumerate(jobs[:num_results], 1):
-        title      = job.get("text", "Unknown Role")
+        title      = job.get("text", _UNKNOWN_ROLE)
         cats       = job.get("categories") or {}
         team       = cats.get("team", "")
         loc        = cats.get("location", "") or cats.get("allLocations", "")
@@ -593,13 +593,10 @@ def search_lever_jobs(
             queued_lines.append(f"  {title}: {result}")
 
     if queued_lines:
-        lines.append("─── AUTO-QUEUED ───")
+        lines.append(_AUTO_QUEUED_HEADER)
         lines.extend(queued_lines)
     else:
-        lines.append(
-            "Tip: call scrape_job_url(link) on any listing above to fetch the full JD "
-            "and queue it for fitment review."
-        )
+        lines.append(_SCRAPE_JOB_URL_TIP)
 
     return "\n".join(lines)
 

@@ -10,6 +10,7 @@ Two modes depending on the active AuthProvider:
 """
 from __future__ import annotations
 
+import html
 import hashlib
 import os
 import secrets
@@ -93,6 +94,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
     )
 
   next_url = _safe_next(next)
+  safe_next_url = html.escape(next_url, quote=True)
   html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -135,7 +137,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
   <form class="card" method="post" action="{_LOGIN_PATH}">
     <h1>Dashboard Login</h1>
     <p>Enter your API key to create a browser session on this device.</p>
-    <input type="hidden" name="next" value="{next_url}" />
+    <input type="hidden" name="next" value="{safe_next_url}" />
     <label for="api_key">API key</label>
     <input id="api_key" name="api_key" type="password" autocomplete="current-password" required />
     <button type="submit">Sign in</button>
@@ -218,9 +220,10 @@ async def dashboard_entra_callback(
 ) -> RedirectResponse | HTMLResponse:
     """Handle Entra PKCE callback, exchange code for token, set jc_session cookie."""
     if error:
+        safe_error = html.escape(error)
         return HTMLResponse(
             f'<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
-            f'<h2>Login failed</h2><p>{error}</p>'
+            f'<h2>Login failed</h2><p>{safe_error}</p>'
             f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
             status_code=400,
         )
@@ -255,10 +258,11 @@ async def dashboard_entra_callback(
         })
 
     if resp.status_code != 200:
+        safe_response_text = html.escape(resp.text[:400])
         return HTMLResponse(
             '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
             '<h2>Token exchange failed</h2>'
-            f'<pre>{resp.text[:400]}</pre>'
+            f'<pre>{safe_response_text}</pre>'
             f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
             status_code=400,
         )

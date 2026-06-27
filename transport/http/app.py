@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 
 _logger = logging.getLogger(__name__)
+_PNG_MEDIA_TYPE = "image/png"
 
 
 class UserDataContextMiddleware(BaseHTTPMiddleware):
@@ -267,7 +268,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/og-image.png", include_in_schema=False)
     async def og_image():
         """Open Graph image for LinkedIn / social previews (1200x627 PNG)."""
-        return FileResponse(_static / "og-image.png", media_type="image/png")
+        return FileResponse(_static / "og-image.png", media_type=_PNG_MEDIA_TYPE)
 
     @app.get("/favicon.svg", include_in_schema=False)
     async def favicon_svg():
@@ -275,16 +276,16 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
     @app.get("/favicon-32.png", include_in_schema=False)
     async def favicon_32():
-        return FileResponse(_static / "favicon-32.png", media_type="image/png")
+        return FileResponse(_static / "favicon-32.png", media_type=_PNG_MEDIA_TYPE)
 
     @app.get("/favicon-16.png", include_in_schema=False)
     async def favicon_16():
-        return FileResponse(_static / "favicon-16.png", media_type="image/png")
+        return FileResponse(_static / "favicon-16.png", media_type=_PNG_MEDIA_TYPE)
 
     @app.get("/apple-touch-icon{_:path}.png", include_in_schema=False)
     async def apple_touch_icon(_: str):
         """Catch all apple-touch-icon variants iOS requests (sized, precomposed, etc.)."""
-        return FileResponse(_static / "apple-touch-icon.png", media_type="image/png")
+        return FileResponse(_static / "apple-touch-icon.png", media_type=_PNG_MEDIA_TYPE)
 
     # ── MCP Streamable HTTP transport (optional, catch-all — must be last) ────
     # The FastMCP Starlette app registers its handler at the path /mcp

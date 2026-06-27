@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from lib import config
 from lib.io import _load_json, _load_master_context, _save_json
 
-_COMPACT_TOKEN_RE = r"[^a-z0-9]+"
+_COMPACT_TOKEN_RE = r"[^A-Za-z0-9]+"
 
 class _JobActionRequest(BaseModel):
     job_id: int = Field(..., ge=1)
@@ -123,7 +123,6 @@ def _list_optimized_resume_options() -> list[str]:
 
 def _cover_letter_dir() -> Path:
     return config.get_active_cover_letters_dir()
-    return config.get_active_workspace_folder() / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
 
 
 def _list_cover_letter_options() -> list[str]:
@@ -655,5 +654,4 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
         f"Source: {_source_url_from_jd(jd)}",
     ])
     return summary, detail
-
 

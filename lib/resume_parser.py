@@ -15,7 +15,6 @@ from lib import config
 def _get_contact_defaults() -> dict:
     """Read contact defaults from config.json 'contact' block. Falls back to empty strings.
     config.json is gitignored — put your real contact info there, not in source."""
-    c = config.get_contact_info()
     c = config._cfg.get("contact", {})
     return {
         "phone": c.get("phone", ""),
@@ -35,7 +34,7 @@ _DATE_WORD_RE = re.compile(
     r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
     re.I,
 )
-_PHONE_RE = re.compile(r"[\+]?[\d][\d\s\-\.\(\)]{8,}")
+_PHONE_RE = re.compile(r"[\+]?\d[\d\s\-.\(\)]{8,}")
 _EMAIL_RE = re.compile(r"[\w\.\+\-]+@[\w\.\-]+\.\w+")
 _LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w\-]+", re.I)
 
@@ -412,7 +411,7 @@ def _parse_experience_section(lines: list[str]) -> dict:
         cur = c
         had_bullets = False
         after_blank = False
-        jobs.append(cur)
+        jobs.append(c)
 
     for raw in lines:
         line = raw.strip()
@@ -429,8 +428,9 @@ def _parse_experience_section(lines: list[str]) -> dict:
             bullet = _clean_bullet(line)
             if cur is None:
                 continue
-            if not cur.get("_done"):
-                _finalize_job(cur)
+            current_job = cur
+            if not current_job.get("_done"):
+                _finalize_job(current_job)
             if cur_group is None:
                 cur_group = {"label": "", "bullets": []}
             cur_group["bullets"].append(bullet)
@@ -441,8 +441,9 @@ def _parse_experience_section(lines: list[str]) -> dict:
             after_blank = False
             if cur is None:
                 continue
-            if not cur.get("_done"):
-                _finalize_job(cur)
+            current_job = cur
+            if not current_job.get("_done"):
+                _finalize_job(current_job)
             flush_group()
             cur_group = {"label": line.rstrip(":"), "bullets": []}
             had_bullets = False
@@ -455,12 +456,13 @@ def _parse_experience_section(lines: list[str]) -> dict:
         # ── accumulate header lines or implicit plain-text bullet ─────────
         else:
             after_blank = False
-            if not cur.get("_done"):
-                cur["_hlines"].append(line)
+            current_job = cur
+            if not current_job.get("_done"):
+                current_job["_hlines"].append(line)
                 # Finalize when last pipe-segment looks like a date range
                 check = line.rsplit(" | ", 1)[-1].strip()
                 if _is_date_part(check):
-                    _finalize_job(cur)
+                    _finalize_job(current_job)
             else:
                 # Header is done; plain-text lines without bullet chars are
                 # implicit bullets (common in MCP-saved .txt resumes).
@@ -800,7 +802,6 @@ def _parse_cover_letter_txt(text: str) -> dict:
 
     # Name is the very first non-blank, non-contact line.
     # Fall back to config-driven default (set "name" in config.json "contact" block).
-    derived_name = config.get_contact_name("")
     derived_name = config._cfg.get("contact", {}).get("name", "")
     for line in lines:
         s = line.strip()
@@ -813,8 +814,6 @@ def _parse_cover_letter_txt(text: str) -> dict:
     # are short; genuine body paragraphs are fully-joined and > 60 chars.
     body_lines: list[str] = []
     in_body = False
-    _contact_first = config.get_contact_name("").split()
-    _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "(?!)"
     _contact_first = (config._cfg.get("contact", {}).get("name", "") or "").split()
     _first_name_pat = re.escape(_contact_first[0]) if _contact_first else "Frank"
     header_re = re.compile(rf"^({_first_name_pat}|\+1|\d{{3}}|www\.|linkedin)", re.I)
@@ -881,7 +880,6 @@ def _parse_cover_letter_txt(text: str) -> dict:
                 break
 
     # Fix closing signature: last few paragraphs — if one is just a short name, replace it.
-    _full_name = config.get_contact_name("")
     _full_name = config._cfg.get("contact", {}).get("name", "") or ""
     if _full_name:
         _sign_first = re.escape(_full_name.split()[0])
@@ -899,4 +897,3 @@ def _parse_cover_letter_txt(text: str) -> dict:
         "contact": contact,
         "paragraphs": paragraphs,
     }
-

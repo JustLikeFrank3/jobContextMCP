@@ -98,6 +98,7 @@ EVENT_TYPE_MAP: dict[str, str] = {
 
 # Ordered tuple used in the DDL CHECK constraint — keep in sync with map values.
 EVENT_TYPE_CANONICAL: tuple[str, ...] = tuple(sorted(set(EVENT_TYPE_MAP.values())))
+_DB_FILENAME = "jobcontextmcp.db"
 
 
 def normalize_event_type(raw: str) -> str:
@@ -114,7 +115,7 @@ def normalize_event_type(raw: str) -> str:
 
 def db_path() -> Path:
     """Return the path to the SQLite database, derived from config DATA_FOLDER."""
-    return Path(str(_cfg.DATA_FOLDER)) / "db" / "jobcontextmcp.db"
+    return Path(str(_cfg.DATA_FOLDER)) / "db" / _DB_FILENAME
 
 
 def global_db_path() -> Path:
@@ -123,7 +124,7 @@ def global_db_path() -> Path:
     Use this for tables that must be queryable before a user is identified
     (e.g. user_api_keys lookup during auth).
     """
-    return Path(str(_cfg.DATA_FOLDER)) / "db" / "jobcontextmcp.db"
+    return Path(str(_cfg.DATA_FOLDER)) / "db" / _DB_FILENAME
 
 
 # ── Schema migrations ──────────────────────────────────────────────────────────
@@ -197,7 +198,7 @@ def get_connection(path: Path | None = None, is_global: bool = False) -> Generat
     else:
         from lib.user_context import get_data_folder_override
         override = get_data_folder_override()
-        resolved = (override / "db" / "jobcontextmcp.db") if override else db_path()
+        resolved = (override / "db" / _DB_FILENAME) if override else db_path()
     # Ensure the directory exists (first run, new tenant, or global DB on fresh deploy)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(resolved)

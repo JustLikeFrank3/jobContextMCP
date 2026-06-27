@@ -17,6 +17,8 @@ from typing import Any
 
 
 DEFAULT_PERSONA = "default"
+_BANNED_GREETING = "I hope this finds you well"
+_BANNED_OUTREACH_OPEN = "I wanted to reach out"
 
 _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
     "default": {
@@ -26,8 +28,8 @@ _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
             "register": "professional-conversational",
             "voice": "first-person where appropriate, active verbs, short sentences",
             "banned_phrases": [
-                "I hope this finds you well",
-                "I wanted to reach out",
+                _BANNED_GREETING,
+                _BANNED_OUTREACH_OPEN,
                 "I am excited to",
                 "I trust this email finds you",
                 "synergy",
@@ -60,8 +62,8 @@ _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
             "register": "executive-formal",
             "voice": "outcome-first, third-person business-impact phrasing, fewer first-person verbs",
             "banned_phrases": [
-                "I hope this finds you well",
-                "I wanted to reach out",
+                _BANNED_GREETING,
+                _BANNED_OUTREACH_OPEN,
                 "I am excited to",
                 "I trust this email finds you",
                 "passionate about",
@@ -94,8 +96,8 @@ _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
             "register": "technical-precise",
             "voice": "active verbs, system-and-scale nouns, avoid superlatives",
             "banned_phrases": [
-                "I hope this finds you well",
-                "I wanted to reach out",
+                _BANNED_GREETING,
+                _BANNED_OUTREACH_OPEN,
                 "rockstar",
                 "ninja",
                 "guru",
@@ -129,8 +131,8 @@ _BUILTIN_PERSONAS: dict[str, dict[str, Any]] = {
             "register": "founder-direct",
             "voice": "first-person ownership, momentum verbs (shipped, owned, built), no corporate hedging",
             "banned_phrases": [
-                "I hope this finds you well",
-                "I wanted to reach out",
+                _BANNED_GREETING,
+                _BANNED_OUTREACH_OPEN,
                 "responsible for",
                 "tasked with",
             ],

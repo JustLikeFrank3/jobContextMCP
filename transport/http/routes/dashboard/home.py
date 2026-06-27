@@ -1,6 +1,9 @@
 """GET /dashboard and GET /dashboard/ — home/landing page."""
 from __future__ import annotations
 
+import html
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
@@ -131,13 +134,14 @@ _PAGES = [
 
 @router.get("/", include_in_schema=False)
 async def dashboard_home(
-    user: User = Depends(require_authenticated_user),
+    user: Annotated[User, Depends(require_authenticated_user)],
 ) -> HTMLResponse:
     snap = _build_snapshot()
 
     # First name: first token of display name; graceful fallback for api-key users
     raw_name = user.name or ""
     first_name = raw_name.split()[0] if raw_name.lower() not in ("api-key", "") else "there"
+    safe_first_name = html.escape(first_name)
 
     # ── Greeting section ─────────────────────────────────────────────────────
     if snap["has_data"]:
@@ -161,10 +165,10 @@ async def dashboard_home(
             n = snap["undecided"]
             stat_pills += f'<span class="badge-warn">{n} to evaluate</span>'
 
-        focus_items = "".join(f"<li>{p}</li>" for p in snap["priorities"])
+        focus_items = "".join(f"<li>{html.escape(p)}</li>" for p in snap["priorities"])
 
         greeting_html = f"""  <div class="greeting-wrap">
-    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{first_name}.</span></p>
+    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{safe_first_name}.</span></p>
     <div class="stat-row">{stat_pills}</div>
     <div class="snapshot-card">
       <div class="snap-eyebrow">Here&#8217;s what you&#8217;ve got</div>
@@ -173,22 +177,22 @@ async def dashboard_home(
   </div>"""
     else:
         greeting_html = f"""  <div class="greeting-wrap">
-    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{first_name}.</span></p>
+    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{safe_first_name}.</span></p>
     <p class="greeting-sub">What would you like to get started on today?</p>
   </div>"""
 
     # ── Cards ─────────────────────────────────────────────────────────────────
     cards = "\n".join(
-        f"""<a class="card" href="{href}">
+        f"""<a class="card" href="{html.escape(href, quote=True)}">
       <div class="card-icon">{icon}</div>
-      <div class="card-title">{label}</div>
-      <div class="card-desc">{desc}</div>
+      <div class="card-title">{html.escape(label)}</div>
+      <div class="card-desc">{html.escape(desc)}</div>
       <div class="card-arrow">Open \u2192</div>
     </a>"""
         for icon, label, href, desc in _PAGES
     )
 
-    html = f"""<!doctype html>
+    page_html = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -351,4 +355,4 @@ async def dashboard_home(
   </div>
 </body>
 </html>"""
-    return HTMLResponse(html)
+    return HTMLResponse(page_html)
