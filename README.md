@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
   <img src="https://img.shields.io/badge/tests-1003%20passing-brightgreen" alt="1003 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-81.08%25-brightgreen" alt="81.08% coverage"/>
+  <img src="https://img.shields.io/badge/coverage-81.05%25-brightgreen" alt="81.05% coverage"/>
   <img src="https://img.shields.io/badge/tools-82-informational" alt="82 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
