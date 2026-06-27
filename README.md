@@ -8,8 +8,6 @@
   <img src="https://img.shields.io/badge/coverage-82.93%25-brightgreen" alt="82.93% coverage"/>
   <img src="https://img.shields.io/badge/tools-82-informational" alt="82 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
-</p>
-<p align="center">
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
 </p>
 
