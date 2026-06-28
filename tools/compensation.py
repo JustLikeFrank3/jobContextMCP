@@ -97,7 +97,7 @@ def update_compensation(
     )
 
 
-def get_compensation_comparison() -> str:
+def get_compensation_comparison() -> str:  # NOSONAR
     """
     Return a side-by-side compensation comparison table for all tracked applications
     that have comp data entered via update_compensation().

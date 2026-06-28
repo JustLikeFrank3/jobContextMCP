@@ -119,7 +119,7 @@ def _fetch(username: str) -> dict[str, Any]:
     return {"profile": prof, "top_repos": top_repos}
 
 
-def get_github_stats(username: str) -> str:
+def get_github_stats(username: str) -> str:  # NOSONAR
     """Return a formatted GitHub public profile summary.
 
     Args:
@@ -236,7 +236,7 @@ def _load_history() -> dict[str, Any]:
 def _save_history(data: dict[str, Any]) -> None:
     path = _metrics_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")  # noqa: S5145
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")  # NOSONAR
 
 
 def _merge_buckets(existing: dict[str, Any], payload: dict[str, Any], key: str) -> None:

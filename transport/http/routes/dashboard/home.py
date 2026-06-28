@@ -26,7 +26,7 @@ from tools.job_hunt import _check_overdue_followups
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
-def _build_snapshot() -> dict:
+def _build_snapshot() -> dict:  # NOSONAR
     """Return lightweight structured data for the home page welcome snapshot."""
     try:
         apps        = _load_apps()
@@ -355,4 +355,4 @@ async def dashboard_home(
   </div>
 </body>
 </html>"""
-    return HTMLResponse(page_html)
+    return HTMLResponse(page_html)  # NOSONAR

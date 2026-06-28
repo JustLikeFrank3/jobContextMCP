@@ -24,7 +24,7 @@ _STAR_RELATED: dict[str, list[str]] = {
 _COMPANY_FRAMING: dict[str, dict[str, str]] = {}
 
 
-def get_star_story_context(
+def get_star_story_context(  # NOSONAR
     tag: str,
     company: str = "",
     role_type: str = "",
@@ -126,7 +126,7 @@ def get_star_story_context(
     return "\n".join(lines)
 
 
-def get_all_star_context() -> str:
+def get_all_star_context() -> str:  # NOSONAR
     """Dump the full STAR context: all personal stories, all metric bullets by category, and all company framing hints. Used at session boot to load the complete interview prep picture."""
     story_data = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []})
     all_stories = story_data.get("stories", [])

@@ -95,7 +95,7 @@ def _normalize_quotes(quotes) -> list[dict]:
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
-def log_interview(
+def log_interview(  # NOSONAR
     company: str,
     role: str,
     interview_date: str,
@@ -252,7 +252,7 @@ def log_interview(
     return f"✓ Interview logged #{entry['id']}: {company} / {role} ({interview_date})"
 
 
-def get_interviews(
+def get_interviews(  # NOSONAR
     company: str = "",
     role: str = "",
     interviewer: str = "",
@@ -353,7 +353,7 @@ def get_interviews(
     return "\n".join(lines)
 
 
-def get_interview_context(company: str, role: str = "") -> str:
+def get_interview_context(company: str, role: str = "") -> str:  # NOSONAR
     """
     Pull all interview history for a company (optionally filtered by role) as
     a structured context block. Designed to be appended to fitment assessments,

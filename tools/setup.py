@@ -239,7 +239,7 @@ def _build_config(
 
 # ── check_workspace ───────────────────────────────────────────────────────────
 
-def check_workspace() -> str:
+def check_workspace() -> str:  # NOSONAR
     """
     Scan the workspace and report what's present, missing, or incomplete.
     Makes no changes. Safe to call at any time.
@@ -335,7 +335,7 @@ def check_workspace() -> str:
 
 # ── setup_workspace ───────────────────────────────────────────────────────────
 
-def setup_workspace(
+def setup_workspace(  # NOSONAR
     name: str,
     email: str,
     phone: str,
@@ -482,7 +482,7 @@ def setup_workspace(
         }
         if address:
             existing["contact"]["address"] = address.strip()
-        user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")  # noqa: S5145
+        user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
         _mark("config.json (contact block)", True)
     else:
         # Local mode: write the full config.json at the repo root

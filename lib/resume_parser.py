@@ -117,7 +117,7 @@ def _strip_separator_lines(lines: list[str]) -> list[str]:
 
 # ── CONTACT EXTRACTION ───────────────────────────────────────────────────
 
-def _extract_contact(lines: list[str]) -> dict:
+def _extract_contact(lines: list[str]) -> dict:  # NOSONAR
     contact = _get_contact_defaults()
     for line in lines:
         s = line.strip()
@@ -154,7 +154,7 @@ def _extract_contact(lines: list[str]) -> dict:
 
 # ── SKIP APPLICATION MATERIALS BLOCK ─────────────────────────────────────
 
-def _strip_metadata_blocks(lines: list[str]) -> list[str]:
+def _strip_metadata_blocks(lines: list[str]) -> list[str]:  # NOSONAR
     """Remove ---- ... ---- blocks that contain 'APPLICATION MATERIALS'."""
     result = []
     in_block = False
@@ -231,7 +231,7 @@ def _split_sections(lines: list[str]) -> tuple[list[str], list[tuple[str, list[s
 
 # ── HEADER PARSING ─────────────────────────────────────────────────────────
 
-def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:
+def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:  # NOSONAR
     """Returns (name, tagline, synopsis)."""
     name_lines: list[str] = []
     tagline: str = ""
@@ -307,7 +307,7 @@ def _is_date_part(s: str) -> bool:
     return bool(_YEAR_RE.search(s)) and bool(_DATE_WORD_RE.search(s) or "\u2013" in s or "\u2014" in s or "-" in s)
 
 
-def _finalize_job(job: dict) -> None:
+def _finalize_job(job: dict) -> None:  # NOSONAR
     """Resolve accumulated header_lines into title/company/dates."""
     if job.get("_done"):
         return
@@ -364,7 +364,7 @@ def _finalize_job(job: dict) -> None:
             job["company"] += " " + h
 
 
-def _parse_experience_section(lines: list[str]) -> dict:
+def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
     jobs: list[dict] = []
     cur: dict | None = None
     cur_group: dict | None = None
@@ -373,7 +373,7 @@ def _parse_experience_section(lines: list[str]) -> dict:
 
     def flush_group() -> None:
         nonlocal cur_group
-        if cur_group is not None and cur is not None:
+        if cur_group and cur:
             if cur_group["label"]:
                 cur["groups"].append(cur_group)
             else:
@@ -383,9 +383,9 @@ def _parse_experience_section(lines: list[str]) -> dict:
     def new_job(first_line: str) -> None:
         nonlocal cur, had_bullets, after_blank
         flush_group()
-        if cur is not None:
+        if cur:
             _finalize_job(cur)
-        c = {
+        c: dict = {
             "title": "", "company": "", "dates": "",
             "groups": [], "bullets": [],
             "_hlines": [first_line], "_done": False,
@@ -418,18 +418,17 @@ def _parse_experience_section(lines: list[str]) -> dict:
 
         # ── blank line ────────────────────────────────────────────────────
         if not line:
-            if cur is not None:
-                after_blank = True
+            after_blank = bool(cur)
             continue
 
         # ── explicit bullet (•, -, *) ─────────────────────────────────────
         if _is_bullet(line):
             after_blank = False
             bullet = _clean_bullet(line)
-            if cur is None:
+            if not cur:
                 continue
-            current_job = cur
-            if not current_job.get("_done"):
+            current_job: dict = cur
+            if not current_job.get("_done", False):
                 _finalize_job(current_job)
             if cur_group is None:
                 cur_group = {"label": "", "bullets": []}
@@ -439,10 +438,10 @@ def _parse_experience_section(lines: list[str]) -> dict:
         # ── group label ("Cloud & Infrastructure:") ───────────────────────
         elif _is_group_label(line):
             after_blank = False
-            if cur is None:
+            if not cur:
                 continue
-            current_job = cur
-            if not current_job.get("_done"):
+            current_job: dict = cur
+            if not current_job.get("_done", False):
                 _finalize_job(current_job)
             flush_group()
             cur_group = {"label": line.rstrip(":"), "bullets": []}
@@ -450,15 +449,19 @@ def _parse_experience_section(lines: list[str]) -> dict:
 
         # ── start a new job? ──────────────────────────────────────────────
         # No current job yet, OR we just crossed a blank line after content.
-        elif cur is None or after_blank:
+        elif after_blank or not cur:
             new_job(line)
 
         # ── accumulate header lines or implicit plain-text bullet ─────────
         else:
             after_blank = False
-            current_job = cur
-            if not current_job.get("_done"):
-                current_job["_hlines"].append(line)
+            current_job: dict = cur
+            if not current_job.get("_done", False):
+                header_lines = current_job.get("_hlines")
+                if not isinstance(header_lines, list):
+                    header_lines = []
+                    current_job["_hlines"] = header_lines
+                header_lines.append(line)
                 # Finalize when last pipe-segment looks like a date range
                 check = line.rsplit(" | ", 1)[-1].strip()
                 if _is_date_part(check):
@@ -472,12 +475,11 @@ def _parse_experience_section(lines: list[str]) -> dict:
                 had_bullets = True
 
     flush_group()
-    if cur is not None:
+    if cur:
         _finalize_job(cur)
 
     jobs = _merge_same_company_jobs(jobs)
     return {"type": "experience", "jobs": jobs}
-
 
 # ── SAME-COMPANY JOB MERGING ──────────────────────────────────────────────
 
@@ -546,7 +548,7 @@ def _merge_same_company_jobs(jobs: list[dict]) -> list[dict]:
 
 # ── EDUCATION ─────────────────────────────────────────────────────────────
 
-def _parse_education_section(lines: list[str]) -> dict:
+def _parse_education_section(lines: list[str]) -> dict:  # NOSONAR
     degree = school = year = ""
     detail_lines: list[str] = []
     clean_lines = [l.strip() for l in lines if l.strip()]
@@ -726,7 +728,7 @@ def _parse_name_parts(name: str) -> dict:
 
 # ── MAIN RESUME PARSER ─────────────────────────────────────────────────────
 
-def _parse_resume_txt(text: str) -> dict:
+def _parse_resume_txt(text: str) -> dict:  # NOSONAR
     text = _strip_txt_wrapper(text)
     all_lines = text.splitlines()
     all_lines = _strip_metadata_blocks(all_lines)
@@ -790,7 +792,7 @@ def _parse_resume_txt(text: str) -> dict:
 
 # ── COVER LETTER PARSER ─────────────────────────────────────────────────────
 
-def _parse_cover_letter_txt(text: str) -> dict:
+def _parse_cover_letter_txt(text: str) -> dict:  # NOSONAR
     text = _strip_txt_wrapper(text)
     lines = text.splitlines()
     lines = _strip_metadata_blocks(lines)

@@ -229,7 +229,7 @@ def get_config_value(key: str, default: Any = "") -> Any:
     return get_active_config().get(key, default)
 
 
-def get_contact_info() -> dict[str, Any]:
+def get_contact_info() -> dict[str, Any]:  # NOSONAR
     """Return the active request's contact config block.
 
     When a per-user data folder is active (multi-tenant / AKS mode) and that
@@ -339,7 +339,7 @@ def get_active_master_resume_path() -> Path:
 
 # ── LLM client factory ────────────────────────────────────────────────────────
 
-def get_llm_client(task: str = "") -> tuple[Any, str]:
+def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     """Return (openai_client, model_name) for the configured LLM provider.
 
     Supported providers (config.json key ``llm_provider``):

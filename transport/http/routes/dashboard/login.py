@@ -95,7 +95,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
 
   next_url = _safe_next(next)
   safe_next_url = html.escape(next_url, quote=True)
-  html = f"""<!doctype html>
+  page_html = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -145,7 +145,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
   </form>
 </body>
 </html>"""
-  return HTMLResponse(html)
+  return HTMLResponse(page_html)
 
 
 @router.post("/login")

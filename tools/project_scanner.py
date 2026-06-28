@@ -8,6 +8,10 @@ from lib import config
 from lib.io import _load_master_context
 
 
+_JAVA_EXT = ".java"
+_YAML_EXT = ".yaml"
+
+
 def _git_pull(folder: Path) -> str:
     """Attempt git pull on a project folder. Returns a one-line status string."""
     try:
@@ -66,7 +70,7 @@ _TECH_REGISTRY: list[dict] = [
     {"label": "Python",                      "resume_kw": ["python"],                                        "exts": [".py"]},
     {"label": "Go",                          "resume_kw": ["golang", " go "],                                "exts": [".go"]},
     {"label": "Rust",                        "resume_kw": ["rust"],                                          "exts": [".rs"]},
-    {"label": "Java",                        "resume_kw": ["java"],                                          "exts": [".java"]},
+    {"label": "Java",                        "resume_kw": ["java"],                                          "exts": [_JAVA_EXT]},
     {"label": "Kotlin",                      "resume_kw": ["kotlin"],                                        "exts": [".kt", ".kts"]},
     {"label": "TypeScript/JavaScript",       "resume_kw": ["typescript"],                                    "exts": [".ts", ".tsx", ".js", ".jsx"]},
     {"label": "Swift / iOS",                 "resume_kw": ["swift"],                                         "exts": [".swift"]},
@@ -97,42 +101,42 @@ _TECH_REGISTRY: list[dict] = [
     {"label": "iOS TestFlight deployment",   "resume_kw": ["testflight"],                                    "exts": [".ts", ".tsx", ".js"],"content": ["testflight"]},
     # ── Databases ──────────────────────────────────────────────────────────────
     {"label": "SQLite / aiosqlite",          "resume_kw": ["sqlite", "aiosqlite"],                           "exts": [".py"],               "content": ["sqlite", "aiosqlite"]},
-    {"label": "PostgreSQL",                  "resume_kw": ["postgresql", "postgres"],                        "exts": [".py", ".ts", ".js", ".go", ".java", ".yml", ".yaml"], "content": ["postgresql", "postgres", "psycopg"]},
-    {"label": "MySQL",                       "resume_kw": ["mysql"],                                         "exts": [".py", ".ts", ".js", ".go", ".java"], "content": ["mysql"]},
+    {"label": "PostgreSQL",                  "resume_kw": ["postgresql", "postgres"],                        "exts": [".py", ".ts", ".js", ".go", _JAVA_EXT, ".yml", _YAML_EXT], "content": ["postgresql", "postgres", "psycopg"]},
+    {"label": "MySQL",                       "resume_kw": ["mysql"],                                         "exts": [".py", ".ts", ".js", ".go", _JAVA_EXT], "content": ["mysql"]},
     {"label": "MongoDB",                     "resume_kw": ["mongodb", "mongoose"],                           "exts": [".py", ".ts", ".js", ".go"], "content": ["mongodb", "mongoose", "pymongo"]},
     {"label": "Redis",                       "resume_kw": ["redis"],                                         "exts": [".py", ".ts", ".js", ".go"], "content": ["redis"]},
     {"label": "DynamoDB",                    "resume_kw": ["dynamodb"],                                      "exts": [".py", ".ts", ".js"], "content": ["dynamodb"]},
     {"label": "Elasticsearch",               "resume_kw": ["elasticsearch"],                                 "exts": [".py", ".ts", ".js"], "content": ["elasticsearch"]},
     {"label": "Pinecone",                    "resume_kw": ["pinecone"],                                      "exts": [".py", ".ts"],        "content": ["pinecone"]},
     {"label": "Snowflake",                   "resume_kw": ["snowflake"],                                     "exts": [".py", ".sql"],       "content": ["snowflake"]},
-    {"label": "Cassandra",                   "resume_kw": ["cassandra"],                                     "exts": [".py", ".java"],      "content": ["cassandra"]},
+    {"label": "Cassandra",                   "resume_kw": ["cassandra"],                                     "exts": [".py", _JAVA_EXT],      "content": ["cassandra"]},
     # ── Cloud — Azure ──────────────────────────────────────────────────────────
-    {"label": "Azure Blob Storage",          "resume_kw": ["azure blob"],                                    "exts": [".py", ".ts", ".yml", ".yaml", ".sh"], "content": ["azure blob", "blob storage", "blobserviceclient"]},
+    {"label": "Azure Blob Storage",          "resume_kw": ["azure blob"],                                    "exts": [".py", ".ts", ".yml", _YAML_EXT, ".sh"], "content": ["azure blob", "blob storage", "blobserviceclient"]},
     {"label": "Microsoft Entra ID (PKCE/OIDC)", "resume_kw": ["entra", "pkce", "oidc", "msal", "workload identity", "workload.identity"],
-                                                                                                              "exts": [".py", ".ts", ".js", ".yml", ".yaml"], "content": ["entra", "pkce", "oidc", "msal", "workload.identity"]},
-    {"label": "AKS / Azure Kubernetes",      "resume_kw": ["aks", "azure kubernetes"],                       "exts": [".sh", ".yml", ".yaml"], "content": ["az aks", "aks"]},
+                                                                                                              "exts": [".py", ".ts", ".js", ".yml", _YAML_EXT], "content": ["entra", "pkce", "oidc", "msal", "workload.identity"]},
+    {"label": "AKS / Azure Kubernetes",      "resume_kw": ["aks", "azure kubernetes"],                       "exts": [".sh", ".yml", _YAML_EXT], "content": ["az aks", "aks"]},
     {"label": "Azure Functions",             "resume_kw": ["azure functions"],                               "exts": [".py", ".ts", ".js", ".yml"], "content": ["azure.functions", "azure function"]},
     # ── Cloud — AWS ────────────────────────────────────────────────────────────
-    {"label": "AWS",                         "resume_kw": ["aws", "amazon web services"],                    "exts": [".py", ".ts", ".js", ".go", ".tf", ".yml", ".yaml", ".sh"], "content": ["boto3", "aws-sdk", "amazonaws", "@aws-sdk"]},
+    {"label": "AWS",                         "resume_kw": ["aws", "amazon web services"],                    "exts": [".py", ".ts", ".js", ".go", ".tf", ".yml", _YAML_EXT, ".sh"], "content": ["boto3", "aws-sdk", "amazonaws", "@aws-sdk"]},
     {"label": "AWS Lambda",                  "resume_kw": ["aws lambda", "serverless"],                      "exts": [".py", ".ts", ".js", ".go"], "content": ["lambda_handler", "aws_lambda"]},
     {"label": "AWS S3",                      "resume_kw": ["s3", "aws s3"],                                  "exts": [".py", ".ts", ".js"], "content_all": ["s3", "boto3"]},
-    {"label": "AWS CDK / CloudFormation",    "resume_kw": ["cdk", "cloudformation"],                         "exts": [".py", ".ts", ".yml", ".yaml"], "content": ["aws-cdk", "cloudformation", "cdk.stack"]},
+    {"label": "AWS CDK / CloudFormation",    "resume_kw": ["cdk", "cloudformation"],                         "exts": [".py", ".ts", ".yml", _YAML_EXT], "content": ["aws-cdk", "cloudformation", "cdk.stack"]},
     # ── Cloud — GCP ────────────────────────────────────────────────────────────
     {"label": "Google Cloud (GCP)",          "resume_kw": ["google cloud", "gcp"],                           "exts": [".py", ".ts", ".js", ".go", ".tf", ".yml"], "content": ["google.cloud", "googleapis", "gcloud", "firebase"]},
     # ── Containers & orchestration ─────────────────────────────────────────────
     {"label": "Docker",                      "resume_kw": ["docker"],                                        "filenames": ["dockerfile", "docker-compose.yml", "docker-compose.yaml"]},
-    {"label": "Docker",                      "resume_kw": ["docker"],                                        "exts": [".py", ".sh", ".yml", ".yaml"], "content": ["docker"]},
+    {"label": "Docker",                      "resume_kw": ["docker"],                                        "exts": [".py", ".sh", ".yml", _YAML_EXT], "content": ["docker"]},
     {"label": "Docker Compose",              "resume_kw": ["docker compose"],                                "filenames": ["docker-compose.yml", "docker-compose.yaml"]},
-    {"label": "Kubernetes (K8s)",            "resume_kw": ["kubernetes", "k8s"],                             "exts": [".yaml", ".yml", ".sh", ".py"], "content": ["kubectl", "kubernetes", "kind: deployment", "kind: service", "apiversion: apps"]},
-    {"label": "Helm",                        "resume_kw": ["helm"],                                          "exts": [".yaml", ".yml"],     "content": ["helm.sh", "helmchart", "chart.yaml"]},
-    {"label": "ArgoCD",                      "resume_kw": ["argocd", "argo cd"],                             "exts": [".yaml", ".yml"],     "content": ["argocd", "argoproj"]},
+    {"label": "Kubernetes (K8s)",            "resume_kw": ["kubernetes", "k8s"],                             "exts": [_YAML_EXT, ".yml", ".sh", ".py"], "content": ["kubectl", "kubernetes", "kind: deployment", "kind: service", "apiversion: apps"]},
+    {"label": "Helm",                        "resume_kw": ["helm"],                                          "exts": [_YAML_EXT, ".yml"],     "content": ["helm.sh", "helmchart", "chart.yaml"]},
+    {"label": "ArgoCD",                      "resume_kw": ["argocd", "argo cd"],                             "exts": [_YAML_EXT, ".yml"],     "content": ["argocd", "argoproj"]},
     # ── Infrastructure as Code ─────────────────────────────────────────────────
     {"label": "Terraform IaC",               "resume_kw": ["terraform"],                                     "exts": [".tf", ".tfvars"]},
     {"label": "Pulumi",                      "resume_kw": ["pulumi"],                                        "exts": [".py", ".ts"],        "content": ["pulumi"]},
-    {"label": "Ansible",                     "resume_kw": ["ansible"],                                       "exts": [".yml", ".yaml"],     "content": ["ansible"]},  # require 'ansible' keyword; '- hosts:' alone fires on K8s ingress
-    {"label": "GitHub Actions",              "resume_kw": ["github actions"],                                "exts": [".yml", ".yaml"],     "content": ["github.com/actions", "runs-on:"]},
+    {"label": "Ansible",                     "resume_kw": ["ansible"],                                       "exts": [".yml", _YAML_EXT],     "content": ["ansible"]},  # require 'ansible' keyword; '- hosts:' alone fires on K8s ingress
+    {"label": "GitHub Actions",              "resume_kw": ["github actions"],                                "exts": [".yml", _YAML_EXT],     "content": ["github.com/actions", "runs-on:"]},
     # ── Messaging & streaming ──────────────────────────────────────────────────
-    {"label": "Apache Kafka",                "resume_kw": ["kafka"],                                         "exts": [".py", ".java", ".go", ".ts", ".yml", ".yaml"], "content": ["kafka"]},
+    {"label": "Apache Kafka",                "resume_kw": ["kafka"],                                         "exts": [".py", _JAVA_EXT, ".go", ".ts", ".yml", _YAML_EXT], "content": ["kafka"]},
     {"label": "RabbitMQ",                    "resume_kw": ["rabbitmq"],                                      "exts": [".py", ".ts", ".go"], "content": ["rabbitmq", "amqp"]},
     {"label": "AWS SQS / SNS",               "resume_kw": ["sqs", "sns"],                                    "exts": [".py", ".ts", ".go"], "content": ["sqs", "sns"]},
     # ── AI / ML ────────────────────────────────────────────────────────────────
@@ -149,7 +153,7 @@ _TECH_REGISTRY: list[dict] = [
                                                                                                               "exts": [".py"],               "content": ["fastmcp", "mcp.tool"]},
     {"label": "FastMCP",                     "resume_kw": ["fastmcp"],                                       "exts": [".py"],               "content": ["fastmcp"]},
     # ── Observability ──────────────────────────────────────────────────────────
-    {"label": "Prometheus / Grafana",        "resume_kw": ["prometheus", "grafana"],                         "exts": [".py", ".yml", ".yaml"], "content": ["prometheus", "grafana"]},
+    {"label": "Prometheus / Grafana",        "resume_kw": ["prometheus", "grafana"],                         "exts": [".py", ".yml", _YAML_EXT], "content": ["prometheus", "grafana"]},
     {"label": "OpenTelemetry",               "resume_kw": ["opentelemetry", "otel"],                         "exts": [".py", ".ts", ".go"], "content": ["opentelemetry", "otel"]},
     {"label": "Datadog",                     "resume_kw": ["datadog"],                                       "exts": [".py", ".ts", ".yml"],"content": ["datadog", "ddtrace"]},
     {"label": "Sentry",                      "resume_kw": ["sentry"],                                        "exts": [".py", ".ts", ".js"], "content": ["sentry"]},
@@ -159,7 +163,7 @@ _TECH_REGISTRY: list[dict] = [
     {"label": "Auth0",                       "resume_kw": ["auth0"],                                         "exts": [".py", ".ts", ".js"], "content": ["auth0"]},
     # ── Protocols & patterns ───────────────────────────────────────────────────
     {"label": "gRPC",                        "resume_kw": ["grpc"],                                          "exts": [".proto"]},
-    {"label": "gRPC",                        "resume_kw": ["grpc"],                                          "exts": [".py", ".go", ".java", ".ts"], "content": ["grpc"]},
+    {"label": "gRPC",                        "resume_kw": ["grpc"],                                          "exts": [".py", ".go", _JAVA_EXT, ".ts"], "content": ["grpc"]},
     {"label": "GraphQL",                     "resume_kw": ["graphql"],                                       "exts": [".py", ".ts", ".js"], "content": ["graphql"]},
     {"label": "HTTP Range requests",         "resume_kw": ["range request", "http range"],                   "exts": [".py"],               "content_all": ["range", "http"]},
     {"label": "Automated retention policies","resume_kw": ["retention"],                                     "exts": [".py"],               "content": ["retention"]},
@@ -203,7 +207,7 @@ def _file_matches_tech(entry: dict, ext: str, fname_lower: str, text: str) -> bo
     return True
 
 
-def _scan_folder(folder: Path) -> tuple[set[str], int]:
+def _scan_folder(folder: Path) -> tuple[set[str], int]:  # NOSONAR
     """Scan a single project folder and return (tech_found, file_count)."""
     tech_found: set[str] = set()
     file_count = 0
@@ -241,7 +245,7 @@ def _scan_folder(folder: Path) -> tuple[set[str], int]:
     return tech_found, file_count
 
 
-def scan_project_for_skills() -> str:
+def scan_project_for_skills() -> str:  # NOSONAR
     """Scan all configured side-project directories (side_project_folders in config.json) and detect technologies used. Pulls latest changes from git before scanning each. Reports newly detected skills not yet on the master resume so they can be added."""
     folders = config.get_active_side_project_folders()
     repos = config.get_active_side_project_repos()

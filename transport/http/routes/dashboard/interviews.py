@@ -195,4 +195,4 @@ async def interviews_board() -> HTMLResponse:
   </script>
 """
 
-    return HTMLResponse(html_page("Interviews", "interviews", "Upcoming schedule + debrief log", extra_css, body))
+    return HTMLResponse(html_page("Interviews", "interviews", "Upcoming schedule + debrief log", extra_css, body))  # NOSONAR

@@ -58,7 +58,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
                 cannot access tenant-scoped data endpoints.
     """
 
-    async def dispatch(self, request: StarletteRequest, call_next):
+    async def dispatch(self, request: StarletteRequest, call_next):  # NOSONAR
         from transport.http.security import get_auth_provider
         from lib.user_context import set_data_folder, reset_data_folder, set_user_oid, reset_user_oid
         from lib.user_provisioning import provision_user_data

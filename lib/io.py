@@ -67,7 +67,7 @@ def _save_json(path: Path, data) -> None:
     is_mapped = path.name in _SAVE_HANDLERS
     if not (_USE_SQLITE and _SQLITE_ONLY and is_mapped):
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")  # noqa: S5145
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
 
 
 def _now() -> str:

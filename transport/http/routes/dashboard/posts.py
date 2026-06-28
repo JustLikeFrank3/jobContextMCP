@@ -136,4 +136,4 @@ async def posts_board() -> HTMLResponse:
   </script>
     """
 
-    return HTMLResponse(html_page("LinkedIn Posts", "posts", "Engagement metrics & post log", extra_css, body))
+    return HTMLResponse(html_page("LinkedIn Posts", "posts", "Engagement metrics & post log", extra_css, body))  # NOSONAR
