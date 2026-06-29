@@ -84,7 +84,7 @@ def _fetch(username: str) -> dict[str, Any]:
         repos = _http_get_json(
             f"{_GITHUB_API}/users/{username}/repos?per_page=100&sort=updated"
         )
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, OSError) as exc:
         return {
             "profile": None,
             "top_repos": [],

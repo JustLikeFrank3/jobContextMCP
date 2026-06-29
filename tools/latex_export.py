@@ -377,14 +377,14 @@ def generate_cover_letter_latex(
 _RESUME_TEX = "resume.tex"
 
 def generate_resume_latex(
-    resume_text: str,  # noqa: ARG001  (reserved for future template injection)
+    resume_text: str,  # NOSONAR — reserved for future template injection
     company: str,
     role: str,
     *,
-    role_title: str = "Full Stack Software Engineer",  # noqa: ARG001  (reserved)
+    role_title: str = "Full Stack Software Engineer",  # NOSONAR — reserved
     output_filename: str = "",
     output_dir: Path | None = None,
-    identity: dict[str, str] | None = None,  # noqa: ARG001  (reserved for future use)
+    identity: dict[str, str] | None = None,  # NOSONAR — reserved for future use
 ) -> Path:
     """Pipeline A — compile a custom LaTeX resume via tectonic.
 

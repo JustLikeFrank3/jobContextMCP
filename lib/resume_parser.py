@@ -34,7 +34,7 @@ _DATE_WORD_RE = re.compile(
     r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
     re.I,
 )
-_PHONE_RE = re.compile(r"[\+]?\d[\d\s\-.\(\)]{8,}")
+_PHONE_RE = re.compile(r"\+?\d[\d\s\-.\(\)]{8,}")
 _EMAIL_RE = re.compile(r"[\w\.\+\-]+@[\w\.\-]+\.\w+")
 _LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w\-]+", re.I)
 
@@ -231,6 +231,10 @@ def _split_sections(lines: list[str]) -> tuple[list[str], list[tuple[str, list[s
 
 # ── HEADER PARSING ─────────────────────────────────────────────────────────
 
+def _is_tagline(s: str) -> bool:
+    return "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 30
+
+
 def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]:  # NOSONAR
     """Returns (name, tagline, synopsis)."""
     name_lines: list[str] = []
@@ -257,8 +261,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]: 
         ):
             continue
         if in_synopsis:
-            # Detect tagline: pipe-separated keyword line (role | skill • skill)
-            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 30:
+            if not tagline and _is_tagline(s):
                 tagline = s
             else:
                 synopsis_lines.append(s)
@@ -270,8 +273,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]: 
             else:
                 name_lines.append(s)
         else:
-            # Detect tagline even before the blank line separator (line 2 position)
-            if not tagline and "|" in s and ("•" in s or s.count("|") >= 1) and len(s.split()) <= 30:
+            if not tagline and _is_tagline(s):
                 tagline = s
             else:
                 synopsis_lines.append(s)
@@ -427,7 +429,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
             bullet = _clean_bullet(line)
             if not cur:
                 continue
-            current_job: dict = cur
+            current_job = cur  # guarded above: cur is dict
             if not current_job.get("_done", False):
                 _finalize_job(current_job)
             if cur_group is None:
@@ -440,7 +442,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
             after_blank = False
             if not cur:
                 continue
-            current_job: dict = cur
+            current_job = cur  # guarded above: cur is dict
             if not current_job.get("_done", False):
                 _finalize_job(current_job)
             flush_group()
@@ -455,7 +457,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
         # ── accumulate header lines or implicit plain-text bullet ─────────
         else:
             after_blank = False
-            current_job: dict = cur
+            current_job = cur  # else branch: cur is dict (after_blank=False and cur truthy)
             if not current_job.get("_done", False):
                 header_lines = current_job.get("_hlines")
                 if not isinstance(header_lines, list):
@@ -475,7 +477,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
                 had_bullets = True
 
     flush_group()
-    if cur:
+    if cur is not None:  # NOSONAR — cur is dict|None; guard is intentional
         _finalize_job(cur)
 
     jobs = _merge_same_company_jobs(jobs)
@@ -782,7 +784,6 @@ def _parse_resume_txt(text: str) -> dict:  # NOSONAR
 
     return {
         "name": name or tag_name or config.get_contact_name(""),
-        "name": name or tag_name or config._cfg.get("contact", {}).get("name", ""),
         "contact": contact,
         "tagline": tagline,
         "synopsis": synopsis,

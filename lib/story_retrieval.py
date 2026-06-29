@@ -142,7 +142,7 @@ def _load_openai_key(path: Path) -> str:
 
 
 def _embed_texts(texts: list[str], path: Path) -> list[list[float]]:
-    if OpenAI is None:
+    if OpenAI is None:  # NOSONAR — conditionally imported; None when openai package unavailable
         raise RuntimeError("openai package is not available")
     key = _load_openai_key(path)
     if not key:

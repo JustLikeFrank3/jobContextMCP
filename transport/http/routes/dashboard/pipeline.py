@@ -626,7 +626,7 @@ _PREVIEW_FALLBACK_DATA: dict = {
 }
 
 
-@router.get("/pipeline/preview-template/{template_name}/{style_name}")
+@router.get("/pipeline/preview-template/{template_name}/{style_name}", responses={400: {"description": "Unknown template or style"}})
 async def pipeline_preview_template(template_name: str, style_name: str = "navy") -> HTMLResponse:
     """Render the master resume with the requested template+style for inline browser preview."""
     from lib.resume_parser import _parse_resume_txt as _parse
@@ -704,7 +704,7 @@ class _SelectTemplateRequest(BaseModel):
     style: str
 
 
-@router.post("/pipeline/select-template")
+@router.post("/pipeline/select-template", responses={400: {"description": "Unknown template or style"}})
 async def pipeline_select_template(req: _SelectTemplateRequest) -> JSONResponse:
     """Persist the chosen visual template+style to a job queue entry."""
     from lib.template_loader import VALID_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
@@ -719,7 +719,7 @@ async def pipeline_select_template(req: _SelectTemplateRequest) -> JSONResponse:
     return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
 
 
-@router.post("/pipeline/select-cl-template")
+@router.post("/pipeline/select-cl-template", responses={400: {"description": "Unknown CL template or style"}})
 async def pipeline_select_cl_template(req: _SelectTemplateRequest) -> JSONResponse:
     """Persist the chosen cover letter visual template+style to a job queue entry."""
     from lib.template_loader import VALID_CL_TEMPLATES as _VALID, VALID_STYLES as _VSTYLES
@@ -734,7 +734,7 @@ async def pipeline_select_cl_template(req: _SelectTemplateRequest) -> JSONRespon
     return JSONResponse({"ok": True, "job_id": req.job_id, "template": req.template, "style": req.style})
 
 
-@router.get("/pipeline/preview-cl/{template_name}/{style_name}")
+@router.get("/pipeline/preview-cl/{template_name}/{style_name}", responses={400: {"description": "Unknown CL template or style"}})
 async def pipeline_preview_cl(template_name: str, style_name: str = "navy") -> HTMLResponse:
     """Render a cover letter preview with the requested template+style."""
     from lib.resume_parser import _parse_cover_letter_txt as _parse_cl

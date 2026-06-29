@@ -222,7 +222,7 @@ async def settings_page(
     return HTMLResponse(_build_page(user, flash=flash))  # NOSONAR
 
 
-@router.post("/settings/ai-key", include_in_schema=False)
+@router.post("/settings/ai-key", include_in_schema=False, responses={400: {"description": "Invalid config path"}})
 async def save_ai_key(
     user: Annotated[User, Depends(require_authenticated_user)],
     openai_key: Annotated[str, Form()] = "",
