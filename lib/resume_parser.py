@@ -260,12 +260,8 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]: 
             or _CLOSING_TAG_RE.match(s)  # </SOFTWARE_ENGINEER> footer tag
         ):
             continue
-        if in_synopsis:
-            if not tagline and _is_tagline(s):
-                tagline = s
-            else:
-                synopsis_lines.append(s)
-        elif not name_lines or (len(s) > 6 and s.isupper() and "," not in s and "@" not in s):
+        if (not in_synopsis and
+                (not name_lines or (len(s) > 6 and s.isupper() and "," not in s and "@" not in s))):
             # FRANK V. MACBRIDE III — is it a name or title?
             if name_lines and re.match(r"^[A-Z ]+$", s) and len(s) > 10:
                 # could be subtitle like "SOFTWARE ENGINEER" — stop here
@@ -273,6 +269,7 @@ def _parse_header(pre_lines: list[str], contact: dict) -> tuple[str, str, str]: 
             else:
                 name_lines.append(s)
         else:
+            # Both in-synopsis and post-name lines accumulate tagline/synopsis the same way
             if not tagline and _is_tagline(s):
                 tagline = s
             else:
@@ -444,7 +441,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
                 continue
             current_job = cur  # guarded above: cur is dict
             if not current_job.get("_done", False):
-                _finalize_job(current_job)
+                _finalize_job(current_job)  # NOSONAR — cur is non-None: guarded by `if not cur: continue` above
             flush_group()
             cur_group = {"label": line.rstrip(":"), "bullets": []}
             had_bullets = False
@@ -467,7 +464,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
                 # Finalize when last pipe-segment looks like a date range
                 check = line.rsplit(" | ", 1)[-1].strip()
                 if _is_date_part(check):
-                    _finalize_job(current_job)
+                    _finalize_job(current_job)  # NOSONAR — cur is non-None: else branch of `elif after_blank or not cur:`
             else:
                 # Header is done; plain-text lines without bullet chars are
                 # implicit bullets (common in MCP-saved .txt resumes).

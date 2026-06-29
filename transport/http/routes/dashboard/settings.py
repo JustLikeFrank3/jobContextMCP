@@ -213,7 +213,7 @@ def _build_page(user: User, flash: str = "", flash_type: str = "ok") -> str:
     return html_page("Settings", "settings", "Account and AI preferences", _EXTRA_CSS, body)
 
 
-@router.get("/settings", include_in_schema=False)
+@router.get("/settings", include_in_schema=False, responses={400: {"description": "Invalid config path"}})
 async def settings_page(
     user: Annotated[User, Depends(require_authenticated_user)],
     saved: Annotated[str, Query()] = "",
