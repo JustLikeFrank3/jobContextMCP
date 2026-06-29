@@ -125,19 +125,17 @@ def update_application(
         existing["last_updated"] = _now()
         action = "Updated"
     else:
-        apps.append(
-            dict(
-                company=company,
-                role=role,
-                status=status,
-                next_steps=next_steps,
-                contact=contact,
-                notes=notes,
-                events=[],
-                applied_date=_now(),
-                last_updated=_now(),
-            )
-        )
+        apps.append({
+                "company": company,
+                "role": role,
+                "status": status,
+                "next_steps": next_steps,
+                "contact": contact,
+                "notes": notes,
+                "events": [],
+                "applied_date": _now(),
+                "last_updated": _now(),
+            })
         action = "Added"
 
     data["last_updated"] = _now()
