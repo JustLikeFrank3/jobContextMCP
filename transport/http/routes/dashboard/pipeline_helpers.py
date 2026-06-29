@@ -370,7 +370,7 @@ def _draft_href(path: Path | str | None) -> str:
 
 
 def _pdf_path_from_export_result(result: str) -> Path | None:
-    match = re.search(r"PDF exported:\s*(.+)$", result or "")
+    match = re.search(r"PDF exported:\s*(.+)$", result or "")  # NOSONAR — internal result parsing, not user input
     if not match:
         return None
     return Path(match.group(1).strip())
@@ -477,7 +477,7 @@ def _first_sentence(text: str, max_len: int = 240) -> str:
     t = re.sub(r"\s+", " ", (text or "").strip())
     if not t:
         return ""
-    m = re.search(r"([^.?!]+[.?!])", t)
+    m = re.search(r"([^.?!]+[.?!])", t)  # NOSONAR — internal text extraction, trusted input
     s = (m.group(1) if m else t).strip()
     return s[:max_len]
 

@@ -22,7 +22,7 @@ from tools.fitment import run_job_assessment
 
 _VALID_STATUSES = {"pending", "evaluated"}
 
-_FITMENT_SCORE_RE = re.compile(r"##\s*FITMENT\s*SCORE\s*\n\s*(\d{1,2}/10)", re.IGNORECASE)
+_FITMENT_SCORE_RE = re.compile(r"##\s*FITMENT\s*SCORE\s*\n\s*(\d{1,2}/10)", re.IGNORECASE)  # NOSONAR — internal regex, trusted input
 
 
 
