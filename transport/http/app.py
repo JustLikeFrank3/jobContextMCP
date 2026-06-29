@@ -31,6 +31,7 @@ from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
+from transport.http.routes.dashboard.api import router as dashboard_api_router
 from transport.http.routes.architecture import architecture_html
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
@@ -220,6 +221,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(context_routes.router)
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
+    app.include_router(dashboard_api_router)  # /api/dashboard/* JSON for the React SPA
     app.include_router(dashboard_router)
 
     @app.get("/", include_in_schema=False)

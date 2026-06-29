@@ -44,6 +44,7 @@ from tools import (
     interviews,
     project_scanner,
     health,
+    oura,
     context,
     tone,
     rag,
@@ -161,6 +162,7 @@ interview.register(mcp)
 interviews.register(mcp)
 project_scanner.register(mcp)
 health.register(mcp)
+oura.register(mcp)
 context.register(mcp)
 tone.register(mcp)
 rag.register(mcp)

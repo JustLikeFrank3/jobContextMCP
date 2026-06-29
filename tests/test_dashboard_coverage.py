@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from transport.http.app import create_app
 from transport.http.config import reset_settings_cache
+from transport.http.routes.dashboard import api as dashboard_api_routes
 from transport.http.routes.dashboard import api_keys as api_keys_routes
 from transport.http.routes.dashboard import assets as assets_routes
 from transport.http.routes.dashboard import digest as digest_routes
@@ -429,6 +430,98 @@ class TestDashboardHomeCoverage:
         assert "Priority Actions" in response.text
         assert "Review: Beta Corp" in response.text
         assert "Interviews" in response.text
+
+
+class TestDashboardHomeApiCoverage:
+    """GET /api/dashboard/home — JSON feed for the React SPA."""
+
+    _SNAP = {
+        "has_data": True,
+        "active": 7,
+        "in_flight": 3,
+        "closed": 2,
+        "overdue": 1,
+        "drafted_unsent": 0,
+        "undecided": 2,
+        "priorities": [
+            "Follow up with Acme",
+            "Review: Beta Corp — Platform Engineer",
+            "Apply to 2–3 new roles today",
+        ],
+    }
+
+    def test_api_home_with_oura(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {
+                "readiness_score": 82,
+                "sleep_score": 88,
+                "hrv": 64,
+                "recovery_index": 91,
+            },
+        )
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        # Top-level shape the React Home screen consumes.
+        assert set(body) >= {"welcomeName", "hasOura", "oura", "today", "digest"}
+        assert body["hasOura"] is True
+
+        # Oura block shaped into score + label + three metric bars.
+        oura = body["oura"]
+        assert oura["score"] == 82
+        assert oura["label"]  # non-empty readiness label
+        assert [b["label"] for b in oura["bars"]] == ["Sleep score", "HRV", "Recovery index"]
+        assert oura["bars"][2]["tone"] == "green"  # recovery uses the green tone
+        assert oura["bars"][1]["unit"] == "ms"
+
+        # Pipeline summary: snake_case in_flight is renamed to inflight.
+        today = body["today"]
+        assert today["active"] == 7
+        assert today["inflight"] == 3
+        assert today["overdue"] == 1
+        assert "in_flight" not in today
+        assert today["move"]  # today's move text rendered
+
+        # String priorities are transformed into {n, text} objects.
+        assert today["priorities"][0] == {"n": "1", "text": "Follow up with Acme"}
+        assert today["priorities"][1]["n"] == "2"
+
+    def test_api_home_without_oura_returns_null_block_and_digest(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["hasOura"] is False
+        assert body["oura"] is None
+
+        # Digest fallback is always present so the no-ring state has content.
+        digest = body["digest"]
+        assert "date" in digest and digest["date"]
+        labels = {item["label"] for item in digest["items"]}
+        assert "Follow-ups due" in labels
+        assert "New assessments ready" in labels
+
+    def test_api_home_requires_auth(self, monkeypatch, isolated_server):
+        """With auth enabled, an anonymous fetch is rejected (not a redirect)."""
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/home")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
 
 
 class TestDashboardInterviewsCoverage:
