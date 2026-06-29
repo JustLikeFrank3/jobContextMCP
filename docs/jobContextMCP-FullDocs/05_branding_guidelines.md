@@ -11,7 +11,7 @@
 - `favicon-16.png`
 
 ## Colors
-- Teal accent: #3FA8A8 (matches VS Code vibe)
+- Teal accent: #00B5C8 (matches VS Code vibe)
 - Neutral gray: #EDEDED
 - Dark background: #1E1E1E
 

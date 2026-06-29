@@ -13,7 +13,7 @@ PRIVACY_HTML: str = r'''<!doctype html>
   --ink-950:#070B14;--ink-900:#0A0F1C;--ink-850:#0B1220;--ink-800:#0F172A;
   --ink-700:#111A2B;--ink-600:#16213A;--ink-500:#1B2A44;--ink-450:#22324E;
   --line:#23324D;--line-soft:#1A2740;--line-strong:#2E4366;
-  --cyan-500:#06B6D4;--cyan-400:#22C7E0;--cyan-300:#6FE0EE;
+  --cyan-500:#00B5C8;--cyan-400:#22C7E0;--cyan-300:#6FE0EE;
   --green-500:#22C55E;
   --text:#F2F6FC;--text-strong:#FFFFFF;--text-soft:#D7E3F8;
   --muted:#9AA8BF;--faint:#6B7A93;

@@ -101,7 +101,7 @@ async def health_board() -> HTMLResponse:
         const energyTitle = esc(String(e.energy ?? '')).replaceAll('"', '&quot;');
         return `<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%">
           <div class="spark-bar" title="Mood: ${moodTitle}" style="height:${mood}%;background:#3b82f6;flex:1"></div>
-          <div class="spark-bar" title="Energy: ${energyTitle}" style="height:${energy}%;background:#3FA8A8;flex:1"></div>
+          <div class="spark-bar" title="Energy: ${energyTitle}" style="height:${energy}%;background:#00B5C8;flex:1"></div>
         </div>`;
       }).join('') || '<div style="color:var(--muted);font-size:0.8rem;padding:8px">No data yet.</div>';
 
@@ -124,7 +124,7 @@ async def health_board() -> HTMLResponse:
             </div>
             <div class="meter">
               <span class="meter-label">Energy</span>
-              <div class="meter-track"><div class="meter-fill" style="width:${energyPct.toFixed(0)}%;background:#3FA8A8"></div></div>
+              <div class="meter-track"><div class="meter-fill" style="width:${energyPct.toFixed(0)}%;background:#00B5C8"></div></div>
               <span class="meter-val">${esc(String(e.energy ?? '—'))}</span>
             </div>
           </div>

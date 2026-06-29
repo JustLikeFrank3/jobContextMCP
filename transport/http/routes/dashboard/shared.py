@@ -1,7 +1,7 @@
 """Shared HTML fragments reused across dashboard pages.
 
 REDESIGNED by the jobContext Design System:
-  - palette: teal #3FA8A8 -> brand cyan #06B6D4 on deep navy
+  - palette: teal #00B5C8 -> brand cyan #00B5C8 on deep navy
   - type:    Inter -> Space Grotesk (loaded via @import in BASE_CSS)
   - logo:    new j+C mark (docs/branding/logo/jobcontextmcp-mark-dark.svg)
   - favicon: new j+C mark (no ASCII-$ binary motif)
@@ -42,7 +42,7 @@ BASE_CSS = """
     --bg: #0a0f1c; --bg-2: #0b1220; --panel: #111a2b; --panel-2: #16213a;
     --muted: #9aa8bf; --faint: #6b7a93;
     --text: #f2f6fc; --text-soft: #d7e3f8;
-    --accent: #06b6d4;            /* was #3FA8A8 teal — now brand cyan */
+    --accent: #00B5C8;            /* Porsche Miami Blue — canonical brand */
     --accent-bright: #22c7e0;
     --line: #23324d; --line-soft: #1a2740;
     --chip: #22324e; --well: #1b2a44;

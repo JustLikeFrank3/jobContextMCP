@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="jobContext">
   <title>jobContext</title>
-  <path d="M70 50 A26 26 0 1 0 70 76" fill="none" stroke="#06B6D4" stroke-width="15" stroke-linecap="round"></path>
+  <path d="M70 50 A26 26 0 1 0 70 76" fill="none" stroke="#00B5C8" stroke-width="15" stroke-linecap="round"></path>
   <circle cx="30" cy="26" r="9" fill="#FFFFFF"></circle>
   <path d="M30 39 L30 70 Q30 82 17 82" fill="none" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"></path>
 </svg>
