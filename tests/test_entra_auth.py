@@ -571,6 +571,56 @@ class TestOauthAuthorizeProxy:
         assert "state=mystate" in location
 
 
+class TestOauthTokenProxy:
+    def test_strips_resource_and_preserves_error_response(self, monkeypatch, oauth_client):
+        import httpx
+
+        captured = {}
+
+        class FakeResponse:
+            status_code = 400
+            text = '{"error":"invalid_grant"}'
+            content = b'{"error":"invalid_grant"}'
+            headers = {"Content-Type": "application/json; charset=utf-8"}
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, data, headers, timeout):
+                captured["url"] = url
+                captured["data"] = data
+                captured["headers"] = headers
+                captured["timeout"] = timeout
+                return FakeResponse()
+
+        monkeypatch.setattr(httpx, "AsyncClient", lambda: FakeAsyncClient())
+
+        r = oauth_client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": "0123456789abcdef",
+                "client_secret": "super-secret-value",
+                "resource": "https://jobcontext.ai",
+            },
+        )
+
+        assert r.status_code == 400
+        assert r.json() == {"error": "invalid_grant"}
+        assert captured["url"].endswith("/oauth2/v2.0/token")
+        assert captured["data"] == {
+            "grant_type": "authorization_code",
+            "code": "0123456789abcdef",
+            "client_secret": "super-secret-value",
+        }
+        assert captured["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+        assert captured["timeout"] == 30
+
+
 class TestLogoutEndpoints:
     def test_logout_redirects_to_entra(self, oauth_client):
         r = oauth_client.get("/logout", follow_redirects=False)
@@ -591,6 +641,27 @@ class TestLogoutEndpoints:
     def test_logged_out_page_has_cache_clear_instructions(self, oauth_client):
         r = oauth_client.get("/logged-out")
         assert "mcp-remote" in r.text or "rm -rf" in r.text
+
+
+class TestLogoutPostEndpoints:
+    def test_logout_post_uses_local_redirect_for_api_key_auth(self, http_client_authed):
+        r = http_client_authed.post("/logout", follow_redirects=False)
+
+        assert r.status_code == 303
+        assert r.headers["location"] == "/"
+        assert "jc_session=" in r.headers["set-cookie"]
+
+    def test_logout_post_redirects_to_entra_using_server_base(self, monkeypatch, oauth_client):
+        monkeypatch.setenv("SERVER_BASE_URL", "https://jobs.example.com")
+
+        r = oauth_client.post("/logout", follow_redirects=False)
+
+        assert r.status_code == 303
+        assert (
+            r.headers["location"]
+            == "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/logout?post_logout_redirect_uri=https://jobs.example.com/"
+        )
+        assert "jc_session=" in r.headers["set-cookie"]
 
 
 class _StubAuthProvider:
