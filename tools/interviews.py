@@ -95,7 +95,7 @@ def _normalize_quotes(quotes) -> list[dict]:
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
-def log_interview(  # NOSONAR
+def log_interview(  # NOSONAR — 18 params are intentional: structured debrief schema for MCP tool contract
     company: str,
     role: str,
     interview_date: str,

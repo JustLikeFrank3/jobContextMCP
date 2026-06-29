@@ -428,7 +428,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
                 continue
             current_job = cur  # guarded above: cur is dict
             if not current_job.get("_done", False):
-                _finalize_job(current_job)
+                _finalize_job(current_job)  # NOSONAR — cur is non-None: guarded by `if not cur: continue` above
             if cur_group is None:
                 cur_group = {"label": "", "bullets": []}
             cur_group["bullets"].append(bullet)
@@ -475,7 +475,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
 
     flush_group()
     if cur is not None:  # NOSONAR — cur is dict|None; guard is intentional
-        _finalize_job(cur)
+        _finalize_job(cur)  # NOSONAR — cur is non-None: confirmed by the is not None check above
 
     jobs = _merge_same_company_jobs(jobs)
     return {"type": "experience", "jobs": jobs}
