@@ -299,10 +299,6 @@ _PAGES = [
         "Wellbeing", "/dashboard/health", "Mood & energy log, trend sparklines",
     ),
     (
-        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M4 4h12v2H4zM4 9h8v2H4zM4 14h10v2H4z"/></svg>',
-        "Daily Digest", "/dashboard/digest", "On-demand morning briefing: follow-ups, stale apps, priorities",
-    ),
-    (
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3 3-5 7-5s7 2 7 5"/><path d="M14 5l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" stroke-width="1.2"/></svg>',
         "Interviews", "/dashboard/interviews", "Upcoming schedule, debrief log, verbatim quotes",
     ),
@@ -484,7 +480,10 @@ async def dashboard_home(
     /* ── Card grid ── */
     .grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
+    }}
+    @media (max-width: 860px) {{ .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+    @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr;
       gap: 12px; width: 100%; max-width: 860px;
     }}
     .card {{
