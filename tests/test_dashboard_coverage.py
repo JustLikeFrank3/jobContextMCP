@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import importlib
 import json
@@ -9,9 +10,15 @@ from fastapi.testclient import TestClient
 
 from transport.http.app import create_app
 from transport.http.config import reset_settings_cache
+from transport.http.routes.dashboard import api_keys as api_keys_routes
+from transport.http.routes.dashboard import assets as assets_routes
+from transport.http.routes.dashboard import digest as digest_routes
 from transport.http.routes.dashboard import home as home_routes
 from transport.http.routes.dashboard import interviews as interviews_routes
 from transport.http.routes.dashboard import login as login_routes
+from transport.http.routes.dashboard import materials as materials_routes
+from transport.http.routes.dashboard import people as people_routes
+from transport.http.routes.dashboard import pipeline as pipeline_routes
 from transport.http.routes.dashboard import settings as settings_routes
 from transport.http.security import User, reset_auth_provider_cache
 
@@ -492,3 +499,402 @@ class TestDashboardInterviewsCoverage:
         assert "Upcoming Interviews" in response.text
         assert "Recent Debriefs" in response.text
         assert "boot()" in response.text
+
+
+class TestDashboardApiKeysCoverage:
+    def test_key_row_html_handles_used_and_unlabeled_keys(self):
+        used_row = api_keys_routes._key_row_html(
+            7,
+            "Phone <Shortcut>",
+            "2026-06-28T20:00:00",
+            "2026-06-29T08:30:00",
+        )
+        unlabeled_row = api_keys_routes._key_row_html(
+            8,
+            "",
+            "2026-06-28T20:00:00",
+            None,
+        )
+
+        assert "Phone &lt;Shortcut&gt;" in used_row
+        assert "2026-06-29" in used_row
+        assert "/dashboard/api-keys/7/revoke" in used_row
+        assert "unlabeled" in unlabeled_row
+        assert "Never" in unlabeled_row
+
+    def test_api_keys_page_renders_empty_state(self, http_client_authed, monkeypatch):
+        monkeypatch.setattr(api_keys_routes, "list_keys", lambda _oid: [])
+
+        response = http_client_authed.get(
+            "/dashboard/api-keys",
+            headers={"Authorization": "Bearer test-key"},
+        )
+
+        assert response.status_code == 200
+        assert "No API keys yet" in response.text
+        assert "Generate a new API key" in response.text
+
+    def test_generate_and_revoke_api_key_routes(self, http_client_authed, monkeypatch):
+        calls = {"create": None, "revoke": None}
+
+        monkeypatch.setattr(
+            api_keys_routes,
+            "list_keys",
+            lambda _oid: [
+                SimpleNamespace(
+                    id=11,
+                    label="CLI Key",
+                    created_at="2026-06-28T20:00:00",
+                    last_used_at="2026-06-28T21:00:00",
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            api_keys_routes,
+            "create_key",
+            lambda oid, label: calls.update({"create": (oid, label)}) or (11, "jcmcp_new_secret"),
+        )
+        monkeypatch.setattr(
+            api_keys_routes,
+            "revoke_key",
+            lambda key_id, oid: calls.update({"revoke": (key_id, oid)}),
+        )
+
+        generate_response = http_client_authed.post(
+            "/dashboard/api-keys",
+            headers={"Authorization": "Bearer test-key"},
+            data={"label": "  Home Mac CLI  "},
+        )
+        revoke_response = http_client_authed.post(
+            "/dashboard/api-keys/11/revoke",
+            headers={"Authorization": "Bearer test-key"},
+            follow_redirects=False,
+        )
+
+        assert generate_response.status_code == 200
+        assert "New API key generated" in generate_response.text
+        assert "jcmcp_new_secret" in generate_response.text
+        assert "CLI Key" in generate_response.text
+        assert calls["create"] == ("admin", "Home Mac CLI")
+        assert revoke_response.status_code == 303
+        assert revoke_response.headers["location"] == "/dashboard/api-keys"
+        assert calls["revoke"] == (11, "admin")
+
+
+class TestDashboardDigestCoverage:
+    def test_digest_generate_returns_tool_output(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(digest_routes, "get_daily_digest", lambda: "Digest body")
+
+        response = http_client_noauth.post("/dashboard/digest/generate")
+
+        assert response.status_code == 200
+        assert response.json() == {"digest": "Digest body"}
+
+    def test_digest_page_renders_generate_ui(self, http_client_noauth):
+        response = http_client_noauth.get("/dashboard/digest")
+
+        assert response.status_code == 200
+        assert "Generate Today's Digest" in response.text
+        assert "No digest generated yet." in response.text
+        assert "WAITING ON OTHERS" in response.text
+
+
+class TestDashboardAssetsCoverage:
+    def test_logo_and_banner_svg_return_empty_on_read_error(self, monkeypatch):
+        def _raise_oserror(*_args, **_kwargs):
+            raise OSError("missing")
+
+        monkeypatch.setattr(
+            assets_routes,
+            "_LOGO_SVG_PATH",
+            SimpleNamespace(read_text=_raise_oserror),
+        )
+        monkeypatch.setattr(
+            assets_routes,
+            "_BANNER_SVG_PATH",
+            SimpleNamespace(read_text=_raise_oserror),
+        )
+
+        assert assets_routes.logo_svg() == ""
+        assert assets_routes.banner_svg() == ""
+
+    def test_logo_endpoint_serves_svg_file(self, http_client_noauth, isolated_server, monkeypatch):
+        logo_path = isolated_server / "logo.svg"
+        logo_path.write_text("<svg>ok</svg>", encoding="utf-8")
+        monkeypatch.setattr(assets_routes, "_LOGO_SVG_PATH", logo_path)
+
+        response = http_client_noauth.get("/dashboard/logo")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/svg+xml")
+        assert "<svg>ok</svg>" in response.text
+
+    def test_logo_endpoint_returns_not_found_when_svg_missing(self, http_client_noauth, isolated_server, monkeypatch):
+        monkeypatch.setattr(assets_routes, "_LOGO_SVG_PATH", isolated_server / "missing-logo.svg")
+
+        response = http_client_noauth.get("/dashboard/logo")
+
+        assert response.status_code == 404
+        assert response.json()["error"] == "Logo not found"
+
+
+class TestDashboardMaterialsCoverage:
+    def test_folder_path_returns_none_for_unknown_key(self, monkeypatch, isolated_server):
+        monkeypatch.setattr(materials_routes, "_workspace_base", lambda: isolated_server)
+
+        assert materials_routes._folder_path("unknown-folder") is None
+
+    def test_materials_file_route_handles_errors_and_success(self, monkeypatch, isolated_server):
+        monkeypatch.setattr(materials_routes, "_workspace_base", lambda: isolated_server)
+        resume_folder = isolated_server / materials_routes._FOLDERS["optimized_resumes"][0]
+        resume_folder.mkdir(parents=True, exist_ok=True)
+        pdf_folder = isolated_server / materials_routes._FOLDERS["resume_pdfs"][0]
+        pdf_folder.mkdir(parents=True, exist_ok=True)
+        pdf_path = pdf_folder / "resume.pdf"
+        pdf_path.write_text("pdf-body", encoding="utf-8")
+
+        with pytest.raises(HTTPException) as unknown_exc:
+            asyncio.run(materials_routes.materials_file("unknown-folder", "resume.txt"))
+        with pytest.raises(HTTPException) as missing_exc:
+            asyncio.run(materials_routes.materials_file("optimized_resumes", "missing.txt"))
+        with pytest.raises(HTTPException) as escape_exc:
+            asyncio.run(materials_routes.materials_file("optimized_resumes", "../escape.txt"))
+
+        response = asyncio.run(materials_routes.materials_file("resume_pdfs", "resume.pdf"))
+
+        assert unknown_exc.value.status_code == 404
+        assert "Unknown folder" in unknown_exc.value.detail
+        assert missing_exc.value.status_code == 404
+        assert "File not found" in missing_exc.value.detail
+        assert escape_exc.value.status_code == 404
+        assert escape_exc.value.detail == "Invalid file path"
+        assert response.path == pdf_path
+        assert response.media_type == "application/pdf"
+
+
+class TestDashboardPeopleCoverage:
+    def test_people_payload_sorts_recency_and_builds_follow_up_queue(self, monkeypatch):
+        monkeypatch.setattr(
+            people_routes,
+            "_load_json",
+            lambda *_args, **_kwargs: [
+                {
+                    "name": "Dana",
+                    "company": "Acme",
+                    "outreach_status": "sent",
+                    "relationship": "recruiter",
+                    "last_contacted": "2026-06-28",
+                    "tags": ["warm"],
+                },
+                {
+                    "name": "Eli",
+                    "company": "Beta",
+                    "outreach_status": "drafted",
+                    "relationship": "manager",
+                    "last_updated": "2026-06-27",
+                },
+                {
+                    "name": "Fran",
+                    "company": "Gamma",
+                    "relationship": "peer",
+                },
+            ],
+        )
+
+        payload = people_routes._people_payload()
+
+        assert payload["total"] == 3
+        assert [person["name"] for person in payload["recent"]] == ["Dana", "Eli", "Fran"]
+        assert [person["name"] for person in payload["follow_up_queue"]] == ["Dana", "Eli"]
+        assert payload["by_status"][0] == {"status": "sent", "count": 1}
+        assert {"relationship": "peer", "count": 1} in payload["by_relationship"]
+
+
+class TestDashboardPipelineCoverage:
+    def test_safe_child_path_rejects_escape(self, isolated_server):
+        safe_file = pipeline_routes._safe_child_path(isolated_server, "safe.txt")
+
+        assert safe_file == (isolated_server / "safe.txt").resolve()
+
+        with pytest.raises(HTTPException) as exc:
+            pipeline_routes._safe_child_path(isolated_server, "../escape.txt")
+
+        assert exc.value.status_code == 400
+        assert exc.value.detail == "Invalid path"
+
+    def test_pipeline_preview_template_rejects_unknown_template(self, http_client_noauth):
+        response = http_client_noauth.get("/dashboard/pipeline/preview-template/not-real/navy")
+
+        assert response.status_code == 400
+        assert "Unknown template" in response.json()["detail"]
+
+    def test_pipeline_preview_template_renders_master_resume_and_falls_back_style(
+        self,
+        http_client_noauth,
+        isolated_server,
+        monkeypatch,
+    ):
+        resume_path = isolated_server / "master_resume.txt"
+        resume_path.write_text("MASTER CONTENT", encoding="utf-8")
+        captured = {}
+
+        monkeypatch.setattr(
+            pipeline_routes.config,
+            "get_active_master_resume_path",
+            lambda: resume_path,
+        )
+        monkeypatch.setattr("lib.resume_parser._parse_resume_txt", lambda text: {"body": text})
+        monkeypatch.setattr("lib.template_loader.VALID_TEMPLATES", {"modern"})
+        monkeypatch.setattr("lib.template_loader.VALID_STYLES", {"navy"})
+        monkeypatch.setattr(
+            "lib.template_loader.render_resume",
+            lambda data, template, style: captured.update(
+                {"data": data, "template": template, "style": style}
+            )
+            or f"<html>{template}:{style}:{data['body']}:{data['footer_tag']}</html>",
+        )
+
+        response = http_client_noauth.get("/dashboard/pipeline/preview-template/modern/not-a-style")
+
+        assert response.status_code == 200
+        assert "modern:navy:MASTER CONTENT:SOFTWARE_ENGINEER" in response.text
+        assert captured["template"] == "modern"
+        assert captured["style"] == "navy"
+
+    def test_pipeline_preview_template_uses_fallback_data_when_resume_missing(
+        self,
+        http_client_noauth,
+        isolated_server,
+        monkeypatch,
+    ):
+        missing_path = isolated_server / "missing_resume.txt"
+
+        monkeypatch.setattr(
+            pipeline_routes.config,
+            "get_active_master_resume_path",
+            lambda: missing_path,
+        )
+        monkeypatch.setattr("lib.template_loader.VALID_TEMPLATES", {"modern"})
+        monkeypatch.setattr("lib.template_loader.VALID_STYLES", {"navy"})
+        monkeypatch.setattr(
+            "lib.template_loader.render_resume",
+            lambda data, template, style: f"<html>{template}:{style}:{data['footer_tag']}:{data['contact']['email']}</html>",
+        )
+
+        response = http_client_noauth.get("/dashboard/pipeline/preview-template/modern/navy")
+
+        assert response.status_code == 200
+        assert "SOFTWARE_ENGINEER" in response.text
+        assert "you@example.com" in response.text
+
+    def test_pipeline_select_template_validates_and_saves(self, http_client_noauth, monkeypatch):
+        updates = []
+        monkeypatch.setattr("lib.template_loader.VALID_TEMPLATES", {"modern"})
+        monkeypatch.setattr("lib.template_loader.VALID_STYLES", {"navy"})
+        monkeypatch.setattr(
+            pipeline_routes,
+            "_update_job",
+            lambda job_id, updater: updates.append(job_id) or updater({}),
+        )
+
+        success = http_client_noauth.post(
+            "/dashboard/pipeline/select-template",
+            json={"job_id": 5, "template": "modern", "style": "navy"},
+        )
+        bad_template = http_client_noauth.post(
+            "/dashboard/pipeline/select-template",
+            json={"job_id": 5, "template": "bad", "style": "navy"},
+        )
+        bad_style = http_client_noauth.post(
+            "/dashboard/pipeline/select-template",
+            json={"job_id": 5, "template": "modern", "style": "bad"},
+        )
+
+        assert success.status_code == 200
+        assert success.json() == {"ok": True, "job_id": 5, "template": "modern", "style": "navy"}
+        assert updates == [5]
+        assert bad_template.status_code == 400
+        assert "Unknown template" in bad_template.json()["detail"]
+        assert bad_style.status_code == 400
+        assert "Unknown style" in bad_style.json()["detail"]
+
+    def test_pipeline_preview_cl_and_select_cl_template_cover_fallbacks(
+        self,
+        http_client_noauth,
+        isolated_server,
+        monkeypatch,
+    ):
+        cover_dir = isolated_server / "cover_letters"
+        cover_dir.mkdir(parents=True, exist_ok=True)
+        cover_path = cover_dir / "latest.txt"
+        cover_path.write_text("Dear Hiring Team", encoding="utf-8")
+        updates = []
+
+        monkeypatch.setattr(
+            pipeline_routes.config,
+            "get_active_cover_letters_dir",
+            lambda: cover_dir,
+        )
+        monkeypatch.setattr("lib.resume_parser._parse_cover_letter_txt", lambda text: {"paragraphs": [text]})
+        monkeypatch.setattr("lib.template_loader.VALID_CL_TEMPLATES", {"modern"})
+        monkeypatch.setattr("lib.template_loader.VALID_STYLES", {"navy"})
+        monkeypatch.setattr(
+            "lib.template_loader.render_cover_letter",
+            lambda data, template, style: f"<html>{template}:{style}:{'|'.join(data['paragraphs'])}:{data['footer_tag']}</html>",
+        )
+        monkeypatch.setattr(
+            pipeline_routes,
+            "_update_job",
+            lambda job_id, updater: updates.append(job_id) or updater({}),
+        )
+
+        preview = http_client_noauth.get("/dashboard/pipeline/preview-cl/modern/bad-style")
+        select_ok = http_client_noauth.post(
+            "/dashboard/pipeline/select-cl-template",
+            json={"job_id": 6, "template": "modern", "style": "navy"},
+        )
+        select_bad_template = http_client_noauth.post(
+            "/dashboard/pipeline/select-cl-template",
+            json={"job_id": 6, "template": "bad", "style": "navy"},
+        )
+        select_bad_style = http_client_noauth.post(
+            "/dashboard/pipeline/select-cl-template",
+            json={"job_id": 6, "template": "modern", "style": "bad"},
+        )
+
+        assert preview.status_code == 200
+        assert "modern:navy:Dear Hiring Team:SOFTWARE_ENGINEER" in preview.text
+        assert select_ok.status_code == 200
+        assert select_ok.json() == {"ok": True, "job_id": 6, "template": "modern", "style": "navy"}
+        assert updates == [6]
+        assert select_bad_template.status_code == 400
+        assert "Unknown CL template" in select_bad_template.json()["detail"]
+        assert select_bad_style.status_code == 400
+        assert "Unknown style" in select_bad_style.json()["detail"]
+
+    def test_pipeline_preview_cl_uses_fallback_data_when_no_letters_exist(
+        self,
+        http_client_noauth,
+        isolated_server,
+        monkeypatch,
+    ):
+        empty_dir = isolated_server / "empty_cover_letters"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(
+            pipeline_routes.config,
+            "get_active_cover_letters_dir",
+            lambda: empty_dir,
+        )
+        monkeypatch.setattr("lib.template_loader.VALID_CL_TEMPLATES", {"modern"})
+        monkeypatch.setattr("lib.template_loader.VALID_STYLES", {"navy"})
+        monkeypatch.setattr(
+            "lib.template_loader.render_cover_letter",
+            lambda data, template, style: f"<html>{template}:{style}:{data['paragraphs'][0]}:{data['footer_tag']}</html>",
+        )
+
+        response = http_client_noauth.get("/dashboard/pipeline/preview-cl/modern/navy")
+
+        assert response.status_code == 200
+        assert "Dear Hiring Manager" in response.text
+        assert "SOFTWARE_ENGINEER" in response.text
