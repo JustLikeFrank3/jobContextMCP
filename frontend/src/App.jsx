@@ -1,38 +1,26 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Logo, Button } from './design-system'
+import DashboardShell from './shell/DashboardShell.jsx'
+import ComingSoon from './screens/ComingSoon.jsx'
 
-// Placeholder shell for the scaffold step. Subsequent steps replace this with
-// DashboardShell + the Home/Pipeline/etc. screens converted from the design
-// handoff. Exercises the design-system primitives so the build validates them.
-function Placeholder() {
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 18,
-        textAlign: 'center',
-        padding: 24,
-      }}
-    >
-      <Logo size={48} />
-      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-base)' }}>
-        React dashboard scaffold is live. Screens coming online next.
-      </div>
-      <Button variant="ghost" size="sm">
-        Sign out
-      </Button>
-    </div>
-  )
-}
-
+// All dashboard screens render inside DashboardShell (header + tab bar) via
+// react-router's <Outlet>. Home is the Oura-readiness redesign; the remaining
+// tabs are placeholders until each legacy screen is ported.
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Placeholder />} />
+      <Route element={<DashboardShell />}>
+        <Route path="/" element={<ComingSoon title="Home" />} />
+        <Route path="/pipeline" element={<ComingSoon title="Pipeline" />} />
+        <Route path="/job-hunt" element={<ComingSoon title="Job Hunt" />} />
+        <Route path="/materials" element={<ComingSoon title="Materials" />} />
+        <Route path="/rejections" element={<ComingSoon title="Rejections" />} />
+        <Route path="/posts" element={<ComingSoon title="Posts" />} />
+        <Route path="/people" element={<ComingSoon title="Outreach" />} />
+        <Route path="/health" element={<ComingSoon title="Wellbeing" />} />
+        <Route path="/interviews" element={<ComingSoon title="Interviews" />} />
+        <Route path="/settings" element={<ComingSoon title="Settings" />} />
+        <Route path="/api-keys" element={<ComingSoon title="API Keys" />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
