@@ -462,7 +462,7 @@ def _parse_experience_section(lines: list[str]) -> dict:  # NOSONAR
                 header_lines = current_job.get("_hlines")
                 if not isinstance(header_lines, list):
                     header_lines = []
-                    current_job["_hlines"] = header_lines
+                    current_job["_hlines"] = header_lines  # NOSONAR — cur is non-None here (else branch of `not cur` guard above)
                 header_lines.append(line)
                 # Finalize when last pipe-segment looks like a date range
                 check = line.rsplit(" | ", 1)[-1].strip()
