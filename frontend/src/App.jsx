@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Logo, Button } from './design-system'
 
 // Placeholder shell for the scaffold step. Subsequent steps replace this with
 // DashboardShell + the Home/Pipeline/etc. screens converted from the design
-// handoff. Kept intentionally minimal so `vite build` is green from day one.
+// handoff. Exercises the design-system primitives so the build validates them.
 function Placeholder() {
   return (
     <div
@@ -12,24 +13,18 @@ function Placeholder() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 12,
+        gap: 18,
         textAlign: 'center',
         padding: 24,
       }}
     >
-      <div
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: '2rem',
-          fontWeight: 700,
-          color: 'var(--text-strong)',
-        }}
-      >
-        job<span style={{ color: 'var(--cyan-400)' }}>Context</span>
-      </div>
-      <div style={{ color: 'var(--muted)', fontSize: '0.95rem' }}>
+      <Logo size={48} />
+      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-base)' }}>
         React dashboard scaffold is live. Screens coming online next.
       </div>
+      <Button variant="ghost" size="sm">
+        Sign out
+      </Button>
     </div>
   )
 }

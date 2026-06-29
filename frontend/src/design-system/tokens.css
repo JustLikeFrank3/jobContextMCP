@@ -1,0 +1,116 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   jobContext design-system tokens
+   Source of truth for color, type, spacing, radius, motion.
+   Never hard-code these values in components — reference the vars.
+
+   Note on cyan: the handoff spec lists #06B6D4 as --cyan-500, but the live
+   jobContext brand (logo mark, favicon, landing, OG image) is Porsche Miami
+   Blue #00B5C8. We use #00B5C8 as the primary to keep brand consistency and
+   retain the handoff's lighter tints for the scale.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Cyan (primary brand) ── */
+  --cyan-500: #00b5c8; /* brand primary (logo/favicon/landing) */
+  --cyan-400: #22c7e0;
+  --cyan-300: #6fe0ee;
+
+  /* ── Green (success / readiness-good) ── */
+  --green-500: #22c55e;
+  --green-300: #7be6a4;
+
+  /* ── Semantic ── */
+  --danger: #ef4444;
+  --danger-soft: #f87171;
+  --warn: #f59e0b;
+
+  /* ── Ink / surfaces ── */
+  --ink-900: #0a0f1c; /* app bg gradient top */
+  --ink-850: #0b1220; /* app bg gradient bottom */
+  --ink-700: #141e33;
+  --ink-600: #1c2740; /* gauge/bar tracks */
+  --ink-500: #2a3954; /* toggle off bg */
+  --surface: #111a2b;
+  --surface-raised: #16213a;
+  --surface-sunken: #1b2a44;
+  --surface-chip: #22324e;
+
+  /* ── Tints (derived overlays) ── */
+  --tint-primary: color-mix(in srgb, var(--cyan-500) 18%, var(--surface));
+  --tint-danger: color-mix(in srgb, var(--danger) 15%, var(--surface));
+
+  /* ── Lines ── */
+  --border: #23324d;
+  --border-soft: #1a2740;
+  --line-strong: #2e4366;
+
+  /* ── Text ── */
+  --text: #f2f6fc;
+  --text-strong: #ffffff;
+  --text-soft: #d7e3f8;
+  --muted: #9aa8bf;
+  --faint: #6b7a93;
+
+  /* ── Typefaces ── */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+
+  /* ── Font sizes ── */
+  --fs-2xs: 0.7rem; /* eyebrow */
+  --fs-xs: 0.78rem;
+  --fs-sm: 0.85rem; /* body-small, buttons, card desc */
+  --fs-base: 0.95rem; /* body */
+  --fs-h3: 1rem; /* card title */
+  --fs-lg: 1.2rem; /* section heading */
+  --fs-xl: 1.55rem; /* stat / welcome */
+  --fs-2xl: 1.6rem; /* page title */
+
+  /* ── Font weights ── */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ── Letter spacing ── */
+  --ls-eyebrow: 0.08em;
+
+  /* ── Composite type shorthands ── */
+  --text-page-title: var(--fw-bold) var(--fs-2xl) / 1.2 var(--font-display);
+
+  /* ── Radius ── */
+  --radius-chip: 6px;
+  --radius-sm: 8px; /* buttons / tabs */
+  --radius-md: 10px; /* inputs */
+  --radius-lg: 12px; /* cards */
+  --radius-xl: 14px; /* hero cards */
+  --radius-pill: 999px;
+
+  /* ── Shadow / glow ── */
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --glow-primary: 0 0 0 1px color-mix(in srgb, var(--cyan-500) 50%, transparent),
+    0 8px 24px color-mix(in srgb, var(--cyan-500) 18%, transparent);
+
+  /* ── Motion ── */
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Layout ── */
+  --wrap-max: 1200px;
+  --page-pad: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
