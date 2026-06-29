@@ -61,10 +61,10 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
 <nav>
   <div class="nav-inner">
     <a class="brand" href="/">
-      <svg viewBox="0 0 320 290" width="22" height="20" aria-label="jobContext">
-        <path d="M268.2 124.5 A80 80 0 1 0 268.2 175.5" fill="none" stroke="var(--cyan-500)" stroke-width="46" stroke-linecap="round"/>
-        <circle cx="84" cy="54" r="27" fill="#fff"/>
-        <path d="M84 98 L84 207 Q84 250 41 250" fill="none" stroke="#fff" stroke-width="40" stroke-linecap="round"/>
+      <svg viewBox="0 0 100 100" width="22" height="20" aria-label="jobContext">
+        <circle cx="27" cy="21" r="7" fill="#fff"/>
+        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
       </svg>
       <span>job<span class="c">Context</span></span>
     </a>
