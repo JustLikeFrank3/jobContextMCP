@@ -15,6 +15,7 @@ import pytest
 import server as srv
 from services import JobAnalysisService
 from services.persona_service import PersonaService
+from tools import fitment
 
 
 JD = "We need a senior engineer with React, Node, and AWS."
@@ -106,6 +107,59 @@ class TestRunJobAssessmentPersona:
         out = srv.run_job_assessment("Stripe", "Staff Engineer", JD, persona="executive_polish")
         assert PersonaService.get("executive_polish").to_prompt_block() in out
 
+    @pytest.mark.live_llm
+    def test_unknown_persona_warning_and_auto_save(self, isolated_server, monkeypatch):
+        from lib import config
+
+        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
+
+        fake_client = MagicMock()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content="FITMENT SCORE: 6/10"))]
+        fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+        fake_client.chat.completions.create.return_value = fake_response
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
+            out = srv.run_job_assessment(
+                "ACME/AI",
+                "AI Platform Engineer",
+                "Build MCP and RAG workflows.",
+                persona="missing_persona",
+            )
+
+        saved = fitment.config.get_active_job_assessments_dir() / "run_job_assessment" / "ACME-AI AI Platform Engineer - Fitment Assessment.md"
+        assert "persona warning:" in out
+        assert "Saved job assessment" in out
+        assert saved.exists()
+        assert saved.read_text(encoding="utf-8") == "FITMENT SCORE: 6/10"
+
+    @pytest.mark.live_llm
+    def test_ai_role_includes_ai_evidence_in_user_message(self, isolated_server, monkeypatch):
+        from lib import config
+
+        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
+
+        fake_client = MagicMock()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content="FITMENT SCORE: 8/10"))]
+        fake_response.usage = None
+        fake_client.chat.completions.create.return_value = fake_response
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")), patch(
+            "tools.fitment._load_master_context",
+            return_value="Built an MCP server for agent workflows.\nPlain Java service line.",
+        ):
+            srv.run_job_assessment(
+                "Stripe",
+                "AI Platform Engineer",
+                "Build RAG agents and MCP tooling.",
+                auto_save=False,
+            )
+
+        user_msg = fake_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        assert "AI PLATFORM EVIDENCE EXTRACTED FROM MASTER RESUME" in user_msg
+        assert "- Built an MCP server for agent workflows." in user_msg
+
 
 class TestJobAnalysisServicePersona:
     def test_evaluate_threads_persona_to_pack(self, isolated_server):
@@ -140,3 +194,44 @@ class TestJobAnalysisServicePersona:
         )
         assert "PERSONA LENS" in out
         assert PersonaService.get("startup_founder").to_prompt_block() in out
+
+
+class TestFitmentCoverageExtras:
+    def test_extract_ai_platform_evidence_returns_empty_without_matches(self):
+        assert fitment._extract_ai_platform_evidence("Plain Java backend. Spring services only.") == ""
+
+    def test_get_customization_strategy_reports_unknown_role_type(self):
+        out = fitment.get_customization_strategy("mystery_role")
+
+        assert "Unknown role type: 'mystery_role'" in out
+        assert "backend" in out
+        assert "cloud" in out
+
+    def test_save_job_assessment_sanitizes_source_and_extension(self, isolated_server):
+        out = fitment.save_job_assessment(
+            "ACME/AI",
+            "Line one  \nLine two  ",
+            filename="summary",
+            source="Referral\\Team",
+        )
+
+        saved = fitment.config.get_active_job_assessments_dir() / "Referral-Team" / "summary.md"
+        assert "Referral-Team/summary.md" in out
+        assert saved.read_text(encoding="utf-8") == "Line one\nLine two"
+
+    def test_run_job_assessment_handles_llm_client_boot_failure(self, isolated_server):
+        with patch("lib.config.get_llm_client", side_effect=RuntimeError("boom")):
+            out = fitment.run_job_assessment("Stripe", "Staff Engineer", JD)
+
+        assert out == "✗ Failed to load LLM client. Check config.json llm_provider settings."
+
+    def test_run_job_assessment_handles_openai_errors(self, isolated_server):
+        fake_client = object()
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")), patch(
+            "tools.fitment.create_chat_completion",
+            side_effect=RuntimeError("rate limited"),
+        ):
+            out = fitment.run_job_assessment("Stripe", "Staff Engineer", JD, auto_save=False)
+
+        assert out == "✗ OpenAI API error: rate limited"
