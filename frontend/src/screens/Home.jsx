@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../design-system'
+import { apiFetch } from '../auth/api.js'
 
 /* HomeScreen — the Oura-readiness redesign. Converted from the design
    handoff's home.jsx IIFE to ESM.
@@ -458,8 +459,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/dashboard/home', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
+    apiFetch('/api/dashboard/home')
       .then((json) => {
         if (cancelled || !json) return
         const merged = { ...MOCK, ...json, today: { ...MOCK.today, ...(json.today || {}) }, digest: { ...MOCK.digest, ...(json.digest || {}) } }

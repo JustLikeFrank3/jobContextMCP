@@ -45,9 +45,19 @@ def _is_secure(request: Request) -> bool:
 _DASHBOARD_ROOT = "/dashboard"
 _LOGIN_PATH = "/dashboard/login"
 
+# Internal destinations a post-login redirect may land on. The React SPA lives
+# under /app, the legacy server-rendered dashboard under /dashboard. Anything
+# else (external URLs, protocol-relative //host) falls back to the dashboard.
+_ALLOWED_NEXT_PREFIXES = (_DASHBOARD_ROOT, "/app")
+
 
 def _safe_next(next_url: str | None) -> str:
-    if next_url and next_url.startswith(_DASHBOARD_ROOT):
+    if (
+        next_url
+        and next_url.startswith("/")
+        and not next_url.startswith("//")
+        and any(next_url.startswith(p) for p in _ALLOWED_NEXT_PREFIXES)
+    ):
         return next_url
     return _DASHBOARD_ROOT
 

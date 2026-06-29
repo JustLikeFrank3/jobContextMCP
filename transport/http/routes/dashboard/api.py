@@ -111,6 +111,27 @@ def _digest_payload(snap: dict) -> dict:
     return {"date": date_line, "items": items}
 
 
+@router.get("/me", response_model=None)
+async def dashboard_me(
+    user: Annotated[User, Depends(require_authenticated_user)],
+) -> JSONResponse:
+    """Lightweight auth probe for the SPA.
+
+    Returns 200 + the current user when the session cookie / bearer is valid,
+    or 401 (via the dependency) when it is not. The React AuthContext calls
+    this on mount to decide between rendering the app and redirecting to login,
+    without paying for the full home payload.
+    """
+    return JSONResponse(
+        {
+            "authenticated": True,
+            "id": user.id,
+            "name": html.escape((user.name or "").strip()),
+            "firstName": html.escape(_first_name(user)),
+        }
+    )
+
+
 @router.get("/home", response_model=None)
 async def dashboard_home_data(
     user: Annotated[User, Depends(require_authenticated_user)],

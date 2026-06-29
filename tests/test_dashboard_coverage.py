@@ -523,6 +523,46 @@ class TestDashboardHomeApiCoverage:
         reset_settings_cache()
         assert response.status_code in (401, 403)
 
+    def test_api_me_returns_user_when_authed(self, http_client_noauth):
+        response = http_client_noauth.get("/api/dashboard/me")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["authenticated"] is True
+        assert "name" in body and "firstName" in body and "id" in body
+
+    def test_api_me_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/me")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestSafeNextRedirect:
+    """_safe_next gates post-login redirects to internal SPA/dashboard paths."""
+
+    @pytest.mark.parametrize(
+        "candidate,expected",
+        [
+            ("/app", "/app"),
+            ("/app/job-hunt", "/app/job-hunt"),
+            ("/dashboard", "/dashboard"),
+            ("/dashboard/people", "/dashboard/people"),
+            # Anything off-allowlist or unsafe falls back to the dashboard root.
+            ("/api/dashboard/home", "/dashboard"),
+            ("https://evil.example/app", "/dashboard"),
+            ("//evil.example", "/dashboard"),
+            ("", "/dashboard"),
+            (None, "/dashboard"),
+        ],
+    )
+    def test_safe_next(self, candidate, expected):
+        assert login_routes._safe_next(candidate) == expected
+
 
 class TestSpaServing:
     """/app/* — Vite-built React SPA served by FastAPI."""

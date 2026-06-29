@@ -2,14 +2,23 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import DashboardShell from './shell/DashboardShell.jsx'
 import Home from './screens/Home.jsx'
 import ComingSoon from './screens/ComingSoon.jsx'
+import { ProtectedRoute } from './auth/AuthContext.jsx'
 
 // All dashboard screens render inside DashboardShell (header + tab bar) via
-// react-router's <Outlet>. Home is the Oura-readiness redesign; the remaining
-// tabs are placeholders until each legacy screen is ported.
+// react-router's <Outlet>. The whole shell is gated behind ProtectedRoute so an
+// expired/missing session redirects to login before any screen renders. Home is
+// the Oura-readiness redesign; the remaining tabs are placeholders until each
+// legacy screen is ported.
 export default function App() {
   return (
     <Routes>
-      <Route element={<DashboardShell />}>
+      <Route
+        element={
+          <ProtectedRoute>
+            <DashboardShell />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/" element={<Home />} />
         <Route path="/pipeline" element={<ComingSoon title="Pipeline" />} />
         <Route path="/job-hunt" element={<ComingSoon title="Job Hunt" />} />
