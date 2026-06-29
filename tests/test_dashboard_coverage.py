@@ -524,6 +524,78 @@ class TestDashboardHomeApiCoverage:
         assert response.status_code in (401, 403)
 
 
+class TestSpaServing:
+    """/app/* — Vite-built React SPA served by FastAPI."""
+
+    @staticmethod
+    def _make_dist(tmp_path):
+        dist = tmp_path / "dist"
+        (dist / "assets").mkdir(parents=True)
+        (dist / "index.html").write_text('<!doctype html><html><body><div id="root"></div></body></html>')
+        (dist / "assets" / "app.js").write_text('console.log("spa")')
+        return dist
+
+    @pytest.fixture()
+    def spa_client(self, tmp_path, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", self._make_dist(tmp_path))
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            yield client
+        reset_settings_cache()
+
+    def test_app_shell_served(self, spa_client):
+        response = spa_client.get("/app")
+        assert response.status_code == 200
+        assert '<div id="root">' in response.text
+
+    def test_deep_link_falls_back_to_index(self, spa_client):
+        # No file on disk for this client-side route → SPA fallback to index.
+        response = spa_client.get("/app/job-hunt")
+        assert response.status_code == 200
+        assert '<div id="root">' in response.text
+
+    def test_hashed_asset_is_served(self, spa_client):
+        response = spa_client.get("/app/assets/app.js")
+        assert response.status_code == 200
+        assert "spa" in response.text
+
+    def test_shell_public_but_data_api_protected_under_auth(
+        self, tmp_path, monkeypatch, isolated_server
+    ):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", self._make_dist(tmp_path))
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            # Static shell loads without credentials so the SPA can boot.
+            assert client.get("/app").status_code == 200
+            # User data stays behind auth.
+            assert client.get("/api/dashboard/home").status_code in (401, 403)
+        reset_settings_cache()
+
+    def test_mount_skipped_when_dist_absent(self, tmp_path, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", tmp_path / "does-not-exist")
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            # No SPA mount → the shell is never served.
+            response = client.get("/app")
+            assert '<div id="root">' not in response.text
+        reset_settings_cache()
+
+
 class TestDashboardInterviewsCoverage:
     def test_interviews_payload_sorts_upcoming_and_recent(self, monkeypatch):
         today = dt.date.today()
