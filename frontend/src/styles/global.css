@@ -40,3 +40,15 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Split hero collapses to a single column on narrow viewports. The right
+   panel's left border becomes a top border so the divider still reads. */
+@media (max-width: 720px) {
+  .hero-split-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .hero-split-right {
+    border-left: none !important;
+    border-top: 1px solid var(--border-soft) !important;
+  }
+}

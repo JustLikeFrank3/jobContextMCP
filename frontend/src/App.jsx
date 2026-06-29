@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import DashboardShell from './shell/DashboardShell.jsx'
+import Home from './screens/Home.jsx'
 import ComingSoon from './screens/ComingSoon.jsx'
 
 // All dashboard screens render inside DashboardShell (header + tab bar) via
@@ -9,7 +10,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<DashboardShell />}>
-        <Route path="/" element={<ComingSoon title="Home" />} />
+        <Route path="/" element={<Home />} />
         <Route path="/pipeline" element={<ComingSoon title="Pipeline" />} />
         <Route path="/job-hunt" element={<ComingSoon title="Job Hunt" />} />
         <Route path="/materials" element={<ComingSoon title="Materials" />} />
