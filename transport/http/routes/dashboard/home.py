@@ -96,7 +96,22 @@ def _build_snapshot() -> dict:  # NOSONAR
 # ── Oura helpers ─────────────────────────────────────────────────────────────
 
 def _load_oura() -> "dict | None":
-    """Load today's Oura readiness snapshot from the active workspace, if present."""
+    """Load the most recent Oura readiness snapshot for the current user.
+
+    Priority:
+      1. SQLite oura_readiness table (per-user, persists on AKS).
+      2. workspace/oura.json flat file (local dev fallback).
+    """
+    # 1 — SQLite (primary on AKS and local after first log_oura_readiness call)
+    try:
+        from tools.oura import _latest_oura_row
+        row = _latest_oura_row()
+        if row:
+            return row
+    except Exception:
+        pass
+
+    # 2 — flat-file fallback for local dev / first-run
     try:
         import json
         from lib.config import get_active_workspace_folder
@@ -105,6 +120,7 @@ def _load_oura() -> "dict | None":
             return json.loads(p.read_text())
     except Exception:
         pass
+
     return None
 
 
@@ -481,10 +497,10 @@ async def dashboard_home(
     .grid {{
       display: grid;
       grid-template-columns: repeat(4, 1fr);
+      gap: 12px; width: 100%; max-width: 860px;
     }}
     @media (max-width: 860px) {{ .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
-    @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr;
-      gap: 12px; width: 100%; max-width: 860px;
+    @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr; }} }}
     }}
     .card {{
       background: var(--panel); border: 1px solid var(--line);
