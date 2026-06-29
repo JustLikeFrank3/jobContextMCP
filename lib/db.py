@@ -17,9 +17,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
+import logging
 import sqlite3
 
 import lib.config as _cfg
+
+
+_logger = logging.getLogger(__name__)
 
 
 # ── Canonical event type registry ─────────────────────────────────────────────
@@ -146,7 +150,36 @@ _MIGRATIONS = [
     # v3 — cover letter template + style selection per job card
     "ALTER TABLE job_queue ADD COLUMN cl_template TEXT",
     "ALTER TABLE job_queue ADD COLUMN cl_style TEXT",
+    # v4 — Oura Ring readiness data (per-user biometric integration)
+    """CREATE TABLE IF NOT EXISTS oura_readiness (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        oid              TEXT    NOT NULL DEFAULT '',
+        date             TEXT    NOT NULL,
+        readiness_score  INTEGER,
+        sleep_score      INTEGER,
+        hrv              INTEGER,
+        recovery_index   INTEGER,
+        raw_json         TEXT,
+        created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(oid, date)
+    )""",
 ]
+
+
+# Substrings of sqlite3.OperationalError messages that are safe to ignore for a
+# single migration statement without aborting the whole chain. These occur when
+# an ALTER targets a table that doesn't exist yet in a given DB (e.g. job_queue
+# is created out-of-band by the SQLite seeder, not by _MIGRATIONS) or a column
+# that was already added. Tolerating them keeps later migrations (e.g. the Oura
+# table) from being permanently blocked on partially-provisioned databases.
+_TOLERABLE_MIGRATION_ERRORS = ("duplicate column name", "no such table")
+
+
+def _ledger_migration(con: sqlite3.Connection) -> None:
+    """Record one migration as applied in the version ledger."""
+    con.execute(
+        "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
+    )
 
 
 def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
@@ -154,6 +187,12 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
 
     Uses a simple applied_migrations table as a version ledger.
     Idempotent — safe to call on every connection open.
+
+    Robustness: a single migration that fails with a tolerable error
+    (missing target table for an ALTER, or a column that already exists) is
+    logged and recorded as applied so the chain advances. This prevents an
+    early fragile ALTER from permanently blocking later CREATE TABLE
+    migrations (e.g. oura_readiness) on partially-provisioned databases.
 
     When *is_global* is True, only migrations that are safe for the global DB
     (i.e. don't reference per-user tables like job_queue) are applied.
@@ -164,17 +203,24 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
     )
     applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
     for i, sql in enumerate(_MIGRATIONS):
-        if i >= applied:
-            # Skip per-user table migrations when running on the global DB
-            if is_global and ("job_queue" in sql or "ALTER TABLE" in sql):
-                con.execute(
-                    "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
-                )
-                continue
+        if i < applied:
+            continue
+        # Skip per-user table migrations when running on the global DB
+        if is_global and ("job_queue" in sql or "ALTER TABLE" in sql):
+            _ledger_migration(con)
+            continue
+        try:
             con.execute(sql)
-            con.execute(
-                "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
-            )
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if any(tol in msg for tol in _TOLERABLE_MIGRATION_ERRORS):
+                _logger.warning(
+                    "migration %d tolerated (%s): %s",
+                    i, exc, sql.strip().splitlines()[0][:70],
+                )
+            else:
+                raise
+        _ledger_migration(con)
     con.commit()
 
 

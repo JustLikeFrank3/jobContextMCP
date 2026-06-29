@@ -420,9 +420,13 @@ class TestDashboardHomeCoverage:
 
         assert response.status_code == 200
         assert "Welcome back" in response.text
-        assert "7</span>" in response.text
-        assert "&#9888; 1 overdue" in response.text
-        assert "2 to evaluate" in response.text
+        # Hero pipeline panel: big-number counts
+        assert "7</span>" in response.text          # active count
+        assert "Pipeline &middot; Today" in response.text
+        # Overdue badge (hero uses an SVG dot, not the old &#9888; glyph)
+        assert "1 overdue" in response.text
+        # Priority actions list driven by the snapshot
+        assert "Priority Actions" in response.text
         assert "Review: Beta Corp" in response.text
         assert "Interviews" in response.text
 
