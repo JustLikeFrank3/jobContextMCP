@@ -836,7 +836,7 @@ def _extract_cover_letter_body(content: str) -> str:
         "warm regards,", "best,", "sincerely,", "respectfully,", "cheers,",
         "kindest regards", "regards", "best regards", "sincerely", "thank you,",
     }
-    _email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+    _email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")  # NOSONAR — internal email regex, not exposed to HTTP input
     _phone_re = re.compile(r"\+?\d[\d().\s-]{7,}")
     end = len(body_lines)
     for i, ln in enumerate(body_lines):
@@ -975,8 +975,8 @@ def _sanitize_cover_letter_output(content: str) -> str:
     # Deterministic em-dash / double-hyphen backstop. The prompt forbids them,
     # but the model still leaks one occasionally; never ship one to the PDF.
     # A comma is the lowest-damage substitution for a stray dash.
-    cleaned = re.sub(r"\s*(?:—|--)\s*", ", ", cleaned)
-    cleaned = re.sub(r"\s+,", ",", cleaned)
+    cleaned = re.sub(r"\s*(?:—|--)\s*", ", ", cleaned)  # NOSONAR — internal text cleanup, trusted input
+    cleaned = re.sub(r"\s+,", ",", cleaned)  # NOSONAR — internal text cleanup, trusted input
     cleaned = re.sub(r",\s*,", ",", cleaned)
 
     # Normalize typographic apostrophes/quotes to ASCII first. The model often

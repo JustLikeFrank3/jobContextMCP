@@ -10,7 +10,7 @@ _MONTH_MAP = {
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 _DATE_RE = re.compile(
-    r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*~?\s*(\d{1,2})\b',
+    r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*~?\s*(\d{1,2})\b',  # NOSONAR — internal date parser, trusted input
     re.IGNORECASE,
 )
 
