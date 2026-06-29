@@ -88,7 +88,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
       '<body style="font-family:Inter,Arial,sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
       '<h2>Authentication disabled</h2>'
       '<p>API_KEY is not set. Login is not required.</p>'
-      f'<p><a href="{_DASHBOARD_ROOT}" style="color:#3FA8A8">Open dashboard</a></p>'
+      f'<p><a href="{_DASHBOARD_ROOT}" style="color:#00B5C8">Open dashboard</a></p>'
       '</body>',
       status_code=200,
     )
@@ -104,7 +104,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
   <style>
     :root {{
       --bg: #0b1220; --panel: #111a2b; --line: #23324d;
-      --text: #e6edf7; --muted: #9aa8bf; --accent: #3FA8A8;
+      --text: #e6edf7; --muted: #9aa8bf; --accent: #00B5C8;
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -224,7 +224,7 @@ async def dashboard_entra_callback(
         return HTMLResponse(
             f'<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
             f'<h2>Login failed</h2><p>{safe_error}</p>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
             status_code=400,
         )
 
@@ -242,7 +242,7 @@ async def dashboard_entra_callback(
             '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
             '<h2>Server auth not configured</h2>'
             '<p>ENTRA_CLIENT_SECRET is missing in runtime configuration.</p>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
             status_code=500,
         )
 
@@ -263,7 +263,7 @@ async def dashboard_entra_callback(
             '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
             '<h2>Token exchange failed</h2>'
             f'<pre>{safe_response_text}</pre>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#3FA8A8">Try again</a></p></body></html>',
+            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
             status_code=400,
         )
 

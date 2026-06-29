@@ -953,7 +953,7 @@ async def pipeline_board() -> HTMLResponse:
 
     <!-- Loading bar -->
     <div id='tpLoading' style='display:none;height:3px;background:#1b2943;border-radius:999px;overflow:hidden'>
-      <div style='height:100%;width:35%;background:#06b6d4;animation:slide 1.2s linear infinite'></div>
+      <div style='height:100%;width:35%;background:#00B5C8;animation:slide 1.2s linear infinite'></div>
     </div>
 
     <!-- Preview iframe -->

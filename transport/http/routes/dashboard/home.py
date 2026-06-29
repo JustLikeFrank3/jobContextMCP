@@ -205,7 +205,7 @@ async def dashboard_home(
   <style>
     :root {{
       --bg: #0b1220; --panel: #111a2b; --muted: #9aa8bf;
-      --text: #e6edf7; --accent: #3FA8A8; --line: #23324d;
+      --text: #e6edf7; --accent: #00B5C8; --line: #23324d;
       --amber: #f59e0b; --red: #ef4444;
     }}
     * {{ box-sizing: border-box; }}

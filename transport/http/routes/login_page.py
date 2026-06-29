@@ -17,9 +17,9 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 /* ============================================================
    jobContext — Color tokens
    Redesign palette. Anchored on the brand sheet: deep navy ink,
-   vivid cyan primary (#06B6D4), confirmation green (#22C55E,
+   vivid cyan primary (#00B5C8), confirmation green (#22C55E,
    the "$" in the mark), warm slate neutrals, off-white text.
-   The live dashboard's muted teal (#3FA8A8) is retired in favour
+   The live dashboard's muted teal (#00B5C8) is retired in favour
    of the brighter brand cyan; navy surfaces are kept and deepened.
    ============================================================ */
 :root {
@@ -41,7 +41,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   /* ---- Brand cyan (primary) ---- */
   --cyan-700: #0673a6;
   --cyan-600: #0894AE;
-  --cyan-500: #06B6D4;  /* PRIMARY — actions, links, focus     */
+  --cyan-500: #00B5C8;  /* PRIMARY — actions, links, focus     */
   --cyan-400: #22C7E0;  /* hover / bright accent               */
   --cyan-300: #6FE0EE;  /* highlight text on dark              */
   --cyan-100: #D1FBFB;  /* faint cyan text                     */
@@ -68,7 +68,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   --danger-soft: #F87171;
   --warn:   #F59E0B;
   --ok:     #22C55E;
-  --info:   #06B6D4;
+  --info:   #00B5C8;
 
   /* ============================================================
      Semantic aliases — prefer these in components
@@ -270,10 +270,10 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   <!-- brand / value panel -->
   <aside class="panel">
     <a class="brand" href="/">
-      <svg viewBox="0 0 320 290" width="32" height="29" aria-label="jobContext">
-        <path d="M268.2 124.5 A80 80 0 1 0 268.2 175.5" fill="none" stroke="var(--cyan-500)" stroke-width="46" stroke-linecap="round"/>
-        <circle cx="84" cy="54" r="27" fill="#fff"/>
-        <path d="M84 98 L84 207 Q84 250 41 250" fill="none" stroke="#fff" stroke-width="40" stroke-linecap="round"/>
+      <svg viewBox="0 0 100 100" width="32" height="29" aria-label="jobContext">
+        <circle cx="27" cy="21" r="7" fill="#fff"/>
+        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
       </svg>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
