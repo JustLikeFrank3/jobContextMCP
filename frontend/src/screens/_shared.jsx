@@ -280,6 +280,111 @@ export function Row({ title, subtitle, meta, right, children }) {
   )
 }
 
+/* ---------- chips ---------- */
+/** A wrap of small pill chips (hashtags, tags). Returns null when empty. */
+export function Chips({ items, prefix = '' }) {
+  if (!Array.isArray(items) || items.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {items.map((t, i) => (
+        <span
+          key={`${t}-${i}`}
+          style={{
+            background: 'var(--surface-chip)',
+            border: '1px solid var(--border-soft)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '2px 8px',
+            fontSize: 'var(--fs-2xs)',
+            color: 'var(--muted)',
+          }}
+        >
+          {prefix}{t}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/* ---------- expandable card ---------- */
+/**
+ * A Panel whose header is a click target that toggles a detail body.
+ *   title / subtitle / right  — always-visible header
+ *   children                  — revealed when expanded
+ * A chevron indicates state. When there are no children it renders flat.
+ */
+export function ExpandableCard({ title, subtitle, right, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const hasBody = children != null && children !== false
+
+  return (
+    <Panel pad="0">
+      <button
+        type="button"
+        onClick={() => hasBody && setOpen((o) => !o)}
+        aria-expanded={open}
+        style={{
+          appearance: 'none',
+          width: '100%',
+          textAlign: 'left',
+          background: 'transparent',
+          border: 'none',
+          cursor: hasBody ? 'pointer' : 'default',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {title && (
+            <div style={{ color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-base)', lineHeight: 1.35 }}>
+              {title}
+            </div>
+          )}
+          {subtitle && (
+            <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginTop: 3, lineHeight: 1.4 }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {right != null && <div style={{ textAlign: 'right' }}>{right}</div>}
+          {hasBody && (
+            <span
+              aria-hidden
+              style={{
+                color: 'var(--muted)',
+                fontSize: 'var(--fs-xs)',
+                transition: 'transform var(--dur-base)',
+                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+              }}
+            >
+              {'\u25B6'}
+            </span>
+          )}
+        </div>
+      </button>
+      {open && hasBody && (
+        <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--border-soft)', marginTop: 0 }}>
+          <div style={{ paddingTop: 12 }}>{children}</div>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/** Labeled detail line used inside expandable card bodies. */
+export function DetailLine({ label, children }) {
+  return (
+    <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-soft)', marginTop: 8, lineHeight: 1.5 }}>
+      {label && <span style={{ color: 'var(--muted)', fontWeight: 'var(--fw-semibold)' }}>{label}: </span>}
+      {children}
+    </div>
+  )
+}
+
+
 /* ---------- formatting ---------- */
 export function fmtDate(iso) {
   if (!iso) return ''
