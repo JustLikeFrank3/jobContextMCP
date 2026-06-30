@@ -12,6 +12,10 @@ __pycache__/
 dist/
 build/
 
+# Node (frontend deps + build output rebuilt inside the image)
+node_modules/
+frontend/dist/
+
 # Local config (mounted as volume at runtime)
 config.json
 .env

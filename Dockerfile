@@ -13,6 +13,22 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 
+# ── Stage 1b: frontend build (Vite → React SPA served under /app) ────────────
+# Debian-based (glibc) image avoids musl edge cases with esbuild/rollup native
+# binaries that can surface on Alpine.
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /frontend
+
+# Install from the lockfile first so this layer caches unless deps change.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# Build the SPA. vite.config.js sets base=/app/, output → /frontend/dist.
+COPY frontend/ ./
+RUN npm run build
+
+
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
@@ -50,6 +66,12 @@ COPY --from=builder /install /usr/local
 
 # Copy application source
 COPY . .
+
+# Copy the freshly built React SPA from the frontend stage. The app serves it
+# under /app (transport/http/app.py:_mount_spa expects /app/frontend/dist).
+# frontend/dist is .dockerignore'd, so it must come from the build stage —
+# never the build context — guaranteeing a clean, reproducible bundle.
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 # Pre-fetch tectonic's LaTeX support bundle at build time so the running
 # container never needs outbound network to relay.fullyjustified.net. Compiling
