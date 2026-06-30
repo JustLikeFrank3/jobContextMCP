@@ -452,6 +452,8 @@ class TestDashboardHomeApiCoverage:
 
     def test_api_home_with_oura(self, http_client_noauth, monkeypatch):
         monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        # Readiness only surfaces for a genuinely connected ring.
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": True})
         monkeypatch.setattr(
             dashboard_api_routes,
             "_load_oura",
@@ -495,6 +497,7 @@ class TestDashboardHomeApiCoverage:
         self, http_client_noauth, monkeypatch
     ):
         monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": False})
         monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
 
         response = http_client_noauth.get("/api/dashboard/home")
@@ -510,6 +513,29 @@ class TestDashboardHomeApiCoverage:
         labels = {item["label"] for item in digest["items"]}
         assert "Follow-ups due" in labels
         assert "New assessments ready" in labels
+
+    def test_api_home_reading_without_connection_shows_digest(
+        self, http_client_noauth, monkeypatch
+    ):
+        """A stale/zeroed readiness row must NOT flip Home into the readiness
+        view when no ring is connected. Regression for the QA bug where Home
+        defaulted to a zeroed-out Oura panel instead of the daily digest."""
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": False})
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {"readiness_score": 0, "sleep_score": 0, "hrv": 0, "recovery_index": 0},
+        )
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        # Disconnected -> no readiness, digest shown instead.
+        assert body["hasOura"] is False
+        assert body["oura"] is None
+        assert body["digest"]["items"]
 
     def test_api_home_requires_auth(self, monkeypatch, isolated_server):
         """With auth enabled, an anonymous fetch is rejected (not a redirect)."""

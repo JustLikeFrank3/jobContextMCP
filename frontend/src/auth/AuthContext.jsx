@@ -44,16 +44,16 @@ export function useAuth() {
 export function ProtectedRoute({ children }) {
   const { status } = useAuth()
   if (status === 'authed') return children
-  if (status === 'anon') return <AuthSplash label="Redirecting to sign in\u2026" />
+  if (status === 'anon') return <AuthSplash label={'Redirecting to sign in\u2026'} />
   if (status === 'error') {
     return (
       <AuthSplash
-        label="Couldn\u2019t reach the server. Refresh to try again."
+        label={'Couldn\u2019t reach the server. Refresh to try again.'}
         error
       />
     )
   }
-  return <AuthSplash label="Loading your workspace\u2026" />
+  return <AuthSplash label={'Loading your workspace\u2026'} />
 }
 
 function AuthSplash({ label, error = false }) {

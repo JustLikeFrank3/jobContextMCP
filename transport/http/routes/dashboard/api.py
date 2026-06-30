@@ -140,7 +140,11 @@ async def dashboard_home_data(
     user: Annotated[User, Depends(require_authenticated_user)],
 ) -> JSONResponse:
     snap = _build_snapshot()
-    oura = _load_oura()
+    # Only surface readiness when a ring is genuinely connected. A stale or
+    # zeroed oura_readiness row must never flip Home into the readiness view —
+    # an unconnected user always sees the daily digest. Connection status is
+    # token-based and makes no network call.
+    oura = _load_oura() if _oura_status().get("connected", False) else None
 
     priorities = [
         {"n": str(i + 1), "text": p}

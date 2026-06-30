@@ -198,7 +198,7 @@ function AddJobModal({ onClose, onSubmit }) {
         </label>
         <label style={{ display: 'block', marginBottom: 16 }}>
           <span style={lbl}>Job description (paste full text)</span>
-          <textarea style={{ ...field, resize: 'vertical', lineHeight: 1.45 }} rows={9} value={jd} onChange={(e) => setJd(e.target.value)} placeholder="Paste the job description here\u2026" />
+          <textarea style={{ ...field, resize: 'vertical', lineHeight: 1.45 }} rows={9} value={jd} onChange={(e) => setJd(e.target.value)} placeholder={'Paste the job description here\u2026'} />
         </label>
         {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -645,7 +645,7 @@ export default function Pipeline() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter company / role / status\u2026"
+          placeholder={'Filter company / role / status\u2026'}
           style={fieldStyle}
         />
         {personaOptions.length > 0 && (

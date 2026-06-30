@@ -160,7 +160,7 @@ function UntrackedSection({ files }) {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Filter untracked files\u2026"
+        placeholder={'Filter untracked files\u2026'}
         style={{
           width: '100%', maxWidth: 440, marginBottom: 12,
           background: 'var(--surface-sunken)', border: '1px solid var(--border)',

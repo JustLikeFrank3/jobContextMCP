@@ -97,7 +97,7 @@ export default function Posts() {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Filter by title, source, hashtag\u2026"
+        placeholder={'Filter by title, source, hashtag\u2026'}
         style={{
           width: '100%', maxWidth: 440, marginBottom: 14, boxSizing: 'border-box',
           background: 'var(--surface-sunken)', border: '1px solid var(--border)',

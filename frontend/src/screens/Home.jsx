@@ -393,7 +393,7 @@ function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }
           <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={184} />
         </div>
         <div className="hero-split-right" style={{ padding: '26px 30px', borderLeft: '1px solid var(--border-soft)' }}>
-          <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline \u00b7 Today</div>
+          <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline {'\u00b7'} Today</div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 30, marginTop: 14 }}>
             <BigNum value={data.today.active} label="Active" />
             <BigNum value={data.today.inflight} label="In-flight" />
@@ -435,7 +435,7 @@ function CardsHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }
         <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={160} compact />
       </div>
       <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline \u00b7 Today</div>
+        <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline {'\u00b7'} Today</div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 26, marginTop: 16 }}>
           <BigNum value={data.today.active} label="Active" />
           <BigNum value={data.today.inflight} label="In-flight" />
