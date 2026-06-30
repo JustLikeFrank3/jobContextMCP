@@ -521,9 +521,9 @@ LANDING_HTML: str = r'''<!doctype html>
         </div>
       </div>
       <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h12v9H4z"/><path d="M6 8h8M6 11h5"/><path d="M16 17l3 3"/></svg></div>
-        <h3>Daily digest</h3>
-        <p>An on-demand morning brief: follow-ups due, stale apps, and today's priorities.</p>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
+        <h3>Dashboard</h3>
+        <p>Your search at a glance: today's priorities, follow-ups due, pipeline health, and daily readiness.</p>
       </div>
     </div>
   </div>
