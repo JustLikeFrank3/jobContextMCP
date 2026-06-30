@@ -674,6 +674,13 @@ class TestDashboardSettingsApiCoverage:
             "isOwner": True,
             "openaiKeySet": True,
             "ouraConnected": True,
+            "oura": {
+                "date": "",
+                "readiness_score": 70,
+                "sleep_score": 0,
+                "hrv": 0,
+                "recovery_index": 0,
+            },
             "classicUrl": "/dashboard/settings",
         }
 
@@ -690,6 +697,7 @@ class TestDashboardSettingsApiCoverage:
         assert body["isOwner"] is False
         assert body["openaiKeySet"] is False
         assert body["ouraConnected"] is False
+        assert body["oura"] is None
         assert body["classicUrl"] == "/dashboard/settings"
 
     def test_settings_requires_auth(self, monkeypatch, isolated_server):
@@ -700,6 +708,86 @@ class TestDashboardSettingsApiCoverage:
         reset_settings_cache()
         with TestClient(create_app()) as client:
             response = client.get("/api/dashboard/settings")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestDashboardOuraApiCoverage:
+    """POST /api/dashboard/oura — log/update a readiness snapshot from the SPA."""
+
+    def test_oura_log_persists_and_returns_latest(
+        self, http_client_noauth, monkeypatch
+    ):
+        import tools.oura as oura_tool
+
+        captured = {}
+
+        def _fake_log(**kwargs):
+            captured.update(kwargs)
+            return "ok"
+
+        monkeypatch.setattr(oura_tool, "log_oura_readiness", _fake_log)
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {
+                "date": "2026-06-29",
+                "readiness_score": 88,
+                "sleep_score": 90,
+                "hrv": 65,
+                "recovery_index": 80,
+            },
+        )
+
+        response = http_client_noauth.post(
+            "/api/dashboard/oura",
+            json={
+                "readiness_score": 88,
+                "sleep_score": 90,
+                "hrv": 65,
+                "recovery_index": 80,
+                "date": "2026-06-29",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["ouraConnected"] is True
+        assert body["oura"]["readiness_score"] == 88
+        # The tool received the parsed values.
+        assert captured["readiness_score"] == 88
+        assert captured["date"] == "2026-06-29"
+
+    def test_oura_log_rejects_out_of_range_score(self, http_client_noauth):
+        response = http_client_noauth.post(
+            "/api/dashboard/oura",
+            json={"readiness_score": 150},
+        )
+        # Pydantic field validation -> 422.
+        assert response.status_code == 422
+
+    def test_oura_log_rejects_malformed_date(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(oura_tool, "log_oura_readiness", lambda **k: "ok")
+        response = http_client_noauth.post(
+            "/api/dashboard/oura",
+            json={"readiness_score": 70, "date": "06/29/2026"},
+        )
+        assert response.status_code == 400
+        assert response.json()["ok"] is False
+
+    def test_oura_log_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.post(
+                "/api/dashboard/oura", json={"readiness_score": 70}
+            )
         reset_settings_cache()
         assert response.status_code in (401, 403)
 

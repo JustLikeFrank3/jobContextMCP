@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from lib import config
 from lib.api_keys import create_key, list_keys, revoke_key
@@ -243,16 +243,80 @@ def _openai_key_set() -> bool:
         return False
 
 
+def _oura_settings_payload(oura: "dict | None") -> "dict | None":
+    """Shape the latest Oura row for the Settings screen, or None."""
+    if not oura:
+        return None
+    return {
+        "date": oura.get("date", "") or "",
+        "readiness_score": int(oura.get("readiness_score", 0) or 0),
+        "sleep_score": int(oura.get("sleep_score", 0) or 0),
+        "hrv": int(oura.get("hrv", 0) or 0),
+        "recovery_index": int(oura.get("recovery_index", 0) or 0),
+    }
+
+
 @router.get("/settings", response_model=None)
 async def settings_summary(
     user: Annotated[User, Depends(require_authenticated_user)],
 ) -> JSONResponse:
+    oura = _load_oura()
     return JSONResponse(
         {
             "isOwner": _is_owner(),
             "openaiKeySet": _openai_key_set(),
-            "ouraConnected": _load_oura() is not None,
+            "ouraConnected": oura is not None,
+            "oura": _oura_settings_payload(oura),
             "classicUrl": "/dashboard/settings",
+        }
+    )
+
+
+# ── Oura readiness ────────────────────────────────────────────────────────────
+# The React Settings screen lets the user enter (or update) a daily Oura
+# readiness snapshot. There is no Oura OAuth flow; readiness is entered
+# manually (or pushed via the MCP tool / iOS Shortcut). Logging the first
+# reading is what "connects" the ring and unlocks the Home readiness hero.
+
+class _OuraBody(BaseModel):
+    readiness_score: int = Field(..., ge=0, le=100)
+    sleep_score: int = Field(0, ge=0, le=100)
+    hrv: int = Field(0, ge=0, le=400)
+    recovery_index: int = Field(0, ge=0, le=100)
+    date: str = ""
+
+
+@router.post("/oura", response_model=None)
+async def oura_log(
+    user: Annotated[User, Depends(require_authenticated_user)],
+    body: _OuraBody,
+) -> JSONResponse:
+    """Log or update today's (or a named date's) Oura readiness for this user."""
+    log_date = body.date.strip()
+    if log_date:
+        try:
+            datetime.date.fromisoformat(log_date)
+        except ValueError:
+            return JSONResponse(
+                {"ok": False, "error": "date must be in YYYY-MM-DD format"},
+                status_code=400,
+            )
+
+    from tools.oura import log_oura_readiness
+
+    log_oura_readiness(
+        readiness_score=body.readiness_score,
+        sleep_score=body.sleep_score,
+        hrv=body.hrv,
+        recovery_index=body.recovery_index,
+        date=log_date,
+    )
+    oura = _load_oura()
+    return JSONResponse(
+        {
+            "ok": True,
+            "ouraConnected": oura is not None,
+            "oura": _oura_settings_payload(oura),
         }
     )
 
