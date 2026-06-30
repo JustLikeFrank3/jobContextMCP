@@ -2,10 +2,11 @@
    Geometry matches docs/branding/logo/jobcontextmcp-mark-dark.svg exactly.
 
    Props:
-     size      number  — pixel height of the mark (default 32)
-     markOnly  bool    — render just the mark, no "jobContext" wordmark
+     size          number  — pixel height of the mark (default 32)
+     markOnly      bool    — render just the mark, no "jobContext" wordmark
+     wordmarkOnly  bool    — render just the "jobContext" wordmark, no mark
 */
-export default function Logo({ size = 32, markOnly = false }) {
+export default function Logo({ size = 32, markOnly = false, wordmarkOnly = false }) {
   const mark = (
     <svg
       width={size}
@@ -39,21 +40,27 @@ export default function Logo({ size = 32, markOnly = false }) {
 
   if (markOnly) return mark
 
+  const wordmark = (
+    <span
+      style={{
+        fontFamily: 'var(--font-display)',
+        fontWeight: 'var(--fw-bold)',
+        fontSize: `${size * 0.62}px`,
+        letterSpacing: '-0.01em',
+        lineHeight: 1,
+      }}
+    >
+      <span style={{ color: 'var(--text-strong)' }}>job</span>
+      <span style={{ color: 'var(--cyan-400)' }}>Context</span>
+    </span>
+  )
+
+  if (wordmarkOnly) return wordmark
+
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
       {mark}
-      <span
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 'var(--fw-bold)',
-          fontSize: `${size * 0.62}px`,
-          letterSpacing: '-0.01em',
-          lineHeight: 1,
-        }}
-      >
-        <span style={{ color: 'var(--text-strong)' }}>job</span>
-        <span style={{ color: 'var(--cyan-400)' }}>Context</span>
-      </span>
+      {wordmark}
     </span>
   )
 }

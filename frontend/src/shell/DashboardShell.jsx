@@ -89,7 +89,7 @@ export default function DashboardShell() {
           <Logo size={36} markOnly />
           <div>
             <h1 style={{ margin: 0, font: 'var(--text-page-title)', color: 'var(--text-strong)' }}>
-              {title || <Logo size={26} />}
+              {title || <Logo size={26} wordmarkOnly />}
             </h1>
             {subtitle && (
               <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginTop: 4 }}>
