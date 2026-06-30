@@ -542,6 +542,168 @@ class TestDashboardHomeApiCoverage:
         assert response.status_code in (401, 403)
 
 
+class TestDashboardApiKeysJsonCoverage:
+    """GET/POST /api/dashboard/api-keys — JSON token management for the SPA.
+
+    Distinct from TestDashboardApiKeysCoverage, which exercises the legacy
+    server-rendered /dashboard/api-keys HTML page. These cover the JSON feed
+    the React API Keys screen consumes.
+    """
+
+    def test_list_keys_returns_shaped_rows(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "list_keys",
+            lambda _oid: [
+                SimpleNamespace(
+                    id=3,
+                    label="Phone Shortcut",
+                    created_at="2026-06-28T20:00:00",
+                    last_used_at="2026-06-29T08:30:00",
+                ),
+                SimpleNamespace(
+                    id=4,
+                    label="",
+                    created_at="2026-06-27T10:00:00",
+                    last_used_at=None,
+                ),
+            ],
+        )
+
+        response = http_client_noauth.get("/api/dashboard/api-keys")
+        assert response.status_code == 200
+        keys = response.json()["keys"]
+        assert keys[0] == {
+            "id": 3,
+            "label": "Phone Shortcut",
+            "created_at": "2026-06-28T20:00:00",
+            "last_used_at": "2026-06-29T08:30:00",
+        }
+        # Unlabeled / never-used rows collapse None to empty strings.
+        assert keys[1]["label"] == ""
+        assert keys[1]["last_used_at"] == ""
+
+    def test_create_key_returns_plaintext_once(self, http_client_noauth, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "create_key",
+            lambda oid, label: calls.update({"args": (oid, label)})
+            or (9, "jcmcp_brand_new_token"),
+        )
+
+        response = http_client_noauth.post(
+            "/api/dashboard/api-keys",
+            json={"label": "  CLI on Home Mac  "},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body == {
+            "id": 9,
+            "label": "CLI on Home Mac",
+            "token": "jcmcp_brand_new_token",
+        }
+        # Label is trimmed and the key is scoped to the resolved admin OID.
+        assert calls["args"] == ("admin", "CLI on Home Mac")
+
+    def test_create_key_defaults_blank_label(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "create_key",
+            lambda _oid, _label: (1, "jcmcp_token"),
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys", json={})
+        assert response.status_code == 201
+        assert response.json()["label"] == ""
+
+    def test_revoke_key_reports_success(self, http_client_noauth, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "revoke_key",
+            lambda key_id, oid: calls.update({"args": (key_id, oid)}) or True,
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys/11/revoke")
+        assert response.status_code == 200
+        assert response.json() == {"revoked": True}
+        assert calls["args"] == (11, "admin")
+
+    def test_revoke_missing_key_reports_false(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes, "revoke_key", lambda _key_id, _oid: False
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys/999/revoke")
+        assert response.status_code == 200
+        assert response.json() == {"revoked": False}
+
+    def test_api_keys_require_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            assert client.get("/api/dashboard/api-keys").status_code in (401, 403)
+            assert client.post(
+                "/api/dashboard/api-keys", json={"label": "x"}
+            ).status_code in (401, 403)
+            assert client.post(
+                "/api/dashboard/api-keys/1/revoke"
+            ).status_code in (401, 403)
+        reset_settings_cache()
+
+
+class TestDashboardSettingsApiCoverage:
+    """GET /api/dashboard/settings — read-only status summary for the SPA."""
+
+    def test_settings_summary_reports_status_flags(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: True)
+        monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: True)
+        monkeypatch.setattr(
+            dashboard_api_routes, "_load_oura", lambda: {"readiness_score": 70}
+        )
+
+        response = http_client_noauth.get("/api/dashboard/settings")
+        assert response.status_code == 200
+        assert response.json() == {
+            "isOwner": True,
+            "openaiKeySet": True,
+            "ouraConnected": True,
+            "classicUrl": "/dashboard/settings",
+        }
+
+    def test_settings_summary_defaults_when_unconfigured(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: False)
+        monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: False)
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.get("/api/dashboard/settings")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["isOwner"] is False
+        assert body["openaiKeySet"] is False
+        assert body["ouraConnected"] is False
+        assert body["classicUrl"] == "/dashboard/settings"
+
+    def test_settings_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/settings")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
 class TestSafeNextRedirect:
     """_safe_next gates post-login redirects to internal SPA/dashboard paths."""
 

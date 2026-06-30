@@ -14,8 +14,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from lib import config
+from lib.api_keys import create_key, list_keys, revoke_key
 from lib.io import _load_json
 from transport.http.auth import require_api_key, require_authenticated_user
 from transport.http.security import User
@@ -158,3 +160,99 @@ async def dashboard_home_data(
         "digest": _digest_payload(snap),
     }
     return JSONResponse(payload)
+
+
+# ── API keys ─────────────────────────────────────────────────────────────────
+# The React API Keys screen manages personal access tokens for MCP clients.
+# Tokens are scoped to the caller's OID (user.id); the plaintext is shown once,
+# at creation, and never stored or returned again.
+
+class _CreateKeyBody(BaseModel):
+    label: str = ""
+
+
+def _key_dict(k) -> dict:
+    return {
+        "id": k.id,
+        "label": k.label or "",
+        "created_at": k.created_at or "",
+        "last_used_at": k.last_used_at or "",
+    }
+
+
+@router.get("/api-keys", response_model=None)
+async def api_keys_list(
+    user: Annotated[User, Depends(require_authenticated_user)],
+) -> JSONResponse:
+    keys = [_key_dict(k) for k in list_keys(user.id)]
+    return JSONResponse({"keys": keys})
+
+
+@router.post("/api-keys", response_model=None)
+async def api_keys_create(
+    user: Annotated[User, Depends(require_authenticated_user)],
+    body: _CreateKeyBody,
+) -> JSONResponse:
+    key_id, plaintext = create_key(user.id, body.label.strip())
+    # plaintext is returned exactly once — the client must surface it now.
+    return JSONResponse(
+        {"id": key_id, "label": body.label.strip(), "token": plaintext},
+        status_code=201,
+    )
+
+
+@router.post("/api-keys/{key_id}/revoke", response_model=None)
+async def api_keys_revoke(
+    key_id: int,
+    user: Annotated[User, Depends(require_authenticated_user)],
+) -> JSONResponse:
+    revoked = revoke_key(key_id, user.id)
+    return JSONResponse({"revoked": bool(revoked)})
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+# Read-only status summary for the React Settings screen. Mutations (saving an
+# OpenAI key) remain on the classic /dashboard/settings page, which has the
+# tenant-config write path; the React screen links to it.
+
+def _is_owner() -> bool:
+    try:
+        from lib.config import OWNER_OID
+        from lib.user_context import get_current_user_oid
+
+        return bool(OWNER_OID) and get_current_user_oid() == OWNER_OID
+    except Exception:
+        return False
+
+
+def _openai_key_set() -> bool:
+    try:
+        from lib.user_context import get_data_folder_override
+
+        override = get_data_folder_override()
+        if not override:
+            return False
+        cfg_path = override / "config.json"
+        if not cfg_path.exists():
+            return False
+        import json
+
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return bool((cfg.get("openai_api_key") or "").strip())
+    except Exception:
+        return False
+
+
+@router.get("/settings", response_model=None)
+async def settings_summary(
+    user: Annotated[User, Depends(require_authenticated_user)],
+) -> JSONResponse:
+    return JSONResponse(
+        {
+            "isOwner": _is_owner(),
+            "openaiKeySet": _openai_key_set(),
+            "ouraConnected": _load_oura() is not None,
+            "classicUrl": "/dashboard/settings",
+        }
+    )
+
