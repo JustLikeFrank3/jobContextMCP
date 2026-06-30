@@ -173,3 +173,73 @@ def test_load_oura_falls_back_to_json(tmp_data, monkeypatch):
     loaded = home._load_oura()
     assert loaded is not None
     assert loaded["readiness_score"] == 77
+
+
+# ── OAuth token storage: encryption at rest ──────────────────────────────────
+
+_RAW_TOKENS = {
+    "access_token": "oura_access_plain_xyz",
+    "refresh_token": "oura_refresh_plain_xyz",
+    "expires_in": 86400,
+    "scope": "daily",
+}
+
+
+def test_tokens_round_trip_without_key(tmp_data, oura_mod, monkeypatch):
+    """With no APP_ENCRYPTION_KEY, tokens persist as plaintext (prior behaviour)."""
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+
+    oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
+    got = oura_mod.get_oura_tokens()
+    assert got["access_token"] == "oura_access_plain_xyz"
+    assert got["refresh_token"] == "oura_refresh_plain_xyz"
+
+    # Stored value is the raw plaintext (no encryption prefix).
+    with db.get_connection() as con:
+        row = con.execute("SELECT access_token, refresh_token FROM oura_tokens").fetchone()
+    assert row["access_token"] == "oura_access_plain_xyz"
+    assert not row["access_token"].startswith("enc:")
+
+
+def test_tokens_encrypted_at_rest_with_key(tmp_data, oura_mod, monkeypatch):
+    """With a key set, the DB holds ciphertext but get_oura_tokens returns plaintext."""
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key().decode("ascii")
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", key)
+
+    oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
+
+    # On disk: encrypted, prefixed, and not the plaintext.
+    with db.get_connection() as con:
+        row = con.execute("SELECT access_token, refresh_token FROM oura_tokens").fetchone()
+    assert row["access_token"].startswith("enc:v1:")
+    assert "oura_access_plain_xyz" not in row["access_token"]
+    assert row["refresh_token"].startswith("enc:v1:")
+
+    # Through the accessor: transparently decrypted.
+    got = oura_mod.get_oura_tokens()
+    assert got["access_token"] == "oura_access_plain_xyz"
+    assert got["refresh_token"] == "oura_refresh_plain_xyz"
+
+
+def test_tokens_unreadable_after_key_rotation(tmp_data, oura_mod, monkeypatch):
+    """A rotated/missing key makes get_oura_tokens report not-connected (None),
+    so the user is prompted to reconnect rather than the request erroring."""
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+    oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
+
+    # Rotate to a different key.
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+    assert oura_mod.get_oura_tokens() is None
+
+
+def test_oura_connection_status_with_encryption(tmp_data, oura_mod, monkeypatch):
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+
+    assert oura_mod.oura_connection_status()["connected"] is False
+    oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
+    assert oura_mod.oura_connection_status()["connected"] is True

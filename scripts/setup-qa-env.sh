@@ -39,6 +39,13 @@ LLM_PROVIDER="${LLM_PROVIDER:-foundry}"
 OURA_CLIENT_ID="${OURA_CLIENT_ID:-}"       # optional: Oura Ring OAuth app client id
 OURA_CLIENT_SECRET="${OURA_CLIENT_SECRET:-}"  # optional: Oura Ring OAuth app secret
 
+# App-wide key for encrypting per-user secrets at rest (OAuth tokens). Reuse the
+# existing key if the secret already exists so we never orphan data encrypted
+# under a prior key; otherwise generate a fresh Fernet-compatible key.
+_EXISTING_ENC_KEY="$(kubectl get secret jcmcp-qa-app-secrets -n "$QA_NAMESPACE" \
+  -o jsonpath='{.data.app_encryption_key}' 2>/dev/null | base64 --decode 2>/dev/null || true)"
+APP_ENCRYPTION_KEY="${APP_ENCRYPTION_KEY:-${_EXISTING_ENC_KEY:-$(openssl rand -base64 32 | tr '+/' '-_')}}"
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 echo "==> Setting AKS context: $AKS_CLUSTER in $AKS_RG"
@@ -139,6 +146,7 @@ kubectl create secret generic jcmcp-qa-app-secrets \
   --from-literal=llm_api_key="$LLM_API_KEY" \
   --from-literal=oura_client_id="$OURA_CLIENT_ID" \
   --from-literal=oura_client_secret="$OURA_CLIENT_SECRET" \
+  --from-literal=app_encryption_key="$APP_ENCRYPTION_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 7. Apply static QA manifests (PVC and Service don't have placeholders)

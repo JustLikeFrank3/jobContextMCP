@@ -126,6 +126,15 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
+            # App-wide key for encrypting secrets at rest (per-user OAuth
+            # tokens). Optional: when absent, tokens are stored in cleartext
+            # (prior behaviour). See lib/crypto.py.
+            - name: APP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: app_encryption_key
+                  optional: true
           resources:
             requests:
               cpu: "50m"

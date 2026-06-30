@@ -227,6 +227,13 @@ def save_oura_tokens(tokens: dict) -> None:
     scope = tokens.get("scope", "") or OURA_SCOPES
     now = _now_utc().isoformat()
 
+    # Encrypt the bearer + refresh tokens at rest. No-op when no app key is
+    # configured (local dev), so existing behaviour is preserved.
+    from lib.crypto import encrypt_secret
+
+    access = encrypt_secret(access)
+    refresh = encrypt_secret(refresh)
+
     with get_connection() as con:
         con.execute(
             """INSERT INTO oura_tokens
@@ -243,7 +250,12 @@ def save_oura_tokens(tokens: dict) -> None:
 
 
 def get_oura_tokens() -> "dict | None":
-    """Return the current user's stored Oura token row, or None."""
+    """Return the current user's stored Oura token row, or None.
+
+    Access/refresh tokens are decrypted transparently; a decryption failure
+    (missing or rotated key) is treated as "not connected" so the user is
+    prompted to reconnect rather than the request erroring.
+    """
     oid = get_current_user_oid()
     try:
         with get_connection() as con:
@@ -252,7 +264,14 @@ def get_oura_tokens() -> "dict | None":
                 "FROM oura_tokens WHERE oid = ?",
                 (oid,),
             ).fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            from lib.crypto import decrypt_secret
+
+            data = dict(row)
+            data["access_token"] = decrypt_secret(data.get("access_token", ""))
+            data["refresh_token"] = decrypt_secret(data.get("refresh_token", ""))
+            return data
     except Exception:
         return None
 

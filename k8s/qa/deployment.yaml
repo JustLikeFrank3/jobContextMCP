@@ -123,6 +123,14 @@ spec:
                   name: jcmcp-qa-app-secrets
                   key: oura_client_secret
                   optional: true
+            # App-wide key for encrypting secrets at rest (per-user OAuth
+            # tokens). Optional: when absent, tokens are stored in cleartext.
+            - name: APP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: app_encryption_key
+                  optional: true
           resources:
             requests:
               cpu: "50m"

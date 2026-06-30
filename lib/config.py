@@ -141,6 +141,12 @@ SERPAPI_KEY: str = _cfg.get("serpapi_key", "")
 # Set via ENTRA_OWNER_OID env var; falls back to config.json "entra_owner_oid" key.
 OWNER_OID: str = os.getenv("ENTRA_OWNER_OID", "") or _cfg.get("entra_owner_oid", "")
 
+# App-wide key for encrypting secrets at rest (per-user OAuth tokens, etc.).
+# A Fernet key (urlsafe-base64, 32 bytes). Lives only in infra (k8s secret /
+# Key Vault), never in user data. When unset, secret encryption is a no-op and
+# values are stored as plaintext (prior behaviour). See lib/crypto.py.
+APP_ENCRYPTION_KEY: str = os.getenv("APP_ENCRYPTION_KEY", "") or _cfg.get("app_encryption_key", "")
+
 
 # ── Per-request workspace folder resolution ───────────────────────────────────
 # In production (AKS) RESUME_FOLDER = DATA_FOLDER / "workspace".
