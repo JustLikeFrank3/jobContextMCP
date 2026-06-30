@@ -163,6 +163,20 @@ _MIGRATIONS = [
         created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
         UNIQUE(oid, date)
     )""",
+    # v5 — Oura OAuth tokens (one row per user; populated by the connect flow).
+    # Tokens live in the per-OID isolated DB, consistent with how the OpenAI
+    # key is stored in each user's config.json. The access token is refreshed
+    # in place via the refresh token when it expires.
+    """CREATE TABLE IF NOT EXISTS oura_tokens (
+        oid           TEXT    PRIMARY KEY,
+        access_token  TEXT    NOT NULL,
+        refresh_token TEXT    NOT NULL,
+        expires_at    TEXT    NOT NULL,
+        scope         TEXT,
+        last_sync_at  TEXT,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""",
 ]
 
 

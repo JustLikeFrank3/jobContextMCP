@@ -8,13 +8,14 @@ GET /api/dashboard/home
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import html
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from lib import config
 from lib.api_keys import create_key, list_keys, revoke_key
@@ -256,67 +257,83 @@ def _oura_settings_payload(oura: "dict | None") -> "dict | None":
     }
 
 
+def _oura_status() -> dict:
+    """Oura connection status (no network calls).
+
+    Wrapped on this module so the Settings route stays import-light and tests
+    can monkeypatch it, mirroring _is_owner / _openai_key_set.
+    """
+    try:
+        from tools.oura import oura_connection_status
+
+        return oura_connection_status()
+    except Exception:
+        return {"configured": False, "connected": False, "last_sync": "", "scope": ""}
+
+
 @router.get("/settings", response_model=None)
 async def settings_summary(
     user: Annotated[User, Depends(require_authenticated_user)],
 ) -> JSONResponse:
-    oura = _load_oura()
+    status = _oura_status()
     return JSONResponse(
         {
             "isOwner": _is_owner(),
             "openaiKeySet": _openai_key_set(),
-            "ouraConnected": oura is not None,
-            "oura": _oura_settings_payload(oura),
+            "ouraConfigured": bool(status.get("configured")),
+            "ouraConnected": bool(status.get("connected")),
+            "ouraLastSync": status.get("last_sync") or "",
+            "oura": _oura_settings_payload(_load_oura()),
             "classicUrl": "/dashboard/settings",
         }
     )
 
 
-# ── Oura readiness ────────────────────────────────────────────────────────────
-# The React Settings screen lets the user enter (or update) a daily Oura
-# readiness snapshot. There is no Oura OAuth flow; readiness is entered
-# manually (or pushed via the MCP tool / iOS Shortcut). Logging the first
-# reading is what "connects" the ring and unlocks the Home readiness hero.
-
-class _OuraBody(BaseModel):
-    readiness_score: int = Field(..., ge=0, le=100)
-    sleep_score: int = Field(0, ge=0, le=100)
-    hrv: int = Field(0, ge=0, le=400)
-    recovery_index: int = Field(0, ge=0, le=100)
-    date: str = ""
+# ── Oura Ring OAuth actions ────────────────────────────────────────────────────
+# The browser connect/callback handshake lives in routes/dashboard/oura.py.
+# These are the JSON actions the React Settings screen calls once a ring is
+# connected: pull the latest reading on demand, or disconnect (drop tokens).
+# There is no manual readiness entry from the web UI — data comes from the
+# user's real Oura account via OAuth (the MCP tool remains for the iOS Shortcut).
 
 
-@router.post("/oura", response_model=None)
-async def oura_log(
-    user: Annotated[User, Depends(require_authenticated_user)],
-    body: _OuraBody,
+@router.post("/oura/sync", response_model=None)
+async def oura_sync(
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
 ) -> JSONResponse:
-    """Log or update today's (or a named date's) Oura readiness for this user."""
-    log_date = body.date.strip()
-    if log_date:
-        try:
-            datetime.date.fromisoformat(log_date)
-        except ValueError:
-            return JSONResponse(
-                {"ok": False, "error": "date must be in YYYY-MM-DD format"},
-                status_code=400,
-            )
+    """Pull the latest readiness from the connected Oura account into SQLite."""
+    from tools.oura import sync_oura
 
-    from tools.oura import log_oura_readiness
+    # sync_oura() does blocking httpx I/O — keep it off the event loop.
+    result = await asyncio.to_thread(sync_oura)
 
-    log_oura_readiness(
-        readiness_score=body.readiness_score,
-        sleep_score=body.sleep_score,
-        hrv=body.hrv,
-        recovery_index=body.recovery_index,
-        date=log_date,
-    )
-    oura = _load_oura()
+    if result.get("error") in {"not_configured", "not_connected"}:
+        status_code = 409  # actionable client state, not a server failure
+    elif result.get("ok"):
+        status_code = 200
+    else:
+        status_code = 502  # upstream Oura API / auth failure
+
     return JSONResponse(
         {
-            "ok": True,
-            "ouraConnected": oura is not None,
-            "oura": _oura_settings_payload(oura),
-        }
+            "ok": bool(result.get("ok")),
+            "connected": bool(result.get("connected")),
+            "error": result.get("error", ""),
+            "note": result.get("note", ""),
+            "ouraConnected": _oura_status().get("connected", False),
+            "oura": _oura_settings_payload(_load_oura()),
+        },
+        status_code=status_code,
     )
+
+
+@router.post("/oura/disconnect", response_model=None)
+async def oura_disconnect(
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
+) -> JSONResponse:
+    """Drop the current user's Oura OAuth tokens (disconnect the ring)."""
+    from tools.oura import clear_oura_tokens
+
+    removed = clear_oura_tokens()
+    return JSONResponse({"ok": True, "removed": bool(removed), "ouraConnected": False})
 

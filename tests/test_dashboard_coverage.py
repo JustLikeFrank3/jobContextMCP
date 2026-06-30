@@ -657,13 +657,23 @@ class TestDashboardApiKeysJsonCoverage:
 
 
 class TestDashboardSettingsApiCoverage:
-    """GET /api/dashboard/settings — read-only status summary for the SPA."""
+    """GET /api/dashboard/settings: read-only status summary for the SPA."""
 
     def test_settings_summary_reports_status_flags(
         self, http_client_noauth, monkeypatch
     ):
         monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: True)
         monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: True)
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {
+                "configured": True,
+                "connected": True,
+                "last_sync": "2026-06-29T08:00:00",
+                "scope": "daily",
+            },
+        )
         monkeypatch.setattr(
             dashboard_api_routes, "_load_oura", lambda: {"readiness_score": 70}
         )
@@ -673,7 +683,9 @@ class TestDashboardSettingsApiCoverage:
         assert response.json() == {
             "isOwner": True,
             "openaiKeySet": True,
+            "ouraConfigured": True,
             "ouraConnected": True,
+            "ouraLastSync": "2026-06-29T08:00:00",
             "oura": {
                 "date": "",
                 "readiness_score": 70,
@@ -689,6 +701,11 @@ class TestDashboardSettingsApiCoverage:
     ):
         monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: False)
         monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: False)
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": False, "connected": False, "last_sync": "", "scope": ""},
+        )
         monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
 
         response = http_client_noauth.get("/api/dashboard/settings")
@@ -696,7 +713,9 @@ class TestDashboardSettingsApiCoverage:
         body = response.json()
         assert body["isOwner"] is False
         assert body["openaiKeySet"] is False
+        assert body["ouraConfigured"] is False
         assert body["ouraConnected"] is False
+        assert body["ouraLastSync"] == ""
         assert body["oura"] is None
         assert body["classicUrl"] == "/dashboard/settings"
 
@@ -713,20 +732,25 @@ class TestDashboardSettingsApiCoverage:
 
 
 class TestDashboardOuraApiCoverage:
-    """POST /api/dashboard/oura — log/update a readiness snapshot from the SPA."""
+    """POST /api/dashboard/oura/sync + /disconnect: OAuth-backed Oura actions.
 
-    def test_oura_log_persists_and_returns_latest(
-        self, http_client_noauth, monkeypatch
-    ):
+    The browser connect/callback handshake is covered separately; these cover
+    the JSON actions the React Settings screen calls once a ring is connected.
+    """
+
+    def test_oura_sync_pulls_and_returns_latest(self, http_client_noauth, monkeypatch):
         import tools.oura as oura_tool
 
-        captured = {}
-
-        def _fake_log(**kwargs):
-            captured.update(kwargs)
-            return "ok"
-
-        monkeypatch.setattr(oura_tool, "log_oura_readiness", _fake_log)
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": True, "connected": True, "reading": {"readiness_score": 88}},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "x", "scope": "daily"},
+        )
         monkeypatch.setattr(
             dashboard_api_routes,
             "_load_oura",
@@ -739,57 +763,151 @@ class TestDashboardOuraApiCoverage:
             },
         )
 
-        response = http_client_noauth.post(
-            "/api/dashboard/oura",
-            json={
-                "readiness_score": 88,
-                "sleep_score": 90,
-                "hrv": 65,
-                "recovery_index": 80,
-                "date": "2026-06-29",
-            },
-        )
-
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
         assert response.status_code == 200
         body = response.json()
         assert body["ok"] is True
         assert body["ouraConnected"] is True
         assert body["oura"]["readiness_score"] == 88
-        # The tool received the parsed values.
-        assert captured["readiness_score"] == 88
-        assert captured["date"] == "2026-06-29"
 
-    def test_oura_log_rejects_out_of_range_score(self, http_client_noauth):
-        response = http_client_noauth.post(
-            "/api/dashboard/oura",
-            json={"readiness_score": 150},
-        )
-        # Pydantic field validation -> 422.
-        assert response.status_code == 422
-
-    def test_oura_log_rejects_malformed_date(self, http_client_noauth, monkeypatch):
+    def test_oura_sync_no_data_still_ok(self, http_client_noauth, monkeypatch):
         import tools.oura as oura_tool
 
-        monkeypatch.setattr(oura_tool, "log_oura_readiness", lambda **k: "ok")
-        response = http_client_noauth.post(
-            "/api/dashboard/oura",
-            json={"readiness_score": 70, "date": "06/29/2026"},
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": True, "connected": True, "reading": None, "note": "no_data"},
         )
-        assert response.status_code == 400
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "x", "scope": "daily"},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["note"] == "no_data"
+        assert body["oura"] is None
+
+    def test_oura_sync_not_connected_returns_409(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": False, "connected": False, "error": "not_connected"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": False, "last_sync": "", "scope": ""},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 409
+        assert response.json()["error"] == "not_connected"
+
+    def test_oura_sync_upstream_error_returns_502(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": False, "connected": True, "error": "Oura API daily_readiness returned 500"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "", "scope": "daily"},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 502
         assert response.json()["ok"] is False
 
-    def test_oura_log_requires_auth(self, monkeypatch, isolated_server):
+    def test_oura_disconnect_clears_tokens(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        captured = {}
+
+        def _clear():
+            captured["called"] = True
+            return True
+
+        monkeypatch.setattr(oura_tool, "clear_oura_tokens", _clear)
+
+        response = http_client_noauth.post("/api/dashboard/oura/disconnect", json={})
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "removed": True, "ouraConnected": False}
+        assert captured["called"] is True
+
+    def test_oura_sync_requires_auth(self, monkeypatch, isolated_server):
         from fastapi.testclient import TestClient
 
         monkeypatch.setenv("API_KEY", "test-key")
         monkeypatch.delenv("ENABLE_REMOTE", raising=False)
         reset_settings_cache()
         with TestClient(create_app()) as client:
-            response = client.post(
-                "/api/dashboard/oura", json={"readiness_score": 70}
-            )
+            response = client.post("/api/dashboard/oura/sync", json={})
         reset_settings_cache()
         assert response.status_code in (401, 403)
+
+    def test_oura_disconnect_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.post("/api/dashboard/oura/disconnect", json={})
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestDashboardOuraConnectRoute:
+    """GET /dashboard/oura/connect: the browser OAuth handshake entry point.
+
+    Regression guard: this router must stay mounted. A prior wiring gap left it
+    out of the dashboard package __init__, making connect/callback 404.
+    """
+
+    def test_connect_unconfigured_redirects_to_settings(
+        self, http_client_noauth, monkeypatch
+    ):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(oura_tool, "oura_configured", lambda: False)
+        response = http_client_noauth.get(
+            "/dashboard/oura/connect", follow_redirects=False
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/app/settings?oura=unavailable"
+
+    def test_connect_configured_redirects_to_oura(
+        self, http_client_noauth, monkeypatch
+    ):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(oura_tool, "oura_configured", lambda: True)
+        monkeypatch.setattr(
+            oura_tool,
+            "oura_authorize_url",
+            lambda state, redirect_uri: f"https://cloud.ouraring.com/oauth/authorize?state={state}",
+        )
+        response = http_client_noauth.get(
+            "/dashboard/oura/connect", follow_redirects=False
+        )
+        assert response.status_code == 302
+        assert response.headers["location"].startswith(
+            "https://cloud.ouraring.com/oauth/authorize?state="
+        )
+        # A state cookie is set so the callback can verify the handshake.
+        assert "oura_state" in response.headers.get("set-cookie", "")
 
 
 class TestSafeNextRedirect:

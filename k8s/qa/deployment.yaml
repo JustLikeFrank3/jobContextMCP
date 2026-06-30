@@ -108,6 +108,21 @@ spec:
                   name: jcmcp-qa-app-secrets
                   key: llm_api_key
                   optional: true
+            # Oura Ring OAuth client credentials. Optional: when absent the
+            # connect flow shows "not enabled" instead of erroring. Add the
+            # keys to jcmcp-qa-app-secrets and restart to turn it on.
+            - name: OURA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: oura_client_id
+                  optional: true
+            - name: OURA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: oura_client_secret
+                  optional: true
           resources:
             requests:
               cpu: "50m"

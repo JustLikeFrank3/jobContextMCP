@@ -1,13 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApi, Screen, SectionHead, Badge, fmtDate } from './_shared.jsx'
 import { apiPost, ApiError } from '../auth/api.js'
 import { Panel, Button } from '../design-system'
 
-/* Settings — account status, integrations, and the Oura connect/upload control.
-   Editing the OpenAI key still happens on the classic settings page (it owns
-   the tenant-config write path), but Oura readiness can be entered here: the
-   first reading is what "connects" the ring and unlocks the Home hero.
-   Data: GET /api/dashboard/settings, POST /api/dashboard/oura. */
+/* Settings: account integrations and the Oura Ring connection.
+
+   Oura is a real OAuth integration. The user connects their actual Oura
+   account (browser handshake in routes/dashboard/oura.py) and the server pulls
+   readiness / sleep / HRV from the Oura Cloud API. There is no manual data
+   entry here. Connect starts the login flow, Sync now pulls fresh data,
+   Disconnect drops the stored tokens.
+
+   Data:    GET  /api/dashboard/settings
+   Actions: GET  /dashboard/oura/connect       (full-page nav)
+            POST /api/dashboard/oura/sync
+            POST /api/dashboard/oura/disconnect */
+
+const CONNECT_URL = '/dashboard/oura/connect'
 
 function StatusRow({ label, ok, okText, offText, children }) {
   return (
@@ -28,35 +37,6 @@ function StatusRow({ label, ok, okText, offText, children }) {
       </div>
       <Badge tone={ok ? 'green' : 'muted'}>{ok ? okText : offText}</Badge>
     </div>
-  )
-}
-
-const fieldStyle = {
-  width: '100%', boxSizing: 'border-box', background: 'var(--surface-sunken)',
-  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-  padding: '9px 11px', color: 'var(--text)', fontSize: 'var(--fs-sm)',
-}
-const labelStyle = { display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginBottom: 5 }
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function NumberField({ label, hint, value, onChange, min, max }) {
-  return (
-    <label style={{ display: 'block' }}>
-      <span style={labelStyle}>{label}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={fieldStyle}
-      />
-      {hint && <span style={{ display: 'block', fontSize: 'var(--fs-2xs)', color: 'var(--faint)', marginTop: 4 }}>{hint}</span>}
-    </label>
   )
 }
 
@@ -88,92 +68,167 @@ function OuraReading({ oura }) {
   )
 }
 
-function OuraControl({ oura, onSaved }) {
-  const connected = Boolean(oura)
-  const [readiness, setReadiness] = useState(oura?.readiness_score ?? '')
-  const [sleep, setSleep] = useState(oura?.sleep_score ?? '')
-  const [hrv, setHrv] = useState(oura?.hrv ?? '')
-  const [recovery, setRecovery] = useState(oura?.recovery_index ?? '')
-  const [date, setDate] = useState(todayIso())
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-  const [okMsg, setOkMsg] = useState('')
+/* Reads the ?oura= outcome the OAuth callback redirects back with, then strips
+   it from the URL so a refresh does not re-show the banner. */
+function useOuraFlash() {
+  const [flash, setFlash] = useState('')
+  useEffect(() => {
+    const loc = globalThis.location
+    if (!loc) return
+    const value = new URLSearchParams(loc.search).get('oura')
+    if (!value) return
+    setFlash(value)
+    globalThis.history.replaceState({}, '', loc.pathname)
+  }, [])
+  return flash
+}
 
-  async function submit() {
-    setErr(''); setOkMsg('')
-    const r = Number(readiness)
-    if (!Number.isFinite(r) || r < 0 || r > 100) {
-      setErr('Readiness is required and must be between 0 and 100.')
-      return
-    }
-    setBusy(true)
-    try {
-      await apiPost('/api/dashboard/oura', {
-        readiness_score: r,
-        sleep_score: Number(sleep) || 0,
-        hrv: Number(hrv) || 0,
-        recovery_index: Number(recovery) || 0,
-        date: date || '',
-      })
-      setOkMsg(connected ? 'Reading updated. The Home hero now reflects it.' : 'Ring connected. Readiness is now live on Home.')
-      onSaved()
-    } catch (e) {
-      if (e instanceof ApiError) {
-        setErr(e.body ? `Could not save (${e.status}): ${e.body.slice(0, 200)}` : `Could not save (${e.status}).`)
-      } else {
-        setErr('Could not save the reading. Try again.')
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
+const FLASH = {
+  connected: { tone: 'green', text: 'Your Oura Ring is connected. Readiness now powers your Home dashboard.' },
+  error: { tone: 'danger', text: 'Could not connect your Oura Ring. Please try again.' },
+  unavailable: { tone: 'muted', text: 'Oura is not enabled on this server yet.' },
+}
 
+const FLASH_COLOR = { green: 'var(--green-300)', danger: 'var(--danger-soft)', muted: 'var(--muted)' }
+
+function FlashBanner({ flash }) {
+  const cfg = FLASH[flash]
+  if (!cfg) return null
+  const color = FLASH_COLOR[cfg.tone] || 'var(--muted)'
+  const bg = cfg.tone === 'green' ? 'var(--tint-primary)' : 'var(--surface-sunken)'
+  return (
+    <div
+      style={{
+        padding: '11px 14px', marginBottom: 16, borderRadius: 'var(--radius-md)',
+        background: bg, border: '1px solid var(--border-soft)', color, fontSize: 'var(--fs-sm)',
+      }}
+    >
+      {cfg.text}
+    </div>
+  )
+}
+
+function NotConfigured({ isOwner }) {
   return (
     <Panel>
-      {connected && <OuraReading oura={oura} />}
-      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.5, marginBottom: 14 }}>
-        {connected
-          ? 'Update today\u2019s scores below, or log a different date. Re-logging the same date overwrites it.'
-          : 'Enter your latest Oura scores to connect the ring. Readiness drives the Home dashboard hero; without it Home shows the Daily Digest instead.'}
+      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
+        The Oura Ring integration is not enabled on this server yet, so there is
+        nothing to connect to right now.
+        {isOwner && (
+          <span style={{ display: 'block', marginTop: 10, color: 'var(--faint)', fontSize: 'var(--fs-xs)' }}>
+            Owner note: set <code style={{ color: 'var(--cyan-300)' }}>OURA_CLIENT_ID</code> and{' '}
+            <code style={{ color: 'var(--cyan-300)' }}>OURA_CLIENT_SECRET</code> in the server secret
+            (register an app at cloud.ouraring.com, redirect URI{' '}
+            <code style={{ color: 'var(--cyan-300)' }}>/dashboard/oura/callback</code>) to turn on the
+            connect flow.
+          </span>
+        )}
       </div>
+    </Panel>
+  )
+}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 12 }}>
-        <NumberField label="Readiness *" hint="0\u2013100" value={readiness} onChange={setReadiness} min={0} max={100} />
-        <NumberField label="Sleep score" hint="0\u2013100" value={sleep} onChange={setSleep} min={0} max={100} />
-        <NumberField label="HRV" hint="ms (rMSSD)" value={hrv} onChange={setHrv} min={0} max={400} />
-        <NumberField label="Recovery index" hint="0\u2013100" value={recovery} onChange={setRecovery} min={0} max={100} />
+function NotConnected() {
+  return (
+    <Panel>
+      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 16 }}>
+        Connect your Oura account to pull your daily readiness, sleep, and HRV
+        automatically. You will be sent to Oura to sign in and approve access,
+        then brought right back here. Readiness drives the Home dashboard hero.
       </div>
-
-      <label style={{ display: 'block', maxWidth: 220, marginBottom: 16 }}>
-        <span style={labelStyle}>Date</span>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
-      </label>
-
-      {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
-      {okMsg && <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{okMsg}</div>}
-
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={submit} disabled={busy}>
-          {busy ? 'Saving\u2026' : connected ? 'Update reading' : 'Connect ring'}
+        <Button onClick={() => { globalThis.location.href = CONNECT_URL }}>
+          Connect Oura Ring
         </Button>
       </div>
     </Panel>
   )
 }
 
+function Connected({ oura, lastSync, onReload }) {
+  const [busy, setBusy] = useState('')
+  const [err, setErr] = useState('')
+  const [okMsg, setOkMsg] = useState('')
+
+  async function sync() {
+    setErr(''); setOkMsg(''); setBusy('sync')
+    try {
+      const res = await apiPost('/api/dashboard/oura/sync', {})
+      setOkMsg(res?.note === 'no_data'
+        ? 'Connected, but Oura has no new readiness data in the last few days.'
+        : 'Synced your latest Oura readiness.')
+      onReload()
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        setErr('Your Oura connection needs to be re-established. Disconnect and connect again.')
+        onReload()
+      } else if (e instanceof ApiError) {
+        setErr('Could not reach Oura just now. Please try again in a moment.')
+      } else {
+        setErr('Could not sync. Please try again.')
+      }
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function disconnect() {
+    setErr(''); setOkMsg(''); setBusy('disconnect')
+    try {
+      await apiPost('/api/dashboard/oura/disconnect', {})
+      onReload()
+    } catch {
+      setErr('Could not disconnect. Please try again.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <Panel>
+      {oura ? (
+        <OuraReading oura={oura} />
+      ) : (
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginBottom: 14 }}>
+          Your ring is connected. No readings have synced yet. Click Sync now to
+          pull your latest data from Oura.
+        </div>
+      )}
+
+      {lastSync && (
+        <div style={{ fontSize: 'var(--fs-2xs)', color: 'var(--faint)', marginBottom: 12 }}>
+          Last synced: {fmtDate(lastSync) || lastSync}
+        </div>
+      )}
+
+      {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{err}</div>}
+      {okMsg && <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{okMsg}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <Button variant="ghost" size="sm" onClick={disconnect} disabled={Boolean(busy)}>
+          {busy === 'disconnect' ? 'Disconnecting\u2026' : 'Disconnect'}
+        </Button>
+        <Button size="sm" onClick={sync} disabled={Boolean(busy)}>
+          {busy === 'sync' ? 'Syncing\u2026' : 'Sync now'}
+        </Button>
+      </div>
+    </Panel>
+  )
+}
+
+function OuraSection({ data, reload }) {
+  if (!data?.ouraConfigured) return <NotConfigured isOwner={Boolean(data?.isOwner)} />
+  if (!data?.ouraConnected) return <NotConnected />
+  return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
+}
+
 export default function Settings() {
   const { data, loading, error, reload } = useApi('/api/dashboard/settings')
+  const flash = useOuraFlash()
 
   return (
     <Screen loading={loading} error={error}>
-      <SectionHead title="Account" />
-      <Panel style={{ marginBottom: 20 }}>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <StatusRow label="Owner access" ok={data?.isOwner} okText="owner" offText="standard">
-            {data?.isOwner ? 'You have owner-only features enabled.' : 'Standard user account.'}
-          </StatusRow>
-        </div>
-      </Panel>
+      <FlashBanner flash={flash} />
 
       <SectionHead title="Integrations" />
       <Panel style={{ marginBottom: 20 }}>
@@ -195,8 +250,8 @@ export default function Settings() {
         </div>
       </Panel>
 
-      <SectionHead title="Oura Ring readiness" />
-      <OuraControl oura={data?.oura || null} onSaved={reload} />
+      <SectionHead title="Oura Ring" />
+      <OuraSection data={data} reload={reload} />
     </Screen>
   )
 }

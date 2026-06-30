@@ -36,6 +36,8 @@ SERVICE_ACCOUNT_NAME="jcmcp-workload-sa"
 : "${ENTRA_OWNER_OID:?Set ENTRA_OWNER_OID}"
 LLM_API_KEY="${LLM_API_KEY:-}"   # optional for Azure Foundry w/ workload identity
 LLM_PROVIDER="${LLM_PROVIDER:-foundry}"
+OURA_CLIENT_ID="${OURA_CLIENT_ID:-}"       # optional: Oura Ring OAuth app client id
+OURA_CLIENT_SECRET="${OURA_CLIENT_SECRET:-}"  # optional: Oura Ring OAuth app secret
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -135,6 +137,8 @@ kubectl create secret generic jcmcp-qa-app-secrets \
   --from-literal=entra_client_secret="$ENTRA_CLIENT_SECRET" \
   --from-literal=llm_provider="$LLM_PROVIDER" \
   --from-literal=llm_api_key="$LLM_API_KEY" \
+  --from-literal=oura_client_id="$OURA_CLIENT_ID" \
+  --from-literal=oura_client_secret="$OURA_CLIENT_SECRET" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 7. Apply static QA manifests (PVC and Service don't have placeholders)
@@ -160,6 +164,12 @@ echo ""
 echo "  3. GitHub secret — Add to JustLikeFrank3/jobContextMCP:"
 echo "     QA_STORAGE_ACCOUNT = $QA_STORAGE_ACCOUNT"
 echo "     (Settings → Secrets → Actions → New repository secret)"
+echo ""
+echo "  4. (Optional) Oura Ring — to enable the Connect flow:"
+echo "     Register an app at https://cloud.ouraring.com/oauth/applications"
+echo "     Redirect URI: https://qa.jobcontext.ai/dashboard/oura/callback"
+echo "     Then re-run this script with OURA_CLIENT_ID and OURA_CLIENT_SECRET set,"
+echo "     or patch jcmcp-qa-app-secrets, and restart the deployment."
 echo ""
 echo "Once DNS propagates (~5 min) push to qa branch to trigger the first deploy."
 echo "══════════════════════════════════════════════════════════════════════"
