@@ -321,7 +321,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 '''
 
 
-def login_html(next_url: str = "/dashboard") -> str:
+def login_html(next_url: str = "/app") -> str:
     """Return the branded sign-in page with next_url URL-encoded into the Microsoft sign-in link."""
     from urllib.parse import quote as _quote
     safe_href = _quote(next_url, safe="")

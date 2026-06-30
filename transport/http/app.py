@@ -285,7 +285,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         return HTMLResponse(terms_html())
 
     @app.get("/login", include_in_schema=False)
-    async def _login_page(next: str = "/dashboard") -> HTMLResponse:
+    async def _login_page(next: str = "/app") -> HTMLResponse:
         return HTMLResponse(login_html(next))
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
