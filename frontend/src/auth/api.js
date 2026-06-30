@@ -25,10 +25,11 @@ export function redirectToLogin(next) {
 }
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, body) {
     super(message || `API error ${status}`)
     this.name = 'ApiError'
     this.status = status
+    this.body = body
   }
 }
 
@@ -57,4 +58,49 @@ export async function apiFetch(path, options = {}) {
 
   const text = await res.text()
   return text ? JSON.parse(text) : null
+}
+
+/**
+ * Send a mutating request (POST by default) with a JSON body.
+ *
+ * Mirrors apiFetch's auth handling: forwards the session cookie, redirects on
+ * 401, and throws ApiError on non-2xx. On error it captures the response body
+ * (when present) on err.body so callers can surface why an action failed
+ * (e.g. an LLM rate-limit message from a generate endpoint).
+ *
+ * Returns parsed JSON, or { ok: true, raw } when the body is not JSON.
+ */
+export async function apiSend(path, { method = 'POST', body, headers } = {}) {
+  const hasBody = body !== undefined
+  const res = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: {
+      Accept: 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(headers || {}),
+    },
+    ...(hasBody ? { body: JSON.stringify(body) } : {}),
+  })
+
+  if (res.status === 401) {
+    redirectToLogin()
+    throw new ApiError(401, 'Authentication required')
+  }
+
+  const text = await res.text()
+  if (!res.ok) {
+    throw new ApiError(res.status, `Request failed (${res.status})`, text)
+  }
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { ok: true, raw: text }
+  }
+}
+
+/** Convenience wrapper: POST a JSON body and return the parsed response. */
+export function apiPost(path, body) {
+  return apiSend(path, { method: 'POST', body })
 }
