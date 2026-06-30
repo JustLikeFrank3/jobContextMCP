@@ -61,6 +61,12 @@ _DATA_FILES = [
     "rejections.json",
 ]
 
+# Single source of truth for the cheatsheet filenames setup actually writes.
+# These are also persisted into the user's config so the resolver finds them
+# (otherwise tenants inherit the owner's GM_* defaults from the base config).
+_LC_CHEATSHEET_FILENAME = "Algorithm_Cheatsheet.md"
+_LC_QUICK_REF_FILENAME  = "Interview_Quick_Reference.md"
+
 # ── LeetCode language scaffolding ─────────────────────────────────────────────
 
 _LC_SUPPORTED_LANGS = {"java", "python", "javascript", "typescript", "cpp"}
@@ -200,8 +206,8 @@ def _build_config(
         "side_project_folders": [_to_tilde(Path(p).expanduser()) for p in (side_project_folders or [])],
 
         "master_resume_path":         f"01-Current-Optimized/{_master_resume_filename(name)}",
-        "leetcode_cheatsheet_path":   "Algorithm_Cheatsheet.md",
-        "quick_reference_path":       "Interview_Quick_Reference.md",
+        "leetcode_cheatsheet_path":   _LC_CHEATSHEET_FILENAME,
+        "quick_reference_path":       _LC_QUICK_REF_FILENAME,
         "optimized_resumes_dir":      "01-Current-Optimized",
         "cover_letters_dir":          "02-Cover-Letters",
         "reference_materials_dir":    "06-Reference-Materials",
@@ -247,8 +253,13 @@ def check_workspace() -> str:  # NOSONAR
     """
     lines = ["═══ WORKSPACE STATUS ═══", ""]
 
-    # config.json
-    config_path = _HERE / _CONFIG_FILENAME
+    # config.json — in multi-tenant mode the user's config lives in their own
+    # data partition, not at the repo root (which holds the shared base config
+    # injected via ConfigMap). Resolve the right one before reading contact /
+    # language details, otherwise every tenant sees the owner's values.
+    from lib.user_context import get_data_folder_override
+    _override = get_data_folder_override()
+    config_path = (_override / _CONFIG_FILENAME) if _override is not None else (_HERE / _CONFIG_FILENAME)
     if config_path.exists():
         lines.append("✓ config.json — present")
         try:
@@ -432,8 +443,8 @@ def setup_workspace(  # NOSONAR
 
     # Cheatsheet + quick reference stubs
     for fname, content in [
-        ("Algorithm_Cheatsheet.md", _CHEATSHEET_STUB),
-        ("Interview_Quick_Reference.md", _QUICK_REF_STUB),
+        (_LC_CHEATSHEET_FILENAME, _CHEATSHEET_STUB),
+        (_LC_QUICK_REF_FILENAME, _QUICK_REF_STUB),
     ]:
         p = lc_root / fname
         if not p.exists():
@@ -482,6 +493,16 @@ def setup_workspace(  # NOSONAR
         }
         if address:
             existing["contact"]["address"] = address.strip()
+        # Persist per-user resolution keys (relative paths / values only — the
+        # folder roots come from the shared AKS config). Without these the
+        # merged config falls back to the owner's defaults, so check_workspace
+        # reports the master resume / cheatsheet missing and the LeetCode
+        # language as "(not set)" for every tenant.
+        existing["master_resume_path"]       = f"01-Current-Optimized/{mr_filename}"
+        existing["leetcode_cheatsheet_path"] = _LC_CHEATSHEET_FILENAME
+        existing["quick_reference_path"]     = _LC_QUICK_REF_FILENAME
+        existing["leetcode_language"]        = lang
+        existing["leetcode_problems_dir"]    = lc_problems_subdir
         user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
         _mark("config.json (contact block)", True)
     else:
