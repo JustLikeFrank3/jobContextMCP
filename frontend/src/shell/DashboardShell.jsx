@@ -7,7 +7,7 @@ import { Logo, NavTabs, Button, Icon } from '../design-system'
 
    Deltas from the original kit shell (per handoff):
    - Digest tab removed (its content now lives on Home as the Oura fallback)
-   - Settings tab + header gear added
+   - Settings reached via the header button (no nav tab)
    - API Keys kept as its own tab
 */
 
@@ -21,7 +21,6 @@ const TABS = [
   { label: 'Outreach', key: 'people' },
   { label: 'Wellbeing', key: 'health' },
   { label: 'Interviews', key: 'interviews' },
-  { label: 'Settings', key: 'settings' },
   { label: 'API Keys', key: 'api-keys' },
 ]
 
