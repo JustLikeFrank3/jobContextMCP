@@ -11,30 +11,34 @@ export default function Logo({ size = 32, markOnly = false, wordmarkOnly = false
     <svg
       width={size}
       height={size}
-      viewBox="0 0 100 100"
+      viewBox="0 0 320 320"
       role="img"
       aria-label="jobContext"
       style={{ display: 'block', flexShrink: 0 }}
     >
       <title>jobContext</title>
-      {/* j: dot + stem + hook */}
-      <circle cx="27" cy="21" r="7" fill="var(--text-strong)" />
-      <path
-        d="M27 31 L27 61 Q27 73 16 73"
-        fill="none"
-        stroke="var(--text-strong)"
-        strokeWidth="9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* C: cyan arc */}
-      <path
-        d="M77 27 A24 24 0 1 0 77 67"
-        fill="none"
-        stroke="var(--cyan-500)"
-        strokeWidth="9"
-        strokeLinecap="round"
-      />
+      {/* framed badge: dark disc + cyan ring */}
+      <circle cx="160" cy="160" r="153" fill="var(--ink-900)" />
+      <circle cx="160" cy="160" r="153" fill="none" stroke="var(--cyan-500)" strokeWidth="10" />
+      <g transform="translate(-12 0)">
+        {/* C: cyan arc */}
+        <path
+          d="M234 118 A56 56 0 1 0 234 202"
+          fill="none"
+          stroke="var(--cyan-500)"
+          strokeWidth="32"
+          strokeLinecap="round"
+        />
+        {/* j: dot + stem + hook */}
+        <circle cx="100" cy="112" r="19" fill="var(--text-strong)" />
+        <path
+          d="M100 142 L100 205 Q100 230 74 230"
+          fill="none"
+          stroke="var(--text-strong)"
+          strokeWidth="30"
+          strokeLinecap="round"
+        />
+      </g>
     </svg>
   )
 

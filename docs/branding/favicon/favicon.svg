@@ -1,9 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="jobContext">
-  <title>jobContext</title>
-  <rect width="64" height="64" rx="13" fill="#0F172A"/>
-  <!-- j -->
-  <circle cx="17" cy="13" r="4.5" fill="#FFFFFF"/>
-  <path d="M17 20 L17 39 Q17 47 10 47" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- C: same tight gap proportional to mark -->
-  <path d="M49 17 A15 15 0 1 0 49 43" fill="none" stroke="#00B5C8" stroke-width="6" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-label="jobContext">
+  <title>jobContext favicon</title>
+  <circle cx="160" cy="160" r="153" fill="#0A0F1C"></circle>
+  <circle cx="160" cy="160" r="153" fill="none" stroke="#00B5C8" stroke-width="10"></circle>
+  <g transform="translate(-12 0)">
+    <path d="M234 118 A 56 56 0 1 0 234 202" fill="none" stroke="#00B5C8" stroke-width="32" stroke-linecap="round"></path>
+    <circle cx="100" cy="112" r="19" fill="#FFFFFF"></circle>
+    <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"></path>
+  </g>
 </svg>
