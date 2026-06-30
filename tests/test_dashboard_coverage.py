@@ -87,7 +87,7 @@ class TestDashboardLoginCoverage:
 
         assert response.status_code == 200
         assert 'method="post" action="/dashboard/login"' in response.text
-        assert 'name="next" value="/dashboard"' in response.text
+        assert 'name="next" value="/app"' in response.text
         assert "Enter your API key" in response.text
 
     def test_login_page_redirects_to_entra_with_pkce(self, monkeypatch, isolated_server):
@@ -120,7 +120,7 @@ class TestDashboardLoginCoverage:
         )
 
         assert response.status_code == 303
-        assert response.headers["location"] == "/dashboard/login?next=/dashboard"
+        assert response.headers["location"] == "/dashboard/login?next=/app"
 
     def test_login_submit_sets_session_cookie_on_success(self, http_client_authed):
         response = http_client_authed.post(
@@ -714,12 +714,12 @@ class TestSafeNextRedirect:
             ("/app/job-hunt", "/app/job-hunt"),
             ("/dashboard", "/dashboard"),
             ("/dashboard/people", "/dashboard/people"),
-            # Anything off-allowlist or unsafe falls back to the dashboard root.
-            ("/api/dashboard/home", "/dashboard"),
-            ("https://evil.example/app", "/dashboard"),
-            ("//evil.example", "/dashboard"),
-            ("", "/dashboard"),
-            (None, "/dashboard"),
+            # Anything off-allowlist or unsafe falls back to the SPA root.
+            ("/api/dashboard/home", "/app"),
+            ("https://evil.example/app", "/app"),
+            ("//evil.example", "/app"),
+            ("", "/app"),
+            (None, "/app"),
         ],
     )
     def test_safe_next(self, candidate, expected):

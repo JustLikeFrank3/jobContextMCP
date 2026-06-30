@@ -47,8 +47,13 @@ _LOGIN_PATH = "/dashboard/login"
 
 # Internal destinations a post-login redirect may land on. The React SPA lives
 # under /app, the legacy server-rendered dashboard under /dashboard. Anything
-# else (external URLs, protocol-relative //host) falls back to the dashboard.
+# else (external URLs, protocol-relative //host) falls back to the SPA.
 _ALLOWED_NEXT_PREFIXES = (_DASHBOARD_ROOT, "/app")
+
+# Default post-login destination: the React SPA. Auth flows that arrive without
+# an explicit (and safe) next target land here, not on the legacy /dashboard
+# pages. The classic pages stay reachable via their /dashboard links.
+_DEFAULT_NEXT = "/app"
 
 
 def _safe_next(next_url: str | None) -> str:
@@ -59,11 +64,11 @@ def _safe_next(next_url: str | None) -> str:
         and any(next_url.startswith(p) for p in _ALLOWED_NEXT_PREFIXES)
     ):
         return next_url
-    return _DASHBOARD_ROOT
+    return _DEFAULT_NEXT
 
 
 @router.get("/login", response_model=None)
-async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) -> HTMLResponse | RedirectResponse:
+async def dashboard_login_page(request: Request, next: str = _DEFAULT_NEXT) -> HTMLResponse | RedirectResponse:
   provider = get_auth_provider()
 
   # Entra mode: skip the form, go straight to PKCE
@@ -98,7 +103,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
       '<body style="font-family:Inter,Arial,sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
       '<h2>Authentication disabled</h2>'
       '<p>API_KEY is not set. Login is not required.</p>'
-      f'<p><a href="{_DASHBOARD_ROOT}" style="color:#00B5C8">Open dashboard</a></p>'
+      f'<p><a href="{_DEFAULT_NEXT}" style="color:#00B5C8">Open dashboard</a></p>'
       '</body>',
       status_code=200,
     )
@@ -162,7 +167,7 @@ async def dashboard_login_page(request: Request, next: str = _DASHBOARD_ROOT) ->
 async def dashboard_login_submit(
     request: Request,
   api_key: Annotated[str, Form()],
-  next: Annotated[str, Form()] = _DASHBOARD_ROOT,
+  next: Annotated[str, Form()] = _DEFAULT_NEXT,
 ) -> RedirectResponse:
     provider = get_auth_provider()
     next_url = _safe_next(next)
@@ -225,7 +230,7 @@ async def dashboard_logout(request: Request) -> RedirectResponse:
 async def dashboard_entra_callback(
     request: Request,
     code: str = "",
-    state: str = _DASHBOARD_ROOT,
+    state: str = _DEFAULT_NEXT,
     error: str = "",
 ) -> RedirectResponse | HTMLResponse:
     """Handle Entra PKCE callback, exchange code for token, set jc_session cookie."""
