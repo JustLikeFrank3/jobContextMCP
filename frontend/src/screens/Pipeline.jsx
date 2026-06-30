@@ -11,9 +11,9 @@ import {
    Restores the interactive card actions from the legacy /dashboard/pipeline
    page: run/re-run assessment, generate resume, generate cover letter
    (HTML + LaTeX for owner), queue apply, mark applied, unqueue, remove —
-   plus a search filter and the Add Job intake modal. The heavy LLM editor
-   flows (edit resume / edit cover letter / choose template) still live on the
-   classic workspace, linked from the toolbar. */
+   plus a search filter and the Add Job intake modal. The AI editor flows now
+   live here too, in React: Edit Resume, Edit Cover Letter (draft → review →
+   accept/discard), and the visual Template chooser with a live preview. */
 
 const CLOSED = new Set(['added', 'applied', 'dismissed'])
 
@@ -72,7 +72,7 @@ function Detail({ label, children }) {
   )
 }
 
-function JobCard({ job, busy, isOwner, onAction }) {
+function JobCard({ job, busy, isOwner, onAction, onOpenEditor }) {
   const closedEval = CLOSED.has(job.status)
   const canApply = job.status === 'evaluated'
   const appliedDone = job.status === 'applied' || job.status === 'dismissed'
@@ -135,6 +135,13 @@ function JobCard({ job, busy, isOwner, onAction }) {
         <ActionBtn disabled={busy || appliedDone} onClick={() => onAction(job, 'applied')}>Mark Applied</ActionBtn>
         <ActionBtn disabled={busy} onClick={() => onAction(job, 'unqueue')}>Unqueue</ActionBtn>
         <ActionBtn tone="danger" disabled={busy} onClick={() => onAction(job, 'remove')}>Remove</ActionBtn>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8, paddingTop: 10, borderTop: '1px solid var(--border-soft)', alignItems: 'center' }}>
+        <span style={{ ...EYEBROW, marginRight: 2 }}>AI editors</span>
+        <ActionBtn disabled={busy} onClick={() => onOpenEditor(job, 'edit-resume')}>Edit Resume</ActionBtn>
+        <ActionBtn disabled={busy} onClick={() => onOpenEditor(job, 'edit-cl')}>Edit Cover Letter</ActionBtn>
+        <ActionBtn disabled={busy} onClick={() => onOpenEditor(job, 'templates')}>Templates</ActionBtn>
       </div>
     </Panel>
   )
@@ -203,12 +210,357 @@ function AddJobModal({ onClose, onSubmit }) {
   )
 }
 
+/* ---------- shared modal primitives for the editor flows ---------- */
+const modalField = {
+  width: '100%', boxSizing: 'border-box', background: 'var(--surface-sunken)',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+  padding: '9px 11px', color: 'var(--text)', fontSize: 'var(--fs-sm)',
+}
+const modalLabel = { display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginBottom: 5 }
+
+function Modal({ title, onClose, children, maxWidth = 640 }) {
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 900, overflowY: 'auto', padding: '24px 14px' }}
+    >
+      <Panel pad="20px" style={{ maxWidth, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <span style={{ fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-lg)', color: 'var(--text-strong)' }}>{title}</span>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.3rem', cursor: 'pointer' }}>{'\u2715'}</button>
+        </div>
+        {children}
+      </Panel>
+    </div>
+  )
+}
+
+function ResultLine({ children }) {
+  return (
+    <pre style={{
+      whiteSpace: 'pre-wrap', margin: '0 0 8px', padding: '9px 11px',
+      background: 'var(--surface-sunken)', border: '1px solid var(--border-soft)',
+      borderRadius: 'var(--radius-sm)', color: 'var(--text-soft)',
+      fontSize: 'var(--fs-xs)', lineHeight: 1.5, fontFamily: 'var(--font-mono)',
+    }}>{children}</pre>
+  )
+}
+
+function EmptyEditorState({ what }) {
+  return (
+    <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.5 }}>
+      No {what} are available to edit yet. Generate one first, then come back to refine it with AI.
+    </div>
+  )
+}
+
+/* ---------- Edit Resume ---------- */
+function EditResumeModal({ job, resumeOptions, onClose, onDone }) {
+  const options = resumeOptions || []
+  const [resumeName, setResumeName] = useState(job.suggested_edit_resume || options[0] || '')
+  const [instructions, setInstructions] = useState('')
+  const [exportPdf, setExportPdf] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState('')
+  const [result, setResult] = useState(null)
+
+  async function submit() {
+    if (!resumeName) { setErr('Pick a resume to edit.'); return }
+    if (instructions.trim().length < 3) { setErr('Describe the edit in a few words.'); return }
+    setSubmitting(true); setErr('')
+    try {
+      const res = await apiPost('/dashboard/pipeline/edit-resume', {
+        job_id: job.id, resume_name: resumeName, instructions: instructions.trim(), export_pdf: exportPdf,
+      })
+      setResult(res)
+    } catch (e) { setErr(actionError(e)) } finally { setSubmitting(false) }
+  }
+
+  return (
+    <Modal title={`Edit Resume \u2014 ${job.company}`} onClose={onClose}>
+      {options.length === 0 ? (
+        <EmptyEditorState what="optimized resumes" />
+      ) : result ? (
+        <div>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--tint-primary)', border: '1px solid var(--line-strong)', marginBottom: 12 }}>
+            <div style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-xs)', fontWeight: 'var(--fw-semibold)', marginBottom: 6 }}>Resume edited</div>
+            {result.edited_resume && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', color: 'var(--text-strong)', wordBreak: 'break-all' }}>{result.edited_resume}</div>
+            )}
+          </div>
+          {result.save_result && <ResultLine>{result.save_result}</ResultLine>}
+          {result.pdf_result && <ResultLine>{result.pdf_result}</ResultLine>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+            <Button size="sm" onClick={onDone}>Done</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={modalLabel}>Resume to edit</span>
+            <select style={modalField} value={resumeName} onChange={(e) => setResumeName(e.target.value)}>
+              {options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={modalLabel}>Edit instructions</span>
+            <textarea
+              style={{ ...modalField, resize: 'vertical', lineHeight: 1.45 }}
+              rows={6}
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="e.g. Lead with the Azure migration. Tighten each GM bullet to one line. Add a metrics-forward summary up top."
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 'var(--fs-sm)', color: 'var(--text-soft)' }}>
+            <input type="checkbox" checked={exportPdf} onChange={(e) => setExportPdf(e.target.checked)} />
+            Also export a PDF using this job's selected template
+          </label>
+          {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" onClick={submit} disabled={submitting}>{submitting ? 'Editing\u2026' : 'Edit with AI'}</Button>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+/* ---------- Edit Cover Letter (draft \u2192 review \u2192 accept/discard) ---------- */
+function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDone }) {
+  const options = coverLetterOptions || []
+  const [clName, setClName] = useState(job.suggested_edit_cover_letter || options[0] || '')
+  const [instructions, setInstructions] = useState('')
+  const [pipeline, setPipeline] = useState(isOwner ? 'latex' : 'html')
+  const [exportPdf, setExportPdf] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState('')
+  const [phase, setPhase] = useState('edit') // edit | review | done
+  const [draft, setDraft] = useState(null)
+  const [accepted, setAccepted] = useState(null)
+
+  async function runEdit() {
+    if (!clName) { setErr('Pick a cover letter to edit.'); return }
+    if (instructions.trim().length < 3) { setErr('Describe the edit in a few words.'); return }
+    setSubmitting(true); setErr('')
+    try {
+      const res = await apiPost('/dashboard/pipeline/edit-cover-letter', {
+        job_id: job.id,
+        cover_letter_name: clName,
+        draft_name: draft?.draft_name || '',
+        instructions: instructions.trim(),
+        export_pdf: exportPdf,
+        export_pipeline: pipeline,
+      })
+      setDraft(res)
+      setPhase('review')
+    } catch (e) { setErr(actionError(e)) } finally { setSubmitting(false) }
+  }
+
+  async function accept() {
+    setSubmitting(true); setErr('')
+    try {
+      const res = await apiPost('/dashboard/pipeline/accept-cover-letter-edit', {
+        cover_letter_name: clName, draft_name: draft.draft_name,
+      })
+      setAccepted(res); setPhase('done')
+    } catch (e) { setErr(actionError(e)) } finally { setSubmitting(false) }
+  }
+
+  async function discard() {
+    setSubmitting(true); setErr('')
+    try {
+      await apiPost('/dashboard/pipeline/cancel-cover-letter-edit', { cover_letter_name: clName })
+    } catch { /* draft cleanup is best-effort */ } finally {
+      setSubmitting(false); setDraft(null); setInstructions(''); setPhase('edit')
+    }
+  }
+
+  let bodyContent
+  if (options.length === 0) {
+    bodyContent = <EmptyEditorState what="cover letters" />
+  } else if (phase === 'done') {
+    bodyContent = (
+      <div>
+        <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--tint-success, var(--tint-primary))', border: '1px solid var(--line-strong)', marginBottom: 12 }}>
+          <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-xs)', fontWeight: 'var(--fw-semibold)', marginBottom: 6 }}>Cover letter updated</div>
+          <div style={{ color: 'var(--text-soft)', fontSize: 'var(--fs-sm)' }}>
+            The draft was applied to {clName}. A .bak backup of the previous version was saved.
+          </div>
+        </div>
+        {accepted?.href && (
+          <a href={accepted.href} target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the updated file {'\u2197'}</a>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <Button size="sm" onClick={onDone}>Done</Button>
+        </div>
+      </div>
+    )
+  } else if (phase === 'review' && draft) {
+    bodyContent = (
+      <div>
+        <div style={{ ...EYEBROW, marginBottom: 6 }}>Proposed draft</div>
+        <pre style={{
+          whiteSpace: 'pre-wrap', margin: '0 0 12px', padding: '12px 14px', maxHeight: 280, overflow: 'auto',
+          background: 'var(--surface-sunken)', border: '1px solid var(--border-soft)', borderRadius: 'var(--radius-sm)',
+          color: 'var(--text-soft)', fontSize: 'var(--fs-sm)', lineHeight: 1.5,
+        }}>{draft.draft_content}</pre>
+        {draft.save_result && <ResultLine>{draft.save_result}</ResultLine>}
+        {draft.pdf_result && <ResultLine>{draft.pdf_result}</ResultLine>}
+        {draft.pdf_href && (
+          <a href={draft.pdf_href} target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open PDF preview {'\u2197'}</a>
+        )}
+        {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', margin: '12px 0', whiteSpace: 'pre-wrap' }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14, flexWrap: 'wrap' }}>
+          <Button variant="ghost" size="sm" onClick={discard} disabled={submitting}>Discard draft</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setPhase('edit'); setInstructions('') }} disabled={submitting}>Revise again</Button>
+          <Button size="sm" onClick={accept} disabled={submitting}>{submitting ? 'Applying\u2026' : 'Accept & apply'}</Button>
+        </div>
+      </div>
+    )
+  } else {
+    bodyContent = (
+      <>
+        {draft && (
+          <div style={{ color: 'var(--faint)', fontSize: 'var(--fs-xs)', marginBottom: 10 }}>
+            Revising the current draft. Your new instructions build on the last AI pass.
+          </div>
+        )}
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={modalLabel}>Cover letter to edit</span>
+          <select style={modalField} value={clName} onChange={(e) => { setClName(e.target.value); setDraft(null) }}>
+            {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={modalLabel}>Edit instructions</span>
+          <textarea
+            style={{ ...modalField, resize: 'vertical', lineHeight: 1.45 }}
+            rows={6}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="e.g. Open with a hook about their platform team. Cut the third paragraph. Make the tone warmer and more direct."
+          />
+        </label>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            <span style={modalLabel} >Export</span>
+            <select style={{ ...modalField, width: 'auto' }} value={pipeline} onChange={(e) => setPipeline(e.target.value)}>
+              <option value="html">HTML / PDF</option>
+              {isOwner && <option value="latex">LaTeX</option>}
+            </select>
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-soft)' }}>
+            <input type="checkbox" checked={exportPdf} onChange={(e) => setExportPdf(e.target.checked)} />
+            Export a PDF of the draft
+          </label>
+        </div>
+        {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={runEdit} disabled={submitting}>{submitting ? 'Drafting\u2026' : 'Draft edit with AI'}</Button>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <Modal title={`Edit Cover Letter \u2014 ${job.company}`} onClose={onClose} maxWidth={680}>
+      {bodyContent}
+    </Modal>
+  )
+}
+
+/* ---------- Template chooser (resume + cover letter, live preview) ---------- */
+function TemplateModal({ job, resumeTemplates, clTemplates, styles, onClose, onSaved }) {
+  const rTemplates = resumeTemplates?.length ? resumeTemplates : ['modern', 'executive', 'sidebar', 'portfolio']
+  const cTemplates = clTemplates?.length ? clTemplates : rTemplates
+  const sStyles = styles?.length ? styles : ['navy', 'slate', 'forest', 'warm', 'classic']
+
+  const [tab, setTab] = useState('resume')
+  const [rTpl, setRTpl] = useState(job.resume_template || 'modern')
+  const [rSty, setRSty] = useState(job.resume_style || 'navy')
+  const [cTpl, setCTpl] = useState(job.cl_template || 'modern')
+  const [cSty, setCSty] = useState(job.cl_style || 'navy')
+  const [saving, setSaving] = useState(false)
+  const [savedMsg, setSavedMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const isResume = tab === 'resume'
+  const tpl = isResume ? rTpl : cTpl
+  const sty = isResume ? rSty : cSty
+  const templates = isResume ? rTemplates : cTemplates
+  const previewUrl = isResume
+    ? `/dashboard/pipeline/preview-template/${tpl}/${sty}`
+    : `/dashboard/pipeline/preview-cl/${tpl}/${sty}`
+
+  async function save() {
+    setSaving(true); setErr(''); setSavedMsg('')
+    try {
+      const endpoint = isResume ? '/dashboard/pipeline/select-template' : '/dashboard/pipeline/select-cl-template'
+      await apiPost(endpoint, { job_id: job.id, template: tpl, style: sty })
+      setSavedMsg(`${isResume ? 'Resume' : 'Cover letter'} template set: ${tpl} / ${sty}.`)
+      onSaved()
+    } catch (e) { setErr(actionError(e)) } finally { setSaving(false) }
+  }
+
+  const seg = (on) => ({
+    padding: '6px 16px', borderRadius: 7, fontSize: 'var(--fs-xs)', fontWeight: 'var(--fw-semibold)',
+    cursor: 'pointer', whiteSpace: 'nowrap', border: 'none',
+    background: on ? 'var(--surface-raised)' : 'transparent',
+    color: on ? 'var(--text-strong)' : 'var(--muted)',
+    boxShadow: on ? 'inset 0 0 0 1px color-mix(in srgb,var(--cyan-500) 40%,transparent)' : 'none',
+  })
+
+  return (
+    <Modal title={`Templates \u2014 ${job.company}`} onClose={onClose} maxWidth={760}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
+          <button type="button" style={seg(isResume)} onClick={() => { setTab('resume'); setSavedMsg('') }}>Resume</button>
+          <button type="button" style={seg(!isResume)} onClick={() => { setTab('cl'); setSavedMsg('') }}>Cover Letter</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+        <label style={{ flex: 1, minWidth: 180 }}>
+          <span style={modalLabel}>Template</span>
+          <select style={modalField} value={tpl} onChange={(e) => (isResume ? setRTpl : setCTpl)(e.target.value)}>
+            {templates.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label style={{ flex: 1, minWidth: 180 }}>
+          <span style={modalLabel}>Style</span>
+          <select style={modalField} value={sty} onChange={(e) => (isResume ? setRSty : setCSty)(e.target.value)}>
+            {sStyles.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <iframe
+        title="template-preview"
+        src={previewUrl}
+        style={{ width: '100%', height: 460, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: '#fff' }}
+      />
+
+      {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginTop: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
+      {savedMsg && <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginTop: 12 }}>{savedMsg}</div>}
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving\u2026' : `Use this ${isResume ? 'resume' : 'cover letter'} template`}</Button>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Pipeline() {
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const [busy, setBusy] = useState(null)
   const [filter, setFilter] = useState('')
   const [persona, setPersona] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const [editor, setEditor] = useState(null) // { type: 'edit-resume'|'edit-cl'|'templates', job }
 
   const load = useCallback(async ({ silent } = {}) => {
     if (!silent) setState((s) => ({ ...s, loading: !s.data, error: null }))
@@ -317,7 +669,7 @@ export default function Pipeline() {
           rel="noreferrer"
           style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none', marginLeft: 'auto' }}
         >
-          Advanced: edit resume / cover letter / templates {'\u2197'}
+          Open classic pipeline {'\u2197'}
         </a>
       </div>
 
@@ -345,6 +697,7 @@ export default function Pipeline() {
               busy={!!busy}
               isOwner={!!data?.is_owner}
               onAction={onAction}
+              onOpenEditor={(j, type) => setEditor({ type, job: j })}
             />
           ))}
         </div>
@@ -357,6 +710,34 @@ export default function Pipeline() {
             await apiPost('/jobs/evaluate', { ...payload, source: 'dashboard_manual' })
             await load({ silent: true })
           }}
+        />
+      )}
+
+      {editor?.type === 'edit-resume' && (
+        <EditResumeModal
+          job={editor.job}
+          resumeOptions={data?.optimized_resume_options}
+          onClose={() => setEditor(null)}
+          onDone={() => { setEditor(null); load({ silent: true }) }}
+        />
+      )}
+      {editor?.type === 'edit-cl' && (
+        <EditCoverLetterModal
+          job={editor.job}
+          coverLetterOptions={data?.cover_letter_options}
+          isOwner={!!data?.is_owner}
+          onClose={() => setEditor(null)}
+          onDone={() => { setEditor(null); load({ silent: true }) }}
+        />
+      )}
+      {editor?.type === 'templates' && (
+        <TemplateModal
+          job={editor.job}
+          resumeTemplates={data?.resume_templates}
+          clTemplates={data?.cl_templates}
+          styles={data?.template_styles}
+          onClose={() => setEditor(null)}
+          onSaved={() => load({ silent: true })}
         />
       )}
     </Screen>

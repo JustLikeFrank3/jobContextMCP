@@ -8,12 +8,14 @@ import {
    Data: GET /dashboard/job-hunt/data (_load_applications).
 
    Statuses in the data are free-form (dozens of one-off variants), so cards
-   are bucketed into four lanes by substring matching, mirroring the legacy
-   /dashboard/job-hunt laneFor() logic. Cards expand in place to show next
-   steps, contact, notes, and the event count. A search filter narrows all
-   lanes at once. */
+   are bucketed into five lanes by substring matching. The Outreach lane sits
+   first and captures the pre-application stage (networking, referral asks,
+   warm intros, "interested" leads) before a formal application exists. Cards
+   expand in place to show next steps, contact, notes, and the event count.
+   A search filter narrows all lanes at once. */
 
 const LANES = [
+  { key: 'outreach', label: 'Outreach', tone: 'var(--cyan-200)' },
   { key: 'active', label: 'Active', tone: 'var(--cyan-400)' },
   { key: 'interview', label: 'Interviewing', tone: 'var(--cyan-300)' },
   { key: 'offer', label: 'Offer', tone: 'var(--green-400)' },
@@ -22,9 +24,20 @@ const LANES = [
 
 function laneFor(status) {
   const s = (status || '').trim().toLowerCase()
+  if (!s) return 'active'
   if (s.includes('offer') || s.includes('onboarding') || s.includes('accept')) return 'offer'
   if (s.includes('reject') || s.includes('pass') || s.includes('declin') || s.includes('no response') || s.includes('ghost')) return 'rejected'
   if (s.includes('interview') || s.includes('screen') || s.includes('onsite') || s.includes('panel')) return 'interview'
+  // Pre-application stage: a relationship or lead exists, but nothing submitted yet.
+  if (
+    s.includes('outreach') || s.includes('interested') || s.includes('considering')
+    || s.includes('networking') || s.includes('referral') || s.includes('handoff')
+    || s.includes('pre-application') || s.includes('pre-app') || s.includes('pre-vetting')
+    || s.includes('not submitted') || s.includes('not_submitted') || s.includes('no application')
+    || s.includes('prospect') || s.includes('lead') || s.includes('researching')
+    || s.includes('to apply') || s.includes('wishlist') || s.includes('saved')
+    || s.includes('materials ready') || s.includes('warm')
+  ) return 'outreach'
   return 'active'
 }
 
@@ -116,7 +129,7 @@ export default function JobHunt() {
     ? apps.filter((a) => [a.company, a.role, a.status, a.next_steps, a.contact, a.notes].join(' ').toLowerCase().includes(query))
     : apps
 
-  const buckets = { active: [], interview: [], offer: [], rejected: [] }
+  const buckets = { outreach: [], active: [], interview: [], offer: [], rejected: [] }
   shown.forEach((a) => buckets[laneFor(a.status)].push(a))
 
   return (
@@ -128,6 +141,7 @@ export default function JobHunt() {
     >
       <StatGrid>
         <Stat label="Applications" value={data?.total ?? 0} tone="accent" />
+        <Stat label="Outreach" value={buckets.outreach.length} />
         <Stat label="Active" value={buckets.active.length} />
         <Stat label="Interviewing" value={buckets.interview.length} tone="accent" />
         <Stat label="Offers" value={buckets.offer.length} tone="green" />
@@ -149,7 +163,7 @@ export default function JobHunt() {
       {shown.length === 0 ? (
         <EmptyState label="No applications match your filter." />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, alignItems: 'start' }}>
           {LANES.map((lane) => (
             <Lane key={lane.key} lane={lane} apps={buckets[lane.key]} />
           ))}

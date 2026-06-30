@@ -174,23 +174,29 @@ function Bars({ bars, accent, animate, smallLabel }) {
   )
 }
 
-function Toggle({ on, onClick, accent }) {
+function Toggle({ on, onClick, accent, disabled = false }) {
+  const fire = () => {
+    if (!disabled) onClick()
+  }
   return (
     <div
-      onClick={onClick}
+      onClick={fire}
       role="switch"
       aria-checked={on}
-      tabIndex={0}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onClick()
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) onClick()
       }}
+      title={disabled ? 'Connect an Oura ring in Settings to enable readiness' : undefined}
       style={{
         width: 40,
         height: 22,
         borderRadius: 999,
         background: on ? accent : 'var(--ink-500)',
         position: 'relative',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
         transition: 'background var(--dur-base)',
         flexShrink: 0,
       }}
@@ -266,15 +272,15 @@ function Digest({ digest, compact, withNote }) {
   )
 }
 
-function PanelHead({ hasOura, setHasOura, accent }) {
+function PanelHead({ hasOura, setHasOura, ouraConnected, accent }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
       <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>{hasOura ? 'Oura \u00b7 Readiness' : 'Daily Digest'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: '0.66rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Oura ring
+          {ouraConnected ? 'Oura ring' : 'Not connected'}
         </span>
-        <Toggle on={hasOura} onClick={() => setHasOura((v) => !v)} accent={accent} />
+        <Toggle on={hasOura} onClick={() => setHasOura((v) => !v)} accent={accent} disabled={!ouraConnected} />
       </div>
     </div>
   )
@@ -348,10 +354,10 @@ function Priorities({ priorities }) {
 }
 
 /* ---------- hero variants ---------- */
-function ReadinessOrDigest({ data, hasOura, setHasOura, accent, animate, size, compact }) {
+function ReadinessOrDigest({ data, hasOura, setHasOura, ouraConnected, accent, animate, size, compact }) {
   return (
     <>
-      <PanelHead hasOura={hasOura} setHasOura={setHasOura} accent={accent} />
+      <PanelHead hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} />
       {hasOura && data.oura ? (
         <>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: compact ? 14 : 16 }}>
@@ -369,7 +375,7 @@ function ReadinessOrDigest({ data, hasOura, setHasOura, accent, animate, size, c
   )
 }
 
-function SplitHero({ data, hasOura, setHasOura, accent, animate }) {
+function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
   return (
     <div
       style={{
@@ -384,7 +390,7 @@ function SplitHero({ data, hasOura, setHasOura, accent, animate }) {
       <div style={{ height: 3, background: 'linear-gradient(90deg,var(--cyan-500) 0%,color-mix(in srgb,var(--cyan-500) 30%,transparent) 55%,transparent 100%)' }} />
       <div className="hero-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
         <div style={{ padding: '26px 30px' }}>
-          <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} accent={accent} animate={animate} size={184} />
+          <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={184} />
         </div>
         <div className="hero-split-right" style={{ padding: '26px 30px', borderLeft: '1px solid var(--border-soft)' }}>
           <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline \u00b7 Today</div>
@@ -416,7 +422,7 @@ function SplitHero({ data, hasOura, setHasOura, accent, animate }) {
   )
 }
 
-function CardsHero({ data, hasOura, setHasOura, accent, animate }) {
+function CardsHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
   const card = {
     background: 'var(--surface)',
     border: '1px solid var(--border)',
@@ -426,7 +432,7 @@ function CardsHero({ data, hasOura, setHasOura, accent, animate }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 14, marginBottom: 34 }}>
       <div style={card}>
-        <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} accent={accent} animate={animate} size={160} compact />
+        <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={160} compact />
       </div>
       <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline \u00b7 Today</div>
@@ -454,6 +460,7 @@ export default function Home() {
   const [hero, setHero] = useState('split')
   const [data, setData] = useState(MOCK)
   const [hasOura, setHasOura] = useState(false)
+  const [ouraConnected, setOuraConnected] = useState(false)
   const [hover, setHover] = useState(null)
   const animate = useRef(!prefersReducedMotion()).current
 
@@ -464,7 +471,9 @@ export default function Home() {
         if (cancelled || !json) return
         const merged = { ...MOCK, ...json, today: { ...MOCK.today, ...(json.today || {}) }, digest: { ...MOCK.digest, ...(json.digest || {}) } }
         setData(merged)
-        setHasOura(Boolean(json.hasOura && json.oura))
+        const connected = Boolean(json.hasOura && json.oura)
+        setOuraConnected(connected)
+        setHasOura(connected)
       })
       .catch(() => {})
     return () => {
@@ -510,9 +519,9 @@ export default function Home() {
       </div>
 
       {hero === 'split' ? (
-        <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} accent={ACCENT} animate={animate} />
+        <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
       ) : (
-        <CardsHero data={data} hasOura={hasOura} setHasOura={setHasOura} accent={ACCENT} animate={animate} />
+        <CardsHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
       )}
 
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>

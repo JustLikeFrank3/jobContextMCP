@@ -77,6 +77,17 @@ class TestPipelineData:
         assert isinstance(body["resume_options"], list)
         assert len(body["resume_options"]) == 2
 
+    def test_payload_exposes_template_and_style_lists(self, http_client_noauth):
+        """The React template chooser sources its options from the payload."""
+        from lib.template_loader import (
+            VALID_TEMPLATES, VALID_CL_TEMPLATES, VALID_STYLES,
+        )
+        _seed_jobs([])
+        body = http_client_noauth.get("/dashboard/pipeline/data").json()
+        assert body["resume_templates"] == sorted(VALID_TEMPLATES)
+        assert body["cl_templates"] == sorted(VALID_CL_TEMPLATES)
+        assert body["template_styles"] == sorted(VALID_STYLES)
+
     def test_jobs_sorted_newest_first(self, http_client_noauth):
         _seed_jobs([
             _job(id=1, company="Older", added_date="2026-05-01 09:00"),
