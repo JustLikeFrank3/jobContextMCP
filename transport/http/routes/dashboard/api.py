@@ -231,19 +231,22 @@ def _is_owner() -> bool:
 
 
 def _openai_key_set() -> bool:
+    """Whether AI generation has a usable key for the active request/tenant.
+
+    Mirrors the exact resolution used by lib.config.get_llm_client() so the
+    Settings screen reports the same truth generation will actually see:
+    the LLM_API_KEY env var (global override) or the active tenant's merged
+    config.json openai_api_key. Works for single-tenant/local runs and the
+    owner session, not just when a per-user data-folder override is active.
+    """
     try:
-        from lib.user_context import get_data_folder_override
+        import os
+        from lib.config import get_active_config
 
-        override = get_data_folder_override()
-        if not override:
-            return False
-        cfg_path = override / "config.json"
-        if not cfg_path.exists():
-            return False
-        import json
-
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-        return bool((cfg.get("openai_api_key") or "").strip())
+        api_key = os.environ.get("LLM_API_KEY") or get_active_config().get(
+            "openai_api_key", ""
+        )
+        return bool(str(api_key or "").strip())
     except Exception:
         return False
 

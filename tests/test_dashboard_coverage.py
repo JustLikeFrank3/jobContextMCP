@@ -757,6 +757,202 @@ class TestDashboardSettingsApiCoverage:
         assert response.status_code in (401, 403)
 
 
+class TestOpenAiKeySetHelper:
+    """_openai_key_set() must be tenant-aware (PR #67 Copilot review, #1).
+
+    It mirrors lib.config.get_llm_client()'s resolution so the Settings screen
+    reports the same truth generation sees: the LLM_API_KEY env var OR the
+    active tenant's merged config openai_api_key. This must work for
+    single-tenant/local and owner sessions, not only when a per-user
+    data-folder override is active.
+    """
+
+    def test_true_from_active_config(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "sk-abc"})
+        assert dashboard_api_routes._openai_key_set() is True
+
+    def test_true_from_env_even_without_config_key(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.setenv("LLM_API_KEY", "env-provided-key")
+        monkeypatch.setattr(config, "get_active_config", lambda: {})
+        assert dashboard_api_routes._openai_key_set() is True
+
+    def test_false_when_no_key_anywhere(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "   "})
+        assert dashboard_api_routes._openai_key_set() is False
+
+    def test_false_and_safe_on_config_error(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+        def boom():
+            raise RuntimeError("no request context")
+
+        monkeypatch.setattr(config, "get_active_config", boom)
+        assert dashboard_api_routes._openai_key_set() is False
+
+
+class TestHomeHeroBuilders:
+    """Direct coverage for home.py hero HTML builders + readiness band helpers."""
+
+    def test_readiness_color_and_label_bands(self):
+        from transport.http.routes.dashboard import home
+
+        assert home._readiness_color_and_label(90) == ("#22C55E", "High readiness")
+        assert home._readiness_color_and_label(72) == ("#f59e0b", "Good readiness")
+        assert home._readiness_color_and_label(40) == ("#ef4444", "Low readiness")
+
+    def test_metric_bar_color_bands(self):
+        from transport.http.routes.dashboard import home
+
+        assert home._metric_bar_color(80) == "#22C55E"
+        assert home._metric_bar_color(60) == "#f59e0b"
+        assert home._metric_bar_color(10) == "#ef4444"
+
+    def test_today_move_text_readiness_variants(self):
+        from transport.http.routes.dashboard import home
+
+        assert "High readiness" in home._today_move_text({"readiness_score": 90}, {"overdue": 0})
+        assert "Decent readiness" in home._today_move_text({"readiness_score": 74}, {})
+        low = home._today_move_text({"readiness_score": 40}, {"overdue": 2})
+        assert "Recovery day" in low
+        assert "2 overdue task" in low
+
+    def test_today_move_text_no_oura_paths(self):
+        from transport.http.routes.dashboard import home
+
+        assert "in flight" in home._today_move_text(None, {"in_flight": 3})
+        assert "top priority" in home._today_move_text(None, {"in_flight": 0, "overdue": 0})
+
+    def test_build_hero_html_with_oura_and_data(self):
+        from transport.http.routes.dashboard import home
+
+        snap = {
+            "has_data": True, "active": 2, "in_flight": 1, "overdue": 1,
+            "priorities": ["Follow up with Acme"],
+        }
+        oura = {"readiness_score": 88, "sleep_score": 80, "hrv": 65, "recovery_index": 90}
+        out = home._build_hero_html("Frank", snap, oura)
+        assert "oura-panel" in out
+        assert ">88<" in out
+        assert "High readiness" in out
+        assert "1 overdue" in out
+        assert "Follow up with Acme" in out
+        assert "Active" in out
+
+    def test_build_hero_html_without_oura_no_data(self):
+        from transport.http.routes.dashboard import home
+
+        snap = {"has_data": False, "active": 0, "in_flight": 0, "overdue": 0, "priorities": []}
+        out = home._build_hero_html("there", snap, None)
+        assert "oura-panel" not in out
+        assert "What would you like to work on today?" in out
+
+
+class TestOuraBrowserOAuthRoutes:
+    """Browser OAuth connect/callback handlers in dashboard/oura.py."""
+
+    def test_connect_unavailable_when_not_configured(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(oura_route.oura, "oura_configured", lambda: False)
+        r = http_client_noauth.get("/dashboard/oura/connect", follow_redirects=False)
+        assert r.status_code == 303
+        assert "oura=unavailable" in r.headers["location"]
+
+    def test_connect_redirects_to_oura_with_state_cookie(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(oura_route.oura, "oura_configured", lambda: True)
+        monkeypatch.setattr(
+            oura_route.oura, "oura_authorize_url",
+            lambda state, redirect_uri: f"https://cloud.ouraring.com/oauth/authorize?state={state}",
+        )
+        r = http_client_noauth.get("/dashboard/oura/connect", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"].startswith("https://cloud.ouraring.com/oauth/authorize")
+        assert "oura_state=" in r.headers.get("set-cookie", "")
+
+    def test_callback_error_param_redirects_error(self, http_client_noauth):
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?error=access_denied", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_missing_code_redirects_error(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/oura/callback", follow_redirects=False)
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_state_mismatch_redirects_error(self, http_client_noauth):
+        # No state cookie set → expected is empty → mismatch → error.
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=xyz", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_success_flow(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(
+            oura_route.oura, "exchange_code_for_tokens",
+            lambda code, redirect_uri: {"access_token": "a", "refresh_token": "r"},
+        )
+        monkeypatch.setattr(oura_route.oura, "save_oura_tokens", lambda tokens: None)
+        monkeypatch.setattr(oura_route.oura, "sync_oura", lambda: {"ok": True})
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=connected" in r.headers["location"]
+
+    def test_callback_success_tolerates_sync_failure(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(
+            oura_route.oura, "exchange_code_for_tokens",
+            lambda code, redirect_uri: {"access_token": "a", "refresh_token": "r"},
+        )
+        monkeypatch.setattr(oura_route.oura, "save_oura_tokens", lambda tokens: None)
+
+        def sync_boom():
+            raise RuntimeError("sync hiccup")
+
+        monkeypatch.setattr(oura_route.oura, "sync_oura", sync_boom)
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        # Connect must still succeed even if the best-effort first sync fails.
+        assert r.status_code == 303
+        assert "oura=connected" in r.headers["location"]
+
+    def test_callback_exchange_error_redirects_error(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        def boom(code, redirect_uri):
+            raise oura_route.oura.OuraError("bad code")
+
+        monkeypatch.setattr(oura_route.oura, "exchange_code_for_tokens", boom)
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+
 class TestDashboardOuraApiCoverage:
     """POST /api/dashboard/oura/sync + /disconnect: OAuth-backed Oura actions.
 

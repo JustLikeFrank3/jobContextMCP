@@ -940,3 +940,68 @@ def test_seeder_job_queue_covers_all_alter_migrations(tmp_path):
         "add them to _SCHEMA_SQL (lib/user_provisioning.py) and _SCHEMA "
         "(scripts/migrate_to_sqlite.py) to prevent ledger-skip drift"
     )
+
+
+# ── Regression: migration error tolerance is scoped to job_queue ALTERs (PR #67, #2)
+
+def test_apply_migrations_tolerates_job_queue_alter_on_missing_table(tmp_path, monkeypatch):
+    """An ALTER TABLE job_queue against a DB lacking job_queue is tolerated and
+    the ledger still advances (so later migrations aren't blocked)."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        ["ALTER TABLE job_queue ADD COLUMN brand_new TEXT"],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        # Must NOT raise despite "no such table: job_queue".
+        db_mod._apply_migrations(con)
+        applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
+        assert applied == 1  # ledger advanced past the tolerated ALTER
+    finally:
+        con.close()
+
+
+def test_apply_migrations_raises_on_unrelated_missing_table(tmp_path, monkeypatch):
+    """A non-job_queue migration failing with the same 'no such table' message
+    must NOT be tolerated — it should raise so a real bug isn't marked applied."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        ["ALTER TABLE some_other_table ADD COLUMN oops TEXT"],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            db_mod._apply_migrations(con)
+        # Ledger did not record the failed migration.
+        applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
+        assert applied == 0
+    finally:
+        con.close()
+
+
+def test_apply_migrations_raises_on_unrelated_duplicate_column(tmp_path, monkeypatch):
+    """'duplicate column name' is only tolerable on job_queue ALTERs; on any
+    other table it signals a real drift and must raise."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        [
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)",
+            "ALTER TABLE widgets ADD COLUMN name TEXT",  # duplicate on non-job_queue
+        ],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            db_mod._apply_migrations(con)
+    finally:
+        con.close()
+

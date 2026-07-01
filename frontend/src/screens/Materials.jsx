@@ -45,6 +45,12 @@ function openPreview(file) {
     window.alert('Allow pop-ups for this site to preview files in a window.')
     return
   }
+  // Sever the opener link before writing content. The preview loads
+  // user-controlled files (including SVG, which can execute script), so a
+  // live window.opener would expose the SPA to reverse-tabnabbing / same-origin
+  // opener attacks. We keep the `win` handle for document.write but null its
+  // opener so the child can't reach back via window.opener / window.top.opener.
+  win.opener = null
   const name = escapeHtml(file.name)
   const href = file.href // already URL-encoded by the backend
   const previewable = PREVIEWABLE.has(extOf(file))

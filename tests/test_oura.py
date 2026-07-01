@@ -243,3 +243,362 @@ def test_oura_connection_status_with_encryption(tmp_data, oura_mod, monkeypatch)
     assert oura_mod.oura_connection_status()["connected"] is False
     oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
     assert oura_mod.oura_connection_status()["connected"] is True
+
+
+# ── httpx mock plumbing ──────────────────────────────────────────────────────
+
+class _FakeResp:
+    """Minimal stand-in for httpx.Response."""
+
+    def __init__(self, status_code=200, json_data=None, text=""):
+        self.status_code = status_code
+        self._json = json_data if json_data is not None else {}
+        self.text = text
+
+    def json(self):
+        return self._json
+
+
+@pytest.fixture()
+def creds(monkeypatch):
+    """Configure Oura client credentials via env for the duration of a test."""
+    monkeypatch.setenv("OURA_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("OURA_CLIENT_SECRET", "test-client-secret")
+
+
+# ── credentials / configuration ──────────────────────────────────────────────
+
+def test_oura_configured_true_with_env(oura_mod, creds):
+    assert oura_mod.oura_configured() is True
+
+
+def test_oura_configured_false_without_creds(oura_mod, monkeypatch):
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    monkeypatch.setitem(cfg._cfg, "oura_client_id", "")
+    monkeypatch.setitem(cfg._cfg, "oura_client_secret", "")
+    assert oura_mod.oura_configured() is False
+
+
+def test_client_creds_fall_back_to_config(oura_mod, monkeypatch):
+    """When env vars are absent, credentials come from lib.config._cfg."""
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    monkeypatch.setitem(cfg._cfg, "oura_client_id", "cfg-cid")
+    monkeypatch.setitem(cfg._cfg, "oura_client_secret", "cfg-secret")
+    cid, secret = oura_mod._client_creds()
+    assert cid == "cfg-cid"
+    assert secret == "cfg-secret"
+
+
+def test_oura_authorize_url_contains_params(oura_mod, creds):
+    url = oura_mod.oura_authorize_url(state="xyz-state", redirect_uri="https://app/cb")
+    assert url.startswith(oura_mod.OURA_AUTHORIZE_URL)
+    assert "client_id=test-client-id" in url
+    assert "state=xyz-state" in url
+    assert "redirect_uri=https" in url
+
+
+# ── token save error path ────────────────────────────────────────────────────
+
+def test_save_oura_tokens_missing_fields_raises(tmp_data, oura_mod):
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod.save_oura_tokens({"access_token": "only-access"})  # no refresh
+
+
+def test_clear_oura_tokens_returns_true_then_false(tmp_data, oura_mod):
+    oura_mod.save_oura_tokens(dict(_RAW_TOKENS))
+    assert oura_mod.clear_oura_tokens() is True
+    assert oura_mod.clear_oura_tokens() is False
+    assert oura_mod.get_oura_tokens() is None
+
+
+# ── exchange_code_for_tokens ─────────────────────────────────────────────────
+
+def test_exchange_code_success(oura_mod, creds, monkeypatch):
+    import httpx
+    captured = {}
+
+    def fake_post(url, data=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return _FakeResp(200, {"access_token": "a", "refresh_token": "r", "expires_in": 100})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    out = oura_mod.exchange_code_for_tokens("the-code", "https://app/cb")
+    assert out["access_token"] == "a"
+    assert captured["url"] == oura_mod.OURA_TOKEN_URL
+    assert captured["data"]["grant_type"] == "authorization_code"
+    assert captured["data"]["code"] == "the-code"
+
+
+def test_exchange_code_missing_creds_raises(oura_mod, monkeypatch):
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    monkeypatch.setitem(cfg._cfg, "oura_client_id", "")
+    monkeypatch.setitem(cfg._cfg, "oura_client_secret", "")
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod.exchange_code_for_tokens("code", "https://app/cb")
+
+
+def test_exchange_code_non_200_raises(oura_mod, creds, monkeypatch):
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResp(400, text="bad request"))
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod.exchange_code_for_tokens("code", "https://app/cb")
+
+
+def test_exchange_code_http_error_raises(oura_mod, creds, monkeypatch):
+    import httpx
+
+    def boom(*a, **k):
+        raise httpx.HTTPError("connection reset")
+
+    monkeypatch.setattr(httpx, "post", boom)
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod.exchange_code_for_tokens("code", "https://app/cb")
+
+
+# ── refresh + valid-access-token ─────────────────────────────────────────────
+
+def test_refresh_tokens_persists_and_keeps_refresh(tmp_data, oura_mod, creds, monkeypatch):
+    import httpx
+    # Response omits refresh_token — the existing one must be retained.
+    monkeypatch.setattr(
+        httpx, "post",
+        lambda *a, **k: _FakeResp(200, {"access_token": "new-access", "expires_in": 3600}),
+    )
+    out = oura_mod._refresh_tokens("old-refresh")
+    assert out["access_token"] == "new-access"
+    assert out["refresh_token"] == "old-refresh"  # setdefault kept it
+    # And it was saved.
+    stored = oura_mod.get_oura_tokens()
+    assert stored["access_token"] == "new-access"
+
+
+def test_refresh_tokens_non_200_raises(oura_mod, creds, monkeypatch):
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResp(401, text="nope"))
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod._refresh_tokens("old-refresh")
+
+
+def test_valid_access_token_none_when_no_row(tmp_data, oura_mod):
+    assert oura_mod._valid_access_token() is None
+
+
+def test_valid_access_token_returns_unexpired(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+    oura_mod.save_oura_tokens({
+        "access_token": "still-good", "refresh_token": "r", "expires_in": 86400,
+    })
+    assert oura_mod._valid_access_token() == "still-good"
+
+
+def test_valid_access_token_refreshes_when_expired(tmp_data, oura_mod, creds, monkeypatch):
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+    # Persist an already-expired token.
+    oura_mod.save_oura_tokens({
+        "access_token": "stale", "refresh_token": "old-refresh", "expires_in": -10,
+    })
+    import httpx
+    monkeypatch.setattr(
+        httpx, "post",
+        lambda *a, **k: _FakeResp(200, {"access_token": "fresh", "expires_in": 3600}),
+    )
+    assert oura_mod._valid_access_token() == "fresh"
+
+
+# ── _api_get ─────────────────────────────────────────────────────────────────
+
+def test_api_get_returns_data_list(oura_mod, monkeypatch):
+    import httpx
+    monkeypatch.setattr(
+        httpx, "get",
+        lambda *a, **k: _FakeResp(200, {"data": [{"day": "2026-06-29", "score": 80}]}),
+    )
+    out = oura_mod._api_get("tok", "daily_readiness", {"start_date": "x", "end_date": "y"})
+    assert out == [{"day": "2026-06-29", "score": 80}]
+
+
+def test_api_get_401_raises(oura_mod, monkeypatch):
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResp(401, text="unauth"))
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod._api_get("tok", "daily_readiness", {})
+
+
+def test_api_get_500_raises(oura_mod, monkeypatch):
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResp(500, text="boom"))
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod._api_get("tok", "daily_readiness", {})
+
+
+def test_api_get_http_error_raises(oura_mod, monkeypatch):
+    import httpx
+
+    def boom(*a, **k):
+        raise httpx.HTTPError("timeout")
+
+    monkeypatch.setattr(httpx, "get", boom)
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod._api_get("tok", "daily_readiness", {})
+
+
+# ── _latest_by_day ───────────────────────────────────────────────────────────
+
+def test_latest_by_day_picks_max(oura_mod):
+    items = [{"day": "2026-06-27"}, {"day": "2026-06-29"}, {"day": "2026-06-28"}]
+    assert oura_mod._latest_by_day(items)["day"] == "2026-06-29"
+
+
+def test_latest_by_day_empty_is_none(oura_mod):
+    assert oura_mod._latest_by_day([]) is None
+    assert oura_mod._latest_by_day([{"score": 1}]) is None  # no 'day' keys
+
+
+# ── fetch_latest_from_oura ───────────────────────────────────────────────────
+
+def _fake_api_map(mapping):
+    """Return a fake _api_get that dispatches by endpoint path."""
+    def _fake(access_token, path, params):
+        return mapping.get(path, [])
+    return _fake
+
+
+def test_fetch_latest_combines_endpoints(oura_mod, monkeypatch):
+    day = "2026-06-29"
+    monkeypatch.setattr(oura_mod, "_api_get", _fake_api_map({
+        "daily_readiness": [{"day": day, "score": 88, "contributors": {"recovery_index": 91}}],
+        "daily_sleep": [{"day": day, "score": 80}],
+        "sleep": [{"day": day, "average_hrv": 64.6}],
+    }))
+    out = oura_mod.fetch_latest_from_oura("tok")
+    assert out["date"] == day
+    assert out["readiness_score"] == 88
+    assert out["sleep_score"] == 80
+    assert out["hrv"] == 65  # rounded
+    assert out["recovery_index"] == 91
+    assert "daily_readiness" in out["raw_json"]
+
+
+def test_fetch_latest_no_readiness_returns_none(oura_mod, monkeypatch):
+    monkeypatch.setattr(oura_mod, "_api_get", _fake_api_map({"daily_readiness": []}))
+    assert oura_mod.fetch_latest_from_oura("tok") is None
+
+
+def test_fetch_latest_hrv_best_effort(oura_mod, monkeypatch):
+    """An HRV endpoint failure must not sink the whole fetch; hrv falls back to 0."""
+    day = "2026-06-29"
+
+    def _fake(access_token, path, params):
+        if path == "sleep":
+            raise oura_mod.OuraError("hrv endpoint down")
+        return {
+            "daily_readiness": [{"day": day, "score": 70, "contributors": {}}],
+            "daily_sleep": [{"day": day, "score": 60}],
+        }.get(path, [])
+
+    monkeypatch.setattr(oura_mod, "_api_get", _fake)
+    out = oura_mod.fetch_latest_from_oura("tok")
+    assert out["hrv"] == 0
+    assert out["readiness_score"] == 70
+
+
+# ── sync_oura ────────────────────────────────────────────────────────────────
+
+def test_sync_oura_not_configured(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    monkeypatch.setitem(cfg._cfg, "oura_client_id", "")
+    monkeypatch.setitem(cfg._cfg, "oura_client_secret", "")
+    res = oura_mod.sync_oura()
+    assert res == {"ok": False, "connected": False, "error": "not_configured"}
+
+
+def test_sync_oura_not_connected(tmp_data, oura_mod, creds):
+    res = oura_mod.sync_oura()
+    assert res["ok"] is False
+    assert res["error"] == "not_connected"
+
+
+def test_sync_oura_no_data_marks_synced(tmp_data, oura_mod, creds, monkeypatch):
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+    oura_mod.save_oura_tokens({"access_token": "a", "refresh_token": "r", "expires_in": 86400})
+    monkeypatch.setattr(oura_mod, "fetch_latest_from_oura", lambda tok: None)
+    res = oura_mod.sync_oura()
+    assert res["ok"] is True
+    assert res["reading"] is None
+    assert res["note"] == "no_data"
+
+
+def test_sync_oura_success_logs_reading(tmp_data, oura_mod, creds, monkeypatch):
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+    oura_mod.save_oura_tokens({"access_token": "a", "refresh_token": "r", "expires_in": 86400})
+    reading = {
+        "date": "2026-06-29", "readiness_score": 84, "sleep_score": 70,
+        "hrv": 61, "recovery_index": 82, "raw_json": "{}",
+    }
+    monkeypatch.setattr(oura_mod, "fetch_latest_from_oura", lambda tok: reading)
+    res = oura_mod.sync_oura()
+    assert res["ok"] is True
+    assert res["reading"]["readiness_score"] == 84
+    # Persisted to the readiness table.
+    assert oura_mod._latest_oura_row()["readiness_score"] == 84
+
+
+def test_sync_oura_fetch_error_reports_connected(tmp_data, oura_mod, creds, monkeypatch):
+    monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(cfg, "APP_ENCRYPTION_KEY", "", raising=False)
+    monkeypatch.setitem(cfg._cfg, "app_encryption_key", "")
+    oura_mod.save_oura_tokens({"access_token": "a", "refresh_token": "r", "expires_in": 86400})
+
+    def boom(tok):
+        raise oura_mod.OuraError("api down")
+
+    monkeypatch.setattr(oura_mod, "fetch_latest_from_oura", boom)
+    res = oura_mod.sync_oura()
+    assert res["ok"] is False
+    assert res["connected"] is True
+    assert "api down" in res["error"]
+
+
+# ── sync_oura_readiness (string wrapper for MCP) ─────────────────────────────
+
+def test_sync_oura_readiness_not_configured_message(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    monkeypatch.setitem(cfg._cfg, "oura_client_id", "")
+    monkeypatch.setitem(cfg._cfg, "oura_client_secret", "")
+    assert "not configured" in oura_mod.sync_oura_readiness().lower()
+
+
+def test_sync_oura_readiness_success_message(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.setattr(oura_mod, "sync_oura", lambda: {
+        "ok": True,
+        "reading": {"date": "2026-06-29", "readiness_score": 88,
+                    "sleep_score": 80, "hrv": 65, "recovery_index": 90},
+    })
+    out = oura_mod.sync_oura_readiness()
+    assert "2026-06-29" in out
+    assert "88" in out
+    assert "High" in out
+
+
+def test_sync_oura_readiness_no_data_message(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.setattr(oura_mod, "sync_oura", lambda: {"ok": True, "reading": None})
+    assert "no new readiness" in oura_mod.sync_oura_readiness().lower()
+
+
+def test_sync_oura_readiness_not_connected_message(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.setattr(oura_mod, "sync_oura", lambda: {"ok": False, "error": "not_connected"})
+    assert "connect" in oura_mod.sync_oura_readiness().lower()

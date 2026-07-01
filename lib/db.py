@@ -180,12 +180,15 @@ _MIGRATIONS = [
 ]
 
 
-# Substrings of sqlite3.OperationalError messages that are safe to ignore for a
-# single migration statement without aborting the whole chain. These occur when
-# an ALTER targets a table that doesn't exist yet in a given DB (e.g. job_queue
-# is created out-of-band by the SQLite seeder, not by _MIGRATIONS) or a column
-# that was already added. Tolerating them keeps later migrations (e.g. the Oura
-# table) from being permanently blocked on partially-provisioned databases.
+# Substrings of sqlite3.OperationalError messages that are safe to ignore, but
+# ONLY for the known-fragile ALTER TABLE job_queue migrations (see the guard in
+# _apply_migrations). These occur when an ALTER targets job_queue before it has
+# been created out-of-band by the SQLite seeder ("no such table") or a column
+# that was already added by the seeder ("duplicate column name"). Scoping the
+# tolerance to job_queue ALTERs keeps later migrations (e.g. the Oura tables)
+# from being blocked on partially-provisioned DBs, while ensuring an unrelated
+# broken migration (e.g. a typoed CREATE TABLE) still fails loudly instead of
+# being silently marked applied.
 _TOLERABLE_MIGRATION_ERRORS = ("duplicate column name", "no such table")
 
 
@@ -227,7 +230,11 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
             con.execute(sql)
         except sqlite3.OperationalError as exc:
             msg = str(exc).lower()
-            if any(tol in msg for tol in _TOLERABLE_MIGRATION_ERRORS):
+            # Only tolerate the known-fragile job_queue ALTERs; any other
+            # migration failing with the same message is a real bug and must
+            # abort so it isn't silently marked applied.
+            is_job_queue_alter = "alter table job_queue" in sql.lower()
+            if is_job_queue_alter and any(tol in msg for tol in _TOLERABLE_MIGRATION_ERRORS):
                 _logger.warning(
                     "migration %d tolerated (%s): %s",
                     i, exc, sql.strip().splitlines()[0][:70],
