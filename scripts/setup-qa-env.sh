@@ -15,7 +15,7 @@
 #   ENTRA_CLIENT_ID       - Entra app registration client ID
 #   ENTRA_CLIENT_SECRET   - Entra app registration client secret
 #   LLM_API_KEY           - API key for the LLM provider (leave blank for Azure Foundry w/ workload identity)
-#   ENTRA_OWNER_OID       - Frank's OID (az ad user show --id <email> --query id -o tsv)
+#   ENTRA_OWNER_OID       - Owner OID (az ad user show --id <email> --query id -o tsv)
 
 set -euo pipefail
 

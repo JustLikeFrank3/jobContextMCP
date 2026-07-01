@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import html
+import html  # noqa: F401  (retained for potential HTML responses)
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from lib import config
 from lib.api_keys import create_key, list_keys, revoke_key
 from lib.io import _load_json
-from transport.http.auth import require_api_key, require_authenticated_user
+from transport.http.auth import require_authenticated_user
 from transport.http.security import User
 
 from tools.digest import (
@@ -37,7 +37,7 @@ from .home import (
     _today_move_text,
 )
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard-api"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api/dashboard", tags=["dashboard-api"])
 
 
 def _first_name(user: User) -> str:
@@ -129,8 +129,8 @@ async def dashboard_me(
         {
             "authenticated": True,
             "id": user.id,
-            "name": html.escape((user.name or "").strip()),
-            "firstName": html.escape(_first_name(user)),
+            "name": (user.name or "").strip(),
+            "firstName": _first_name(user),
         }
     )
 
@@ -152,7 +152,7 @@ async def dashboard_home_data(
     ]
 
     payload = {
-        "welcomeName": html.escape(_first_name(user)),
+        "welcomeName": _first_name(user),
         "hasOura": oura is not None,
         "oura": _oura_payload(oura),
         "today": {

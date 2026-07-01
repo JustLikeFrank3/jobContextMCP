@@ -71,7 +71,11 @@ CREATE TABLE IF NOT EXISTS job_queue (
     fitment_score   TEXT,
     fitment_context TEXT,
     decision_notes  TEXT,
-    decided_date    TEXT
+    decided_date    TEXT,
+    resume_template TEXT,
+    resume_style    TEXT,
+    cl_template     TEXT,
+    cl_style        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS people (
