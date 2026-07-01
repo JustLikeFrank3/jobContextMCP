@@ -17,8 +17,11 @@ from typing import Any
 _HERE = Path(__file__).parent.parent          # jobContextMCP/ root
 _CONFIG_FILENAME = "config.json"
 _MASTER_RESUME_PATH = "01-Current-Optimized/Resume - MASTER SOURCE.txt"
-_LEETCODE_CHEATSHEET_FILENAME = "GM_Interview_Cheatsheet.md"
-_QUICK_REFERENCE_FILENAME = "INTERVIEW_DAY_QUICK_REFERENCE.md"
+# Generic fallback filenames — match what setup_workspace() creates. Only used
+# when a config omits the key; every real config (owner + per-tenant) sets these
+# explicitly, so this default must never be a personal filename.
+_LEETCODE_CHEATSHEET_FILENAME = "Algorithm_Cheatsheet.md"
+_QUICK_REFERENCE_FILENAME = "Interview_Quick_Reference.md"
 _CONFIG_PATH = _HERE / _CONFIG_FILENAME
 _EXAMPLE_PATH = _HERE / "config.example.json"
 _ACTIVE_CONFIG_CTX: ContextVar[dict[str, Any] | None] = ContextVar("active_config_ctx", default=None)
