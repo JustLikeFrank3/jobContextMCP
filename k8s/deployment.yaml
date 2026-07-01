@@ -126,6 +126,21 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
+            # Oura Ring OAuth client credentials. Optional: when absent the
+            # connect flow shows "not enabled" instead of erroring. Add the
+            # keys to jcmcp-app-secrets and restart to turn it on.
+            - name: OURA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: oura_client_id
+                  optional: true
+            - name: OURA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: oura_client_secret
+                  optional: true
             # App-wide key for encrypting secrets at rest (per-user OAuth
             # tokens). Optional: when absent, tokens are stored in cleartext
             # (prior behaviour). See lib/crypto.py.
