@@ -524,32 +524,6 @@ export default function Home() {
         <CardsHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
-        <a
-          href="/why"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 16px',
-            border: '1px solid var(--border)',
-            borderRadius: 999,
-            color: 'var(--muted)',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-          }}
-        >
-          <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="10" cy="10" r="7.5" />
-            <path d="M10 9v4.5" strokeLinecap="round" />
-            <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
-          </svg>
-          Why use jobContext?
-        </a>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))', gap: 14 }}>
         {cards.map((c) => {
           const on = hover === c.key

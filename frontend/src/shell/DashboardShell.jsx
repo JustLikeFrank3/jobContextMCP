@@ -98,6 +98,20 @@ export default function DashboardShell() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
+          >
+            <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+              <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <circle cx="10" cy="10" r="7.5" />
+                <path d="M10 9v4.5" strokeLinecap="round" />
+                <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
+            Why use jobContext?
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
             <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
               <Icon name="settings" size={15} />
