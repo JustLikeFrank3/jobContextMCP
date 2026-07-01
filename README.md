@@ -60,7 +60,7 @@ If you're in the same situation, it's yours.
 
 ### Web dashboard
 
-![JobContextMCP Dashboard v1](docs/jobContextMCP%20Dashboard%20v1.png)
+![JobContextMCP Dashboard v2](docs/jobContextMCP%20Dashboard%20v2.png)
 
 The browser dashboard turns the local MCP workspace into a job-search command center: daily digest (including a NEEDS DECISION section surfacing unevaluated queue items), pipeline triage, cover-letter edit dialog with LLM-powered revision and draft versioning, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
 
