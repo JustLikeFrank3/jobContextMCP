@@ -6,6 +6,46 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.2.0] - 2026-07-01
+
+React single-page dashboard, Oura Ring integration, encryption of per-user OAuth tokens at rest, a hosted QA environment, a full brand refresh, and a multi-tenant data-isolation fix. 1157 passing tests.
+
+### Features
+
+- **React SPA dashboard** (`frontend/`) -- new Vite + React 18 single-page app served under `/app` and baked into the container via a multi-stage Docker build. Ten screens: Home, Pipeline, Job Hunt (kanban), Posts, Outreach, People, Materials, Interviews, Wellbeing, Settings. Cookie-session auth context with protected client routes; post-login now lands on `/app` instead of the legacy dashboard. Design-token primitives and a routed `DashboardShell` with tabbed navigation.
+- **Home JSON feed** -- `GET /api/dashboard/home` returns the Home payload (Oura readiness + pipeline hero) so the SPA renders without server-side templating.
+- **Oura Ring integration** -- real Oura OAuth connect flow wired into the SPA Settings screen (callback at `/dashboard/oura/callback`); readiness hero on Home that renders only when a ring is connected (otherwise the digest shows); owner-gated enablement that shows "not enabled" when `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` are absent instead of erroring. All Oura reads scoped to the current user OID.
+
+### Security
+
+- **Per-user OAuth tokens encrypted at rest** (`lib/crypto.py`) -- tokens are encrypted with a Fernet key from `APP_ENCRYPTION_KEY`; absent the key, tokens fall back to cleartext (prior behavior) so local dev is unaffected. Production and QA provision the key via the app-secrets K8s secret.
+- **Removed owner-personal filenames from base config** -- the app-wide default cheatsheet/quick-reference filenames and both public config templates (`config.example.json`, `docker.config.example.json`) no longer ship the owner's personal filenames; genericized to match what `setup_workspace()` creates. No content ever leaked (reads resolve against each user's own partition), but the base config is now tenant-neutral.
+
+### Bug fixes
+
+- **Multi-tenant data-partition path doubling** -- `lib/io.py` `_resolve_data_path()` re-applied an active data-folder override to paths that were already tenant-resolved, producing `data/users/<oid>/users/<oid>/*.json`. The resolver is now idempotent; a path already under the override is returned unchanged.
+- **`check_workspace()` read the wrong config** -- under an active tenant override it read the repo-root base config instead of the user's own; it now resolves the per-user config so contact and LeetCode language display correctly.
+- **Tenant setup did not persist resolution keys** -- `setup_workspace()` now writes `master_resume_path`, `leetcode_cheatsheet_path`, `quick_reference_path`, `leetcode_language`, and `leetcode_problems_dir` into the per-user config so a tenant's files resolve to their own partition instead of inheriting owner defaults.
+- **Home defaulted to a zeroed Oura panel** -- the Home feed treated any Oura row as "connected"; it now gates the readiness panel on a real connection so users without a ring see the digest.
+- **Literal unicode escapes in the SPA** -- `\u00b7` / `\u2026` sequences rendered raw in several screens; wrapped in expressions so they render as the intended glyphs.
+- **Redundant Settings nav tab removed** -- the top-nav Settings tab duplicated the header Settings button; dropped from the tab bar (route and button retained).
+
+### Infrastructure
+
+- **Hosted QA environment** (`k8s/qa/`, `scripts/setup-qa-env.sh`) -- `qa.jobcontext.ai` runs on the existing AKS cluster in namespace `jcmcp-qa` with its own storage account and PVC, sharing the workload identity via a QA federated credential. Pushes to the `qa` branch build a `qa-<sha>` image and roll out independently of production.
+- **Dropped orphaned Key Vault mount** -- removed `k8s/secret-provider-class.yaml`, dead pre-multi-tenant YAML that embedded owner-personal filenames as Key Vault secrets; nothing consumed it (the secrets-store CSI CRD is not installed and no deployment mounted it).
+- **Genericized configmap fallback paths** -- the leetcode cheatsheet / quick-reference fallback paths in both prod and QA configmaps now match `setup_workspace()` output.
+
+### Branding
+
+- **Unified framed-badge identity** across all public and app surfaces: favicon (multi-size `favicon.ico`), apple-touch-icon, LinkedIn banner, og-image (1200x627), and inline marks on landing, login, architecture, setup, and sub-landing pages. Marketing copy updated: the removed "Daily Digest" tout is replaced with "Dashboard."
+
+### Tests
+
+- 1157 passing (up from 1140). New regression coverage for tenant-scoped setup writes (single-level partition, no doubling), per-user config resolution keys, and `check_workspace` under a tenant override.
+
+---
+
 ## [1.1.0] - 2026-06-24
 
 Multi-template document generation: 4 resume layouts x 5 color themes = 20 resume variants, plus a matching 4-layout cover letter system. Template selection is per-job in the pipeline. 924 passing tests.
