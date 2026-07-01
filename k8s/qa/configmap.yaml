@@ -17,11 +17,11 @@ data:
       "optimized_resumes_dir":     "01-Current-Optimized",
       "cover_letters_dir":         "02-Cover-Letters",
       "reference_materials_dir":   "06-Reference-Materials",
-      "master_resume_path":        "01-Current-Optimized/Frank MacBride Resume - MASTER SOURCE WITH METRICS.txt",
+      "master_resume_path":        "01-Current-Optimized/Resume - MASTER SOURCE.txt",
       "leetcode_cheatsheet_path":  "Algorithm_Cheatsheet.md",
       "quick_reference_path":      "Interview_Quick_Reference.md",
-      "template_format_path":      "06-Reference-Materials/Frank MacBride Resume - Template Format.txt",
-      "achievements_path":          "06-Reference-Materials/GM Recognition Awards.txt",
+      "template_format_path":      "06-Reference-Materials/Resume - Template Format.txt",
+      "achievements_path":          "06-Reference-Materials/Achievements.txt",
       "feedback_received_path":    "06-Reference-Materials/Feedback_Received.txt",
       "skills_shorter_path":       "06-Reference-Materials/Skills - 10% Shorter.txt",
       "resume_template_png":       "06-Reference-Materials/resume_template.png",
@@ -39,14 +39,14 @@ data:
         "https://github.com/JustLikeFrank3/LiveVoxNative"
       ],
       "contact": {
-        "name":      "Frank Vladmir MacBride III",
-        "phone":     "+1 (305) 490-1262",
-        "email":     "frankvmacbride@gmail.com",
-        "linkedin":  "www.linkedin.com/in/frankvmacbride",
-        "github":    "https://github.com/JustLikeFrank3",
-        "city":      "Atlanta, GA",
-        "city_state":"Atlanta, GA",
-        "location":  "Atlanta, GA"
+        "name":      "",
+        "phone":     "",
+        "email":     "",
+        "linkedin":  "",
+        "github":    "",
+        "city":      "",
+        "city_state":"",
+        "location":  ""
       }
     }
   storage_account: "__QA_STORAGE_ACCOUNT__"
