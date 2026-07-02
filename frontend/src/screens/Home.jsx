@@ -420,7 +420,7 @@ function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }
         }}
       >
         <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--green-500)', flexShrink: 0 }} />
-        <span style={{ ...EYEBROW, color: 'var(--green-300)', flexShrink: 0 }}>Today's move</span>
+        <span style={{ ...EYEBROW, color: 'var(--green-300)', flexShrink: 0 }}>Today&rsquo;s move</span>
         <span style={{ color: 'var(--text-soft)', fontSize: '0.9rem', lineHeight: 1.4 }}>{data.today.move}</span>
         <span style={{ marginLeft: 'auto', color: 'var(--cyan-400)', fontSize: '1.1rem', flexShrink: 0 }}>{'\u2192'}</span>
       </div>

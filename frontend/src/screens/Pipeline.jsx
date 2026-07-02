@@ -314,7 +314,7 @@ function EditResumeModal({ job, resumeOptions, onClose, onDone }) {
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 'var(--fs-sm)', color: 'var(--text-soft)' }}>
             <input type="checkbox" checked={exportPdf} onChange={(e) => setExportPdf(e.target.checked)} />
-            Also export a PDF using this job's selected template
+            Also export a PDF using this job&rsquo;s selected template
           </label>
           {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{err}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

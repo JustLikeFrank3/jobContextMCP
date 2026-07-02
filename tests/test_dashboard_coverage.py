@@ -1438,6 +1438,63 @@ class TestDashboardInterviewsCoverage:
         assert "Recent Debriefs" in response.text
         assert "boot()" in response.text
 
+    def _payload_with(self, monkeypatch, interviews):
+        monkeypatch.setattr(
+            interviews_routes,
+            "_load_json",
+            lambda *_args, **_kwargs: {"interviews": interviews},
+        )
+        return interviews_routes._interviews_payload()
+
+    def test_today_with_debrief_lands_in_debriefs_not_upcoming(self, monkeypatch):
+        """A debrief dated today leaves Upcoming the moment it has content."""
+        today = dt.date.today()
+        payload = self._payload_with(
+            monkeypatch,
+            [{"company": "Debriefed Co", "interview_date": today.isoformat(), "self_rating": 8}],
+        )
+
+        assert [iv["company"] for iv in payload["upcoming"]] == []
+        assert [iv["company"] for iv in payload["recent"]] == ["Debriefed Co"]
+
+    def test_today_without_debrief_lands_in_upcoming_not_debriefs(self, monkeypatch):
+        today = dt.date.today()
+        payload = self._payload_with(
+            monkeypatch,
+            [{"company": "Scheduled Co", "interview_date": today.isoformat()}],
+        )
+
+        assert [iv["company"] for iv in payload["upcoming"]] == ["Scheduled Co"]
+        assert [iv["company"] for iv in payload["recent"]] == []
+
+    def test_future_without_debrief_is_upcoming(self, monkeypatch):
+        today = dt.date.today()
+        payload = self._payload_with(
+            monkeypatch,
+            [{"company": "Future Co", "interview_date": (today + dt.timedelta(days=3)).isoformat()}],
+        )
+
+        assert [iv["company"] for iv in payload["upcoming"]] == ["Future Co"]
+        assert [iv["company"] for iv in payload["recent"]] == []
+
+    def test_debrief_detected_from_any_populated_field(self, monkeypatch):
+        """what_landed / what_didnt / verbatim_quotes each mark a debrief even
+        when the interview is dated in the future."""
+        today = dt.date.today()
+        future = (today + dt.timedelta(days=2)).isoformat()
+        payload = self._payload_with(
+            monkeypatch,
+            [
+                {"company": "Landed Co", "interview_date": future, "what_landed": ["strong system design"]},
+                {"company": "Didnt Co", "interview_date": future, "what_didnt": ["rambled on scaling"]},
+                {"company": "Quotes Co", "interview_date": future, "verbatim_quotes": ["we'd move fast"]},
+                {"company": "Empty Co", "interview_date": future, "what_landed": []},
+            ],
+        )
+
+        assert set(iv["company"] for iv in payload["upcoming"]) == {"Empty Co"}
+        assert set(iv["company"] for iv in payload["recent"]) == {"Landed Co", "Didnt Co", "Quotes Co"}
+
 
 class TestDashboardApiKeysCoverage:
     def test_key_row_html_handles_used_and_unlabeled_keys(self):

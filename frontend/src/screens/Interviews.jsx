@@ -2,6 +2,7 @@ import { Panel } from '../design-system'
 import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, EmptyState, EYEBROW,
 } from './_shared.jsx'
+import { dayLabel } from './interviewUtils.js'
 
 /* Interviews — upcoming schedule and debrief log.
    Data: GET /dashboard/interviews/data (_interviews_payload).
@@ -37,20 +38,6 @@ function ratingTone(n) {
   return 'warn'
 }
 
-/* "today" / "in 3d" / "5d ago" relative to the interview date. */
-function dayLabel(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(String(dateStr).replace(' ', 'T'))
-  if (Number.isNaN(d.getTime())) return ''
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  d.setHours(0, 0, 0, 0)
-  const diff = Math.round((d - today) / 86400000)
-  if (diff === 0) return 'today'
-  if (diff > 0) return `in ${diff}d`
-  return `${Math.abs(diff)}d ago`
-}
-
 function quoteText(q) {
   return typeof q === 'string' ? q : q?.quote || ''
 }
@@ -72,7 +59,7 @@ function BulletSection({ label, items }) {
 function InterviewCard({ iv, upcoming }) {
   const date = (iv.interview_date || '').slice(0, 10)
   const rel = dayLabel(iv.interview_date)
-  const isToday = rel === 'today'
+  const isToday = rel === 'Today'
   const badgeTone = upcoming ? (isToday ? 'warn' : 'accent') : 'muted'
   const badgeText = upcoming ? rel || date : date || '\u2014'
 

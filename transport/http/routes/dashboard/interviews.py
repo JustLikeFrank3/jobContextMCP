@@ -14,6 +14,19 @@ from .shared import html_page
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
+def _has_debrief(iv: dict) -> bool:
+    """An interview counts as a debrief once any debrief field is populated,
+    regardless of its date. Mirrors the truthiness the frontend cards read:
+    self_rating != null OR any of the debrief lists is non-empty."""
+    if iv.get("self_rating") is not None:
+        return True
+    for key in ("what_landed", "what_didnt", "verbatim_quotes"):
+        value = iv.get(key)
+        if value:  # non-empty list/str
+            return True
+    return False
+
+
 def _interviews_payload() -> dict:
     data = _load_json(config.INTERVIEWS_FILE, {"interviews": []})
     interviews = data.get("interviews", [])
@@ -29,10 +42,16 @@ def _interviews_payload() -> dict:
     upcoming = []
     past = []
     for iv in interviews:
-        d = _parse_date(iv.get("interview_date", ""))
-        if d is None:
+        # Classify by whether a debrief exists, not date alone. A debriefed
+        # interview leaves "Upcoming" the moment it has content, even if it is
+        # dated today. Only debrief-free interviews dated today-or-later are
+        # upcoming (>= today so a midnight-dated interview earlier today isn't
+        # treated as future).
+        if _has_debrief(iv):
             past.append(iv)
-        elif d >= today:
+            continue
+        d = _parse_date(iv.get("interview_date", ""))
+        if d is not None and d >= today:
             upcoming.append(iv)
         else:
             past.append(iv)
@@ -101,14 +120,27 @@ async def interviews_board() -> HTMLResponse:
   <script>
     function esc(s) { return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
+    function startOfDayLocal(dateStr) {
+      const s = String(dateStr).trim();
+      const m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
+      // Parse date-only strings as LOCAL calendar dates. new Date('2026-07-02')
+      // parses as UTC midnight, which is the previous day west of UTC.
+      if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      const d = new Date(s.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return null;
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
     function dayLabel(dateStr) {
       if (!dateStr) return '';
-      const d = new Date(dateStr.replace(' ', 'T'));
+      const d = startOfDayLocal(dateStr);
+      if (!d) return '';
       const today = new Date(); today.setHours(0,0,0,0);
       const diff = Math.round((d - today) / 86400000);
-      if (diff === 0) return 'today';
-      if (diff > 0) return `in ${diff}d`;
-      return `${Math.abs(diff)}d ago`;
+      if (diff === 0) return 'Today';
+      if (diff > 0) return `In ${diff}d`;
+      return `${Math.abs(diff)}d Ago`;
     }
 
     function typeLabel(t) {
@@ -125,7 +157,7 @@ async def interviews_board() -> HTMLResponse:
     function renderCard(iv, isUpcoming) {
       const date = (iv.interview_date || '').slice(0, 10);
       const label = dayLabel(iv.interview_date);
-      const isToday = label === 'today';
+      const isToday = label === 'Today';
       const badgeCls = isUpcoming ? (isToday ? 'today' : 'upcoming') : 'past';
       const badgeText = isUpcoming ? (label || date) : (date || '—');
 
