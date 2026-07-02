@@ -222,6 +222,36 @@ function OuraSection({ data, reload }) {
   return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
 }
 
+/* Factual "works with" chip — the Oura name used descriptively, no Oura logo,
+   never folded into the jobContext mark. Generic ring glyph in the brand cyan. */
+function OuraCompatChip() {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <span
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', borderRadius: 999, whiteSpace: 'nowrap',
+          border: '1px solid color-mix(in srgb, var(--cyan-500) 50%, transparent)',
+          background: 'color-mix(in srgb, var(--cyan-500) 12%, transparent)',
+          color: 'var(--text-soft)', fontSize: 'var(--fs-xs)', fontWeight: 600, lineHeight: 1,
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--cyan-400)', boxSizing: 'border-box', flexShrink: 0 }}
+        />{' '}
+        Works with{' '}
+        <strong style={{ color: 'var(--cyan-400)', fontWeight: 700 }}>Oura Ring</strong>
+      </span>
+      <p style={{ margin: '10px 0 0', color: 'var(--faint)', fontSize: 'var(--fs-2xs)', lineHeight: 1.5 }}>
+        Oura and Oura Ring are trademarks of {'\u014C'}ura Health Oy. jobContext is not
+        affiliated with, endorsed by, or sponsored by {'\u014C'}ura; the name is used
+        solely to describe interoperability through the Oura API.
+      </p>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { data, loading, error, reload } = useApi('/api/dashboard/settings')
   const flash = useOuraFlash()
@@ -251,6 +281,7 @@ export default function Settings() {
       </Panel>
 
       <SectionHead title="Oura Ring" />
+      <OuraCompatChip />
       <OuraSection data={data} reload={reload} />
     </Screen>
   )

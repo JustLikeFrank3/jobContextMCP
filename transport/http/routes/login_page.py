@@ -263,6 +263,11 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   .request .arrow { width: 15px; height: 15px; color: var(--cyan-400); transition: transform .15s; }
   .request:hover .arrow { transform: translateX(3px); }
 
+  /* compatibility chip — factual "works with" claim, name only (no Oura logo) */
+  .compat-chip { position: relative; display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; padding: 7px 13px; border-radius: var(--radius-pill); border: 1px solid color-mix(in srgb, var(--cyan-500) 50%, transparent); background: var(--tint-primary); color: var(--text-soft); font-size: var(--fs-xs); font-weight: 600; line-height: 1; white-space: nowrap; }
+  .compat-chip strong { color: var(--cyan-400); font-weight: 700; }
+  .compat-chip .ring { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--cyan-400); box-sizing: border-box; flex-shrink: 0; }
+
   @media (max-width: 860px) {
     .split { grid-template-columns: 1fr; }
     .panel { display: none; }
@@ -299,6 +304,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
         <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></span>Works with Claude, Copilot, Cursor, Windsurf &amp; Zed</div>
         <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></span>70+ tools across 11 career surfaces</div>
       </div>
+      <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works with <strong>Oura Ring</strong></span>
     </div>
 
     <div class="panel-foot">Your career has context. Your AI should too.</div>
