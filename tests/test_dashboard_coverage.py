@@ -568,6 +568,145 @@ class TestDashboardHomeApiCoverage:
         assert response.status_code in (401, 403)
 
 
+class TestOuraAutoSyncOnHome:
+    """Home load auto-refreshes Oura readiness (throttled + time-boxed).
+
+    Covers _oura_sync_due / _auto_sync_oura and their wiring into
+    GET /api/dashboard/home, so a connected ring populates without the user
+    clicking "Sync now" in Settings.
+    """
+
+    @staticmethod
+    def _naive_utc_now():
+        return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+    # ── _oura_sync_due: the throttle predicate ────────────────────────────────
+    def test_sync_due_when_last_sync_empty(self):
+        assert dashboard_api_routes._oura_sync_due("") is True
+
+    def test_sync_due_when_last_sync_unparseable(self):
+        assert dashboard_api_routes._oura_sync_due("not-a-timestamp") is True
+
+    def test_sync_not_due_when_recent(self):
+        recent = self._naive_utc_now().isoformat()
+        assert dashboard_api_routes._oura_sync_due(recent) is False
+
+    def test_sync_due_when_stale(self):
+        stale = (self._naive_utc_now() - dt.timedelta(hours=2)).isoformat()
+        assert dashboard_api_routes._oura_sync_due(stale) is True
+
+    def test_sync_predicate_handles_tz_aware_timestamp(self):
+        """A tz-aware last_sync is normalized to naive UTC before comparison."""
+        fresh_aware = dt.datetime.now(dt.timezone.utc).isoformat()  # ends in +00:00
+        stale_aware = (
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=2)
+        ).isoformat()
+        assert dashboard_api_routes._oura_sync_due(fresh_aware) is False
+        assert dashboard_api_routes._oura_sync_due(stale_aware) is True
+
+    # ── _auto_sync_oura: short-circuits + best-effort guarantees ───────────────
+    def test_auto_sync_skips_when_not_connected(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        asyncio.run(dashboard_api_routes._auto_sync_oura({"connected": False}))
+        assert calls == []
+
+    def test_auto_sync_skips_when_not_due(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        recent = self._naive_utc_now().isoformat()
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": recent}
+            )
+        )
+        assert calls == []
+
+    def test_auto_sync_runs_when_connected_and_due(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+        assert calls == [1]
+
+    def test_auto_sync_swallows_sync_errors(self, monkeypatch):
+        def boom():
+            raise RuntimeError("oura upstream down")
+
+        monkeypatch.setattr("tools.oura.sync_oura", boom)
+        # Must not raise — auto-sync is best-effort.
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+
+    def test_auto_sync_swallows_timeout(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(dashboard_api_routes, "_OURA_AUTOSYNC_TIMEOUT", 0.05)
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: time.sleep(0.3))
+        # The wait_for cancels well before the sleep finishes; no exception escapes.
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+
+    # ── wiring: GET /api/dashboard/home triggers the auto-sync ─────────────────
+    def _stub_home(self, monkeypatch, *, connected, last_sync):
+        monkeypatch.setattr(
+            dashboard_api_routes, "_build_snapshot", lambda: {"has_data": False}
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"connected": connected, "last_sync": last_sync},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+    def test_home_triggers_sync_when_stale(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        self._stub_home(monkeypatch, connected=True, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == [1]  # connected + stale -> one refresh
+
+    def test_home_skips_sync_when_fresh(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        recent = self._naive_utc_now().isoformat()
+        self._stub_home(monkeypatch, connected=True, last_sync=recent)
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == []  # throttled -> no network
+
+    def test_home_skips_sync_when_disconnected(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        self._stub_home(monkeypatch, connected=False, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == []  # no ring -> no sync attempt
+
+    def test_home_survives_sync_failure(self, http_client_noauth, monkeypatch):
+        def boom():
+            raise RuntimeError("oura upstream down")
+
+        monkeypatch.setattr("tools.oura.sync_oura", boom)
+        self._stub_home(monkeypatch, connected=True, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200  # best-effort: failure never breaks Home
+
+
 class TestDashboardApiKeysJsonCoverage:
     """GET/POST /api/dashboard/api-keys — JSON token management for the SPA.
 

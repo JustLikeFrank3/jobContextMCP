@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ## [1.2.0] - 2026-07-01
 
-React single-page dashboard, Oura Ring integration, encryption of per-user OAuth tokens at rest, a hosted QA environment, a full brand refresh, and a multi-tenant data-isolation fix. 1157 passing tests.
+React single-page dashboard, Oura Ring integration, encryption of per-user OAuth tokens at rest, a hosted QA environment, a full brand refresh, and a multi-tenant data-isolation fix. 1227 passing tests.
 
 ### Features
 
@@ -42,7 +42,7 @@ React single-page dashboard, Oura Ring integration, encryption of per-user OAuth
 
 ### Tests
 
-- 1157 passing (up from 1140). New regression coverage for tenant-scoped setup writes (single-level partition, no doubling), per-user config resolution keys, and `check_workspace` under a tenant override.
+- 1227 passing (up from 1140). New regression coverage for tenant-scoped setup writes (single-level partition, no doubling), per-user config resolution keys, and `check_workspace` under a tenant override; the full Oura OAuth/HTTP/sync layer and browser callback routes; and the throttled auto-sync on the Home feed.
 
 ---
 

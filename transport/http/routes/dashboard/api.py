@@ -135,16 +135,68 @@ async def dashboard_me(
     )
 
 
+# ── Oura auto-sync (Home load) ──────────────────────────────────────────────
+# Keep the dashboard current without a manual "Sync now": when a ring is
+# connected, loading Home pulls fresh readiness from Oura. Readiness updates
+# ~once/day, so the pull is throttled by last_sync_at and time-boxed, keeping
+# routine navigations cheap and ensuring a slow/hung upstream can never stall
+# the Home payload.
+_OURA_AUTOSYNC_INTERVAL = datetime.timedelta(minutes=30)
+_OURA_AUTOSYNC_TIMEOUT = 6.0
+
+
+def _oura_sync_due(last_sync: str) -> bool:
+    """True when the last Oura pull is missing or older than the throttle window."""
+    if not last_sync:
+        return True
+    try:
+        ts = datetime.datetime.fromisoformat(last_sync)
+    except (TypeError, ValueError):
+        return True  # unparseable timestamp — treat as stale and refresh
+    if ts.tzinfo is not None:  # last_sync_at is naive UTC; normalize just in case
+        ts = ts.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return (now - ts) >= _OURA_AUTOSYNC_INTERVAL
+
+
+async def _auto_sync_oura(status: dict) -> None:
+    """Best-effort refresh of Oura readiness on Home load.
+
+    Connection status is token-based (no network). Only when a ring is
+    connected AND the throttle window has elapsed do we make the blocking Oura
+    API calls — off the event loop and under a hard timeout so the Home payload
+    can never hang on a slow upstream. Any failure is swallowed; Home just
+    serves the last-known readiness already in SQLite.
+    """
+    if not status.get("connected"):
+        return
+    if not _oura_sync_due(status.get("last_sync", "")):
+        return
+    try:
+        from tools.oura import sync_oura
+
+        await asyncio.wait_for(
+            asyncio.to_thread(sync_oura), timeout=_OURA_AUTOSYNC_TIMEOUT
+        )
+    except Exception:  # noqa: BLE001 — auto-sync is best-effort; never fail Home
+        pass
+
+
 @router.get("/home", response_model=None)
 async def dashboard_home_data(
     user: Annotated[User, Depends(require_authenticated_user)],
 ) -> JSONResponse:
     snap = _build_snapshot()
+    # Refresh from Oura when connected + stale, then read the (now-current) row.
+    # _auto_sync_oura is throttled + time-boxed, so this stays cheap on routine
+    # navigations and safe when the Oura API is slow or down.
+    status = _oura_status()
+    await _auto_sync_oura(status)
     # Only surface readiness when a ring is genuinely connected. A stale or
     # zeroed oura_readiness row must never flip Home into the readiness view —
     # an unconnected user always sees the daily digest. Connection status is
     # token-based and makes no network call.
-    oura = _load_oura() if _oura_status().get("connected", False) else None
+    oura = _load_oura() if status.get("connected", False) else None
 
     priorities = [
         {"n": str(i + 1), "text": p}
