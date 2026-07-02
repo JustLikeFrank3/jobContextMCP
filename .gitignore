@@ -5,6 +5,14 @@ config.*.json
 
 # Docker environment file (contains API keys and local paths)
 .env
+# Other env files (deploy/staging/prod) — all contain secrets
+.env.*
+!.env.example
+
+# SQLite database + WAL sidecars — local runtime data, never for version control
+*.db
+*.db-shm
+*.db-wal
 
 # Runtime data — contains private application/health info
 /data/*.json
