@@ -53,7 +53,7 @@ def tool_count() -> int:
     return len(server.mcp._tool_manager.list_tools())
 
 
-def update_readme(text: str, tests: int, coverage: str, tools: int) -> str:
+def update_readme(text: str, tests: int, tools: int) -> str:
     """Apply anchored substitutions. Each pattern is specific enough that a miss
     means the README format changed and the caller should be alerted."""
     subs: list[tuple[str, str, str]] = [
@@ -64,12 +64,8 @@ def update_readme(text: str, tests: int, coverage: str, tools: int) -> str:
         ("tests badge alt",
          r'alt="\d+ tests passing"',
          f'alt="{tests} tests passing"'),
-        ("coverage badge",
-         r"badge/coverage-[\d.]+%25-",
-         f"badge/coverage-{coverage}%25-"),
-        ("coverage badge alt",
-         r'alt="[\d.]+% coverage"',
-         f'alt="{coverage}% coverage"'),
+        # Coverage is shown via a live SonarCloud measure badge (see README),
+        # so it is intentionally not managed here — no static badge to rewrite.
         ("tools badge",
          r"badge/tools-\d+-",
          f"badge/tools-{tools}-"),
@@ -126,7 +122,7 @@ def main() -> int:
     tools = tool_count()
 
     original = args.readme.read_text(encoding="utf-8")
-    updated = update_readme(original, tests, coverage, tools)
+    updated = update_readme(original, tests, tools)
 
     if updated == original:
         print(f"README badges already current: {tests} tests, {coverage}% coverage, {tools} tools")
