@@ -111,6 +111,7 @@ jobs:
 
   build-and-deploy:
     needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -165,3 +166,69 @@ jobs:
           kubectl apply -f k8s/ingress.yaml -n ${{ env.K8S_NAMESPACE }}
           kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
             -n ${{ env.K8S_NAMESPACE }} --timeout=300s
+
+  build-and-deploy-qa:
+    needs: test
+    if: github.ref == 'refs/heads/qa'
+    runs-on: ubuntu-latest
+    env:
+      QA_K8S_NAMESPACE: jcmcp-qa
+      QA_K8S_DEPLOYMENT: jcmcp-qa
+      # Non-sensitive QA config — mirrors prod Foundry setup by default.
+      # Override by setting these as workflow env vars or GitHub variables.
+      QA_LLM_PROVIDER: foundry
+      QA_FOUNDRY_ENDPOINT: https://jobcontextmcp-resource.services.ai.azure.com
+      QA_FOUNDRY_DEPLOYMENT: gpt-4.1-mini
+      QA_FOUNDRY_API_VERSION: 2025-01-01-preview
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Log in to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build & push QA image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:qa-${{ github.sha }}
+            ${{ env.IMAGE }}:qa-latest
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AKS_RG }}
+          cluster-name: ${{ env.AKS_CLUSTER }}
+
+      - name: Deploy QA
+        run: |
+          ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          sed \
+            -e "s|__QA_LLM_PROVIDER__|${{ env.QA_LLM_PROVIDER }}|g" \
+            -e "s|__QA_FOUNDRY_ENDPOINT__|${{ env.QA_FOUNDRY_ENDPOINT }}|g" \
+            -e "s|__QA_FOUNDRY_DEPLOYMENT__|${{ env.QA_FOUNDRY_DEPLOYMENT }}|g" \
+            -e "s|__QA_FOUNDRY_API_VERSION__|${{ env.QA_FOUNDRY_API_VERSION }}|g" \
+            -e "s|__QA_STORAGE_ACCOUNT__|${{ secrets.QA_STORAGE_ACCOUNT }}|g" \
+            -e "s|__QA_ENTRA_OWNER_OID__|${{ secrets.ENTRA_OWNER_OID }}|g" \
+            k8s/qa/configmap.yaml | kubectl apply -f - -n ${{ env.QA_K8S_NAMESPACE }}
+          sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|qa-${{ github.sha }}|g" \
+            k8s/qa/deployment.yaml | \
+            kubectl apply -f - -n ${{ env.QA_K8S_NAMESPACE }}
+          kubectl apply -f k8s/qa/service.yaml -n ${{ env.QA_K8S_NAMESPACE }}
+          kubectl apply -f k8s/qa/ingress.yaml -n ${{ env.QA_K8S_NAMESPACE }}
+          kubectl rollout status deployment/${{ env.QA_K8S_DEPLOYMENT }} \
+            -n ${{ env.QA_K8S_NAMESPACE }} --timeout=300s

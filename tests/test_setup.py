@@ -161,6 +161,80 @@ def test_setup_language_recorded_in_config(monkeypatch, tmp_path):
     assert cfg["leetcode_problems_dir"] == "problems"
 
 
+# ── Multi-tenant (per-user data-folder override) ───────────────────────────────
+
+def _activate_override(tmp_path: Path):
+    """Activate a per-user data-folder override under DATA_FOLDER.
+
+    Returns (oid, override_path, reset_token). The override lives *inside*
+    DATA_FOLDER so the path-doubling regression is exercised faithfully.
+    """
+    from lib.user_context import set_data_folder
+    oid = "user-oid-1234"
+    override = tmp_path / "data" / "users" / oid
+    token = set_data_folder(override)
+    return oid, override, token
+
+
+def test_setup_under_override_writes_data_single_level(monkeypatch, tmp_path):
+    """Regression: setup must not double the user partition.
+
+    With an active override (DATA_FOLDER/users/<oid>), the seed branch routed
+    paths through _save_json → _resolve_data_path and produced
+    DATA_FOLDER/users/<oid>/users/<oid>/status.json. Files must land exactly
+    one level deep, and the doubled path must not exist.
+    """
+    import tools.setup as s
+    from lib.user_context import reset_data_folder
+    _patch_here(monkeypatch, tmp_path, s)
+    oid, override, token = _activate_override(tmp_path)
+    try:
+        s.setup_workspace(**_MINIMAL)
+        for fname in s._DATA_FILES:
+            assert (override / fname).exists(), f"data file not at single level: {fname}"
+            doubled = override / "users" / oid / fname
+            assert not doubled.exists(), f"path doubled for {fname}: {doubled}"
+    finally:
+        reset_data_folder(token)
+
+
+def test_setup_under_override_persists_resolution_keys(monkeypatch, tmp_path):
+    """Tenant config must carry the relative resolution keys so the merged
+    config resolves the user's own files instead of the owner's defaults."""
+    import tools.setup as s
+    from lib.user_context import reset_data_folder
+    _patch_here(monkeypatch, tmp_path, s)
+    _oid, override, token = _activate_override(tmp_path)
+    try:
+        s.setup_workspace(**_MINIMAL, leetcode_language="python")
+        cfg = json.loads((override / "config.json").read_text())
+        assert cfg["contact"]["name"] == "Test User"
+        assert cfg["leetcode_language"] == "python"
+        assert cfg["leetcode_cheatsheet_path"] == s._LC_CHEATSHEET_FILENAME
+        assert cfg["quick_reference_path"] == s._LC_QUICK_REF_FILENAME
+        assert cfg["master_resume_path"].endswith("Test User Resume - MASTER SOURCE.txt")
+    finally:
+        reset_data_folder(token)
+
+
+def test_check_workspace_under_override_reports_complete(monkeypatch, tmp_path):
+    """check_workspace must read the per-user config and report the tenant's
+    own language + a complete workspace once setup has run under an override."""
+    import tools.setup as s
+    from lib.user_context import reset_data_folder
+    _patch_here(monkeypatch, tmp_path, s)
+    _oid, _override, token = _activate_override(tmp_path)
+    try:
+        s.setup_workspace(**_MINIMAL, leetcode_language="python")
+        result = s.check_workspace()
+        assert "Workspace looks complete" in result
+        assert "config.json — present" in result
+        assert "LeetCode language: python" in result
+        assert "Test User" in result
+    finally:
+        reset_data_folder(token)
+
+
 # ── check_workspace detail ─────────────────────────────────────────────────────
 
 def test_check_workspace_shows_master_resume_word_count(monkeypatch, tmp_path):

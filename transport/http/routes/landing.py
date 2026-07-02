@@ -327,6 +327,35 @@ LANDING_HTML: str = r'''<!doctype html>
   .feat.span2 .ministat .n { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; color: var(--cyan-300); line-height: 1; }
   .feat.span2 .ministat .l { color: var(--faint); font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: var(--ls-label); margin-top: 5px; }
 
+  /* ---------- readiness showcase ---------- */
+  .readiness-grid { display: grid; grid-template-columns: 1fr 0.82fr; gap: 52px; align-items: center; }
+  .readiness-h { font-family: var(--font-display); font-weight: 700; font-size: 2.3rem; letter-spacing: -0.02em; line-height: 1.12; margin: 12px 0 0; color: #fff; text-wrap: balance; }
+  .readiness-h .c { color: var(--cyan-400); }
+  .readiness-p { color: var(--muted); font-size: 1.06rem; margin: 16px 0 22px; line-height: 1.6; max-width: 34em; text-wrap: pretty; }
+
+  /* compatibility chip — factual "works with" claim, name only (no Oura logo) */
+  .compat-chip { display: inline-flex; align-items: center; gap: 9px; padding: 7px 14px; border-radius: var(--radius-pill); border: 1px solid color-mix(in srgb, var(--cyan-500) 55%, transparent); background: var(--tint-primary); color: var(--text-soft); font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; }
+  .compat-chip strong { color: var(--cyan-400); font-weight: 700; }
+  .compat-chip .ring { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--cyan-400); box-sizing: border-box; flex-shrink: 0; }
+  .tm-note { margin: 16px 0 0; color: var(--faint); font-size: var(--fs-2xs); line-height: 1.5; max-width: 36em; }
+
+  /* Oura readiness mockup card (generic ring glyph, no Oura logo) */
+  .ora-card { background: var(--ink-950); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: 24px 26px; max-width: 360px; width: 100%; margin: 0 auto; }
+  .ora-head { display: flex; align-items: center; justify-content: space-between; }
+  .ora-eyebrow { font-family: var(--font-sans); font-weight: 600; font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--cyan-300); }
+  .ora-live { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  .ora-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-500) 25%, transparent); }
+  .ora-ring-wrap { display: flex; flex-direction: column; align-items: center; margin-top: 8px; }
+  .ora-label { margin-top: 8px; font-weight: 600; font-size: 1rem; }
+  .ora-metrics { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; }
+  .ora-mtop { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .ora-mname { font-size: var(--fs-sm); color: var(--muted); }
+  .ora-mval { font-weight: 700; font-size: var(--fs-sm); }
+  .ora-munit { font-size: var(--fs-2xs); color: var(--faint); font-weight: 600; margin-left: 2px; }
+  .ora-track { height: 6px; border-radius: 999px; background: var(--ink-600); overflow: hidden; }
+  .ora-fill { height: 100%; border-radius: 999px; }
+  .ora-move { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-soft); color: var(--text-soft); font-size: var(--fs-sm); line-height: 1.5; }
+
   /* pillars */
   .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .pillar { text-align: left; }
@@ -359,7 +388,7 @@ LANDING_HTML: str = r'''<!doctype html>
   .foot-links a:hover { color: var(--text); }
 
   @media (max-width: 920px) {
-    .hero-grid, .problem { grid-template-columns: 1fr; }
+    .hero-grid, .problem, .readiness-grid { grid-template-columns: 1fr; }
     .bento, .pillars, .steps { grid-template-columns: 1fr; }
     .feat.span2 { grid-column: span 1; flex-direction: column; align-items: flex-start; }
     h1.hl { font-size: 2.6rem; }
@@ -379,10 +408,14 @@ LANDING_HTML: str = r'''<!doctype html>
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="#top">
-      <svg viewBox="0 0 100 100" width="34" height="31" aria-label="jobContext">
-        <circle cx="27" cy="21" r="7" fill="#fff"/>
-        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
-        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
+      <svg viewBox="0 0 320 320" width="34" height="34" aria-label="jobContext">
+        <circle cx="160" cy="160" r="153" fill="#0A0F1C"/>
+        <circle cx="160" cy="160" r="153" fill="none" stroke="var(--cyan-500)" stroke-width="10"/>
+        <g transform="translate(-12 0)">
+          <path d="M234 118 A56 56 0 1 0 234 202" fill="none" stroke="var(--cyan-500)" stroke-width="32" stroke-linecap="round"/>
+          <circle cx="100" cy="112" r="19" fill="#fff"/>
+          <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+        </g>
       </svg>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
@@ -517,9 +550,55 @@ LANDING_HTML: str = r'''<!doctype html>
         </div>
       </div>
       <div class="feat">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h12v9H4z"/><path d="M6 8h8M6 11h5"/><path d="M16 17l3 3"/></svg></div>
-        <h3>Daily digest</h3>
-        <p>An on-demand morning brief: follow-ups due, stale apps, and today's priorities.</p>
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
+        <h3>Dashboard</h3>
+        <p>Your search at a glance: today's priorities, follow-ups due, pipeline health, and daily readiness.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ READINESS ============ -->
+<section class="blk" id="readiness" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="readiness-grid">
+      <div>
+        <div class="sec-eyebrow">Readiness-aware</div>
+        <h2 class="readiness-h">Time your search to your <span class="c">body.</span></h2>
+        <p class="readiness-p">Connect your Oura Ring and jobContext pulls your daily readiness, sleep, and HRV straight onto your dashboard. High-readiness mornings become your window for outreach and interviews; recovery days shift to low-stakes admin. Your search adapts to how you actually feel, automatically, on every login.</p>
+        <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works with <strong>Oura Ring</strong></span>
+        <p class="tm-note">Oura and Oura Ring are trademarks of &#332;ura Health Oy. jobContext is not affiliated with, endorsed by, or sponsored by &#332;ura; the name is used solely to describe interoperability through the Oura API.</p>
+      </div>
+
+      <div class="ora-card">
+        <div class="ora-head">
+          <span class="ora-eyebrow">Oura &middot; Readiness</span>
+          <span class="ora-live"><span class="ora-live-dot"></span>Synced today</span>
+        </div>
+        <div class="ora-ring-wrap">
+          <svg viewBox="0 0 180 180" width="150" height="150" aria-hidden="true">
+            <circle cx="90" cy="90" r="70" fill="none" stroke="#1c2740" stroke-width="16"/>
+            <circle cx="90" cy="90" r="70" fill="none" stroke="#22C55E" stroke-width="16" stroke-linecap="round" stroke-dasharray="378.2 439.82" transform="rotate(-90 90 90)"/>
+            <text x="90" y="83" font-family="'Space Grotesk',system-ui,sans-serif" font-size="40" font-weight="700" fill="#f1f5f9" text-anchor="middle">86</text>
+            <text x="90" y="106" font-family="'Space Grotesk',system-ui,sans-serif" font-size="10" font-weight="600" fill="#9aa8bf" text-anchor="middle" letter-spacing="2">SCORE</text>
+          </svg>
+          <div class="ora-label" style="color:#22C55E">High readiness</div>
+        </div>
+        <div class="ora-metrics">
+          <div class="ora-mrow">
+            <div class="ora-mtop"><span class="ora-mname">Sleep score</span><span class="ora-mval" style="color:#22C55E">88</span></div>
+            <div class="ora-track"><div class="ora-fill" style="width:88%;background:#22C55E"></div></div>
+          </div>
+          <div class="ora-mrow">
+            <div class="ora-mtop"><span class="ora-mname">HRV</span><span class="ora-mval" style="color:#22C55E">80<span class="ora-munit">ms</span></span></div>
+            <div class="ora-track"><div class="ora-fill" style="width:80%;background:#22C55E"></div></div>
+          </div>
+          <div class="ora-mrow">
+            <div class="ora-mtop"><span class="ora-mname">Recovery index</span><span class="ora-mval" style="color:#22C55E">91</span></div>
+            <div class="ora-track"><div class="ora-fill" style="width:91%;background:#22C55E"></div></div>
+          </div>
+        </div>
+        <div class="ora-move">High readiness day. Good window for outreach and interviews.</div>
       </div>
     </div>
   </div>
@@ -599,10 +678,14 @@ LANDING_HTML: str = r'''<!doctype html>
 <footer>
   <div class="wrap foot-inner">
     <a class="brand" href="#top">
-      <svg viewBox="0 0 100 100" width="26" height="24" aria-label="jobContext">
-        <circle cx="27" cy="21" r="7" fill="#fff"/>
-        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
-        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
+      <svg viewBox="0 0 320 320" width="26" height="26" aria-label="jobContext">
+        <circle cx="160" cy="160" r="153" fill="#0A0F1C"/>
+        <circle cx="160" cy="160" r="153" fill="none" stroke="var(--cyan-500)" stroke-width="10"/>
+        <g transform="translate(-12 0)">
+          <path d="M234 118 A56 56 0 1 0 234 202" fill="none" stroke="var(--cyan-500)" stroke-width="32" stroke-linecap="round"/>
+          <circle cx="100" cy="112" r="19" fill="#fff"/>
+          <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+        </g>
       </svg>
       <span class="wm" style="font-size:1.1rem">job<span class="c">Context</span></span>
     </a>

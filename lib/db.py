@@ -17,9 +17,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
+import logging
 import sqlite3
 
 import lib.config as _cfg
+
+
+_logger = logging.getLogger(__name__)
 
 
 # ── Canonical event type registry ─────────────────────────────────────────────
@@ -146,7 +150,53 @@ _MIGRATIONS = [
     # v3 — cover letter template + style selection per job card
     "ALTER TABLE job_queue ADD COLUMN cl_template TEXT",
     "ALTER TABLE job_queue ADD COLUMN cl_style TEXT",
+    # v4 — Oura Ring readiness data (per-user biometric integration)
+    """CREATE TABLE IF NOT EXISTS oura_readiness (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        oid              TEXT    NOT NULL DEFAULT '',
+        date             TEXT    NOT NULL,
+        readiness_score  INTEGER,
+        sleep_score      INTEGER,
+        hrv              INTEGER,
+        recovery_index   INTEGER,
+        raw_json         TEXT,
+        created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(oid, date)
+    )""",
+    # v5 — Oura OAuth tokens (one row per user; populated by the connect flow).
+    # Tokens live in the per-OID isolated DB, consistent with how the OpenAI
+    # key is stored in each user's config.json. The access token is refreshed
+    # in place via the refresh token when it expires.
+    """CREATE TABLE IF NOT EXISTS oura_tokens (
+        oid           TEXT    PRIMARY KEY,
+        access_token  TEXT    NOT NULL,
+        refresh_token TEXT    NOT NULL,
+        expires_at    TEXT    NOT NULL,
+        scope         TEXT,
+        last_sync_at  TEXT,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""",
 ]
+
+
+# Substrings of sqlite3.OperationalError messages that are safe to ignore, but
+# ONLY for the known-fragile ALTER TABLE job_queue migrations (see the guard in
+# _apply_migrations). These occur when an ALTER targets job_queue before it has
+# been created out-of-band by the SQLite seeder ("no such table") or a column
+# that was already added by the seeder ("duplicate column name"). Scoping the
+# tolerance to job_queue ALTERs keeps later migrations (e.g. the Oura tables)
+# from being blocked on partially-provisioned DBs, while ensuring an unrelated
+# broken migration (e.g. a typoed CREATE TABLE) still fails loudly instead of
+# being silently marked applied.
+_TOLERABLE_MIGRATION_ERRORS = ("duplicate column name", "no such table")
+
+
+def _ledger_migration(con: sqlite3.Connection) -> None:
+    """Record one migration as applied in the version ledger."""
+    con.execute(
+        "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
+    )
 
 
 def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
@@ -154,6 +204,12 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
 
     Uses a simple applied_migrations table as a version ledger.
     Idempotent — safe to call on every connection open.
+
+    Robustness: a single migration that fails with a tolerable error
+    (missing target table for an ALTER, or a column that already exists) is
+    logged and recorded as applied so the chain advances. This prevents an
+    early fragile ALTER from permanently blocking later CREATE TABLE
+    migrations (e.g. oura_readiness) on partially-provisioned databases.
 
     When *is_global* is True, only migrations that are safe for the global DB
     (i.e. don't reference per-user tables like job_queue) are applied.
@@ -164,17 +220,28 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
     )
     applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
     for i, sql in enumerate(_MIGRATIONS):
-        if i >= applied:
-            # Skip per-user table migrations when running on the global DB
-            if is_global and ("job_queue" in sql or "ALTER TABLE" in sql):
-                con.execute(
-                    "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
-                )
-                continue
+        if i < applied:
+            continue
+        # Skip per-user table migrations when running on the global DB
+        if is_global and ("job_queue" in sql or "ALTER TABLE" in sql):
+            _ledger_migration(con)
+            continue
+        try:
             con.execute(sql)
-            con.execute(
-                "INSERT INTO applied_migrations (applied_at) VALUES (datetime('now'))"
-            )
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            # Only tolerate the known-fragile job_queue ALTERs; any other
+            # migration failing with the same message is a real bug and must
+            # abort so it isn't silently marked applied.
+            is_job_queue_alter = "alter table job_queue" in sql.lower()
+            if is_job_queue_alter and any(tol in msg for tol in _TOLERABLE_MIGRATION_ERRORS):
+                _logger.warning(
+                    "migration %d tolerated (%s): %s",
+                    i, exc, sql.strip().splitlines()[0][:70],
+                )
+            else:
+                raise
+        _ledger_migration(con)
     con.commit()
 
 

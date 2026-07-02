@@ -417,10 +417,14 @@ WHY_HTML: str = r'''<!doctype html>
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="/">
-      <svg viewBox="0 0 100 100" width="34" height="31" aria-label="jobContext">
-        <circle cx="27" cy="21" r="7" fill="#fff"/>
-        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
-        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
+      <svg viewBox="0 0 320 320" width="34" height="34" aria-label="jobContext">
+        <circle cx="160" cy="160" r="153" fill="#0A0F1C"/>
+        <circle cx="160" cy="160" r="153" fill="none" stroke="var(--cyan-500)" stroke-width="10"/>
+        <g transform="translate(-12 0)">
+          <path d="M234 118 A56 56 0 1 0 234 202" fill="none" stroke="var(--cyan-500)" stroke-width="32" stroke-linecap="round"/>
+          <circle cx="100" cy="112" r="19" fill="#fff"/>
+          <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+        </g>
       </svg>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
@@ -529,7 +533,7 @@ WHY_HTML: str = r'''<!doctype html>
       <h2>How to get the most out of it</h2>
       <p>The people who get the most from jobContext treat it like a teammate they keep in the loop, not a tool they open once.</p>
     </div>
-    <div class="bp"><div class="item"><div class="k">Practice 01</div><h3>Just talk, it logs itself</h3><p>Tell it what happened in plain language. "Had a call with Sam, sending my resume Friday." It records the contact, the message, and the follow-up automatically. The conversation is the record.</p></div><div class="item"><div class="k">Practice 02</div><h3>Drop in job descriptions</h3><p>Paste a posting and ask for a fit assessment before you spend an evening applying. Let it tell you the angles to lead with and the gaps to address.</p></div><div class="item"><div class="k">Practice 03</div><h3>Start your day with the digest</h3><p>Ask for your daily briefing. It surfaces what is overdue, who owes you a reply, and the three things actually worth doing today.</p></div><div class="item"><div class="k">Practice 04</div><h3>Debrief every interview</h3><p>Right after a call, walk through how it went. It captures what landed, what did not, and what the team really cared about, then feeds that into prep for the next round.</p></div><div class="item"><div class="k">Practice 05</div><h3>Keep people current</h3><p>Whenever someone new enters your search, mention them. A search lives or dies on relationships, and the ones it remembers are the ones you can act on.</p></div><div class="item"><div class="k">Practice 06</div><h3>Use it from your phone</h3><p>See a posting on the move? Share it straight into your pipeline with the mobile share sheet, then assess it later from your desk.</p></div></div>
+    <div class="bp"><div class="item"><div class="k">Practice 01</div><h3>Just talk, it logs itself</h3><p>Tell it what happened in plain language. "Had a call with Sam, sending my resume Friday." It records the contact, the message, and the follow-up automatically. The conversation is the record.</p></div><div class="item"><div class="k">Practice 02</div><h3>Drop in job descriptions</h3><p>Paste a posting and ask for a fit assessment before you spend an evening applying. Let it tell you the angles to lead with and the gaps to address.</p></div><div class="item"><div class="k">Practice 03</div><h3>Start your day on the dashboard</h3><p>Open the dashboard for your morning read: what is overdue, who owes you a reply, and the few things actually worth doing today. Prefer to keep it in chat? Ask for your daily briefing and you get the same picture in conversation.</p></div><div class="item"><div class="k">Practice 04</div><h3>Debrief every interview</h3><p>Right after a call, walk through how it went. It captures what landed, what did not, and what the team really cared about, then feeds that into prep for the next round.</p></div><div class="item"><div class="k">Practice 05</div><h3>Keep people current</h3><p>Whenever someone new enters your search, mention them. A search lives or dies on relationships, and the ones it remembers are the ones you can act on.</p></div><div class="item"><div class="k">Practice 06</div><h3>Use it from your phone</h3><p>See a posting on the move? Share it straight into your pipeline with the mobile share sheet, then assess it later from your desk.</p></div></div>
   </div>
 </section>
 

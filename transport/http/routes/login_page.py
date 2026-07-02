@@ -254,6 +254,20 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   .back { display: inline-flex; align-items: center; gap: 6px; margin-top: 26px; color: var(--muted); font-size: var(--fs-sm); transition: color .15s; }
   .back:hover { color: var(--cyan-300); }
 
+  /* invitation request — a welcoming secondary path, not fine-print */
+  .invite { margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .invite p { margin: 0 0 12px; color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; }
+  .request { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px 16px; background: transparent; color: var(--text-soft); font-family: var(--font-sans); font-weight: 600; font-size: var(--fs-sm); transition: border-color .15s, color .15s, background .15s; }
+  .request:hover { border-color: color-mix(in srgb, var(--cyan-500) 55%, transparent); color: #fff; background: var(--tint-primary); }
+  .request .mail { width: 16px; height: 16px; color: var(--cyan-400); flex-shrink: 0; }
+  .request .arrow { width: 15px; height: 15px; color: var(--cyan-400); transition: transform .15s; }
+  .request:hover .arrow { transform: translateX(3px); }
+
+  /* compatibility chip — factual "works with" claim, name only (no Oura logo) */
+  .compat-chip { position: relative; display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; padding: 7px 13px; border-radius: var(--radius-pill); border: 1px solid color-mix(in srgb, var(--cyan-500) 50%, transparent); background: var(--tint-primary); color: var(--text-soft); font-size: var(--fs-xs); font-weight: 600; line-height: 1; white-space: nowrap; }
+  .compat-chip strong { color: var(--cyan-400); font-weight: 700; }
+  .compat-chip .ring { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--cyan-400); box-sizing: border-box; flex-shrink: 0; }
+
   @media (max-width: 860px) {
     .split { grid-template-columns: 1fr; }
     .panel { display: none; }
@@ -270,10 +284,14 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   <!-- brand / value panel -->
   <aside class="panel">
     <a class="brand" href="/">
-      <svg viewBox="0 0 100 100" width="32" height="29" aria-label="jobContext">
-        <circle cx="27" cy="21" r="7" fill="#fff"/>
-        <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
-        <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="var(--cyan-500)" stroke-width="9" stroke-linecap="round"/>
+      <svg viewBox="0 0 320 320" width="34" height="34" aria-label="jobContext">
+        <circle cx="160" cy="160" r="153" fill="#0A0F1C"/>
+        <circle cx="160" cy="160" r="153" fill="none" stroke="var(--cyan-500)" stroke-width="10"/>
+        <g transform="translate(-12 0)">
+          <path d="M234 118 A56 56 0 1 0 234 202" fill="none" stroke="var(--cyan-500)" stroke-width="32" stroke-linecap="round"/>
+          <circle cx="100" cy="112" r="19" fill="#fff"/>
+          <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+        </g>
       </svg>
       <span class="wm">job<span class="c">Context</span></span>
     </a>
@@ -286,6 +304,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
         <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></span>Works with Claude, Copilot, Cursor, Windsurf &amp; Zed</div>
         <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></span>70+ tools across 11 career surfaces</div>
       </div>
+      <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works with <strong>Oura Ring</strong></span>
     </div>
 
     <div class="panel-foot">Your career has context. Your AI should too.</div>
@@ -303,10 +322,13 @@ _LOGIN_TMPL: str = r'''<!doctype html>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
         You must have a valid invitation to sign in.
       </div>
-      <div class="hint" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
-        No invitation yet?
-        <a href="mailto:admin@jobcontext.ai?subject=Access%20Request%20%E2%80%94%20jobContext&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20Here%27s%20a%20bit%20about%20me%3A%0A%0A" style="color:var(--primary);text-decoration:none;font-weight:600;">Request access</a>
+      <div class="invite">
+        <p>New to jobContext? Tell us a bit about yourself and we&rsquo;ll send you an invitation.</p>
+        <a class="request" href="mailto:admin@jobcontext.ai?subject=jobContext%20invitation%20request&body=Hi%2C%0A%0AI%27d%20love%20to%20try%20jobContext.%20A%20bit%20about%20me%3A%0A%0AName%3A%0AWhat%20I%27m%20working%20on%3A%0AAI%20tools%20I%20use%20(Claude%2C%20Copilot%2C%20Cursor%2C%20etc.)%3A%0A%0AThanks!">
+          <svg class="mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+          Request an invitation
+          <svg class="arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h11M11 6l4 4-4 4"/></svg>
+        </a>
       </div>
       <a class="back" href="/">
         <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5l-5 5 5 5"/></svg>
@@ -321,7 +343,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 '''
 
 
-def login_html(next_url: str = "/dashboard") -> str:
+def login_html(next_url: str = "/app") -> str:
     """Return the branded sign-in page with next_url URL-encoded into the Microsoft sign-in link."""
     from urllib.parse import quote as _quote
     safe_href = _quote(next_url, safe="")

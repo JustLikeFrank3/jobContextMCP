@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from transport.http.app import create_app
 from transport.http.config import reset_settings_cache
+from transport.http.routes.dashboard import api as dashboard_api_routes
 from transport.http.routes.dashboard import api_keys as api_keys_routes
 from transport.http.routes.dashboard import assets as assets_routes
 from transport.http.routes.dashboard import digest as digest_routes
@@ -86,7 +87,7 @@ class TestDashboardLoginCoverage:
 
         assert response.status_code == 200
         assert 'method="post" action="/dashboard/login"' in response.text
-        assert 'name="next" value="/dashboard"' in response.text
+        assert 'name="next" value="/app"' in response.text
         assert "Enter your API key" in response.text
 
     def test_login_page_redirects_to_entra_with_pkce(self, monkeypatch, isolated_server):
@@ -119,7 +120,7 @@ class TestDashboardLoginCoverage:
         )
 
         assert response.status_code == 303
-        assert response.headers["location"] == "/dashboard/login?next=/dashboard"
+        assert response.headers["location"] == "/dashboard/login?next=/app"
 
     def test_login_submit_sets_session_cookie_on_success(self, http_client_authed):
         response = http_client_authed.post(
@@ -420,11 +421,948 @@ class TestDashboardHomeCoverage:
 
         assert response.status_code == 200
         assert "Welcome back" in response.text
-        assert "7</span>" in response.text
-        assert "&#9888; 1 overdue" in response.text
-        assert "2 to evaluate" in response.text
+        # Hero pipeline panel: big-number counts
+        assert "7</span>" in response.text          # active count
+        assert "Pipeline &middot; Today" in response.text
+        # Overdue badge (hero uses an SVG dot, not the old &#9888; glyph)
+        assert "1 overdue" in response.text
+        # Priority actions list driven by the snapshot
+        assert "Priority Actions" in response.text
         assert "Review: Beta Corp" in response.text
         assert "Interviews" in response.text
+
+
+class TestDashboardHomeApiCoverage:
+    """GET /api/dashboard/home — JSON feed for the React SPA."""
+
+    _SNAP = {
+        "has_data": True,
+        "active": 7,
+        "in_flight": 3,
+        "closed": 2,
+        "overdue": 1,
+        "drafted_unsent": 0,
+        "undecided": 2,
+        "priorities": [
+            "Follow up with Acme",
+            "Review: Beta Corp — Platform Engineer",
+            "Apply to 2–3 new roles today",
+        ],
+    }
+
+    def test_api_home_with_oura(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        # Readiness only surfaces for a genuinely connected ring.
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": True})
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {
+                "readiness_score": 82,
+                "sleep_score": 88,
+                "hrv": 64,
+                "recovery_index": 91,
+            },
+        )
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        # Top-level shape the React Home screen consumes.
+        assert set(body) >= {"welcomeName", "hasOura", "oura", "today", "digest"}
+        assert body["hasOura"] is True
+
+        # Oura block shaped into score + label + three metric bars.
+        oura = body["oura"]
+        assert oura["score"] == 82
+        assert oura["label"]  # non-empty readiness label
+        assert [b["label"] for b in oura["bars"]] == ["Sleep score", "HRV", "Recovery index"]
+        assert oura["bars"][2]["tone"] == "green"  # recovery uses the green tone
+        assert oura["bars"][1]["unit"] == "ms"
+
+        # Pipeline summary: snake_case in_flight is renamed to inflight.
+        today = body["today"]
+        assert today["active"] == 7
+        assert today["inflight"] == 3
+        assert today["overdue"] == 1
+        assert "in_flight" not in today
+        assert today["move"]  # today's move text rendered
+
+        # String priorities are transformed into {n, text} objects.
+        assert today["priorities"][0] == {"n": "1", "text": "Follow up with Acme"}
+        assert today["priorities"][1]["n"] == "2"
+
+    def test_api_home_without_oura_returns_null_block_and_digest(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": False})
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["hasOura"] is False
+        assert body["oura"] is None
+
+        # Digest fallback is always present so the no-ring state has content.
+        digest = body["digest"]
+        assert "date" in digest and digest["date"]
+        labels = {item["label"] for item in digest["items"]}
+        assert "Follow-ups due" in labels
+        assert "New assessments ready" in labels
+
+    def test_api_home_reading_without_connection_shows_digest(
+        self, http_client_noauth, monkeypatch
+    ):
+        """A stale/zeroed readiness row must NOT flip Home into the readiness
+        view when no ring is connected. Regression for the QA bug where Home
+        defaulted to a zeroed-out Oura panel instead of the daily digest."""
+        monkeypatch.setattr(dashboard_api_routes, "_build_snapshot", lambda: dict(self._SNAP))
+        monkeypatch.setattr(dashboard_api_routes, "_oura_status", lambda: {"connected": False})
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {"readiness_score": 0, "sleep_score": 0, "hrv": 0, "recovery_index": 0},
+        )
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        body = response.json()
+
+        # Disconnected -> no readiness, digest shown instead.
+        assert body["hasOura"] is False
+        assert body["oura"] is None
+        assert body["digest"]["items"]
+
+    def test_api_home_requires_auth(self, monkeypatch, isolated_server):
+        """With auth enabled, an anonymous fetch is rejected (not a redirect)."""
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/home")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+    def test_api_me_returns_user_when_authed(self, http_client_noauth):
+        response = http_client_noauth.get("/api/dashboard/me")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["authenticated"] is True
+        assert "name" in body and "firstName" in body and "id" in body
+
+    def test_api_me_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/me")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestOuraAutoSyncOnHome:
+    """Home load auto-refreshes Oura readiness (throttled + time-boxed).
+
+    Covers _oura_sync_due / _auto_sync_oura and their wiring into
+    GET /api/dashboard/home, so a connected ring populates without the user
+    clicking "Sync now" in Settings.
+    """
+
+    @staticmethod
+    def _naive_utc_now():
+        return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+    # ── _oura_sync_due: the throttle predicate ────────────────────────────────
+    def test_sync_due_when_last_sync_empty(self):
+        assert dashboard_api_routes._oura_sync_due("") is True
+
+    def test_sync_due_when_last_sync_unparseable(self):
+        assert dashboard_api_routes._oura_sync_due("not-a-timestamp") is True
+
+    def test_sync_not_due_when_recent(self):
+        recent = self._naive_utc_now().isoformat()
+        assert dashboard_api_routes._oura_sync_due(recent) is False
+
+    def test_sync_due_when_stale(self):
+        stale = (self._naive_utc_now() - dt.timedelta(hours=2)).isoformat()
+        assert dashboard_api_routes._oura_sync_due(stale) is True
+
+    def test_sync_predicate_handles_tz_aware_timestamp(self):
+        """A tz-aware last_sync is normalized to naive UTC before comparison."""
+        fresh_aware = dt.datetime.now(dt.timezone.utc).isoformat()  # ends in +00:00
+        stale_aware = (
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=2)
+        ).isoformat()
+        assert dashboard_api_routes._oura_sync_due(fresh_aware) is False
+        assert dashboard_api_routes._oura_sync_due(stale_aware) is True
+
+    # ── _auto_sync_oura: short-circuits + best-effort guarantees ───────────────
+    def test_auto_sync_skips_when_not_connected(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        asyncio.run(dashboard_api_routes._auto_sync_oura({"connected": False}))
+        assert calls == []
+
+    def test_auto_sync_skips_when_not_due(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        recent = self._naive_utc_now().isoformat()
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": recent}
+            )
+        )
+        assert calls == []
+
+    def test_auto_sync_runs_when_connected_and_due(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+        assert calls == [1]
+
+    def test_auto_sync_swallows_sync_errors(self, monkeypatch):
+        def boom():
+            raise RuntimeError("oura upstream down")
+
+        monkeypatch.setattr("tools.oura.sync_oura", boom)
+        # Must not raise — auto-sync is best-effort.
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+
+    def test_auto_sync_swallows_timeout(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(dashboard_api_routes, "_OURA_AUTOSYNC_TIMEOUT", 0.05)
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: time.sleep(0.3))
+        # The wait_for cancels well before the sleep finishes; no exception escapes.
+        asyncio.run(
+            dashboard_api_routes._auto_sync_oura(
+                {"connected": True, "last_sync": ""}
+            )
+        )
+
+    # ── wiring: GET /api/dashboard/home triggers the auto-sync ─────────────────
+    def _stub_home(self, monkeypatch, *, connected, last_sync):
+        monkeypatch.setattr(
+            dashboard_api_routes, "_build_snapshot", lambda: {"has_data": False}
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"connected": connected, "last_sync": last_sync},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+    def test_home_triggers_sync_when_stale(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        self._stub_home(monkeypatch, connected=True, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == [1]  # connected + stale -> one refresh
+
+    def test_home_skips_sync_when_fresh(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        recent = self._naive_utc_now().isoformat()
+        self._stub_home(monkeypatch, connected=True, last_sync=recent)
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == []  # throttled -> no network
+
+    def test_home_skips_sync_when_disconnected(self, http_client_noauth, monkeypatch):
+        calls = []
+        monkeypatch.setattr("tools.oura.sync_oura", lambda: calls.append(1))
+        self._stub_home(monkeypatch, connected=False, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200
+        assert calls == []  # no ring -> no sync attempt
+
+    def test_home_survives_sync_failure(self, http_client_noauth, monkeypatch):
+        def boom():
+            raise RuntimeError("oura upstream down")
+
+        monkeypatch.setattr("tools.oura.sync_oura", boom)
+        self._stub_home(monkeypatch, connected=True, last_sync="")
+
+        response = http_client_noauth.get("/api/dashboard/home")
+        assert response.status_code == 200  # best-effort: failure never breaks Home
+
+
+class TestDashboardApiKeysJsonCoverage:
+    """GET/POST /api/dashboard/api-keys — JSON token management for the SPA.
+
+    Distinct from TestDashboardApiKeysCoverage, which exercises the legacy
+    server-rendered /dashboard/api-keys HTML page. These cover the JSON feed
+    the React API Keys screen consumes.
+    """
+
+    def test_list_keys_returns_shaped_rows(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "list_keys",
+            lambda _oid: [
+                SimpleNamespace(
+                    id=3,
+                    label="Phone Shortcut",
+                    created_at="2026-06-28T20:00:00",
+                    last_used_at="2026-06-29T08:30:00",
+                ),
+                SimpleNamespace(
+                    id=4,
+                    label="",
+                    created_at="2026-06-27T10:00:00",
+                    last_used_at=None,
+                ),
+            ],
+        )
+
+        response = http_client_noauth.get("/api/dashboard/api-keys")
+        assert response.status_code == 200
+        keys = response.json()["keys"]
+        assert keys[0] == {
+            "id": 3,
+            "label": "Phone Shortcut",
+            "created_at": "2026-06-28T20:00:00",
+            "last_used_at": "2026-06-29T08:30:00",
+        }
+        # Unlabeled / never-used rows collapse None to empty strings.
+        assert keys[1]["label"] == ""
+        assert keys[1]["last_used_at"] == ""
+
+    def test_create_key_returns_plaintext_once(self, http_client_noauth, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "create_key",
+            lambda oid, label: calls.update({"args": (oid, label)})
+            or (9, "jcmcp_brand_new_token"),
+        )
+
+        response = http_client_noauth.post(
+            "/api/dashboard/api-keys",
+            json={"label": "  CLI on Home Mac  "},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body == {
+            "id": 9,
+            "label": "CLI on Home Mac",
+            "token": "jcmcp_brand_new_token",
+        }
+        # Label is trimmed and the key is scoped to the resolved admin OID.
+        assert calls["args"] == ("admin", "CLI on Home Mac")
+
+    def test_create_key_defaults_blank_label(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "create_key",
+            lambda _oid, _label: (1, "jcmcp_token"),
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys", json={})
+        assert response.status_code == 201
+        assert response.json()["label"] == ""
+
+    def test_revoke_key_reports_success(self, http_client_noauth, monkeypatch):
+        calls = {}
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "revoke_key",
+            lambda key_id, oid: calls.update({"args": (key_id, oid)}) or True,
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys/11/revoke")
+        assert response.status_code == 200
+        assert response.json() == {"revoked": True}
+        assert calls["args"] == (11, "admin")
+
+    def test_revoke_missing_key_reports_false(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes, "revoke_key", lambda _key_id, _oid: False
+        )
+
+        response = http_client_noauth.post("/api/dashboard/api-keys/999/revoke")
+        assert response.status_code == 200
+        assert response.json() == {"revoked": False}
+
+    def test_api_keys_require_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            assert client.get("/api/dashboard/api-keys").status_code in (401, 403)
+            assert client.post(
+                "/api/dashboard/api-keys", json={"label": "x"}
+            ).status_code in (401, 403)
+            assert client.post(
+                "/api/dashboard/api-keys/1/revoke"
+            ).status_code in (401, 403)
+        reset_settings_cache()
+
+
+class TestDashboardSettingsApiCoverage:
+    """GET /api/dashboard/settings: read-only status summary for the SPA."""
+
+    def test_settings_summary_reports_status_flags(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: True)
+        monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: True)
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {
+                "configured": True,
+                "connected": True,
+                "last_sync": "2026-06-29T08:00:00",
+                "scope": "daily",
+            },
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes, "_load_oura", lambda: {"readiness_score": 70}
+        )
+
+        response = http_client_noauth.get("/api/dashboard/settings")
+        assert response.status_code == 200
+        assert response.json() == {
+            "isOwner": True,
+            "openaiKeySet": True,
+            "ouraConfigured": True,
+            "ouraConnected": True,
+            "ouraLastSync": "2026-06-29T08:00:00",
+            "oura": {
+                "date": "",
+                "readiness_score": 70,
+                "sleep_score": 0,
+                "hrv": 0,
+                "recovery_index": 0,
+            },
+            "classicUrl": "/dashboard/settings",
+        }
+
+    def test_settings_summary_defaults_when_unconfigured(
+        self, http_client_noauth, monkeypatch
+    ):
+        monkeypatch.setattr(dashboard_api_routes, "_is_owner", lambda: False)
+        monkeypatch.setattr(dashboard_api_routes, "_openai_key_set", lambda: False)
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": False, "connected": False, "last_sync": "", "scope": ""},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.get("/api/dashboard/settings")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["isOwner"] is False
+        assert body["openaiKeySet"] is False
+        assert body["ouraConfigured"] is False
+        assert body["ouraConnected"] is False
+        assert body["ouraLastSync"] == ""
+        assert body["oura"] is None
+        assert body["classicUrl"] == "/dashboard/settings"
+
+    def test_settings_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.get("/api/dashboard/settings")
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestOpenAiKeySetHelper:
+    """_openai_key_set() must be tenant-aware (PR #67 Copilot review, #1).
+
+    It mirrors lib.config.get_llm_client()'s resolution so the Settings screen
+    reports the same truth generation sees: the LLM_API_KEY env var OR the
+    active tenant's merged config openai_api_key. This must work for
+    single-tenant/local and owner sessions, not only when a per-user
+    data-folder override is active.
+    """
+
+    def test_true_from_active_config(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "sk-abc"})
+        assert dashboard_api_routes._openai_key_set() is True
+
+    def test_true_from_env_even_without_config_key(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.setenv("LLM_API_KEY", "env-provided-key")
+        monkeypatch.setattr(config, "get_active_config", lambda: {})
+        assert dashboard_api_routes._openai_key_set() is True
+
+    def test_false_when_no_key_anywhere(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "   "})
+        assert dashboard_api_routes._openai_key_set() is False
+
+    def test_false_and_safe_on_config_error(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+        def boom():
+            raise RuntimeError("no request context")
+
+        monkeypatch.setattr(config, "get_active_config", boom)
+        assert dashboard_api_routes._openai_key_set() is False
+
+
+class TestHomeHeroBuilders:
+    """Direct coverage for home.py hero HTML builders + readiness band helpers."""
+
+    def test_readiness_color_and_label_bands(self):
+        from transport.http.routes.dashboard import home
+
+        assert home._readiness_color_and_label(90) == ("#22C55E", "High readiness")
+        assert home._readiness_color_and_label(72) == ("#f59e0b", "Good readiness")
+        assert home._readiness_color_and_label(40) == ("#ef4444", "Low readiness")
+
+    def test_metric_bar_color_bands(self):
+        from transport.http.routes.dashboard import home
+
+        assert home._metric_bar_color(80) == "#22C55E"
+        assert home._metric_bar_color(60) == "#f59e0b"
+        assert home._metric_bar_color(10) == "#ef4444"
+
+    def test_today_move_text_readiness_variants(self):
+        from transport.http.routes.dashboard import home
+
+        assert "High readiness" in home._today_move_text({"readiness_score": 90}, {"overdue": 0})
+        assert "Decent readiness" in home._today_move_text({"readiness_score": 74}, {})
+        low = home._today_move_text({"readiness_score": 40}, {"overdue": 2})
+        assert "Recovery day" in low
+        assert "2 overdue task" in low
+
+    def test_today_move_text_no_oura_paths(self):
+        from transport.http.routes.dashboard import home
+
+        assert "in flight" in home._today_move_text(None, {"in_flight": 3})
+        assert "top priority" in home._today_move_text(None, {"in_flight": 0, "overdue": 0})
+
+    def test_build_hero_html_with_oura_and_data(self):
+        from transport.http.routes.dashboard import home
+
+        snap = {
+            "has_data": True, "active": 2, "in_flight": 1, "overdue": 1,
+            "priorities": ["Follow up with Acme"],
+        }
+        oura = {"readiness_score": 88, "sleep_score": 80, "hrv": 65, "recovery_index": 90}
+        out = home._build_hero_html("Frank", snap, oura)
+        assert "oura-panel" in out
+        assert ">88<" in out
+        assert "High readiness" in out
+        assert "1 overdue" in out
+        assert "Follow up with Acme" in out
+        assert "Active" in out
+
+    def test_build_hero_html_without_oura_no_data(self):
+        from transport.http.routes.dashboard import home
+
+        snap = {"has_data": False, "active": 0, "in_flight": 0, "overdue": 0, "priorities": []}
+        out = home._build_hero_html("there", snap, None)
+        assert "oura-panel" not in out
+        assert "What would you like to work on today?" in out
+
+
+class TestOuraBrowserOAuthRoutes:
+    """Browser OAuth connect/callback handlers in dashboard/oura.py."""
+
+    def test_connect_unavailable_when_not_configured(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(oura_route.oura, "oura_configured", lambda: False)
+        r = http_client_noauth.get("/dashboard/oura/connect", follow_redirects=False)
+        assert r.status_code == 303
+        assert "oura=unavailable" in r.headers["location"]
+
+    def test_connect_redirects_to_oura_with_state_cookie(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(oura_route.oura, "oura_configured", lambda: True)
+        monkeypatch.setattr(
+            oura_route.oura, "oura_authorize_url",
+            lambda state, redirect_uri: f"https://cloud.ouraring.com/oauth/authorize?state={state}",
+        )
+        r = http_client_noauth.get("/dashboard/oura/connect", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"].startswith("https://cloud.ouraring.com/oauth/authorize")
+        assert "oura_state=" in r.headers.get("set-cookie", "")
+
+    def test_callback_error_param_redirects_error(self, http_client_noauth):
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?error=access_denied", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_missing_code_redirects_error(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/oura/callback", follow_redirects=False)
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_state_mismatch_redirects_error(self, http_client_noauth):
+        # No state cookie set → expected is empty → mismatch → error.
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=xyz", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+    def test_callback_success_flow(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(
+            oura_route.oura, "exchange_code_for_tokens",
+            lambda code, redirect_uri: {"access_token": "a", "refresh_token": "r"},
+        )
+        monkeypatch.setattr(oura_route.oura, "save_oura_tokens", lambda tokens: None)
+        monkeypatch.setattr(oura_route.oura, "sync_oura", lambda: {"ok": True})
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=connected" in r.headers["location"]
+
+    def test_callback_success_tolerates_sync_failure(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        monkeypatch.setattr(
+            oura_route.oura, "exchange_code_for_tokens",
+            lambda code, redirect_uri: {"access_token": "a", "refresh_token": "r"},
+        )
+        monkeypatch.setattr(oura_route.oura, "save_oura_tokens", lambda tokens: None)
+
+        def sync_boom():
+            raise RuntimeError("sync hiccup")
+
+        monkeypatch.setattr(oura_route.oura, "sync_oura", sync_boom)
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        # Connect must still succeed even if the best-effort first sync fails.
+        assert r.status_code == 303
+        assert "oura=connected" in r.headers["location"]
+
+    def test_callback_exchange_error_redirects_error(self, http_client_noauth, monkeypatch):
+        from transport.http.routes.dashboard import oura as oura_route
+
+        def boom(code, redirect_uri):
+            raise oura_route.oura.OuraError("bad code")
+
+        monkeypatch.setattr(oura_route.oura, "exchange_code_for_tokens", boom)
+        http_client_noauth.cookies.set("oura_state", "match-state")
+        r = http_client_noauth.get(
+            "/dashboard/oura/callback?code=abc&state=match-state", follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "oura=error" in r.headers["location"]
+
+
+class TestDashboardOuraApiCoverage:
+    """POST /api/dashboard/oura/sync + /disconnect: OAuth-backed Oura actions.
+
+    The browser connect/callback handshake is covered separately; these cover
+    the JSON actions the React Settings screen calls once a ring is connected.
+    """
+
+    def test_oura_sync_pulls_and_returns_latest(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": True, "connected": True, "reading": {"readiness_score": 88}},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "x", "scope": "daily"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_load_oura",
+            lambda: {
+                "date": "2026-06-29",
+                "readiness_score": 88,
+                "sleep_score": 90,
+                "hrv": 65,
+                "recovery_index": 80,
+            },
+        )
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["ouraConnected"] is True
+        assert body["oura"]["readiness_score"] == 88
+
+    def test_oura_sync_no_data_still_ok(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": True, "connected": True, "reading": None, "note": "no_data"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "x", "scope": "daily"},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["note"] == "no_data"
+        assert body["oura"] is None
+
+    def test_oura_sync_not_connected_returns_409(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": False, "connected": False, "error": "not_connected"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": False, "last_sync": "", "scope": ""},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 409
+        assert response.json()["error"] == "not_connected"
+
+    def test_oura_sync_upstream_error_returns_502(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(
+            oura_tool,
+            "sync_oura",
+            lambda: {"ok": False, "connected": True, "error": "Oura API daily_readiness returned 500"},
+        )
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "_oura_status",
+            lambda: {"configured": True, "connected": True, "last_sync": "", "scope": "daily"},
+        )
+        monkeypatch.setattr(dashboard_api_routes, "_load_oura", lambda: None)
+
+        response = http_client_noauth.post("/api/dashboard/oura/sync", json={})
+        assert response.status_code == 502
+        assert response.json()["ok"] is False
+
+    def test_oura_disconnect_clears_tokens(self, http_client_noauth, monkeypatch):
+        import tools.oura as oura_tool
+
+        captured = {}
+
+        def _clear():
+            captured["called"] = True
+            return True
+
+        monkeypatch.setattr(oura_tool, "clear_oura_tokens", _clear)
+
+        response = http_client_noauth.post("/api/dashboard/oura/disconnect", json={})
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "removed": True, "ouraConnected": False}
+        assert captured["called"] is True
+
+    def test_oura_sync_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.post("/api/dashboard/oura/sync", json={})
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+    def test_oura_disconnect_requires_auth(self, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(create_app()) as client:
+            response = client.post("/api/dashboard/oura/disconnect", json={})
+        reset_settings_cache()
+        assert response.status_code in (401, 403)
+
+
+class TestDashboardOuraConnectRoute:
+    """GET /dashboard/oura/connect: the browser OAuth handshake entry point.
+
+    Regression guard: this router must stay mounted. A prior wiring gap left it
+    out of the dashboard package __init__, making connect/callback 404.
+    """
+
+    def test_connect_unconfigured_redirects_to_settings(
+        self, http_client_noauth, monkeypatch
+    ):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(oura_tool, "oura_configured", lambda: False)
+        response = http_client_noauth.get(
+            "/dashboard/oura/connect", follow_redirects=False
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/app/settings?oura=unavailable"
+
+    def test_connect_configured_redirects_to_oura(
+        self, http_client_noauth, monkeypatch
+    ):
+        import tools.oura as oura_tool
+
+        monkeypatch.setattr(oura_tool, "oura_configured", lambda: True)
+        monkeypatch.setattr(
+            oura_tool,
+            "oura_authorize_url",
+            lambda state, redirect_uri: f"https://cloud.ouraring.com/oauth/authorize?state={state}",
+        )
+        response = http_client_noauth.get(
+            "/dashboard/oura/connect", follow_redirects=False
+        )
+        assert response.status_code == 302
+        assert response.headers["location"].startswith(
+            "https://cloud.ouraring.com/oauth/authorize?state="
+        )
+        # A state cookie is set so the callback can verify the handshake.
+        assert "oura_state" in response.headers.get("set-cookie", "")
+
+
+class TestSafeNextRedirect:
+    """_safe_next gates post-login redirects to internal SPA/dashboard paths."""
+
+    @pytest.mark.parametrize(
+        "candidate,expected",
+        [
+            ("/app", "/app"),
+            ("/app/job-hunt", "/app/job-hunt"),
+            ("/dashboard", "/dashboard"),
+            ("/dashboard/people", "/dashboard/people"),
+            # Anything off-allowlist or unsafe falls back to the SPA root.
+            ("/api/dashboard/home", "/app"),
+            ("https://evil.example/app", "/app"),
+            ("//evil.example", "/app"),
+            ("", "/app"),
+            (None, "/app"),
+        ],
+    )
+    def test_safe_next(self, candidate, expected):
+        assert login_routes._safe_next(candidate) == expected
+
+
+class TestSpaServing:
+    """/app/* — Vite-built React SPA served by FastAPI."""
+
+    @staticmethod
+    def _make_dist(tmp_path):
+        dist = tmp_path / "dist"
+        (dist / "assets").mkdir(parents=True)
+        (dist / "index.html").write_text('<!doctype html><html><body><div id="root"></div></body></html>')
+        (dist / "assets" / "app.js").write_text('console.log("spa")')
+        return dist
+
+    @pytest.fixture()
+    def spa_client(self, tmp_path, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", self._make_dist(tmp_path))
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            yield client
+        reset_settings_cache()
+
+    def test_app_shell_served(self, spa_client):
+        response = spa_client.get("/app")
+        assert response.status_code == 200
+        assert '<div id="root">' in response.text
+
+    def test_deep_link_falls_back_to_index(self, spa_client):
+        # No file on disk for this client-side route → SPA fallback to index.
+        response = spa_client.get("/app/job-hunt")
+        assert response.status_code == 200
+        assert '<div id="root">' in response.text
+
+    def test_hashed_asset_is_served(self, spa_client):
+        response = spa_client.get("/app/assets/app.js")
+        assert response.status_code == 200
+        assert "spa" in response.text
+
+    def test_shell_public_but_data_api_protected_under_auth(
+        self, tmp_path, monkeypatch, isolated_server
+    ):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", self._make_dist(tmp_path))
+        monkeypatch.setenv("API_KEY", "test-key")
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            # Static shell loads without credentials so the SPA can boot.
+            assert client.get("/app").status_code == 200
+            # User data stays behind auth.
+            assert client.get("/api/dashboard/home").status_code in (401, 403)
+        reset_settings_cache()
+
+    def test_mount_skipped_when_dist_absent(self, tmp_path, monkeypatch, isolated_server):
+        from fastapi.testclient import TestClient
+        import transport.http.app as app_module
+
+        monkeypatch.setattr(app_module, "_SPA_DIST", tmp_path / "does-not-exist")
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("ENABLE_REMOTE", raising=False)
+        reset_settings_cache()
+        with TestClient(app_module.create_app()) as client:
+            # No SPA mount → the shell is never served.
+            response = client.get("/app")
+            assert '<div id="root">' not in response.text
+        reset_settings_cache()
 
 
 class TestDashboardInterviewsCoverage:

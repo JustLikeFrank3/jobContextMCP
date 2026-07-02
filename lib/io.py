@@ -23,6 +23,15 @@ def _resolve_data_path(path: Path) -> Path:
     override = get_data_folder_override()
     if override is None:
         return path
+    # Idempotency guard: if the path is already inside the user's partition,
+    # return it untouched. Callers such as setup_workspace pass paths that are
+    # already tenant-resolved (DATA_FOLDER/users/<oid>/x.json); re-applying the
+    # override would double the partition (…/users/<oid>/users/<oid>/x.json).
+    try:
+        path.relative_to(override)
+        return path
+    except ValueError:
+        pass
     import lib.config as _config
     try:
         relative = path.relative_to(_config.DATA_FOLDER)

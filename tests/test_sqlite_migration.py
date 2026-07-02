@@ -869,3 +869,139 @@ def test_save_people_sync_delete(monkeypatch, tmp_path):
     names = [p["name"] for p in result["people"]]
     assert "Bob" not in names, f"Bob should be deleted, got {names}"
     assert "Alice" in names
+
+
+# ── Regression: seeder schema must not drift from _MIGRATIONS (PR #67, #1) ────
+#
+# The per-user SQLite DB is created out-of-band by the seeder schema
+# (lib.user_provisioning._SCHEMA_SQL / scripts.migrate_to_sqlite._SCHEMA), NOT
+# by lib.db._MIGRATIONS.  Because _apply_migrations tolerates a "no such table"
+# error for a job_queue ALTER and *still advances the version ledger*, any
+# `ALTER TABLE job_queue ADD COLUMN ...` that runs against an empty DB before
+# the table exists is silently marked applied and never retried.  If the seeder
+# then creates job_queue without those columns, they are missing forever and
+# writes to them fail.  The only safe contract is: the seeder must create
+# job_queue with every column the ALTER-migrations would add.
+
+def _job_queue_columns(db_file: Path) -> set[str]:
+    """Return the column names of the job_queue table in a seeded DB file."""
+    con = sqlite3.connect(str(db_file))
+    try:
+        return {row[1] for row in con.execute("PRAGMA table_info(job_queue)")}
+    finally:
+        con.close()
+
+
+def test_provisioned_tenant_db_has_template_columns(tmp_path):
+    """A freshly provisioned tenant DB includes all job_queue template columns.
+
+    resume_template / resume_style / cl_template / cl_style must exist at seed
+    time so per-card template selection persists even when the ALTER migrations
+    were tolerated-and-skipped on an empty DB.
+    """
+    from lib.user_provisioning import provision_user_data
+
+    data_dir = tmp_path / "users" / "oid-under-test"
+    provision_user_data(data_dir)
+
+    cols = _job_queue_columns(data_dir / "db" / "jobcontextmcp.db")
+    for expected in ("resume_template", "resume_style", "cl_template", "cl_style"):
+        assert expected in cols, (
+            f"seeder job_queue missing {expected!r}: {sorted(cols)}"
+        )
+
+
+def test_seeder_job_queue_covers_all_alter_migrations(tmp_path):
+    """The seeder must create every job_queue column the ALTER migrations add.
+
+    Self-maintaining drift guard: if a future migration adds another
+    ``ALTER TABLE job_queue ADD COLUMN <name>`` without updating the seeder
+    schema, this fails — because that column would be permanently skipped on
+    DBs where the ALTER was tolerated before the table existed.
+    """
+    import re
+    import lib.db as db_mod
+    from lib.user_provisioning import provision_user_data
+
+    alter_cols = set()
+    for sql in db_mod._MIGRATIONS:
+        m = re.search(r"ALTER\s+TABLE\s+job_queue\s+ADD\s+COLUMN\s+(\w+)", sql, re.I)
+        if m:
+            alter_cols.add(m.group(1))
+    assert alter_cols, "expected at least one ALTER TABLE job_queue migration"
+
+    data_dir = tmp_path / "users" / "oid-drift-guard"
+    provision_user_data(data_dir)
+    seeder_cols = _job_queue_columns(data_dir / "db" / "jobcontextmcp.db")
+
+    missing = alter_cols - seeder_cols
+    assert not missing, (
+        f"seeder job_queue is missing ALTER-migration columns {sorted(missing)}; "
+        "add them to _SCHEMA_SQL (lib/user_provisioning.py) and _SCHEMA "
+        "(scripts/migrate_to_sqlite.py) to prevent ledger-skip drift"
+    )
+
+
+# ── Regression: migration error tolerance is scoped to job_queue ALTERs (PR #67, #2)
+
+def test_apply_migrations_tolerates_job_queue_alter_on_missing_table(tmp_path, monkeypatch):
+    """An ALTER TABLE job_queue against a DB lacking job_queue is tolerated and
+    the ledger still advances (so later migrations aren't blocked)."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        ["ALTER TABLE job_queue ADD COLUMN brand_new TEXT"],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        # Must NOT raise despite "no such table: job_queue".
+        db_mod._apply_migrations(con)
+        applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
+        assert applied == 1  # ledger advanced past the tolerated ALTER
+    finally:
+        con.close()
+
+
+def test_apply_migrations_raises_on_unrelated_missing_table(tmp_path, monkeypatch):
+    """A non-job_queue migration failing with the same 'no such table' message
+    must NOT be tolerated — it should raise so a real bug isn't marked applied."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        ["ALTER TABLE some_other_table ADD COLUMN oops TEXT"],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            db_mod._apply_migrations(con)
+        # Ledger did not record the failed migration.
+        applied = con.execute("SELECT COUNT(*) FROM applied_migrations").fetchone()[0]
+        assert applied == 0
+    finally:
+        con.close()
+
+
+def test_apply_migrations_raises_on_unrelated_duplicate_column(tmp_path, monkeypatch):
+    """'duplicate column name' is only tolerable on job_queue ALTERs; on any
+    other table it signals a real drift and must raise."""
+    import sqlite3
+    import lib.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "_MIGRATIONS",
+        [
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)",
+            "ALTER TABLE widgets ADD COLUMN name TEXT",  # duplicate on non-job_queue
+        ],
+    )
+    con = sqlite3.connect(str(tmp_path / "t.db"))
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            db_mod._apply_migrations(con)
+    finally:
+        con.close()
+

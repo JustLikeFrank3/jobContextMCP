@@ -11,6 +11,14 @@ def test_login_html_urlencodes_next_target():
     assert "%2Fdashboard%2Fsettings%3Ftab%3Dprofile%26return%3D%2Fdashboard" in html
 
 
+def test_login_html_defaults_next_to_react_app():
+    """Default sign-in lands on the React SPA (/app), not the legacy dashboard."""
+    html = login_html()
+
+    assert "__NEXT_HREF__" not in html
+    assert "/dashboard/login?next=%2Fapp" in html
+
+
 def test_get_session_context_combines_all_sections(monkeypatch):
     monkeypatch.setattr(session.config, "get_contact_name", lambda default: "Frank")
     monkeypatch.setattr(session, "_load_master_context", lambda: "MASTER")

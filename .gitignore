@@ -77,3 +77,7 @@ scripts/import_job_queue_if_empty.py
 scripts/add_fitment_context_column.py
 scripts/gen_demo_docs.py
 scripts/generate_demo_pdfs.py
+
+# Oura biometric data — personal, not for version control
+data/oura.json
+workspace/oura.json

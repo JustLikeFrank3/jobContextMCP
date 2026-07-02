@@ -1,0 +1,213 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jcmcp-qa
+  namespace: jcmcp-qa
+  labels:
+    app: jcmcp-qa
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jcmcp-qa
+  template:
+    metadata:
+      labels:
+        app: jcmcp-qa
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: jcmcp-workload-sa
+      initContainers:
+        - name: seed-workspace
+          image: mcr.microsoft.com/azure-cli:2.61.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Seeding QA tenant data from Blob Storage..."
+              az login \
+                --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                --service-principal \
+                -u "$AZURE_CLIENT_ID" \
+                --tenant "$AZURE_TENANT_ID" \
+                --output none
+              rm -rf /app/data/data /app/data/workspace/data
+              mkdir -p /app/data/users
+              az storage blob download-batch \
+                --account-name "${STORAGE_ACCOUNT}" \
+                --source workspace \
+                --pattern "users/*" \
+                --destination /app/data \
+                --overwrite true \
+                --auth-mode login \
+                --output none && echo "QA tenant data restored." || echo "No QA tenant data in blob yet (first boot)."
+              echo "QA seed complete."
+          env:
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-qa-config
+                  key: storage_account
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      containers:
+        - name: jcmcp-qa
+          image: <ACR_NAME>.azurecr.io/jcmcp:<IMAGE_TAG>
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: START_MODE
+              value: "http"
+            - name: USE_SQLITE
+              value: "1"
+            - name: SQLITE_ONLY
+              value: "0"
+            - name: ENABLE_REMOTE
+              value: "true"
+            - name: SERVER_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: server_base_url
+                  optional: true
+            - name: DISABLE_REBINDING_CHECK
+              value: "true"
+            - name: ENTRA_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: entra_tenant_id
+            - name: ENTRA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: entra_client_id
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: entra_client_secret
+            - name: ENTRA_OWNER_OID
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-qa-config
+                  key: entra_owner_oid
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: llm_provider
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: llm_api_key
+                  optional: true
+            # Oura Ring OAuth client credentials. Optional: when absent the
+            # connect flow shows "not enabled" instead of erroring. Add the
+            # keys to jcmcp-qa-app-secrets and restart to turn it on.
+            - name: OURA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: oura_client_id
+                  optional: true
+            - name: OURA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: oura_client_secret
+                  optional: true
+            # App-wide key for encrypting secrets at rest (per-user OAuth
+            # tokens). Optional: when absent, tokens are stored in cleartext.
+            - name: APP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: app_encryption_key
+                  optional: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"   # half of prod — QA doesn't need full burst capacity
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+        - name: workspace-sync
+          image: mcr.microsoft.com/azure-cli:2.61.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "QA tenant sync sidecar ready. Syncing every 15 min."
+              while true; do
+                sleep 900
+                az login \
+                  --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                  --service-principal \
+                  -u "$AZURE_CLIENT_ID" \
+                  --tenant "$AZURE_TENANT_ID" \
+                  --output none 2>/dev/null
+                if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                  az storage blob upload-batch \
+                    --account-name "${STORAGE_ACCOUNT}" \
+                    --source /app/data/users \
+                    --destination workspace \
+                    --destination-path users \
+                    --overwrite true \
+                    --auth-mode login \
+                    --output none \
+                    && echo "[$(date -u +%H:%M:%SZ)] QA tenant sync OK" \
+                    || echo "[$(date -u +%H:%M:%SZ)] QA tenant sync FAILED"
+                else
+                  echo "[$(date -u +%H:%M:%SZ)] no QA tenant data to sync yet"
+                fi
+              done
+          env:
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-qa-config
+                  key: storage_account
+          resources:
+            requests:
+              cpu: "5m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jcmcp-qa-data
+        - name: config
+          configMap:
+            name: jcmcp-qa-config

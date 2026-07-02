@@ -1,0 +1,53 @@
+# ConfigMap — QA environment non-sensitive configuration.
+# Placeholders (__QA_*__) are substituted by the CI deploy step.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jcmcp-qa-config
+  namespace: jcmcp-qa
+data:
+  config.json: |
+    {
+      "data_folder":               "/app/data",
+      "resume_folder":             "/app/data/workspace",
+      "leetcode_folder":           "/app/data/workspace/leetcode",
+      "latex_resume_dir":          "/app/templates/latex_assets",
+      "job_assessments_dir":       "07-Job-Assessments",
+      "interview_prep_docs_dir":   "08-Interview-Prep-Docs",
+      "optimized_resumes_dir":     "01-Current-Optimized",
+      "cover_letters_dir":         "02-Cover-Letters",
+      "reference_materials_dir":   "06-Reference-Materials",
+      "master_resume_path":        "01-Current-Optimized/Resume - MASTER SOURCE.txt",
+      "leetcode_cheatsheet_path":  "Algorithm_Cheatsheet.md",
+      "quick_reference_path":      "Interview_Quick_Reference.md",
+      "template_format_path":      "06-Reference-Materials/Resume - Template Format.txt",
+      "achievements_path":          "06-Reference-Materials/Achievements.txt",
+      "feedback_received_path":    "06-Reference-Materials/Feedback_Received.txt",
+      "skills_shorter_path":       "06-Reference-Materials/Skills - 10% Shorter.txt",
+      "resume_template_png":       "06-Reference-Materials/resume_template.png",
+      "cover_letter_template_png": "06-Reference-Materials/cover_letter_template.png",
+      "openai_model":              "gpt-4.1-mini",
+      "llm_provider":              "__QA_LLM_PROVIDER__",
+      "azure_foundry_endpoint":    "__QA_FOUNDRY_ENDPOINT__",
+      "azure_foundry_deployment":  "__QA_FOUNDRY_DEPLOYMENT__",
+      "azure_foundry_api_version": "__QA_FOUNDRY_API_VERSION__",
+      "azure_foundry_scope":       "https://ai.azure.com/.default",
+      "side_project_repos": [
+        {"url": "https://github.com/JustLikeFrank3/jobContextMCP", "branch": "qa"},
+        "https://github.com/JustLikeFrank3/RetrosPiCam",
+        "https://github.com/JustLikeFrank3/LiveVox",
+        "https://github.com/JustLikeFrank3/LiveVoxNative"
+      ],
+      "contact": {
+        "name":      "",
+        "phone":     "",
+        "email":     "",
+        "linkedin":  "",
+        "github":    "",
+        "city":      "",
+        "city_state":"",
+        "location":  ""
+      }
+    }
+  storage_account: "__QA_STORAGE_ACCOUNT__"
+  entra_owner_oid: "__QA_ENTRA_OWNER_OID__"

@@ -92,6 +92,199 @@ def _build_snapshot() -> dict:  # NOSONAR
         "priorities":    priorities[:3],
     }
 
+
+# ── Oura helpers ─────────────────────────────────────────────────────────────
+
+def _load_oura() -> "dict | None":
+    """Load the most recent Oura readiness snapshot for the current user.
+
+    Priority:
+      1. SQLite oura_readiness table (per-user, persists on AKS).
+      2. workspace/oura.json flat file (local dev fallback).
+    """
+    # 1 — SQLite (primary on AKS and local after first log_oura_readiness call)
+    try:
+        from tools.oura import _latest_oura_row
+        row = _latest_oura_row()
+        if row:
+            return row
+    except Exception:
+        pass
+
+    # 2 — flat-file fallback for local dev / first-run
+    try:
+        import json
+        from lib.config import get_active_workspace_folder
+        p = get_active_workspace_folder() / "oura.json"
+        if p.exists():
+            return json.loads(p.read_text())
+    except Exception:
+        pass
+
+    return None
+
+
+def _readiness_color_and_label(score: int) -> "tuple[str, str]":
+    if score >= 85:
+        return "#22C55E", "High readiness"
+    if score >= 70:
+        return "#f59e0b", "Good readiness"
+    return "#ef4444", "Low readiness"
+
+
+def _metric_bar_color(pct: float) -> str:
+    if pct >= 75:
+        return "#22C55E"
+    if pct >= 50:
+        return "#f59e0b"
+    return "#ef4444"
+
+
+def _today_move_text(oura: "dict | None", snap: dict) -> str:
+    overdue = snap.get("overdue", 0)
+    overdue_plural = "s" if overdue != 1 else ""
+    overdue_sfx = (
+        f" Clear {overdue} overdue task{overdue_plural} first."
+        if overdue else ""
+    )
+    if oura:
+        score = oura.get("readiness_score", 0)
+        if score >= 85:
+            base = "High readiness day. Good window for outreach and interviews."
+        elif score >= 70:
+            base = "Decent readiness. Stay focused on your priority tasks."
+        else:
+            base = "Recovery day. Keep it light. Admin and planning tasks only."
+        return base + overdue_sfx
+    in_flight = snap.get("in_flight", 0)
+    if in_flight:
+        return (
+            f"{in_flight} application{'s' if in_flight != 1 else ''} in flight."
+            f" Keep the momentum going." + overdue_sfx
+        )
+    return "Start with your top priority action." + overdue_sfx
+
+
+def _build_hero_html(first_name: str, snap: dict, oura: "dict | None") -> str:  # NOSONAR
+    """Build the Oura Readiness + Pipeline hero card HTML block."""
+    safe_name  = first_name  # already html.escaped by caller
+    has_data   = snap.get("has_data", False)
+    active     = snap.get("active", 0)
+    in_flight  = snap.get("in_flight", 0)
+    overdue    = snap.get("overdue", 0)
+    priorities = snap.get("priorities", [])
+
+    priority_items = "".join(
+        f"<li>{html.escape(p)}</li>" for p in priorities
+    ) or "<li>Check your pipeline and identify next steps</li>"
+
+    overdue_badge = (
+        f'<div class="overdue-badge">'
+        f'<svg viewBox="0 0 8 8" width="8" height="8" fill="currentColor">'
+        f'<circle cx="4" cy="4" r="4"/></svg>'
+        f" {overdue} overdue</div>"
+    ) if overdue else ""
+
+    move_text = html.escape(_today_move_text(oura, snap))
+
+    # ── Left panel (Oura) ────────────────────────────────────────────────────
+    if oura:
+        score    = int(oura.get("readiness_score", 0))
+        sleep_s  = int(oura.get("sleep_score", 0))
+        hrv      = int(oura.get("hrv", 0))
+        recovery = int(oura.get("recovery_index", 0))
+
+        ring_color, readiness_label = _readiness_color_and_label(score)
+        circ = 439.82  # 2π × 70
+        dash = (score / 100) * circ
+
+        def _mrow(name: str, val: int, unit: str, pct: float) -> str:
+            color = _metric_bar_color(pct)
+            return (
+                f'<div class="metric-row">'
+                f'<div class="metric-top">'
+                f'<span class="metric-name">{name}</span>'
+                f'<span class="metric-val" style="color:{color}">'
+                f'{val}<span class="metric-unit">{unit}</span></span>'
+                f'</div>'
+                f'<div class="metric-bar-track">'
+                f'<div class="metric-bar-fill" style="width:{min(pct, 100):.0f}%;background:{color}"></div>'
+                f'</div></div>'
+            )
+
+        left_html = (
+            f'<div class="oura-panel">'
+            f'<div class="panel-eyebrow">Oura &middot; Readiness</div>'
+            f'<div class="ring-wrap">'
+            f'<svg viewBox="0 0 180 180" width="136" height="136">'
+            f'<circle cx="90" cy="90" r="70" fill="none" stroke="#1c2740" stroke-width="16"/>'
+            f'<circle cx="90" cy="90" r="70" fill="none" stroke="{ring_color}"'
+            f' stroke-width="16" stroke-linecap="round"'
+            f' stroke-dasharray="{dash:.1f} {circ:.2f}"'
+            f' transform="rotate(-90 90 90)"/>'
+            f'<text x="90" y="82" font-family="Inter,sans-serif" font-size="38"'
+            f' font-weight="700" fill="#f1f5f9" text-anchor="middle">{score}</text>'
+            f'<text x="90" y="104" font-family="Inter,sans-serif" font-size="10"'
+            f' font-weight="600" fill="#9aa8bf" text-anchor="middle"'
+            f' letter-spacing="2">SCORE</text>'
+            f'</svg>'
+            f'<div class="ring-readiness" style="color:{ring_color}">{html.escape(readiness_label)}</div>'
+            f'</div>'
+            f'<div class="metric-rows">'
+            + _mrow("Sleep score", sleep_s, "", sleep_s)
+            + _mrow("HRV", hrv, "ms", min(hrv, 100))
+            + _mrow("Recovery index", recovery, "", recovery)
+            + '</div></div>'
+        )
+        divider   = '<div class="hero-divider"></div>'
+        body_cols = "1fr 1px 1fr"
+    else:
+        left_html = ""
+        divider   = ""
+        body_cols = "1fr"
+
+    overdue_inline = (
+        f'<div style="margin-left:auto;align-self:center">{overdue_badge}</div>'
+    ) if overdue_badge else ""
+
+    right_html = (
+        '<div class="pipeline-panel">'
+        '<div class="panel-eyebrow">Pipeline &middot; Today</div>'
+    )
+    if has_data:
+        right_html += (
+            f'<div class="pipeline-counts">'
+            f'<div class="pcount"><span class="pcount-n">{active}</span>'
+            f'<span class="pcount-l">Active</span></div>'
+            f'<div class="pcount"><span class="pcount-n">{in_flight}</span>'
+            f'<span class="pcount-l">In&#x2011;Flight</span></div>'
+            f'{overdue_inline}'
+            f'</div>'
+            f'<div class="priority-eyebrow">Priority Actions</div>'
+            f'<ol class="priority-list">{priority_items}</ol>'
+        )
+    else:
+        right_html += (
+            '<p style="color:var(--muted);font-size:0.88rem;margin:0 0 8px">'
+            'What would you like to work on today?</p>'
+        )
+    right_html += '</div>'
+
+    return (
+        f'<div class="hero-greeting">Welcome back, <span>{safe_name}.</span></div>\n'
+        f'  <div class="hero-card">\n'
+        f'    <div class="hero-body" style="grid-template-columns:{body_cols}">\n'
+        f'      {left_html}{divider}{right_html}\n'
+        f'    </div>\n'
+        f'    <div class="move-bar">\n'
+        f'      <div class="move-label"><span class="move-dot"></span>Today\'s Move</div>\n'
+        f'      <div class="move-text">{move_text}</div>\n'
+        f'      <div class="move-arrow">&#8594;</div>\n'
+        f'    </div>\n'
+        f'  </div>'
+    )
+
+
 _PAGES = [
   (
     '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M3 5h14M3 10h10M3 15h6"/><circle cx="16" cy="10" r="2"/></svg>',
@@ -122,10 +315,6 @@ _PAGES = [
         "Wellbeing", "/dashboard/health", "Mood & energy log, trend sparklines",
     ),
     (
-        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M4 4h12v2H4zM4 9h8v2H4zM4 14h10v2H4z"/></svg>',
-        "Daily Digest", "/dashboard/digest", "On-demand morning briefing: follow-ups, stale apps, priorities",
-    ),
-    (
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3 3-5 7-5s7 2 7 5"/><path d="M14 5l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" stroke-width="1.2"/></svg>',
         "Interviews", "/dashboard/interviews", "Upcoming schedule, debrief log, verbatim quotes",
     ),
@@ -143,43 +332,9 @@ async def dashboard_home(
     first_name = raw_name.split()[0] if raw_name.lower() not in ("api-key", "") else "there"
     safe_first_name = html.escape(first_name)
 
-    # ── Greeting section ─────────────────────────────────────────────────────
-    if snap["has_data"]:
-        stat_pills = (
-            f'<span class="stat-pill">'
-            f'<span class="stat-n">{snap["active"]}</span>'
-            f'<span class="stat-l">active</span></span>'
-            f'<span class="stat-sep">\u00b7</span>'
-            f'<span class="stat-pill">'
-            f'<span class="stat-n">{snap["in_flight"]}</span>'
-            f'<span class="stat-l">in flight</span></span>'
-            f'<span class="stat-sep">\u00b7</span>'
-            f'<span class="stat-pill dim">'
-            f'<span class="stat-n">{snap["closed"]}</span>'
-            f'<span class="stat-l">closed</span></span>'
-        )
-        if snap["overdue"]:
-            n = snap["overdue"]
-            stat_pills += f'<span class="badge-alert">&#9888; {n} overdue</span>'
-        if snap["undecided"]:
-            n = snap["undecided"]
-            stat_pills += f'<span class="badge-warn">{n} to evaluate</span>'
-
-        focus_items = "".join(f"<li>{html.escape(p)}</li>" for p in snap["priorities"])
-
-        greeting_html = f"""  <div class="greeting-wrap">
-    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{safe_first_name}.</span></p>
-    <div class="stat-row">{stat_pills}</div>
-    <div class="snapshot-card">
-      <div class="snap-eyebrow">Here&#8217;s what you&#8217;ve got</div>
-      <ol class="focus-ol">{focus_items}</ol>
-    </div>
-  </div>"""
-    else:
-        greeting_html = f"""  <div class="greeting-wrap">
-    <p class="greeting-salutation">Welcome back, <span class="greeting-name">{safe_first_name}.</span></p>
-    <p class="greeting-sub">What would you like to get started on today?</p>
-  </div>"""
+    # ── Hero section (Oura Readiness + Pipeline) ─────────────────────────────
+    oura      = _load_oura()
+    hero_html = _build_hero_html(safe_first_name, snap, oura)
 
     # ── Cards ─────────────────────────────────────────────────────────────────
     cards = "\n".join(
@@ -221,79 +376,111 @@ async def dashboard_home(
     .banner-wrap {{ width: 100%; max-width: 620px; margin: 0 auto 8px; }}
     .banner-wrap svg {{ width: 100%; height: auto; display: block; }}
 
-    /* ── Greeting ── */
-    .greeting-wrap {{
-      width: 100%; max-width: 860px;
-      display: flex; flex-direction: column; align-items: center;
-      gap: 10px; margin-bottom: 24px;
+    /* ── Hero greeting ── */
+    .hero-greeting {{
+      font-size: 1.15rem; font-weight: 500; color: var(--muted);
+      margin-bottom: 12px; letter-spacing: -0.01em;
     }}
-    .greeting-salutation {{
-      margin: 0;
-      font-size: 1.35rem; font-weight: 500; color: var(--muted);
-      letter-spacing: -0.01em;
-    }}
-    .greeting-name {{ color: var(--text); font-weight: 700; }}
-    .greeting-sub {{
-      margin: 4px 0 0; font-size: 0.9rem;
-      color: var(--muted); font-style: italic;
-    }}
+    .hero-greeting span {{ color: var(--text); font-weight: 700; }}
 
-    /* ── Stat row ── */
-    .stat-row {{
-      display: flex; align-items: center; flex-wrap: wrap;
-      gap: 6px 10px; justify-content: center;
+    /* ── Hero card ── */
+    .hero-card {{
+      width: 100%; max-width: 860px;
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 18px; overflow: hidden; margin-bottom: 20px;
+      position: relative;
     }}
-    .stat-pill {{ display: inline-flex; align-items: baseline; gap: 4px; }}
-    .stat-pill.dim .stat-n {{ color: var(--muted); }}
-    .stat-n {{
-      font-size: 1.05rem; font-weight: 700; color: var(--accent);
-      font-variant-numeric: tabular-nums;
+    .hero-card::before {{
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; background: var(--accent);
     }}
-    .stat-l {{ font-size: 0.75rem; color: var(--muted); font-weight: 500; }}
-    .stat-sep {{ color: var(--line); font-size: 1rem; }}
-    .badge-alert {{
-      display: inline-flex; align-items: center; gap: 4px;
+    .hero-body {{ display: grid; gap: 0; padding: 24px 28px; }}
+    .hero-divider {{ background: var(--line); margin: 0 4px; }}
+
+    /* ── Oura panel ── */
+    .oura-panel {{ padding-right: 24px; }}
+    .panel-eyebrow {{
+      font-size: 0.67rem; font-weight: 700; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--accent); opacity: 0.8;
+      margin-bottom: 16px;
+    }}
+    .ring-wrap {{
+      display: flex; flex-direction: column;
+      align-items: center; margin-bottom: 18px;
+    }}
+    .ring-readiness {{ font-size: 0.82rem; font-weight: 600; margin-top: 6px; }}
+    .metric-rows {{ display: flex; flex-direction: column; gap: 10px; }}
+    .metric-row {{ display: flex; flex-direction: column; gap: 3px; }}
+    .metric-top {{ display: flex; align-items: baseline; justify-content: space-between; }}
+    .metric-name {{ font-size: 0.78rem; color: var(--muted); font-weight: 500; }}
+    .metric-val {{ font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; }}
+    .metric-unit {{ font-size: 0.68rem; font-weight: 500; color: var(--muted); }}
+    .metric-bar-track {{ height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }}
+    .metric-bar-fill {{ height: 100%; border-radius: 2px; }}
+
+    /* ── Pipeline panel ── */
+    .pipeline-panel {{ padding-left: 24px; }}
+    .pipeline-counts {{
+      display: flex; align-items: flex-start; gap: 20px; margin-bottom: 16px;
+    }}
+    .pcount {{ display: flex; flex-direction: column; gap: 2px; }}
+    .pcount-n {{
+      font-size: 2.4rem; font-weight: 800; line-height: 1;
+      color: var(--text); font-variant-numeric: tabular-nums;
+    }}
+    .pcount-l {{
+      font-size: 0.67rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted);
+    }}
+    .overdue-badge {{
+      display: inline-flex; align-items: center; gap: 5px;
       background: color-mix(in srgb, var(--red) 15%, var(--panel));
       border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
       color: #fca5a5; font-size: 0.72rem; font-weight: 600;
-      border-radius: 999px; padding: 2px 10px; letter-spacing: 0.01em;
+      border-radius: 999px; padding: 3px 10px;
     }}
-    .badge-warn {{
-      display: inline-flex; align-items: center;
-      background: color-mix(in srgb, var(--amber) 12%, var(--panel));
-      border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-      color: #fcd34d; font-size: 0.72rem; font-weight: 600;
-      border-radius: 999px; padding: 2px 10px;
-    }}
-
-    /* ── Snapshot card ── */
-    .snapshot-card {{
-      background: var(--panel); border: 1px solid var(--line);
-      border-radius: 14px; padding: 16px 22px 18px;
-      width: 100%; max-width: 480px;
-    }}
-    .snap-eyebrow {{
+    .priority-eyebrow {{
       font-size: 0.67rem; font-weight: 700; letter-spacing: 0.14em;
-      text-transform: uppercase; color: var(--accent);
-      opacity: 0.8; margin-bottom: 10px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
     }}
-    .focus-ol {{
-      margin: 0; padding: 0; list-style: none;
+    .priority-list {{
+      list-style: none; margin: 0; padding: 0;
       display: flex; flex-direction: column; gap: 7px;
-      counter-reset: focus-counter;
+      counter-reset: priority-counter;
     }}
-    .focus-ol li {{
-      counter-increment: focus-counter;
+    .priority-list li {{
+      counter-increment: priority-counter;
       display: flex; align-items: flex-start; gap: 10px;
-      font-size: 0.85rem; color: var(--text); line-height: 1.4;
+      font-size: 0.83rem; color: var(--text); line-height: 1.4;
     }}
-    .focus-ol li::before {{
-      content: counter(focus-counter);
+    .priority-list li::before {{
+      content: counter(priority-counter);
       min-width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px;
       background: color-mix(in srgb, var(--accent) 18%, var(--panel));
       border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
       color: var(--accent); font-size: 0.65rem; font-weight: 700;
       border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }}
+
+    /* ── Today's Move bar ── */
+    .move-bar {{
+      display: flex; align-items: center; gap: 12px;
+      background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+      border-top: 1px solid var(--line); padding: 13px 28px;
+    }}
+    .move-label {{
+      font-size: 0.67rem; font-weight: 700; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--accent);
+      white-space: nowrap; display: flex; align-items: center; gap: 6px;
+    }}
+    .move-dot {{ width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }}
+    .move-text {{ font-size: 0.83rem; color: var(--text); line-height: 1.4; flex: 1; }}
+    .move-arrow {{ color: var(--accent); font-size: 1rem; flex-shrink: 0; }}
+    @media (max-width: 600px) {{
+      .hero-body {{ grid-template-columns: 1fr !important; }}
+      .hero-divider {{ display: none; }}
+      .oura-panel {{ padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid var(--line); }}
+      .pipeline-panel {{ padding-left: 0; padding-top: 20px; }}
     }}
 
     /* ── Why link ── */
@@ -309,8 +496,11 @@ async def dashboard_home(
     /* ── Card grid ── */
     .grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 12px; width: 100%; max-width: 860px;
+    }}
+    @media (max-width: 860px) {{ .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+    @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr; }} }}
     }}
     .card {{
       background: var(--panel); border: 1px solid var(--line);
@@ -340,7 +530,7 @@ async def dashboard_home(
 </head>
 <body>
   <div class="banner-wrap">{banner_svg()}</div>
-  {greeting_html}
+  {hero_html}
   <a class="why-link" href="/why" target="_blank" rel="noopener noreferrer">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v.5"/><path d="M8 8v3" stroke-linecap="round"/></svg>
     Why use jobContext?

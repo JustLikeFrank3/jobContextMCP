@@ -52,6 +52,11 @@ def _pipeline_payload() -> dict:
     optimized_resume_options = _list_optimized_resume_options()
     cover_letter_options = _list_cover_letter_options()
     persona_options = PersonaService.list_personas()
+    from lib.template_loader import (
+        VALID_TEMPLATES as _VTEMPLATES,
+        VALID_CL_TEMPLATES as _VCLTEMPLATES,
+        VALID_STYLES as _VSTYLES,
+    )
 
     # Owner = the authenticated user's OID matches the configured ENTRA_OWNER_OID
     from lib.user_context import get_current_user_oid
@@ -94,6 +99,9 @@ def _pipeline_payload() -> dict:
         "cover_letter_options": cover_letter_options,
         "persona_options": persona_options,
         "default_persona": DEFAULT_PERSONA,
+        "resume_templates": sorted(_VTEMPLATES),
+        "cl_templates": sorted(_VCLTEMPLATES),
+        "template_styles": sorted(_VSTYLES),
         "is_owner": is_owner,
         "jobs": payload_jobs,
     }

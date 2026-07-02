@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
@@ -31,6 +32,7 @@ from transport.http.routes import personas as personas_routes
 from transport.http.routes import resumes as resumes_routes
 from transport.http.routes import workflows as workflows_routes
 from transport.http.routes.dashboard import router as dashboard_router
+from transport.http.routes.dashboard.api import router as dashboard_api_router
 from transport.http.routes.architecture import architecture_html
 from transport.http.routes.landing import landing_html
 from transport.http.routes.login_page import login_html
@@ -45,6 +47,40 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 _PNG_MEDIA_TYPE = "image/png"
+
+# Vite build output for the React SPA. Module-level so tests can repoint it at
+# a temporary build directory; only exists in prod after `npm run build`.
+_SPA_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+def _mount_spa(app: FastAPI) -> None:
+    """Mount the Vite-built React SPA under /app/, if it has been built.
+
+    Serves hashed assets from frontend/dist/assets and falls back to
+    index.html for any other /app/* path so client-side routes (and hard
+    refreshes on deep links) resolve. No-ops when frontend/dist is absent
+    (e.g. dev/test runs without `npm run build`), leaving the legacy
+    server-rendered /dashboard as the UI.
+    """
+    spa_dist = _SPA_DIST
+    spa_index = spa_dist / "index.html"
+    if not spa_index.is_file():
+        _logger.info("React SPA dist not found at %s — skipping /app mount", spa_dist)
+        return
+
+    # Hashed, content-addressed JS/CSS — safe to serve as immutable static.
+    app.mount("/app/assets", StaticFiles(directory=spa_dist / "assets"), name="spa-assets")
+
+    @app.get("/app", include_in_schema=False)
+    @app.get("/app/{full_path:path}", include_in_schema=False)
+    async def _spa(full_path: str = "") -> FileResponse:  # noqa: D401
+        if full_path:
+            candidate = (spa_dist / full_path).resolve()
+            if candidate.is_file() and spa_dist in candidate.parents:
+                return FileResponse(candidate)
+        return FileResponse(spa_index, media_type="text/html")
+
+    _logger.info("React SPA mounted at /app (dist=%s)", spa_dist)
 
 
 class UserDataContextMiddleware(BaseHTTPMiddleware):
@@ -89,6 +125,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/terms",            "/og-image",            "/logged-out",
             "/login",
             "/why",
+            "/app",              # React SPA shell + hashed assets (data APIs stay protected)
             "/dashboard/login",
             "/dashboard/callback",
             "/dashboard/logout",
@@ -220,6 +257,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(context_routes.router)
     app.include_router(workflows_routes.router)
     app.include_router(personas_routes.router)
+    app.include_router(dashboard_api_router)  # /api/dashboard/* JSON for the React SPA
     app.include_router(dashboard_router)
 
     @app.get("/", include_in_schema=False)
@@ -247,7 +285,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         return HTMLResponse(terms_html())
 
     @app.get("/login", include_in_schema=False)
-    async def _login_page(next: str = "/dashboard") -> HTMLResponse:
+    async def _login_page(next: str = "/app") -> HTMLResponse:
         return HTMLResponse(login_html(next))
 
     # Redirect /dashboard (no trailing slash) → /dashboard/ so the MCP
@@ -286,6 +324,13 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     async def apple_touch_icon(_: str):
         """Catch all apple-touch-icon variants iOS requests (sized, precomposed, etc.)."""
         return FileResponse(_static / "apple-touch-icon.png", media_type=_PNG_MEDIA_TYPE)
+
+    # ── React SPA (served under /app/, built by Vite to frontend/dist) ───────
+    # Mounted before the MCP catch-all so /app/* resolves here. The dist
+    # directory only exists after `npm run build` (CI/Docker build stage), so
+    # _mount_spa() guards on its presence — dev/test runs without a build skip
+    # it and the legacy server-rendered /dashboard remains the UI.
+    _mount_spa(app)
 
     # ── MCP Streamable HTTP transport (optional, catch-all — must be last) ────
     # The FastMCP Starlette app registers its handler at the path /mcp

@@ -3,11 +3,14 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version 1.1.1"/>
-  <img src="https://img.shields.io/badge/tests-1071%20passing-brightgreen" alt="1071 tests passing"/>
-  <img src="https://img.shields.io/badge/coverage-86.83%25-brightgreen" alt="86.83% coverage"/>
-  <img src="https://img.shields.io/badge/tools-82-informational" alt="82 MCP tools"/>
+  <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version 1.2.0"/>
+  <img src="https://img.shields.io/badge/tests-1210%20passing-brightgreen" alt="1210 tests passing"/>
+  <img src="https://img.shields.io/badge/coverage-87.47%25-brightgreen" alt="87.47% coverage"/>
+  <img src="https://img.shields.io/badge/tools-85-informational" alt="85 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
+</p>
+<p align="center">
   <a href="https://sonarcloud.io/summary/new_code?id=JustLikeFrank3_jobContextMCP"><img src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg" alt="SonarQube Cloud"/></a>
 </p>
 
@@ -17,7 +20,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint PDF export, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 82 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 85 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -31,8 +34,8 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 
 | | |
 |---|---|
-| 82 MCP tools | Resume + cover letter generation |
-| 1071 passing tests | Job fitment analysis with persona lenses |
+| 85 MCP tools | Resume + cover letter generation |
+| 1210 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -58,7 +61,7 @@ If you're in the same situation, it's yours.
 
 ### Web dashboard
 
-![JobContextMCP Dashboard v1](docs/jobContextMCP%20Dashboard%20v1.png)
+![JobContextMCP Dashboard v2](docs/jobContextMCP%20Dashboard%20v2.png)
 
 The browser dashboard turns the local MCP workspace into a job-search command center: daily digest (including a NEEDS DECISION section surfacing unevaluated queue items), pipeline triage, cover-letter edit dialog with LLM-powered revision and draft versioning, resume selection, material generation, people/outreach, rejection analysis, LinkedIn post tracking, and wellbeing check-ins from the same gitignored data files the MCP tools use.
 
@@ -126,6 +129,8 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
 | Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
 | Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
+| React SPA dashboard | Vite + React 18 single-page app served under `/app`, baked into the image via a multi-stage build; 10 screens (Home, Pipeline, Job Hunt kanban, Posts, Outreach, People, Materials, Interviews, Wellbeing, Settings); cookie-session auth context with protected routes; JSON feed at `/api/dashboard/home` |
+| Wearables + wellbeing | Oura Ring OAuth connect flow, readiness hero on Home (gated on a real connection), per-OID token scoping, per-user OAuth tokens encrypted at rest (Fernet via `APP_ENCRYPTION_KEY`), mental-health check-ins |
 | Document generation | OpenAI/Ollama-assisted resume and cover-letter generation, Copilot-assisted fallback packets, semantic story retrieval, prompt budgeting, HTML/WeasyPrint PDF export |
 | Search + analytics | Local RAG index, material search, side-project skill scanning, GitHub public stats, GitHub traffic snapshots, portfolio metrics, weekly summaries |
 | People + outreach | People database, single-contact lookup, referral chains, Facebook/LinkedIn cross-reference, outreach draft packets, inbound reply packets, tone review |
@@ -166,7 +171,7 @@ graph TB
     PROV["User provisioning\nauto-create on first Entra login"]
   end
 
-  subgraph TOOLS["82 MCP / CLI tools"]
+  subgraph TOOLS["85 MCP / CLI tools"]
     CTX["Context + identity"]
     PIPE["Pipeline + queue + compensation"]
     DOCS["Resume + cover letter generation"]
@@ -365,6 +370,46 @@ sequenceDiagram
 | `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
 | `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
 | `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
+
+---
+
+## v1.0–v1.2 — React SPA dashboard, Oura Ring, encrypted tokens, and multi-tenant hardening
+
+The v1.x line moves the hosted product onto a dedicated React single-page app, adds wearable-driven wellbeing signals, encrypts per-user secrets at rest, and closes a multi-tenant data-isolation bug.
+
+### React SPA dashboard
+
+A new Vite + React 18 dashboard is served under `/app` and baked into the container via a multi-stage Docker build (Node builder → Python runtime). It becomes the primary UI for authenticated users while the legacy server-rendered routes remain for local use.
+
+- **10 screens** — Home, Pipeline, Job Hunt (kanban), Posts, Outreach, People, Materials, Interviews, Wellbeing, Settings.
+- **Cookie-session auth context** with protected client routes; unauthenticated users are bounced to login, and post-login now lands on `/app` instead of the legacy dashboard.
+- **JSON feed** — `GET /api/dashboard/home` backs the Home screen (Oura readiness + pipeline hero) without server-side templating.
+- History-mode routing: the SPA shell + hashed assets are public; every data API stays behind auth.
+
+### Oura Ring integration
+
+- Real Oura OAuth connect flow wired into the SPA Settings screen (callback `/dashboard/oura/callback`).
+- **Readiness hero** on Home; the panel only renders when a ring is actually connected, otherwise the digest shows.
+- Owner-gated enablement: when `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` are absent the connect control shows "not enabled" rather than erroring.
+- All Oura reads are scoped to the current user OID; the migration retrofit backfills historical rows safely.
+
+### Security — encrypted tokens at rest
+
+Per-user OAuth tokens (Oura, and future providers) are encrypted with a Fernet key from `APP_ENCRYPTION_KEY`. When the key is absent, tokens fall back to cleartext (prior behavior), so local dev is unaffected; production and QA set the key via the app-secrets K8s secret.
+
+### Multi-tenant data-isolation fix
+
+- Fixed per-user data-partition **path doubling** (`data/users/<oid>/users/<oid>/…`) caused by the tenant-aware I/O resolver re-applying an already-resolved override in `lib/io.py`.
+- `check_workspace()` now reads the per-user config under an active tenant override instead of the repo-root base config.
+- `setup_workspace()` persists per-user resolution keys (master resume path, cheatsheet, quick-reference, LeetCode language) so a tenant's files resolve to their own partition instead of inheriting owner defaults.
+
+### Hosted QA environment
+
+A parallel `qa.jobcontext.ai` environment runs on the existing AKS cluster (namespace `jcmcp-qa`, its own storage account + PVC, shared workload identity via a QA federated credential). Pushes to the `qa` branch build a `qa-<sha>` image and roll it out independently of production.
+
+### Rebrand
+
+Unified framed-badge brand identity across all public and app surfaces (favicon, apple-touch-icon, LinkedIn banner, og-image, and the landing/login/architecture/setup and sub-landing pages).
 
 ---
 
@@ -601,7 +646,7 @@ brew install python@3.12
 
 # Smoke test: confirm the server imports cleanly and registers all tools
 .venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
-# Expected: OK, 82 tools
+# Expected: OK, 85 tools
 ```
 
 > ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.
@@ -685,7 +730,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 82 tools directly:
+`cli.py` is a first-class client. Invoke any of the 85 tools directly:
 
 ```bash
 # List all tools
@@ -944,7 +989,7 @@ In `.env`:
 MCP_MODE=local
 ```
 
-Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 82 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
+Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 85 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
 
 #### What's live vs. baked-in
 
