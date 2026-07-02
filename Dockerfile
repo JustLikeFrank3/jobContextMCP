@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 1b: frontend build (Vite → React SPA served under /app) ────────────
 # Debian-based (glibc) image avoids musl edge cases with esbuild/rollup native
 # binaries that can surface on Alpine.
-FROM node:20-slim AS frontend-builder
+FROM node:24-slim AS frontend-builder
 
 WORKDIR /frontend
 
