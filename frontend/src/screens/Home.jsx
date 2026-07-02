@@ -11,7 +11,6 @@ import { apiFetch } from '../auth/api.js'
    never blank. The API shape mirrors MOCK exactly.
 
    Behavior:
-   - Split / Card hero layout toggle (local UI state).
    - Oura toggle: when off (or no ring connected), the readiness panel becomes
      a Daily Digest in the same slot. hasOura is seeded from whether the API
      returned an oura payload — a null payload shows the digest, never a
@@ -353,12 +352,13 @@ function Priorities({ priorities }) {
   ))
 }
 
-/* ---------- hero variants ---------- */
+/* ---------- hero ---------- */
 function ReadinessOrDigest({ data, hasOura, setHasOura, ouraConnected, accent, animate, size, compact }) {
+  const showReadiness = hasOura && data.oura
   return (
     <>
       <PanelHead hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} />
-      {hasOura && data.oura ? (
+      {showReadiness ? (
         <>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: compact ? 14 : 16 }}>
             <Gauge score={data.oura.score} accent={accent} size={size} animate={animate} />
@@ -367,6 +367,12 @@ function ReadinessOrDigest({ data, hasOura, setHasOura, ouraConnected, accent, a
             {data.oura.label}
           </div>
           <Bars bars={data.oura.bars} accent={accent} animate={animate} smallLabel={compact} />
+          {/* Readiness never hides the digest — both are useful at once. Stack the
+             digest below the ring so enabling Oura augments the panel, not replaces it. */}
+          <div style={{ marginTop: compact ? 18 : 22, paddingTop: compact ? 16 : 18, borderTop: '1px solid var(--border-soft)' }}>
+            <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Daily Digest</div>
+            <Digest digest={data.digest} compact />
+          </div>
         </>
       ) : (
         <Digest digest={data.digest} compact={compact} withNote={!compact} />
@@ -422,42 +428,9 @@ function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }
   )
 }
 
-function CardsHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
-  const card = {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-xl)',
-    padding: '22px 24px',
-  }
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 14, marginBottom: 34 }}>
-      <div style={card}>
-        <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={160} compact />
-      </div>
-      <div style={{ ...card, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline {'\u00b7'} Today</div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 26, marginTop: 16 }}>
-          <BigNum value={data.today.active} label="Active" />
-          <BigNum value={data.today.inflight} label="In-flight" />
-        </div>
-        {data.today.overdue > 0 && <div style={{ marginTop: 18 }}><Overdue n={data.today.overdue} /></div>}
-        <div style={{ marginTop: 'auto', paddingTop: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--green-500)', flexShrink: 0, marginTop: 5 }} />
-          <span style={{ color: 'var(--text-soft)', fontSize: '0.88rem', lineHeight: 1.45 }}>{data.today.move}</span>
-        </div>
-      </div>
-      <div style={card}>
-        <div style={EYEBROW}>Priority actions</div>
-        <div style={{ marginTop: 12 }}><Priorities priorities={data.today.priorities} /></div>
-      </div>
-    </div>
-  )
-}
-
 /* ---------- screen ---------- */
 export default function Home() {
   const navigate = useNavigate()
-  const [hero, setHero] = useState('split')
   const [data, setData] = useState(MOCK)
   const [hasOura, setHasOura] = useState(false)
   const [ouraConnected, setOuraConnected] = useState(false)
@@ -481,19 +454,6 @@ export default function Home() {
     }
   }, [])
 
-  const seg = (on) => ({
-    padding: '6px 16px',
-    borderRadius: 7,
-    fontSize: '0.82rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    transition: 'all var(--dur-base)',
-    background: on ? 'var(--surface-raised)' : 'transparent',
-    color: on ? 'var(--text-strong)' : 'var(--muted)',
-    boxShadow: on ? 'inset 0 0 0 1px color-mix(in srgb,var(--cyan-500) 40%,transparent)' : 'none',
-  })
-
   const cards = (data.cards || DEFAULT_CARDS).filter((c) => c.key !== 'digest')
 
   return (
@@ -511,18 +471,7 @@ export default function Home() {
         Welcome back, {data.welcomeName}.
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-        <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
-          <div onClick={() => setHero('split')} style={seg(hero === 'split')}>Split view</div>
-          <div onClick={() => setHero('cards')} style={seg(hero === 'cards')}>Card view</div>
-        </div>
-      </div>
-
-      {hero === 'split' ? (
-        <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
-      ) : (
-        <CardsHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
-      )}
+      <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))', gap: 14 }}>
         {cards.map((c) => {
