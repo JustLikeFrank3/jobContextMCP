@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.2.0] - 2026-07-01
+## [1.2.0] - 2026-07-02
 
 React single-page dashboard, Oura Ring integration, encryption of per-user OAuth tokens at rest, a hosted QA environment, a full brand refresh, and a multi-tenant data-isolation fix. 1227 passing tests.
 
@@ -14,7 +14,8 @@ React single-page dashboard, Oura Ring integration, encryption of per-user OAuth
 
 - **React SPA dashboard** (`frontend/`) -- new Vite + React 18 single-page app served under `/app` and baked into the container via a multi-stage Docker build. Ten screens: Home, Pipeline, Job Hunt (kanban), Posts, Outreach, People, Materials, Interviews, Wellbeing, Settings. Cookie-session auth context with protected client routes; post-login now lands on `/app` instead of the legacy dashboard. Design-token primitives and a routed `DashboardShell` with tabbed navigation.
 - **Home JSON feed** -- `GET /api/dashboard/home` returns the Home payload (Oura readiness + pipeline hero) so the SPA renders without server-side templating.
-- **Oura Ring integration** -- real Oura OAuth connect flow wired into the SPA Settings screen (callback at `/dashboard/oura/callback`); readiness hero on Home that renders only when a ring is connected (otherwise the digest shows); owner-gated enablement that shows "not enabled" when `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` are absent instead of erroring. All Oura reads scoped to the current user OID.
+- **Oura Ring integration** -- real Oura OAuth connect flow wired into the SPA Settings screen (callback at `/dashboard/oura/callback`); readiness hero on Home when a ring is connected, shown above the daily digest rather than replacing it (digest-only when no ring); owner-gated enablement that shows "not enabled" when `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` are absent instead of erroring. All Oura reads scoped to the current user OID.
+- **"Works with Oura Ring" compatibility** -- a descriptive compatibility chip (brand-cyan, generic ring glyph, no Oura logo) on the sign-in page and Settings, a new readiness showcase section on the marketing landing page, and a README badge, each paired with a trademark disclaimer. The Oura name is used descriptively per Oura's API/MCP branding terms and is never folded into the jobContext mark.
 
 ### Security
 
@@ -27,6 +28,7 @@ React single-page dashboard, Oura Ring integration, encryption of per-user OAuth
 - **`check_workspace()` read the wrong config** -- under an active tenant override it read the repo-root base config instead of the user's own; it now resolves the per-user config so contact and LeetCode language display correctly.
 - **Tenant setup did not persist resolution keys** -- `setup_workspace()` now writes `master_resume_path`, `leetcode_cheatsheet_path`, `quick_reference_path`, `leetcode_language`, and `leetcode_problems_dir` into the per-user config so a tenant's files resolve to their own partition instead of inheriting owner defaults.
 - **Home defaulted to a zeroed Oura panel** -- the Home feed treated any Oura row as "connected"; it now gates the readiness panel on a real connection so users without a ring see the digest.
+- **Daily digest hidden when Oura was enabled** -- connecting a ring swapped the readiness ring in for the digest, hiding it entirely; the digest now renders below the readiness ring so both are visible at once. Also removed the Split/Card hero view toggle (the card layout was redundant), leaving a single hero.
 - **Literal unicode escapes in the SPA** -- `\u00b7` / `\u2026` sequences rendered raw in several screens; wrapped in expressions so they render as the intended glyphs.
 - **Redundant Settings nav tab removed** -- the top-nav Settings tab duplicated the header Settings button; dropped from the tab bar (route and button retained).
 
