@@ -2,6 +2,8 @@
 """
 Regenerate the README status badges (tests / coverage / tools) and the matching
 inline stats from real measurements, so they never drift from the suite again.
+The bundled LaTeX resume's jobContext bullet is kept in sync from the same
+sources (test + tool counts).
 
 Sources of truth:
   • tests    — passing count from a JUnit XML report (tests - failures - errors - skipped)
@@ -10,7 +12,8 @@ Sources of truth:
 
 Usage:
     python scripts/update_readme_badges.py \
-        --junit junit.xml --coverage coverage.xml --readme README.md
+        --junit junit.xml --coverage coverage.xml --readme README.md \
+        --resume-section templates/latex_assets/sections/experience.tex
 
 Exits 0 whether or not anything changed; prints a one-line summary. Designed to
 run in CI after the test job, with the result committed back via [skip ci].
@@ -22,6 +25,11 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+#: Bundled LaTeX resume experience section whose jobContext bullet cites the
+#: live test/tool counts. Kept in sync with the README badges from the same
+#: JUnit / runtime sources so the resume never quotes a stale number.
+RESUME_SECTION_DEFAULT = Path("templates/latex_assets/sections/experience.tex")
 
 
 def passing_tests(junit_path: Path) -> int:
@@ -110,11 +118,42 @@ def update_readme(text: str, tests: int, tools: int) -> str:
     return text
 
 
+def update_resume_section(text: str, tests: int, tools: int) -> str:
+    """Rewrite the jobContext resume bullet's live test/tool counts in-place.
+
+    Uses the same measured values as the README badges so the resume and the
+    project page never disagree. Coverage is deliberately left as evergreen
+    prose (e.g. "80%+ line coverage") to avoid drift, matching the README's
+    move to a live SonarCloud badge.
+    """
+    subs: list[tuple[str, str, str]] = [
+        ("resume passing tests",
+         r"hold \d+ passing tests",
+         f"hold {tests} passing tests"),
+        ("resume tool count",
+         r"exposing \d+ tools",
+         f"exposing {tools} tools"),
+    ]
+
+    missing: list[str] = []
+    for label, pattern, repl in subs:
+        text, n = re.subn(pattern, repl, text)
+        if n == 0:
+            missing.append(label)
+
+    if missing:
+        print(f"::warning::resume section updater found no match for: {', '.join(missing)}",
+              file=sys.stderr)
+    return text
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--junit", type=Path, default=Path("junit.xml"))
     ap.add_argument("--coverage", type=Path, default=Path("coverage.xml"))
     ap.add_argument("--readme", type=Path, default=Path("README.md"))
+    ap.add_argument("--resume-section", type=Path, default=RESUME_SECTION_DEFAULT,
+                    help="LaTeX resume experience section to keep in sync (blank to skip).")
     args = ap.parse_args()
 
     tests = passing_tests(args.junit)
@@ -129,6 +168,18 @@ def main() -> int:
     else:
         args.readme.write_text(updated, encoding="utf-8")
         print(f"README badges updated: {tests} tests, {coverage}% coverage, {tools} tools")
+
+    # Keep the bundled resume bullet's live counts in sync from the same sources.
+    section_path = args.resume_section
+    if section_path and Path(section_path).exists():
+        section_orig = Path(section_path).read_text(encoding="utf-8")
+        section_new = update_resume_section(section_orig, tests, tools)
+        if section_new == section_orig:
+            print(f"Resume section already current: {tests} tests, {tools} tools")
+        else:
+            Path(section_path).write_text(section_new, encoding="utf-8")
+            print(f"Resume section updated: {tests} tests, {tools} tools")
+
     return 0
 
 

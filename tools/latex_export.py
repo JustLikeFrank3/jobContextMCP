@@ -376,15 +376,68 @@ def generate_cover_letter_latex(
 
 _RESUME_TEX = "resume.tex"
 
+
+def _def_macro_re(macro: str) -> "re.Pattern[str]":
+    """Regex matching ``\\def\\<macro>{...}`` (first-level braces) in a .tex header."""
+    return re.compile(r"\\def\\" + re.escape(macro) + r"\{[^}]*\}")
+
+
+#: Matches the ``\def\role{...}`` macro. Kept as a module constant for callers/tests.
+_ROLE_DEF_RE = _def_macro_re("role")
+
+#: Header identity macros populated from the active user's contact info so a
+#: compiled resume never carries another user's name/contact. Mirrors the
+#: cover-letter pipeline's _user_identity() field set.
+_IDENTITY_MACROS = ("name", "phone", "city", "email", "linkedin", "github")
+
+
+def _inject_def(tex_src: str, macro: str, value: str) -> str:
+    """Return *tex_src* with its first ``\\def\\<macro>{...}`` set to *value*.
+
+    Overrides a single header macro on a compile-time copy so the source .tex
+    on disk is never mutated. A blank *value* or an absent macro is a no-op.
+    *value* is LaTeX-escaped and stripped; only the first occurrence is set.
+    """
+    if not value or not value.strip():
+        return tex_src
+    replacement = "\\def\\" + macro + "{" + _escape_latex(value.strip()) + "}"
+    # Function replacement avoids backslash/group interpretation in the repl.
+    new_src, n = _def_macro_re(macro).subn(lambda _m: replacement, tex_src, count=1)
+    return new_src if n else tex_src
+
+
+def _inject_role_title(tex_src: str, role_title: str) -> str:
+    """Set the resume header ``\\def\\role`` macro (see _inject_def).
+
+    Powers the ``role_title`` first-class option: the header role is otherwise
+    hard-coded in resume.tex (which callers cannot edit through the hosted MCP
+    tools). Blank leaves the template's own role intact.
+    """
+    return _inject_def(tex_src, "role", role_title)
+
+
+def _inject_identity(tex_src: str, identity: dict[str, str]) -> str:
+    """Override the header contact macros (\\name, \\phone, ...) on a temp copy.
+
+    Ensures a resume compiled from a shared template renders the *calling*
+    user's identity, never whatever contact data is hard-coded in the source
+    .tex. Fields absent/blank in *identity* leave that macro untouched. Values
+    are passed raw (unescaped); _inject_def handles LaTeX escaping.
+    """
+    for macro in _IDENTITY_MACROS:
+        tex_src = _inject_def(tex_src, macro, identity.get(macro, ""))
+    return tex_src
+
+
 def generate_resume_latex(
     resume_text: str,  # NOSONAR — reserved for future template injection
     company: str,
     role: str,
     *,
-    role_title: str = "Full Stack Software Engineer",  # NOSONAR — reserved
+    role_title: str = "",
     output_filename: str = "",
     output_dir: Path | None = None,
-    identity: dict[str, str] | None = None,  # NOSONAR — reserved for future use
+    identity: dict[str, str] | None = None,
 ) -> Path:
     """Pipeline A — compile a custom LaTeX resume via tectonic.
 
@@ -401,13 +454,18 @@ def generate_resume_latex(
                          generation and for potential future template injection.
         company:         Target company (used in the output filename).
         role:            Target role (used in the output filename).
-        role_title:      Reserved — passed to the LaTeX template in a future
-                         version that supports ``\\def\\role`` injection.
+        role_title:      Injected into the resume's ``\\def\\role{...}`` header
+                         macro at compile time (on a temp copy — the source
+                         .tex is never modified). Blank leaves the template's
+                         own role intact. LaTeX-escaped automatically.
         output_filename: Override the output PDF filename.  Defaults to
                          ``resume_{company}_{role}_{YYYYMMDD}.pdf``.
         output_dir:      Where to write the final PDF.  Defaults to the
                          configured workspace resume folder.
-        identity:        Reserved for future template injection.
+        identity:        Optional contact overrides (name, phone, city, email,
+                         linkedin, github). Defaults to the active user's
+                         config contact, so a shared template never emits
+                         another user's details.
 
     Returns:
         Path to the compiled PDF.
@@ -459,6 +517,18 @@ def generate_resume_latex(
         # Copy entire latex source dir tree (including sections/ subdirs) into
         # the temp workspace so \input{sections/skills} and friends resolve.
         shutil.copytree(str(latex_src), str(tmp_path), dirs_exist_ok=True)
+
+        # Override the header identity + role on the temp copy only, so the
+        # source resume.tex on disk is never mutated AND a shared template
+        # (e.g. the bundled assets used on AKS) can never emit another user's
+        # contact details. _user_identity() falls back to generic placeholders
+        # for users without their own configured contact block.
+        author = {**_user_identity(), **(identity or {})}
+        tmp_resume = tmp_path / _RESUME_TEX
+        header_src = tmp_resume.read_text(encoding="utf-8")
+        header_src = _inject_identity(header_src, author)
+        header_src = _inject_role_title(header_src, role_title)  # blank = no-op
+        tmp_resume.write_text(header_src, encoding="utf-8")
 
         result = subprocess.run(
             [tectonic, str(tmp_path / _RESUME_TEX)],
