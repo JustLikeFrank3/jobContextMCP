@@ -1,0 +1,55 @@
+name: SonarCloud
+
+# SonarCloud analysis, split out from the deploy pipeline so it runs where the
+# (free-tier) plan can actually SHOW the results:
+#
+#   • pull_request → main   PR analysis + quality-gate decoration on the PR.
+#                           This is the free-tier-visible path and the one that
+#                           should gate merges. (Branch analysis of non-main
+#                           branches like `qa` is BLOCKED on the free plan — the
+#                           old push-to-qa scan produced a red gate you couldn't
+#                           inspect.)
+#   • push → main           Main-branch analysis (fully visible in UI + API),
+#                           so post-merge findings show up immediately.
+#   • workflow_dispatch     On-demand scan (pick any branch in the Actions tab)
+#                           without needing a deploy.
+#
+# Deploy (build/push/rollout) stays in deploy.yml. This workflow only measures.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Full history so SonarCloud computes new-code / blame accurately.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        # Same marker set as the deploy test gate so the coverage basis matches.
+        run: pytest -m "not live_llm" --cov --cov-report=xml
+
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io

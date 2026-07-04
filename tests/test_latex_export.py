@@ -631,6 +631,30 @@ class TestLatexExportTenantIsolation:
         assert not str(pdf_a).startswith(str(pdf_b.parent))
         assert not str(pdf_b).startswith(str(pdf_a.parent))
 
+    def test_output_filename_traversal_is_stripped_to_basename(self, monkeypatch, tmp_path):
+        """A caller-supplied output_filename with path components must not escape
+        the tenant output dir: only the basename is honored (path-traversal guard)."""
+        out_dir = tmp_path / "users" / "oid-t" / "workspace" / "03-Resume-PDFs"
+        latex_dir = tmp_path / "latex_assets"
+        latex_dir.mkdir()
+        (latex_dir / "resume.tex").write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(latex_export, "_latex_dir", lambda: latex_dir)
+        monkeypatch.setattr(latex_export, "_tectonic_bin", lambda: "/usr/bin/tectonic")
+        monkeypatch.setattr(latex_export.subprocess, "run",
+                            self._fake_tectonic_run("resume.pdf"))
+        monkeypatch.setattr(latex_export.cfg, "get_active_resume_pdfs_dir", lambda: out_dir)
+
+        pdf = latex_export.generate_resume_latex(
+            resume_text="", company="Acme", role="SWE",
+            output_filename="../../../../etc/passwd",
+        )
+
+        # The written PDF stays inside the tenant dir, named by basename only.
+        assert pdf.parent == out_dir
+        assert pdf.name == "passwd.pdf"
+        assert ".." not in str(pdf.relative_to(out_dir))
+
 
 # ---------------------------------------------------------------------------
 # read_latex_asset tests

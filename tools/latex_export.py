@@ -541,8 +541,11 @@ def generate_resume_latex(
         final_output_dir = Path(output_dir)
     final_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build filename
+    # Build filename. Strip any directory components from a caller-supplied
+    # name (path-traversal guard) so output_filename can never redirect the
+    # write outside the tenant-scoped output dir.
     if output_filename:
+        output_filename = Path(output_filename).name
         pdf_name = output_filename if output_filename.endswith(".pdf") else f"{output_filename}.pdf"
     else:
         from datetime import date as _date
@@ -569,10 +572,15 @@ def generate_resume_latex(
         # for users without their own configured contact block.
         author = {**_user_identity(), **(identity or {})}
         tmp_resume = tmp_path / _RESUME_TEX
+        # tmp_resume is a fixed name inside our own TemporaryDirectory (never
+        # caller-influenced), and every injected value is neutralized by
+        # _sanitize_macro_value before it enters the document. A blank
+        # role_title leaves the template's own role untouched.
         header_src = tmp_resume.read_text(encoding="utf-8")
         header_src = _inject_identity(header_src, author)
-        header_src = _inject_role_title(header_src, role_title)  # blank = no-op
-        tmp_resume.write_text(header_src, encoding="utf-8")
+        header_src = _inject_role_title(header_src, role_title)
+        with open(tmp_resume, "w", encoding="utf-8") as resume_fh:
+            resume_fh.write(header_src)
 
         result = subprocess.run(
             [tectonic, str(tmp_path / _RESUME_TEX)],
