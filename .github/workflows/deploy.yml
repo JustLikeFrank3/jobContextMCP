@@ -72,18 +72,19 @@ jobs:
         run: pytest --cov --cov-report=xml --junitxml=junit.xml -q
 
       - name: Regenerate README badges
-        run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md
+        run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md --resume-section templates/latex_assets/sections/experience.tex
 
       - name: Commit badge changes if any
         run: |
-          if git diff --quiet -- README.md; then
-            echo "README badges already current — nothing to commit."
+          FILES="README.md templates/latex_assets/sections/experience.tex"
+          if git diff --quiet -- $FILES; then
+            echo "README badges & resume stats already current — nothing to commit."
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "docs: auto-update README badges [skip ci]"
+          git add $FILES
+          git commit -m "docs: auto-update README badges & resume stats [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
 
   sonar:

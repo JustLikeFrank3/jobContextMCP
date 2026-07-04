@@ -317,18 +317,19 @@ def export_resume_latex(
     role: str,
     resume_text: str = "",
     output_filename: str = "",
-    role_title: str = "Full Stack Software Engineer",
+    role_title: str = "",
 ) -> str:
     """Pipeline A — LaTeX resume export (tectonic).
 
     Compiles a ``resume.tex`` from the configured ``latex_resume_dir`` as-is
     ("compile what's there") and copies the PDF to the workspace resume folder.
 
-    NOTE: unlike export_cover_letter_latex, this pipeline does NOT inject text
-    and has NO bundled-asset fallback. It requires ``latex_resume_dir`` to be
-    set in config and to contain a ``resume.tex`` source file; otherwise it
-    returns an error string. The legacy/portable path is export_resume_pdf
-    (HTML/weasyprint), which works without a LaTeX engine or .tex source.
+    NOTE: unlike export_cover_letter_latex, this pipeline does NOT inject the
+    resume body (the .tex source governs layout) and has NO bundled-asset
+    fallback. It requires ``latex_resume_dir`` to be set in config and to
+    contain a ``resume.tex`` source file; otherwise it returns an error string.
+    The legacy/portable path is export_resume_pdf (HTML/weasyprint), which
+    works without a LaTeX engine or .tex source.
 
     Args:
         company:         Target company (used in the output filename).
@@ -337,7 +338,9 @@ def export_resume_latex(
                          source governs layout). Accepted for API symmetry.
         output_filename: Override the output PDF filename. Defaults to
                          resume_{company}_{role}_{YYYYMMDD}.pdf.
-        role_title:      Reserved for a future \\def\\role injection.
+        role_title:      Sets the resume header role via ``\\def\\role``
+                         injection (e.g. "Full-Stack AI Engineer"). Blank uses
+                         the role defined in the resume.tex template.
 
     Returns:
         Path to the generated PDF, or an error string.

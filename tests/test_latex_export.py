@@ -110,7 +110,7 @@ def test_export_cover_letter_latex_tool_extracts_body_from_full_letter(monkeypat
 
     def fake_generate(*, body, company, role, role_title, letter_date):
         captured.update(body=body, company=company, role=role, role_title=role_title)
-        return Path("/tmp/09-Cover-Letter-PDFs/cover_letter_Equifax.pdf")
+        return Path("cover_letter_Equifax.pdf")
 
     monkeypatch.setattr(latex_export, "generate_cover_letter_latex", fake_generate)
 
@@ -146,7 +146,7 @@ def test_export_resume_latex_tool_success(monkeypatch):
     """The resume MCP tool returns the compiled PDF path on success."""
     def fake_generate(*, resume_text, company, role, role_title, output_filename):
         assert company == "Equifax" and role == "Senior Applied AI Engineer"
-        return Path("/tmp/03-Resume-PDFs/resume_Equifax.pdf")
+        return Path("resume_Equifax.pdf")
 
     monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
 
@@ -168,6 +168,357 @@ def test_export_resume_latex_tool_surfaces_unconfigured_dir(monkeypatch):
     msg = export.export_resume_latex(company="Acme", role="SWE")
     assert msg.startswith("Error:")
     assert "latex_resume_dir" in msg
+
+
+# ---------------------------------------------------------------------------
+# role_title injection into \def\role (resume header)
+# ---------------------------------------------------------------------------
+
+def test_inject_role_title_replaces_macro():
+    src = r"\def\role{Full-Stack Software Engineer}" + "\n\\input{_header}"
+    out = latex_export._inject_role_title(src, "Full-Stack AI Engineer")
+    assert r"\def\role{Full-Stack AI Engineer}" in out
+    assert "Full-Stack Software Engineer" not in out
+    # Surrounding content is preserved.
+    assert "\\input{_header}" in out
+
+
+def test_inject_role_title_blank_is_noop():
+    src = r"\def\role{Full-Stack Software Engineer}"
+    assert latex_export._inject_role_title(src, "") == src
+    assert latex_export._inject_role_title(src, "   ") == src
+
+
+def test_inject_role_title_no_macro_returns_unchanged():
+    src = r"\documentclass{article}\begin{document}hi\end{document}"
+    assert latex_export._inject_role_title(src, "Staff Engineer") == src
+
+
+def test_inject_role_title_escapes_latex_specials():
+    src = r"\def\role{Full-Stack Software Engineer}"
+    out = latex_export._inject_role_title(src, "R&D Engineer")
+    assert r"\def\role{R\&D Engineer}" in out
+
+
+def test_inject_role_title_replaces_only_first_macro():
+    src = r"\def\role{One}" + "\n" + r"\def\role{Two}"
+    out = latex_export._inject_role_title(src, "Injected")
+    assert out.count(r"\def\role{Injected}") == 1
+    # The second macro is left untouched (only the header occurrence is set).
+    assert r"\def\role{Two}" in out
+
+
+def test_inject_role_title_strips_surrounding_whitespace():
+    src = r"\def\role{Old}"
+    out = latex_export._inject_role_title(src, "  Platform Engineer  ")
+    assert r"\def\role{Platform Engineer}" in out
+
+
+def test_export_resume_latex_tool_forwards_role_title(monkeypatch):
+    """The MCP wrapper must pass role_title through to the generator so the
+    header role becomes a first-class option."""
+    captured = {}
+
+    def fake_generate(*, resume_text, company, role, role_title, output_filename):
+        captured["role_title"] = role_title
+        return Path("resume_Acme.pdf")
+
+    monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
+
+    result = export.export_resume_latex(
+        company="Acme", role="Staff Engineer", role_title="Full-Stack AI Engineer",
+    )
+    assert "PDF exported (LaTeX)" in result
+    assert captured["role_title"] == "Full-Stack AI Engineer"
+
+
+def test_export_resume_latex_tool_role_title_defaults_blank(monkeypatch):
+    """Default role_title is blank so the template's own \\def\\role is used
+    (backward-compatible 'compile what's there' behavior)."""
+    captured = {}
+
+    def fake_generate(*, resume_text, company, role, role_title, output_filename):
+        captured["role_title"] = role_title
+        return Path("resume_Acme.pdf")
+
+    monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
+
+    export.export_resume_latex(company="Acme", role="SWE")
+    assert captured["role_title"] == ""
+
+
+# ---------------------------------------------------------------------------
+# _inject_def / _inject_identity — generalized header macro injection
+# ---------------------------------------------------------------------------
+
+def test_inject_def_replaces_named_macro():
+    src = r"\def\name{Old Name}" + "\n" + r"\def\city{Old City}"
+    out = latex_export._inject_def(src, "name", "New Name")
+    assert r"\def\name{New Name}" in out
+    # A different macro is untouched.
+    assert r"\def\city{Old City}" in out
+
+
+def test_inject_def_blank_value_is_noop():
+    src = r"\def\name{Old Name}"
+    assert latex_export._inject_def(src, "name", "") == src
+    assert latex_export._inject_def(src, "name", "   ") == src
+
+
+def test_inject_def_absent_macro_returns_unchanged():
+    src = r"\def\name{Old Name}"
+    assert latex_export._inject_def(src, "phone", "555-1234") == src
+
+
+def test_inject_def_escapes_latex_specials():
+    src = r"\def\city{Old}"
+    out = latex_export._inject_def(src, "city", "Tampa & Bay")
+    assert r"\def\city{Tampa \& Bay}" in out
+
+
+def test_inject_def_replaces_only_first_occurrence():
+    src = r"\def\name{One}" + "\n" + r"\def\name{Two}"
+    out = latex_export._inject_def(src, "name", "Injected")
+    assert out.count(r"\def\name{Injected}") == 1
+    assert r"\def\name{Two}" in out
+
+
+def test_inject_def_unknown_macro_is_noop():
+    """Only the fixed set of known header macros may be overridden; any other
+    name is ignored (no dynamic pattern is ever built from the argument)."""
+    src = r"\def\name{Old}"
+    assert latex_export._inject_def(src, "evilmacro", "x") == src
+    assert latex_export._inject_def(src, "write18", "rm -rf /") == src
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_macro_value — taint boundary for caller-supplied header values
+# ---------------------------------------------------------------------------
+
+def test_sanitize_macro_value_blank_returns_empty():
+    assert latex_export._sanitize_macro_value("") == ""
+    assert latex_export._sanitize_macro_value("   ") == ""
+
+
+def test_sanitize_macro_value_strips_control_chars_and_newlines():
+    out = latex_export._sanitize_macro_value("Sen\nior\tEngi\x00neer\r")
+    # Control characters (newline, tab, NUL, CR) are removed entirely.
+    assert out == "SeniorEngineer"
+
+
+def test_sanitize_macro_value_caps_length():
+    long_value = "A" * 500
+    out = latex_export._sanitize_macro_value(long_value)
+    assert len(out) == latex_export._MACRO_VALUE_MAX_LEN
+
+
+def test_sanitize_macro_value_escapes_latex_after_cleaning():
+    # A LaTeX command payload is neutralized: the leading backslash is escaped
+    # so \write18 can no longer start a control sequence.
+    out = latex_export._sanitize_macro_value(r"\write18{touch pwned}")
+    assert "\\write18" not in out          # no live command survives
+    assert r"\textbackslash" in out         # the backslash was neutralized
+
+
+def test_inject_role_title_neutralizes_latex_injection():
+    """A role_title carrying a LaTeX command must be defused at injection: no
+    live control sequence survives into the header macro."""
+    src = r"\def\role{Full-Stack Software Engineer}"
+    out = latex_export._inject_role_title(src, r"Engineer}\input{/etc/passwd}")
+    # The injected close-brace + \input never becomes live LaTeX: the backslash
+    # is neutralized and the breakout brace is escaped.
+    assert r"\input{/etc/passwd}" not in out
+    assert r"\textbackslash" in out
+
+
+def test_inject_role_title_strips_newlines():
+    src = r"\def\role{Old}"
+    out = latex_export._inject_role_title(src, "Staff\nEngineer")
+    assert r"\def\role{StaffEngineer}" in out
+
+
+def test_inject_identity_overrides_all_contact_macros():
+    src = "\n".join([
+        r"\def\name{PLACEHOLDER}",
+        r"\def\phone{000}",
+        r"\def\city{Nowhere}",
+        r"\def\email{x@y.z}",
+        r"\def\linkedin{ph}",
+        r"\def\github{ph}",
+        r"\def\role{Keep Me}",
+    ])
+    identity = {
+        "name": "Ada Lovelace", "phone": "555-000-1111", "city": "London, UK",
+        "email": "ada@example.org", "linkedin": "adalovelace", "github": "adaGH",
+    }
+    out = latex_export._inject_identity(src, identity)
+    assert r"\def\name{Ada Lovelace}" in out
+    assert r"\def\phone{555-000-1111}" in out
+    assert r"\def\city{London, UK}" in out
+    assert r"\def\email{ada@example.org}" in out
+    assert r"\def\linkedin{adalovelace}" in out
+    assert r"\def\github{adaGH}" in out
+    # Non-identity macros (role) are never touched by identity injection.
+    assert r"\def\role{Keep Me}" in out
+    assert "PLACEHOLDER" not in out
+
+
+def test_inject_identity_skips_absent_macros():
+    """A template missing some contact macros still injects the ones present."""
+    src = r"\def\name{PLACEHOLDER}"  # no phone/email/etc macros
+    out = latex_export._inject_identity(src, {"name": "Ada", "phone": "555"})
+    assert r"\def\name{Ada}" in out
+    # No phone macro existed, so nothing spurious was added.
+    assert r"\def\phone" not in out
+
+
+# ---------------------------------------------------------------------------
+# Per-user identity injection in the resume pipeline (multi-tenant PII safety)
+# ---------------------------------------------------------------------------
+
+def _make_identity_resume(latex_dir: Path) -> None:
+    """Write a resume.tex with placeholder contact macros into latex_dir."""
+    (latex_dir / "resume.tex").write_text(
+        "\n".join([
+            r"\def\name{YOUR FULL NAME}",
+            r"\def\phone{555-867-5309}",
+            r"\def\city{Your City, ST}",
+            r"\def\email{you@example.com}",
+            r"\def\linkedin{yourhandle}",
+            r"\def\github{YourGitHub}",
+            r"\def\role{Full-Stack Software Engineer}",
+            r"\begin{document}\end{document}",
+        ]),
+        encoding="utf-8",
+    )
+
+
+def test_generate_resume_injects_active_user_identity(monkeypatch, tmp_path):
+    """The compiled temp copy must carry the CALLING user's identity, never the
+    template's placeholder contact macros. This is the multi-tenant PII guard:
+    a shared bundled template must never emit another user's details."""
+    latex_dir = tmp_path / "latex_assets"
+    latex_dir.mkdir()
+    _make_identity_resume(latex_dir)
+
+    monkeypatch.setattr(latex_export, "_latex_dir", lambda: latex_dir)
+    monkeypatch.setattr(latex_export, "_tectonic_bin", lambda: "/usr/bin/tectonic")
+    monkeypatch.setattr(latex_export, "_user_identity", lambda: {
+        "name": "Ada Lovelace", "phone": "555-000-1111", "city": "London, UK",
+        "email": "ada@example.org", "linkedin": "adalovelace", "github": "adaGH",
+    })
+    monkeypatch.setattr(latex_export.cfg, "get_active_resume_pdfs_dir",
+                        lambda: tmp_path / "out")
+
+    captured = {}
+
+    def fake_run(cmd, cwd, **kwargs):
+        captured["tex"] = (Path(cwd) / "resume.tex").read_text(encoding="utf-8")
+        (Path(cwd) / "resume.pdf").write_bytes(b"%PDF")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(latex_export.subprocess, "run", fake_run)
+
+    latex_export.generate_resume_latex(resume_text="", company="Acme", role="SWE")
+
+    tex = captured["tex"]
+    assert r"\def\name{Ada Lovelace}" in tex
+    assert r"\def\email{ada@example.org}" in tex
+    assert r"\def\github{adaGH}" in tex
+    # The template placeholders must be gone from the compiled copy.
+    assert "YOUR FULL NAME" not in tex
+    assert "you@example.com" not in tex
+    # The source .tex on disk is never mutated.
+    assert "YOUR FULL NAME" in (latex_dir / "resume.tex").read_text(encoding="utf-8")
+
+
+def test_generate_resume_identity_param_overrides_user_identity(monkeypatch, tmp_path):
+    """An explicit identity= override beats the active user's config identity."""
+    latex_dir = tmp_path / "latex_assets"
+    latex_dir.mkdir()
+    _make_identity_resume(latex_dir)
+
+    monkeypatch.setattr(latex_export, "_latex_dir", lambda: latex_dir)
+    monkeypatch.setattr(latex_export, "_tectonic_bin", lambda: "/usr/bin/tectonic")
+    monkeypatch.setattr(latex_export, "_user_identity", lambda: {
+        "name": "Ada Lovelace", "phone": "555-000-1111", "city": "London, UK",
+        "email": "ada@example.org", "linkedin": "adalovelace", "github": "adaGH",
+    })
+    monkeypatch.setattr(latex_export.cfg, "get_active_resume_pdfs_dir",
+                        lambda: tmp_path / "out")
+
+    captured = {}
+
+    def fake_run(cmd, cwd, **kwargs):
+        captured["tex"] = (Path(cwd) / "resume.tex").read_text(encoding="utf-8")
+        (Path(cwd) / "resume.pdf").write_bytes(b"%PDF")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(latex_export.subprocess, "run", fake_run)
+
+    latex_export.generate_resume_latex(
+        resume_text="", company="Acme", role="SWE",
+        identity={"name": "Grace Hopper"},
+    )
+
+    tex = captured["tex"]
+    assert r"\def\name{Grace Hopper}" in tex
+    # Unspecified override fields fall back to the active user's identity.
+    assert r"\def\email{ada@example.org}" in tex
+
+
+def test_generate_resume_injects_role_alongside_identity(monkeypatch, tmp_path):
+    """role_title still injects even with identity injection now always running."""
+    latex_dir = tmp_path / "latex_assets"
+    latex_dir.mkdir()
+    _make_identity_resume(latex_dir)
+
+    monkeypatch.setattr(latex_export, "_latex_dir", lambda: latex_dir)
+    monkeypatch.setattr(latex_export, "_tectonic_bin", lambda: "/usr/bin/tectonic")
+    monkeypatch.setattr(latex_export, "_user_identity", lambda: {
+        "name": "Ada Lovelace", "phone": "5", "city": "L", "email": "a@b.c",
+        "linkedin": "a", "github": "a",
+    })
+    monkeypatch.setattr(latex_export.cfg, "get_active_resume_pdfs_dir",
+                        lambda: tmp_path / "out")
+
+    captured = {}
+
+    def fake_run(cmd, cwd, **kwargs):
+        captured["tex"] = (Path(cwd) / "resume.tex").read_text(encoding="utf-8")
+        (Path(cwd) / "resume.pdf").write_bytes(b"%PDF")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(latex_export.subprocess, "run", fake_run)
+
+    latex_export.generate_resume_latex(
+        resume_text="", company="Acme", role="SWE", role_title="Senior AI Engineer",
+    )
+
+    assert r"\def\role{Senior AI Engineer}" in captured["tex"]
+    assert r"\def\name{Ada Lovelace}" in captured["tex"]
+
+
+def test_bundled_resume_template_carries_no_owner_pii():
+    """Regression guard: the shipped sample template AND every bundled section
+    file must contain only generic placeholder content — never the owner's real
+    identity, employers, schools, or side projects."""
+    assets = latex_export._BUNDLED_LATEX_ASSETS_DIR
+    files = [assets / "resume.tex", *sorted((assets / "sections").glob("*.tex"))]
+    forbidden = [
+        "frank", "macbride", "frankvmacbride", "305.490", "jobcontext",
+        "general motors", "retrospicam", "livevox", "florida international",
+        "eagle scout", "magna cum laude",
+    ]
+    for f in files:
+        lowered = f.read_text(encoding="utf-8").lower()
+        for token in forbidden:
+            assert token not in lowered, f"{token!r} leaked in {f.name}"
+    # Generic placeholders are present in the header.
+    header = (assets / "resume.tex").read_text(encoding="utf-8")
+    assert r"\def\name{YOUR FULL NAME}" in header
+    assert r"\def\email{you@example.com}" in header
+    assert r"\def\website{}" in header
 
 
 # ---------------------------------------------------------------------------
