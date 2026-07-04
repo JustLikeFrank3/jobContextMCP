@@ -661,12 +661,13 @@ class TestLatexExportTenantIsolation:
 # ---------------------------------------------------------------------------
 
 def test_read_latex_asset_returns_file_contents(monkeypatch, tmp_path):
-    """read_latex_asset returns the content of an allowlisted file."""
+    """read_latex_asset returns bundled default content when no tenant overlay exists."""
     bundled = tmp_path / "latex_assets"
     bundled.mkdir()
     (bundled / "TLCresume.sty").write_text("\\ProvidesPackage{TLCresume}", encoding="utf-8")
 
     monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tmp_path / "tenant")
 
     result = latex_export.read_latex_asset("TLCresume.sty")
     assert "ProvidesPackage" in result
@@ -680,6 +681,7 @@ def test_read_latex_asset_reads_section_file(monkeypatch, tmp_path):
     (sections / "synopsis.tex").write_text("\\noindent My summary.", encoding="utf-8")
 
     monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tmp_path / "tenant")
 
     result = latex_export.read_latex_asset("sections/synopsis.tex")
     assert "My summary" in result
@@ -705,6 +707,7 @@ def test_read_latex_asset_raises_if_file_missing(monkeypatch, tmp_path):
     # Don't create TLCresume.sty
 
     monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tmp_path / "tenant")
 
     import pytest
     with pytest.raises(FileNotFoundError):
@@ -716,16 +719,13 @@ def test_read_latex_asset_raises_if_file_missing(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_write_latex_section_creates_file(monkeypatch, tmp_path):
-    """write_latex_section writes content to sections/ and returns confirmation."""
-    bundled = tmp_path / "latex_assets"
-    sections = bundled / "sections"
-    sections.mkdir(parents=True)
-
-    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+    """write_latex_section writes content to the tenant sections/ dir and returns confirmation."""
+    tenant = tmp_path / "tenant"
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
 
     result = latex_export.write_latex_section("synopsis.tex", "\\noindent Tailored summary.")
 
-    target = sections / "synopsis.tex"
+    target = tenant / "sections" / "synopsis.tex"
     assert target.exists()
     assert target.read_text(encoding="utf-8") == "\\noindent Tailored summary."
     assert "✓" in result
@@ -734,16 +734,15 @@ def test_write_latex_section_creates_file(monkeypatch, tmp_path):
 
 def test_write_latex_section_overwrites_existing_content(monkeypatch, tmp_path):
     """write_latex_section replaces existing file content."""
-    bundled = tmp_path / "latex_assets"
-    sections = bundled / "sections"
-    sections.mkdir(parents=True)
-    (sections / "synopsis.tex").write_text("old content", encoding="utf-8")
+    tenant = tmp_path / "tenant"
+    (tenant / "sections").mkdir(parents=True)
+    (tenant / "sections" / "synopsis.tex").write_text("old content", encoding="utf-8")
 
-    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
 
     latex_export.write_latex_section("synopsis.tex", "new content")
 
-    assert (sections / "synopsis.tex").read_text(encoding="utf-8") == "new content"
+    assert (tenant / "sections" / "synopsis.tex").read_text(encoding="utf-8") == "new content"
 
 
 def test_write_latex_section_rejects_unlisted_file(monkeypatch, tmp_path):
@@ -773,15 +772,106 @@ def test_write_latex_section_rejects_path_traversal(monkeypatch, tmp_path):
 
 def test_read_write_roundtrip(monkeypatch, tmp_path):
     """Write a section then read it back — content must survive the roundtrip."""
+    tenant = tmp_path / "tenant"
     bundled = tmp_path / "latex_assets"
     (bundled / "sections").mkdir(parents=True)
 
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
     monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
 
     content = "\\begin{zitemize}\n\\item Led migration.\n\\end{zitemize}"
     latex_export.write_latex_section("experience.tex", content)
 
-    # Add to readable allowlist for this test (experience.tex is already there)
     result = latex_export.read_latex_asset("sections/experience.tex")
     assert "Led migration" in result
+
+
+# ---------------------------------------------------------------------------
+# Tenant isolation regression tests (cross-tenant leak guard)
+# ---------------------------------------------------------------------------
+
+def test_write_latex_section_writes_to_tenant_not_bundled(monkeypatch, tmp_path):
+    """Section writes must land in the per-tenant overlay, never the shared
+    bundled template dir that every tenant compiles from."""
+    tenant = tmp_path / "tenant"
+    bundled = tmp_path / "latex_assets"
+    (bundled / "sections").mkdir(parents=True)
+
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    latex_export.write_latex_section("experience.tex", "TENANT PRIVATE CONTENT")
+
+    assert (tenant / "sections" / "experience.tex").read_text(encoding="utf-8") == "TENANT PRIVATE CONTENT"
+    # The shared bundled template must be left untouched.
+    assert not (bundled / "sections" / "experience.tex").exists()
+
+
+def test_read_latex_asset_prefers_tenant_overlay(monkeypatch, tmp_path):
+    """A tenant's own overlay copy wins over the bundled default."""
+    tenant = tmp_path / "tenant"
+    bundled = tmp_path / "latex_assets"
+    (tenant / "sections").mkdir(parents=True)
+    (bundled / "sections").mkdir(parents=True)
+    (tenant / "sections" / "synopsis.tex").write_text("TENANT VERSION", encoding="utf-8")
+    (bundled / "sections" / "synopsis.tex").write_text("BUNDLED DEFAULT", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    assert latex_export.read_latex_asset("sections/synopsis.tex") == "TENANT VERSION"
+
+
+def test_read_latex_asset_falls_back_to_bundled_default(monkeypatch, tmp_path):
+    """With no tenant overlay, read returns the bundled read-only default."""
+    tenant = tmp_path / "tenant"  # never created
+    bundled = tmp_path / "latex_assets"
+    (bundled / "sections").mkdir(parents=True)
+    (bundled / "sections" / "synopsis.tex").write_text("BUNDLED DEFAULT", encoding="utf-8")
+
+    monkeypatch.setattr(latex_export, "_tenant_latex_assets_dir", lambda: tenant)
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    assert latex_export.read_latex_asset("sections/synopsis.tex") == "BUNDLED DEFAULT"
+
+
+def test_latex_section_writes_are_tenant_isolated(monkeypatch, tmp_path):
+    """End-to-end isolation: content written under tenant A's data-folder context
+    must be invisible to tenant B (who sees the bundled default instead).
+    Exercises the real ContextVar resolver via set_data_folder."""
+    from lib import user_context
+
+    bundled = tmp_path / "latex_assets"
+    (bundled / "sections").mkdir(parents=True)
+    (bundled / "sections" / "experience.tex").write_text(
+        "BUNDLED DEFAULT EXPERIENCE", encoding="utf-8"
+    )
+    monkeypatch.setattr(latex_export, "_BUNDLED_LATEX_ASSETS_DIR", bundled)
+
+    tenant_a = tmp_path / "users" / "oid-a"
+    tenant_b = tmp_path / "users" / "oid-b"
+
+    # Tenant A writes private content.
+    tok_a = user_context.set_data_folder(tenant_a)
+    try:
+        latex_export.write_latex_section("experience.tex", "TENANT A PRIVATE RESUME")
+    finally:
+        user_context.reset_data_folder(tok_a)
+
+    # Tenant B reads the same logical asset — must NOT see A's content.
+    tok_b = user_context.set_data_folder(tenant_b)
+    try:
+        b_view = latex_export.read_latex_asset("sections/experience.tex")
+    finally:
+        user_context.reset_data_folder(tok_b)
+    assert "TENANT A PRIVATE RESUME" not in b_view
+    assert "BUNDLED DEFAULT EXPERIENCE" in b_view
+
+    # And A can still read back their own content.
+    tok_a2 = user_context.set_data_folder(tenant_a)
+    try:
+        a_view = latex_export.read_latex_asset("sections/experience.tex")
+    finally:
+        user_context.reset_data_folder(tok_a2)
+    assert "TENANT A PRIVATE RESUME" in a_view
 
