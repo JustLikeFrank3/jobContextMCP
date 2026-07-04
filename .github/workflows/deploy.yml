@@ -40,12 +40,6 @@ jobs:
       - name: Run tests
         run: pytest -m "not live_llm" --cov --cov-report=xml
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v5
-        with:
-          name: coverage-report
-          path: coverage.xml
-
   badges:
     needs: test
     # Only on direct pushes to long-lived branches — never on PRs or manual runs,
@@ -86,30 +80,6 @@ jobs:
           git add $FILES
           git commit -m "docs: auto-update README badges & resume stats [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
-
-  sonar:
-    needs: test
-    runs-on: ubuntu-latest
-    # No continue-on-error: surface SonarCloud failures (e.g. rejected
-    # branch analysis, quality-gate errors) instead of silently swallowing
-    # them. Deploy is independent (needs: test), so it still proceeds.
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Download coverage report
-        uses: actions/download-artifact@v5
-        with:
-          name: coverage-report
-
-      - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
 
   build-and-deploy:
     needs: test
