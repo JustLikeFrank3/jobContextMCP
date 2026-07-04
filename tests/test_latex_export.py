@@ -283,6 +283,60 @@ def test_inject_def_replaces_only_first_occurrence():
     assert r"\def\name{Two}" in out
 
 
+def test_inject_def_unknown_macro_is_noop():
+    """Only the fixed set of known header macros may be overridden; any other
+    name is ignored (no dynamic pattern is ever built from the argument)."""
+    src = r"\def\name{Old}"
+    assert latex_export._inject_def(src, "evilmacro", "x") == src
+    assert latex_export._inject_def(src, "write18", "rm -rf /") == src
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_macro_value — taint boundary for caller-supplied header values
+# ---------------------------------------------------------------------------
+
+def test_sanitize_macro_value_blank_returns_empty():
+    assert latex_export._sanitize_macro_value("") == ""
+    assert latex_export._sanitize_macro_value("   ") == ""
+
+
+def test_sanitize_macro_value_strips_control_chars_and_newlines():
+    out = latex_export._sanitize_macro_value("Sen\nior\tEngi\x00neer\r")
+    # Control characters (newline, tab, NUL, CR) are removed entirely.
+    assert out == "SeniorEngineer"
+
+
+def test_sanitize_macro_value_caps_length():
+    long_value = "A" * 500
+    out = latex_export._sanitize_macro_value(long_value)
+    assert len(out) == latex_export._MACRO_VALUE_MAX_LEN
+
+
+def test_sanitize_macro_value_escapes_latex_after_cleaning():
+    # A LaTeX command payload is neutralized: the leading backslash is escaped
+    # so \write18 can no longer start a control sequence.
+    out = latex_export._sanitize_macro_value(r"\write18{touch pwned}")
+    assert "\\write18" not in out          # no live command survives
+    assert r"\textbackslash" in out         # the backslash was neutralized
+
+
+def test_inject_role_title_neutralizes_latex_injection():
+    """A role_title carrying a LaTeX command must be defused at injection: no
+    live control sequence survives into the header macro."""
+    src = r"\def\role{Full-Stack Software Engineer}"
+    out = latex_export._inject_role_title(src, r"Engineer}\input{/etc/passwd}")
+    # The injected close-brace + \input never becomes live LaTeX: the backslash
+    # is neutralized and the breakout brace is escaped.
+    assert r"\input{/etc/passwd}" not in out
+    assert r"\textbackslash" in out
+
+
+def test_inject_role_title_strips_newlines():
+    src = r"\def\role{Old}"
+    out = latex_export._inject_role_title(src, "Staff\nEngineer")
+    assert r"\def\role{StaffEngineer}" in out
+
+
 def test_inject_identity_overrides_all_contact_macros():
     src = "\n".join([
         r"\def\name{PLACEHOLDER}",

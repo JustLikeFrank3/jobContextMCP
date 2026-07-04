@@ -376,33 +376,77 @@ def generate_cover_letter_latex(
 
 _RESUME_TEX = "resume.tex"
 
+#: Header macros the resume pipeline may override on a compile-time copy. A
+#: *fixed* set of literal names — never built from caller input — so the
+#: matchers below are fully static (no request-influenced regex construction).
+_MACRO_NAMES: tuple[str, ...] = (
+    "role", "name", "phone", "city", "email", "linkedin", "github",
+)
 
-def _def_macro_re(macro: str) -> "re.Pattern[str]":
-    """Regex matching ``\\def\\<macro>{...}`` (first-level braces) in a .tex header."""
-    return re.compile(r"\\def\\" + re.escape(macro) + r"\{[^}]*\}")
+#: Precompiled ``\def\<macro>{...}`` matchers, one per known macro. Built from
+#: the literal tuple above (not from a parameter), so an injected header value
+#: can never influence the pattern that gets compiled.
+_MACRO_DEF_PATTERNS: dict[str, "re.Pattern[str]"] = {
+    name: re.compile(r"\\def\\" + name + r"\{[^}]*\}") for name in _MACRO_NAMES
+}
 
-
-#: Matches the ``\def\role{...}`` macro. Kept as a module constant for callers/tests.
-_ROLE_DEF_RE = _def_macro_re("role")
+#: Back-compat alias for the role matcher (referenced by callers/tests).
+_ROLE_DEF_RE = _MACRO_DEF_PATTERNS["role"]
 
 #: Header identity macros populated from the active user's contact info so a
 #: compiled resume never carries another user's name/contact. Mirrors the
 #: cover-letter pipeline's _user_identity() field set.
 _IDENTITY_MACROS = ("name", "phone", "city", "email", "linkedin", "github")
 
+#: Defensive ceiling on an injected header value (name/role are short by nature).
+_MACRO_VALUE_MAX_LEN = 200
+
+#: Control characters (incl. CR/LF/TAB) are never valid in a single-line header
+#: macro; stripping them is the sanitizer boundary applied to every
+#: caller-supplied identity/role string before it enters the compiled .tex.
+_MACRO_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _sanitize_macro_value(value: str) -> str:
+    """Validate and neutralize a caller-supplied header macro value.
+
+    Injected values (``role_title`` from the export tool, or per-user identity
+    fields) are written into the ``resume.tex`` that tectonic subsequently
+    compiles, so an unsanitized string could otherwise smuggle LaTeX control
+    sequences into the document. Every value is therefore, in order:
+
+      1. stripped of control characters / newlines (allowlist boundary),
+      2. capped to _MACRO_VALUE_MAX_LEN characters, then
+      3. LaTeX-escaped so ``\\``, ``{}``, ``$`` … become literal text and no
+         character can begin a control sequence.
+
+    Returns "" for blank/whitespace input so callers treat it as "leave the
+    template's own macro untouched".
+    """
+    if not value or not value.strip():
+        return ""
+    cleaned = _MACRO_CONTROL_CHARS.sub("", value).strip()
+    return _escape_latex(cleaned[:_MACRO_VALUE_MAX_LEN])
+
 
 def _inject_def(tex_src: str, macro: str, value: str) -> str:
     """Return *tex_src* with its first ``\\def\\<macro>{...}`` set to *value*.
 
     Overrides a single header macro on a compile-time copy so the source .tex
-    on disk is never mutated. A blank *value* or an absent macro is a no-op.
-    *value* is LaTeX-escaped and stripped; only the first occurrence is set.
+    on disk is never mutated. *macro* must be one of the known header macros
+    (_MACRO_NAMES); any other name — and a blank/absent value or macro — is a
+    no-op. *value* is sanitized + LaTeX-escaped via _sanitize_macro_value
+    before substitution; only the first occurrence is set.
     """
-    if not value or not value.strip():
+    pattern = _MACRO_DEF_PATTERNS.get(macro)
+    if pattern is None:
         return tex_src
-    replacement = "\\def\\" + macro + "{" + _escape_latex(value.strip()) + "}"
+    safe = _sanitize_macro_value(value)
+    if not safe:
+        return tex_src
+    replacement = "\\def\\" + macro + "{" + safe + "}"
     # Function replacement avoids backslash/group interpretation in the repl.
-    new_src, n = _def_macro_re(macro).subn(lambda _m: replacement, tex_src, count=1)
+    new_src, n = pattern.subn(lambda _m: replacement, tex_src, count=1)
     return new_src if n else tex_src
 
 
