@@ -1,0 +1,71 @@
+NOBODY MACFAKENAME
+
+phone: +1.555.867.5309
+email: nobody@example.com
+linkedin: www.linkedin.com/in/nobodymacfakename
+github: github.com/nobodymacfakename
+
+SOFTWARE ENGINEER | Full Stack • Cloud • AI Tooling
+
+Software engineer with 6 years building production systems across fintech and e-commerce. Led zero-downtime migration of monolithic Java platform to containerized microservices on AWS; maintained 99.5% SLA throughout. Drives AI-assisted development adoption, achieving 40%+ tooling uptake across 3 engineering teams. Owns full delivery lifecycle from architecture to production monitoring.
+
+──────────────────────────────────────────────────────────
+
+CORE TECHNICAL SKILLS
+
+Languages: Java (11→21), Python, TypeScript, JavaScript (ES6+), Go
+Frameworks: Spring Boot (2.7→3.x), FastAPI, React 18, Node.js, RESTful APIs, GraphQL
+Cloud: AWS (ECS, RDS, S3, Lambda, CloudFront), Terraform IaC, Docker, Kubernetes, GitHub Actions
+Databases: PostgreSQL, MySQL, DynamoDB, Redis, Elasticsearch; schema design, query optimization
+Testing: JUnit 5, Mockito, Pytest, Jest, Playwright; 85%+ coverage maintained; TDD; contract testing
+
+──────────────────────────────────────────────────────────
+
+PROFESSIONAL EXPERIENCE
+
+Senior Software Engineer | Fictitious Financial Corp, New York, NY | Mar 2023 – Present
+• Led architecture and delivery of real-time payment processing service handling 2M+ transactions/day with sub-50ms p99 latency
+• Drove AWS ECS migration from bare-metal; reduced infrastructure costs 35% through right-sizing and reserved capacity
+• Championed GitHub Copilot rollout across 3 teams; 40%+ adoption within 60 days; measurable reduction in review cycle time
+• Designed event-driven order-state machine using Kafka; eliminated 12 manual reconciliation jobs consuming 8+ engineering-hours/week
+• Mentored 4 junior engineers; conducted weekly design reviews and established team coding standards
+
+Software Engineer | Placeholder E-Commerce Inc., Austin, TX | Jun 2020 – Feb 2023
+• Built product catalog microservice in Spring Boot serving 15M SKUs; optimized Elasticsearch indexing reducing search latency 60%
+• Delivered React 18 storefront redesign increasing checkout conversion 8% in A/B test across 2M monthly users
+• Implemented OAuth2/JWT authentication layer replacing legacy session model; zero security incidents post-migration
+• Automated CI/CD pipeline with GitHub Actions; deployment frequency improved from weekly to multiple per day
+• Maintained 85%+ test coverage across all owned services using JUnit, Mockito, and Jest
+
+Junior Software Engineer | Sample Startup LLC, Remote | Aug 2018 – May 2020
+• Developed REST APIs for SaaS analytics dashboard used by 300+ enterprise clients
+• Contributed frontend React components and wrote integration tests reducing QA cycle by 2 days per sprint
+• Participated in on-call rotation; MTTR reduced 40% through improved runbooks and alerting thresholds
+
+──────────────────────────────────────────────────────────
+
+PERSONAL PROJECTS
+
+FakeContextMCP | Python, FastAPI, LangGraph | 2024
+• Open-source MCP server giving AI assistants persistent structured memory of a job search
+• 50+ typed tools: resume generation, RAG semantic search, cover letter export, tone profile ingestion
+• FAISS vector index over 1,200+ document chunks; PDF rendering via WeasyPrint
+
+SynthCam | Python, React Native, Azure | 2024
+• IoT camera system: FastAPI backend (MJPEG streaming, OpenCV motion detection) connected to React Native iOS app
+• Azure Blob Storage for clip/snapshot archiving; Tailscale VPN for secure remote access; shipped to TestFlight
+
+──────────────────────────────────────────────────────────
+
+EDUCATION
+
+Bachelor of Science in Computer Science | State University of Nowhere | May 2018
+GPA: 3.7/4.0 | Cum Laude
+
+──────────────────────────────────────────────────────────
+
+LEADERSHIP & AWARDS
+
+• Engineering Excellence Award, Fictitious Financial Corp — Q3 2024
+• Hackathon Winner (AI Tooling Track) — FinTech Innovation Summit 2023
+• Led internal "AI Dev Days" workshop series; 80+ engineers trained across 2 events

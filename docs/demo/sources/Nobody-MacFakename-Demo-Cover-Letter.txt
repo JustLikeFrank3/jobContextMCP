@@ -1,0 +1,20 @@
+NOBODY MACFAKENAME
+phone: +1.555.867.5309
+email: nobody@example.com
+linkedin: www.linkedin.com/in/nobodymacfakename
+github: github.com/nobodymacfakename
+city_state: Atlanta, GA
+
+Dear Hiring Manager,
+
+Six years ago I wrote my first production payment API at a startup that had no runbooks, no on-call rotation, and a deploy process that involved someone physically SSHing into a server. I fixed all three of those things before I left. That instinct — seeing what's broken and fixing it before it becomes someone else's emergency — is the thread that runs through everything I've built since.
+
+At Fictitious Financial Corp I inherited a monolithic Java platform that processed two million transactions a day on bare metal. No observability, no deployment automation, and a codebase where the senior engineers had quietly stopped making changes because the blast radius of any edit was unknowable. I spent the first month reading before I touched anything. Then I started migrating services one at a time to AWS ECS, each one instrumented before it went live. Eighteen months later the platform was fully containerized, infrastructure costs were down 35%, and we had p99 latency under 50ms on the payment path. Nobody had a sleepless night during any of it.
+
+The work I am most proud of at that company has nothing to do with the migration. I ran a two-day internal workshop on AI-assisted development for 80 engineers who had never used a coding assistant in production. Within 60 days, 40% of the engineering organization had adopted GitHub Copilot as part of their daily workflow. The engineers who were most skeptical at the start of day one were the ones asking the most questions by the end of day two. Changing how a team thinks about tools is a different kind of engineering problem. I find it just as interesting as the infrastructure work.
+
+I would be glad to bring that combination to your team.
+
+Sincerely,
+
+Nobody MacFakename
