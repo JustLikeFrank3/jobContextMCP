@@ -110,7 +110,7 @@ def test_export_cover_letter_latex_tool_extracts_body_from_full_letter(monkeypat
 
     def fake_generate(*, body, company, role, role_title, letter_date):
         captured.update(body=body, company=company, role=role, role_title=role_title)
-        return Path("/tmp/09-Cover-Letter-PDFs/cover_letter_Equifax.pdf")
+        return Path("cover_letter_Equifax.pdf")
 
     monkeypatch.setattr(latex_export, "generate_cover_letter_latex", fake_generate)
 
@@ -146,7 +146,7 @@ def test_export_resume_latex_tool_success(monkeypatch):
     """The resume MCP tool returns the compiled PDF path on success."""
     def fake_generate(*, resume_text, company, role, role_title, output_filename):
         assert company == "Equifax" and role == "Senior Applied AI Engineer"
-        return Path("/tmp/03-Resume-PDFs/resume_Equifax.pdf")
+        return Path("resume_Equifax.pdf")
 
     monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
 
@@ -221,7 +221,7 @@ def test_export_resume_latex_tool_forwards_role_title(monkeypatch):
 
     def fake_generate(*, resume_text, company, role, role_title, output_filename):
         captured["role_title"] = role_title
-        return Path("/tmp/03-Resume-PDFs/resume_Acme.pdf")
+        return Path("resume_Acme.pdf")
 
     monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
 
@@ -239,7 +239,7 @@ def test_export_resume_latex_tool_role_title_defaults_blank(monkeypatch):
 
     def fake_generate(*, resume_text, company, role, role_title, output_filename):
         captured["role_title"] = role_title
-        return Path("/tmp/03-Resume-PDFs/resume_Acme.pdf")
+        return Path("resume_Acme.pdf")
 
     monkeypatch.setattr(latex_export, "generate_resume_latex", fake_generate)
 
