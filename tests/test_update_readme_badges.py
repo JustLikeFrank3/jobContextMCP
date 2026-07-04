@@ -55,30 +55,27 @@ def test_coverage_pct_formats_two_decimals(tmp_path):
 # update_resume_section
 # ---------------------------------------------------------------------------
 
-def test_update_resume_section_rewrites_test_and_tool_counts():
+def test_update_resume_section_rewrites_test_count():
     src = (
-        r"\item Stood up a CI pipeline ...; hold 931 passing tests at 80\%+ "
-        r"line coverage through disciplined TDD." "\n"
-        r"\item Engineered an LLM agent layer (... exposing 80 tools) with ..."
+        r"\item Built and maintained a CI pipeline ...; hold 931 passing tests "
+        r"at 80\%+ line coverage through disciplined TDD."
     )
-    out = badges.update_resume_section(src, 1214, 85)
+    out = badges.update_resume_section(src, 1214)
     assert "hold 1214 passing tests" in out
-    assert "exposing 85 tools" in out
-    # Stale numbers are gone.
+    # Stale number is gone.
     assert "931 passing tests" not in out
-    assert "exposing 80 tools" not in out
 
 
 def test_update_resume_section_preserves_coverage_prose():
     """Coverage stays evergreen prose — the updater must not touch it."""
     src = r"hold 100 passing tests at 80\%+ line coverage through disciplined TDD."
-    out = badges.update_resume_section(src, 1214, 85)
+    out = badges.update_resume_section(src, 1214)
     assert r"80\%+ line coverage" in out
 
 
 def test_update_resume_section_no_match_returns_unchanged():
     src = "nothing quantified here"
-    assert badges.update_resume_section(src, 1214, 85) == src
+    assert badges.update_resume_section(src, 1214) == src
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +115,7 @@ def test_main_updates_both_readme_and_resume_section(tmp_path, monkeypatch):
     )
     section = tmp_path / "experience.tex"
     section.write_text(
-        r"hold 1 passing tests at 80\%+ line coverage; exposing 1 tools) done.",
+        r"hold 1 passing tests at 80\%+ line coverage through disciplined TDD.",
         encoding="utf-8",
     )
 
@@ -137,7 +134,6 @@ def test_main_updates_both_readme_and_resume_section(tmp_path, monkeypatch):
     assert "badge/tools-85-" in readme_out
     section_out = section.read_text(encoding="utf-8")
     assert "hold 1214 passing tests" in section_out
-    assert "exposing 85 tools" in section_out
 
 
 def test_main_skips_resume_section_when_missing(tmp_path, monkeypatch):

@@ -2,8 +2,8 @@
 """
 Regenerate the README status badges (tests / coverage / tools) and the matching
 inline stats from real measurements, so they never drift from the suite again.
-The bundled LaTeX resume's jobContext bullet is kept in sync from the same
-sources (test + tool counts).
+The bundled LaTeX sample resume's CI bullet is kept in sync from the same JUnit
+source (passing-test count).
 
 Sources of truth:
   • tests    — passing count from a JUnit XML report (tests - failures - errors - skipped)
@@ -118,21 +118,18 @@ def update_readme(text: str, tests: int, tools: int) -> str:
     return text
 
 
-def update_resume_section(text: str, tests: int, tools: int) -> str:
-    """Rewrite the jobContext resume bullet's live test/tool counts in-place.
+def update_resume_section(text: str, tests: int) -> str:
+    """Rewrite the sample resume bullet's live passing-test count in-place.
 
-    Uses the same measured values as the README badges so the resume and the
-    project page never disagree. Coverage is deliberately left as evergreen
-    prose (e.g. "80%+ line coverage") to avoid drift, matching the README's
-    move to a live SonarCloud badge.
+    Uses the same measured value as the README tests badge so the bundled
+    sample template never quotes a stale number. Coverage is deliberately left
+    as evergreen prose (e.g. "80%+ line coverage") to avoid drift, and the tool
+    count is a README-only concern (too product-specific for a generic resume).
     """
     subs: list[tuple[str, str, str]] = [
         ("resume passing tests",
          r"hold \d+ passing tests",
          f"hold {tests} passing tests"),
-        ("resume tool count",
-         r"exposing \d+ tools",
-         f"exposing {tools} tools"),
     ]
 
     missing: list[str] = []
@@ -169,16 +166,16 @@ def main() -> int:
         args.readme.write_text(updated, encoding="utf-8")
         print(f"README badges updated: {tests} tests, {coverage}% coverage, {tools} tools")
 
-    # Keep the bundled resume bullet's live counts in sync from the same sources.
+    # Keep the bundled sample resume bullet's test count in sync from JUnit.
     section_path = args.resume_section
     if section_path and Path(section_path).exists():
         section_orig = Path(section_path).read_text(encoding="utf-8")
-        section_new = update_resume_section(section_orig, tests, tools)
+        section_new = update_resume_section(section_orig, tests)
         if section_new == section_orig:
-            print(f"Resume section already current: {tests} tests, {tools} tools")
+            print(f"Resume section already current: {tests} tests")
         else:
             Path(section_path).write_text(section_new, encoding="utf-8")
-            print(f"Resume section updated: {tests} tests, {tools} tools")
+            print(f"Resume section updated: {tests} tests")
 
     return 0
 

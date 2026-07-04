@@ -446,18 +446,25 @@ def test_generate_resume_injects_role_alongside_identity(monkeypatch, tmp_path):
 
 
 def test_bundled_resume_template_carries_no_owner_pii():
-    """Regression guard: the shipped sample template must contain only generic
-    placeholders, never the owner's real contact details."""
-    tex = (latex_export._BUNDLED_LATEX_ASSETS_DIR / "resume.tex").read_text(encoding="utf-8")
-    lowered = tex.lower()
-    assert "frank" not in lowered
-    assert "frankvmacbride" not in lowered
-    assert "305.490" not in tex
-    assert "jobcontext.ai" not in lowered
-    # Generic placeholders are present instead.
-    assert r"\def\name{YOUR FULL NAME}" in tex
-    assert r"\def\email{you@example.com}" in tex
-    assert r"\def\website{}" in tex
+    """Regression guard: the shipped sample template AND every bundled section
+    file must contain only generic placeholder content — never the owner's real
+    identity, employers, schools, or side projects."""
+    assets = latex_export._BUNDLED_LATEX_ASSETS_DIR
+    files = [assets / "resume.tex", *sorted((assets / "sections").glob("*.tex"))]
+    forbidden = [
+        "frank", "macbride", "frankvmacbride", "305.490", "jobcontext",
+        "general motors", "retrospicam", "livevox", "florida international",
+        "eagle scout", "magna cum laude",
+    ]
+    for f in files:
+        lowered = f.read_text(encoding="utf-8").lower()
+        for token in forbidden:
+            assert token not in lowered, f"{token!r} leaked in {f.name}"
+    # Generic placeholders are present in the header.
+    header = (assets / "resume.tex").read_text(encoding="utf-8")
+    assert r"\def\name{YOUR FULL NAME}" in header
+    assert r"\def\email{you@example.com}" in header
+    assert r"\def\website{}" in header
 
 
 # ---------------------------------------------------------------------------
