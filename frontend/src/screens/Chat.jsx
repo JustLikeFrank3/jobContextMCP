@@ -224,6 +224,35 @@ function SessionRail({ sessions, activeId, onSelect, onNew }) {
   )
 }
 
+/* "provider · model" label under the composer, from GET /api/chat/config —
+   derived server-side from the same factory the agent loop uses, so it can't
+   lie. Unconfigured state points at Settings instead. */
+function ModelIndicator() {
+  const [config, setConfig] = useState(null)
+  useEffect(() => {
+    let live = true
+    apiFetch('/api/chat/config')
+      .then((data) => live && setConfig(data))
+      .catch(() => live && setConfig(null))
+    return () => {
+      live = false
+    }
+  }, [])
+  if (!config) return null
+  if (!config.configured) {
+    return (
+      <div style={{ fontSize: 'var(--fs-2xs)', color: 'var(--danger-soft)', marginTop: 6 }}>
+        No AI provider configured — add an API key (or run Ollama) in Settings.
+      </div>
+    )
+  }
+  return (
+    <div style={{ fontSize: 'var(--fs-2xs)', color: 'var(--faint)', marginTop: 6 }}>
+      {config.provider} {'·'} <code>{config.model}</code>
+    </div>
+  )
+}
+
 function Composer({ streaming, onSend, onStop }) {
   const [text, setText] = useState('')
   const submit = () => {
@@ -342,6 +371,7 @@ export default function Chat() {
           )}
         </div>
         <Composer streaming={streaming} onSend={handleSend} onStop={stop} />
+        <ModelIndicator />
       </Panel>
     </div>
   )

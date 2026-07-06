@@ -234,6 +234,39 @@ def test_chat_http_session_lifecycle(desktop_client):
     assert desktop_client.get("/api/chat/sessions/424242/messages").status_code == 404
 
 
+def test_chat_config_endpoint(desktop_client):
+    # Offline conftest stub: get_llm_client → (None, None) ⇒ unconfigured.
+    resp = desktop_client.get("/api/chat/config")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is False
+    assert body["provider"] == "openai"
+
+
+@pytest.mark.live_llm  # opts out of the autouse get_llm_client stub; no network involved
+def test_anthropic_provider_branch(monkeypatch):
+    import lib.config as config_module
+
+    monkeypatch.setattr(
+        config_module, "get_active_config",
+        lambda: {"llm_provider": "anthropic", "anthropic_api_key": "sk-ant-test"},
+    )
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    client, model = config_module.get_llm_client("chat")
+    assert client is not None
+    assert "api.anthropic.com" in str(client.base_url)
+    assert model == "claude-sonnet-5"
+
+    # No key → graceful degrade, same as the openai branch.
+    monkeypatch.setattr(
+        config_module, "get_active_config", lambda: {"llm_provider": "anthropic"}
+    )
+    client, model = config_module.get_llm_client("chat")
+    assert client is None
+
+
 def test_chat_http_stream_no_llm(desktop_client):
     """End-to-end SSE: with no key configured the stream yields one error event."""
     sid = desktop_client.post("/api/chat/sessions", json={}).json()["id"]

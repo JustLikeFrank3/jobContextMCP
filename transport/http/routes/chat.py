@@ -31,6 +31,27 @@ class SendMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=32_000)
 
 
+@router.get("/config")
+async def chat_config() -> dict:
+    """Which provider/model the chat will actually talk to.
+
+    Derived from get_llm_client() itself (not re-read from config) so the
+    indicator in the UI can never disagree with what a send would use.
+    """
+    from lib.config import get_active_config, get_llm_client
+    import os
+
+    client, model = get_llm_client("chat")
+    provider = os.environ.get(
+        "LLM_PROVIDER", str(get_active_config().get("llm_provider", "openai"))
+    ).lower()
+    return {
+        "configured": client is not None,
+        "provider": provider,
+        "model": model or "",
+    }
+
+
 @router.post("/sessions")
 async def create_session(request: CreateSessionRequest) -> dict:
     session_id = chat_service.create_session(request.title)
