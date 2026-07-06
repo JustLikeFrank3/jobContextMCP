@@ -20,6 +20,7 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ✅ spec + hooks + selftest; windows-x64 & linux-x64 green in CI, macOS fix landed (custom weasyprint hook) |
 | 4 | Tauri 2 shell + sidecar lifecycle | ✅ compiled & verified live on macOS (dashboard in webview); anti-orphan watchdog covers SIGTERM/SIGKILL; tray mode deferred |
 | 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ✅ endpoints + Settings UI ("AI clients (MCP)" section, desktop-only); live-verified detection of Claude Desktop / VS Code / Cursor |
+| 5.5 | Embedded chat panel (agent loop + tool calling in the SPA) | ⬜ scoped, queued after Phase 8 — see "Phase 5.5 scope" below |
 | 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ◐ first `.dmg` built (62 MB, arm64, unsigned) — sidecar selftests PASS from the mounted read-only image; Win/Linux bundles via CI next |
 | 7 | Signing & notarization — **start Apple Dev Program + Azure Trusted Signing paperwork now** | ⬜ lead-time bound |
 | 8 | Auto-update + GitHub Actions release matrix | ⬜ |
@@ -48,6 +49,28 @@ pywebview spike remains a cheap fallback demo if ever needed.
 Smoke-tested end to end: boot → port discovery → `/healthz` →
 `/desktop/shutdown` → clean exit; app-data dir provisioned (config.json, db,
 workspace tree, personas).
+
+## Phase 5.5 scope — embedded chat (queued after Phase 8, ~5–7 d)
+
+Chat panel inside the desktop app, complementing (not replacing) the
+"bring your own Claude" MCP story. Key accelerators already in the repo:
+`server.mcp.list_tools()` returns all 85 tools with JSON schemas in-process
+(function-calling conversion is mechanical), `services/events.py` already
+does SSE, and `get_llm_client()` abstracts OpenAI/Azure/Ollama — Anthropic
+BYOK rides the same factory via their OpenAI-compatible endpoint.
+
+- Agent loop (1–2 d): model → tool calls → execute → repeat, streamed over
+  SSE; loop caps, tool-error recovery, token budgets are the real work.
+- Tool curation (0.5 d): ~15–20 chat-allowlisted tools (queue, assess,
+  generate, status, interviews), not all 85 in one context window.
+- Persistence (0.5 d): chat_sessions + chat_messages tables via the
+  existing migration pattern.
+- Chat UI (2–3 d): streaming markdown, tool-activity indicators, stop
+  button — the single biggest item; "good," not Claude.ai-grade.
+- Settings + key handling (0.5 d): reuse Fernet-encrypted BYOK storage.
+- Tests (1 d): mocked-client loop tests via the `live_llm` marker pattern.
+
+Desktop-gated initially (single user, localhost — no tenancy questions).
 
 ## Shell contract (for Phase 4)
 
