@@ -19,7 +19,7 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 2 | PDF engine spike (WeasyPrint freeze vs Typst vs hybrid) | ✅ **keep WeasyPrint** — verified frozen on macOS (local) + Windows & Linux (CI selftest) |
 | 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ✅ spec + hooks + selftest; windows-x64 & linux-x64 green in CI, macOS fix landed (custom weasyprint hook) |
 | 4 | Tauri 2 shell + sidecar lifecycle | ◐ scaffolded (`desktop/`), not yet compiled — needs rustup |
-| 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ◐ backend endpoints + tests done (`/desktop/mcp-clients`, `/desktop/mcp-connect`); Settings UI buttons pending |
+| 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ✅ endpoints + Settings UI ("AI clients (MCP)" section, desktop-only); live-verified detection of Claude Desktop / VS Code / Cursor |
 | 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ⬜ |
 | 7 | Signing & notarization — **start Apple Dev Program + Azure Trusted Signing paperwork now** | ⬜ lead-time bound |
 | 8 | Auto-update + GitHub Actions release matrix | ⬜ |
