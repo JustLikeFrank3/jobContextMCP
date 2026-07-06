@@ -36,6 +36,12 @@ jobs:
   freeze:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    env:
+      # Azure Trusted Signing (Windows Authenticode). Empty on forks /
+      # secretless runs — every signing step is guarded on CLIENT_ID.
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -191,9 +197,22 @@ jobs:
         with:
           workspaces: desktop/src-tauri
 
+      # ── Windows Authenticode via Azure Trusted Signing (Phase 7) ─────────
+      # Signs with the jobContext account's jobcontext-public profile through
+      # trusted-signing-cli. Guarded on the secrets so forks and secretless
+      # runs still produce (unsigned) installers.
+      - name: Install trusted-signing-cli (Windows)
+        if: runner.os == 'Windows' && env.AZURE_CLIENT_ID != ''
+        run: cargo install trusted-signing-cli --locked
+
       - name: Stage sidecar into shell resources
         shell: bash
         run: |
+          if [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_CLIENT_ID" ]; then
+            trusted-signing-cli -e https://eus.codesigning.azure.net \
+              -a jobContext -c jobcontext-public \
+              dist/jobcontext-backend/jobcontext-backend.exe
+          fi
           mkdir -p desktop/src-tauri/binaries
           cp -R dist/jobcontext-backend desktop/src-tauri/binaries/
 
@@ -207,7 +226,11 @@ jobs:
         run: |
           npm ci
           npm run icon
-          npm run build -- --bundles ${{ matrix.bundles }}
+          EXTRA=()
+          if [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_CLIENT_ID" ]; then
+            EXTRA+=(--config '{"bundle":{"windows":{"signCommand":"trusted-signing-cli -e https://eus.codesigning.azure.net -a jobContext -c jobcontext-public %1"}}}')
+          fi
+          npm run build -- --bundles ${{ matrix.bundles }} "${EXTRA[@]}"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
