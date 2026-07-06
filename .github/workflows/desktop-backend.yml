@@ -53,14 +53,21 @@ jobs:
       # ── Native libs for WeasyPrint ─────────────────────────────────────────
       - name: Install Pango/Cairo (macOS)
         if: runner.os == 'macOS'
-        run: brew install pango gdk-pixbuf libffi
+        # WeasyPrint resolves Homebrew dylibs via dyld fallback paths; the
+        # runner doesn't have brew's lib dir there by default. The PyInstaller
+        # hook imports weasyprint at build time to find (and collect) the
+        # dylibs, so the build env must resolve them or the bundle ships empty.
+        run: |
+          brew install pango gdk-pixbuf libffi
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       - name: Install Pango/Cairo (Linux)
         if: runner.os == 'Linux'
+        # No libharfbuzz-subset0: on jammy libharfbuzz0b ships libharfbuzz-subset.so.0
         run: |
           sudo apt-get update
           sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 \
-            libharfbuzz0b libharfbuzz-subset0 libfontconfig1 shared-mime-info
+            libharfbuzz0b libfontconfig1 shared-mime-info
 
       - name: Install MSYS2 GTK runtime (Windows)
         if: runner.os == 'Windows'
@@ -102,6 +109,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      # Fail fast if WeasyPrint's native libs aren't resolvable in the build
+      # env — otherwise the PyInstaller hook silently collects nothing and
+      # the failure only shows up at selftest.
+      - name: Verify WeasyPrint imports in build env
+        shell: bash
+        run: python -c "import weasyprint; print('weasyprint', weasyprint.__version__)"
+
       - name: PyInstaller build
         run: pyinstaller packaging/pyinstaller/jobcontext-backend.spec --noconfirm
 
@@ -128,8 +142,8 @@ jobs:
         shell: bash
         run: |
           # Simulate a clean machine: the bundle must not lean on the build
-          # env (MSYS2 PATH entries / WEASYPRINT_DLL_DIRECTORIES).
-          unset WEASYPRINT_DLL_DIRECTORIES
+          # env (MSYS2 PATH entries / WEASYPRINT_DLL_DIRECTORIES / brew paths).
+          unset WEASYPRINT_DLL_DIRECTORIES DYLD_FALLBACK_LIBRARY_PATH
           if [ "$RUNNER_OS" = "Windows" ]; then
             export PATH="$(echo "$PATH" | tr ':' '\n' | grep -vi msys64 | paste -sd: -)"
           fi
