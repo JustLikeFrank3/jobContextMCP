@@ -55,7 +55,13 @@ fn backend_exe(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 
 fn spawn_backend(app: &tauri::AppHandle) -> Result<Backend, String> {
     let bin = backend_exe(app)?;
+    // stdin stays piped and held open for our whole lifetime: the backend's
+    // --parent-watchdog exits on stdin EOF, so even a SIGKILL to this shell
+    // (which fires no Tauri exit event) can't orphan the backend against the
+    // SQLite file.
     let mut child = Command::new(&bin)
+        .arg("--parent-watchdog")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()

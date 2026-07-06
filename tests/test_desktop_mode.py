@@ -289,6 +289,33 @@ def test_apply_desktop_env(monkeypatch, tmp_path):
         assert var not in os.environ
 
 
+def test_parent_watchdog_exits_on_stdin_eof(tmp_path):
+    """--parent-watchdog: backend exits when the shell's stdin pipe closes.
+
+    This is the anti-orphan guarantee — covers shell SIGTERM/SIGKILL/crash,
+    none of which fire Tauri's exit handler. Full-process test on purpose:
+    it exercises the real uvicorn shutdown path, not just the thread.
+    """
+    import subprocess
+
+    proc = subprocess.Popen(
+        [sys.executable, "desktop_main.py", "--parent-watchdog", "--data-dir", str(tmp_path / "wd")],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    try:
+        port_line = proc.stdout.readline().strip()
+        assert port_line.startswith("JOBCONTEXT_PORT=")
+        proc.stdin.close()  # simulate parent death: OS closes the pipe
+        assert proc.wait(timeout=30) == 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
 def test_config_loader_respects_env_path(monkeypatch, tmp_path):
     import lib.config as config_module
 

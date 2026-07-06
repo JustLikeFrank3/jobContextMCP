@@ -145,6 +145,28 @@ def _selftest(app_dir: Path) -> int:
     return 0 if failures == 0 else 1
 
 
+def _start_parent_watchdog(server) -> None:
+    """Exit gracefully when our stdin hits EOF (i.e. the parent shell died).
+
+    Tauri's exit handler covers normal window close, but a SIGTERM/SIGKILL to
+    the shell (logout, force quit, crash) fires no event and would orphan
+    this process against the SQLite file. The shell keeps our stdin pipe
+    open for its lifetime; the OS closes it on ANY parent death, so EOF here
+    is a reliable death signal that needs no polling and no PID races.
+    """
+    import threading
+
+    def _watch() -> None:
+        try:
+            while sys.stdin.buffer.read(4096):
+                pass  # discard until EOF
+        except Exception:  # noqa: BLE001 — any stdin failure means the pipe is gone
+            pass
+        server.should_exit = True
+
+    threading.Thread(target=_watch, name="parent-watchdog", daemon=True).start()
+
+
 def _bind_socket(port: int) -> socket.socket:
     """Bind a loopback TCP socket; port 0 lets the OS pick a free port.
 
@@ -179,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
         "--selftest", action="store_true",
         help="Run packaging diagnostics (config, SQLite, tools, templates, PDF render) and exit",
     )
+    parser.add_argument(
+        "--parent-watchdog", action="store_true",
+        help="Exit gracefully when stdin reaches EOF (the shell holds our stdin pipe; "
+             "EOF means the shell died — including SIGKILL/crash, which fire no events)",
+    )
     args = parser.parse_args(argv)
 
     if args.data_dir:
@@ -212,6 +239,9 @@ def main(argv: list[str] | None = None) -> int:
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="info")
     server = uvicorn.Server(config)
     desktop_runtime.register_shutdown(lambda: setattr(server, "should_exit", True))
+
+    if args.parent_watchdog:
+        _start_parent_watchdog(server)
 
     # The shell parses this line to find the backend; keep the format stable.
     print(f"JOBCONTEXT_PORT={port}", flush=True)
