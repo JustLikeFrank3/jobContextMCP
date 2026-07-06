@@ -89,3 +89,7 @@ scripts/generate_demo_pdfs.py
 # Oura biometric data — personal, not for version control
 data/oura.json
 workspace/oura.json
+
+# PyInstaller build outputs (desktop app backend sidecar)
+/build/
+/dist/

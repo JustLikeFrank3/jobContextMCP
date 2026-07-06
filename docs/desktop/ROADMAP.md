@@ -16,8 +16,8 @@ pywebview spike remains a cheap fallback demo if ever needed.
 |---|---|---|
 | 0 | Product decisions (local-first profile, app-data dirs, BYOK LLM, tool scoping) | ✅ decided; profile shipped |
 | 1 | Backend decoupling: `DEPLOY_MODE=desktop`, platformdirs, bootstrap, healthz, port 0, shutdown | ✅ done |
-| 2 | PDF engine spike (WeasyPrint freeze vs Typst vs hybrid) | ⬜ next — biggest risk, do early |
-| 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ⬜ |
+| 2 | PDF engine spike (WeasyPrint freeze vs Typst vs hybrid) | ✅ macOS: **keep WeasyPrint** — freezes clean; Windows validation in CI |
+| 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ◐ spec + selftest done, macOS arm64 verified; Windows/Linux via CI |
 | 4 | Tauri 2 shell + sidecar lifecycle | ⬜ |
 | 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ◐ flag done; Settings buttons pending |
 | 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ⬜ |
@@ -70,8 +70,24 @@ workspace tree, personas).
 - **LLM**: BYOK OpenAI key in config.json + existing Ollama support
   (`llm_provider: "ollama"`); everything degrades gracefully with no key
   (`get_llm_client` already returns `(None, "")`).
-- **PDF engine**: undecided — Phase 2 spike (WeasyPrint freeze on Windows is
-  the risk; Typst or `PDF_ENGINE` hybrid is the escape hatch).
+- **PDF engine**: **keep WeasyPrint** (spike result, 2026-07-06). The macOS
+  arm64 PyInstaller freeze bundles Pango/Cairo/HarfBuzz/fontconfig from
+  Homebrew automatically (pyinstaller-hooks-contrib), rewrites all load paths
+  to `@rpath` (portable, no Homebrew references), and `--selftest` renders a
+  real PDF from the frozen bundle. Bundle is ~106 MB onedir. Windows (MSYS2
+  GTK DLLs) still needs CI validation; Typst remains the documented escape
+  hatch if that fights back.
+
+## Phase 2/3 spike results (2026-07-06, macOS arm64)
+
+- `packaging/pyinstaller/jobcontext-backend.spec` — onedir build, ~21 s.
+  Only two hidden imports needed: `tiktoken_ext` + `tiktoken_ext.openai_public`.
+  langgraph, cryptography, numpy, uvicorn, mcp all froze with stock hooks.
+- `desktop_main.py --selftest` diagnostics (config / sqlite / tools /
+  templates / pdf) all PASS from the frozen binary; intended as the CI smoke
+  test on every platform build.
+- Frozen HTTP server verified end to end: boots, prints port, serves
+  `/healthz` and the React SPA at `/app`, `/desktop/shutdown` exits cleanly.
 
 ## Top risks (tracking)
 

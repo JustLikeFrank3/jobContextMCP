@@ -79,6 +79,72 @@ def bootstrap(app_dir: Path) -> Path:
     return config_path
 
 
+def _selftest(app_dir: Path) -> int:
+    """Headless diagnostics for frozen builds (CI smoke test on all OSes).
+
+    Verifies the packaging-risk hotspots: config resolution, SQLite schema,
+    tool registration (exercises tiktoken/langgraph/etc. hidden imports),
+    bundled document templates, and a real WeasyPrint PDF render (native
+    Pango/Cairo libs). Prints one line per check; exit 0 = all passed.
+    """
+    import tempfile
+
+    failures = 0
+
+    def check(name: str, fn) -> None:
+        nonlocal failures
+        try:
+            detail = fn()
+            print(f"PASS {name}{f' ({detail})' if detail else ''}", flush=True)
+        except Exception as exc:  # noqa: BLE001 — report every failure, keep going
+            failures += 1
+            print(f"FAIL {name}: {exc!r}", flush=True)
+
+    def _config() -> str:
+        import lib.config as cfg
+        assert Path(str(cfg.DATA_FOLDER)) == app_dir, f"DATA_FOLDER={cfg.DATA_FOLDER}"
+        return str(cfg.DATA_FOLDER)
+
+    def _sqlite() -> str:
+        from lib.db import get_connection
+        with get_connection() as con:
+            tables = con.execute(
+                "SELECT count(*) FROM sqlite_master WHERE type='table'"
+            ).fetchone()[0]
+        assert tables > 0, "no tables"
+        return f"{tables} tables"
+
+    def _tools() -> str:
+        import server as _server
+        count = len(_server._TOOL_MODULES)
+        assert count > 20, f"only {count} tool modules"
+        return f"{count} tool modules"
+
+    def _templates() -> str:
+        from lib.template_loader import list_templates
+        names = list_templates()
+        assert names, "no templates found"
+        return f"{len(names)} templates"
+
+    def _pdf() -> str:
+        import weasyprint
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "selftest.pdf"
+            weasyprint.HTML(string="<h1>jobContext selftest</h1>").write_pdf(str(out))
+            size = out.stat().st_size
+        assert size > 500, f"suspicious PDF size {size}"
+        return f"{size} bytes"
+
+    check("config", _config)
+    check("sqlite", _sqlite)
+    check("tools", _tools)
+    check("templates", _templates)
+    check("pdf", _pdf)
+
+    print(f"SELFTEST {'PASS' if failures == 0 else f'FAIL ({failures})'}", flush=True)
+    return 0 if failures == 0 else 1
+
+
 def _bind_socket(port: int) -> socket.socket:
     """Bind a loopback TCP socket; port 0 lets the OS pick a free port.
 
@@ -109,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
         "--mcp-stdio", action="store_true",
         help="Run the stdio MCP transport (for Claude Desktop / VS Code / Cursor) instead of the HTTP server",
     )
+    parser.add_argument(
+        "--selftest", action="store_true",
+        help="Run packaging diagnostics (config, SQLite, tools, templates, PDF render) and exit",
+    )
     args = parser.parse_args(argv)
 
     if args.data_dir:
@@ -118,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
 
     _apply_desktop_env(app_dir)
     bootstrap(app_dir)
+
+    if args.selftest:
+        return _selftest(app_dir)
 
     if args.mcp_stdio:
         # stdout belongs to the MCP protocol here — no port banner.
