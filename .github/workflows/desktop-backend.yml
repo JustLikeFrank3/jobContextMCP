@@ -1,22 +1,25 @@
-name: Desktop Backend Freeze (PyInstaller)
+name: Desktop Build (freeze + installers)
 
-# Builds the desktop sidecar (packaging/pyinstaller/jobcontext-backend.spec)
-# on every target platform and runs the frozen binary's --selftest, which
-# exercises the known packaging risks: WeasyPrint native libs, tiktoken data
-# files, SQLite bootstrap, bundled templates, tool registration.
+# Per platform: freeze the sidecar (packaging/pyinstaller/*.spec), run the
+# frozen binary's --selftest (WeasyPrint native libs, tiktoken data, SQLite
+# bootstrap, templates, tool registration), then bundle the Tauri shell into
+# installers: dmg (macOS), NSIS exe + msi (Windows), AppImage + deb (Linux).
 #
-# macOS arm64 was validated locally (2026-07-06); this matrix exists chiefly
-# to answer the Windows GTK-DLL question and to produce artifacts the Tauri
-# shell (Phase 4) consumes as sidecars.
+# On version tags (v*) the installers are attached to the GitHub release
+# that create-releases.yml makes. Signing/notarization is Phase 7 — bundles
+# are unsigned until the Apple Developer / Azure Trusted Signing setups land.
 
 on:
   workflow_dispatch:
   push:
     branches:
       - feat/desktop-app
+    tags:
+      - 'v*'
     paths:
       - desktop_main.py
       - packaging/**
+      - desktop/**
       - lib/**
       - transport/**
       - tools/**
@@ -25,6 +28,9 @@ on:
       - requirements*.txt
       - frontend/**
       - .github/workflows/desktop-backend.yml
+
+permissions:
+  contents: write  # attach installers to the tag release
 
 jobs:
   freeze:
@@ -37,15 +43,29 @@ jobs:
           - os: macos-14
             label: macos-arm64
             binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: dmg
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/dmg/*.dmg
           - os: macos-13
             label: macos-x64
             binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: dmg
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/dmg/*.dmg
           - os: windows-latest
             label: windows-x64
             binary: dist/jobcontext-backend/jobcontext-backend.exe
+            bundles: nsis,msi
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/nsis/*.exe
+              desktop/src-tauri/target/release/bundle/msi/*.msi
           - os: ubuntu-22.04   # oldest supported glibc for AppImage compatibility
             label: linux-x64
             binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: appimage,deb
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              desktop/src-tauri/target/release/bundle/deb/*.deb
 
     steps:
       - uses: actions/checkout@v4
@@ -149,9 +169,68 @@ jobs:
           fi
           "${{ matrix.binary }}" --data-dir "${{ runner.temp }}/jc-selftest" --selftest
 
-      - name: Upload artifact
+      - name: Upload backend artifact
         uses: actions/upload-artifact@v4
         with:
           name: jobcontext-backend-${{ matrix.label }}
           path: dist/jobcontext-backend/
           retention-days: 14
+
+      # ── Bundle the Tauri shell into installers ────────────────────────────
+      - name: Install Tauri system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            file patchelf
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Stage sidecar into shell resources
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          cp -R dist/jobcontext-backend desktop/src-tauri/binaries/
+
+      - name: Build installers
+        working-directory: desktop
+        shell: bash
+        env:
+          # AppImage bundling on hosted runners fails stripping the AppRun;
+          # harmless to skip (no symbols worth stripping in release anyway).
+          NO_STRIP: "true"
+        run: |
+          npm ci
+          npm run icon
+          npm run build -- --bundles ${{ matrix.bundles }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobcontext-installer-${{ matrix.label }}
+          path: ${{ matrix.installer_glob }}
+          retention-days: 14
+          if-no-files-found: error
+
+      # On version tags, attach installers to the release created by
+      # create-releases.yml (gh handles the race: --clobber, retry on 404).
+      - name: Attach installers to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 && break
+            echo "release not created yet, retry $i"; sleep 20
+          done
+          shopt -s nullglob
+          files=(desktop/src-tauri/target/release/bundle/dmg/*.dmg
+                 desktop/src-tauri/target/release/bundle/nsis/*.exe
+                 desktop/src-tauri/target/release/bundle/msi/*.msi
+                 desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+                 desktop/src-tauri/target/release/bundle/deb/*.deb)
+          [ ${#files[@]} -gt 0 ] && gh release upload "${GITHUB_REF_NAME}" --clobber "${files[@]}"
