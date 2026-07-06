@@ -20,7 +20,7 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ✅ spec + hooks + selftest; windows-x64 & linux-x64 green in CI, macOS fix landed (custom weasyprint hook) |
 | 4 | Tauri 2 shell + sidecar lifecycle | ✅ compiled & verified live on macOS (dashboard in webview); anti-orphan watchdog covers SIGTERM/SIGKILL; tray mode deferred |
 | 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ✅ endpoints + Settings UI ("AI clients (MCP)" section, desktop-only); live-verified detection of Claude Desktop / VS Code / Cursor |
-| 5.5 | Embedded chat panel (agent loop + tool calling in the SPA) | ⬜ scoped, queued after Phase 8 — see "Phase 5.5 scope" below |
+| 5.5 | Embedded chat panel (agent loop + tool calling in the SPA) | ✅ agent loop + SSE + persistence, chat UI w/ tool chips + model indicator, Anthropic/OpenAI/Ollama BYOK with in-app Settings key entry — all live-verified; deferred polish: markdown rendering, token streaming |
 | 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ✅ all four platforms green in CI (2026-07-06): arm64+Intel dmg, NSIS exe+msi, AppImage+deb — unsigned pending Phase 7 |
 | 7 | Signing & notarization | ◐ Apple Dev Program submitted; Azure: org validation needs 3+yr business history → use **individual** validation (LLC too new), switch to org later |
 | 8 | Auto-update + GitHub Actions release matrix | ◐ release pipeline done & validated: reusable desktop-build.yml shared by Desktop CI (branch pushes) and Desktop Release (`desktop-v*` tags → version-stamped pre-release with installers; namespace disjoint from cloud `v*`/AKS). Remaining: updater plugin (wants signing keys) |
