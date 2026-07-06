@@ -46,7 +46,9 @@ jobs:
             bundles: dmg
             installer_glob: |
               desktop/src-tauri/target/release/bundle/dmg/*.dmg
-          - os: macos-13
+          # macos-13 was retired 2025-12-08; macos-15-intel is the last Intel
+          # image (until Fall 2027). Plan to go arm64-only when it sunsets.
+          - os: macos-15-intel
             label: macos-x64
             binary: dist/jobcontext-backend/jobcontext-backend
             bundles: dmg
@@ -59,7 +61,7 @@ jobs:
             installer_glob: |
               desktop/src-tauri/target/release/bundle/nsis/*.exe
               desktop/src-tauri/target/release/bundle/msi/*.msi
-          - os: ubuntu-22.04   # oldest supported glibc for AppImage compatibility
+          - os: ubuntu-22.04    # oldest supported glibc for AppImage compatibility
             label: linux-x64
             binary: dist/jobcontext-backend/jobcontext-backend
             bundles: appimage,deb
