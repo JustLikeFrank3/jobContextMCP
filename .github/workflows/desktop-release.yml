@@ -45,9 +45,37 @@ jobs:
           files=(installers/**/*.dmg installers/**/*.exe installers/**/*.msi
                  installers/**/*.AppImage installers/**/*.deb)
           echo "attaching ${#files[@]} installers"
+
+          # Install notes prepended above the auto-generated changelog. These
+          # builds aren't Apple-notarized yet (Phase 7), so testers need the
+          # quarantine workaround; Windows is Authenticode-signed but new-cert
+          # SmartScreen reputation is still accruing.
+          cat > NOTES.md <<'EOF'
+          ## Installing this beta
+
+          **macOS** — download `jobContext_*.dmg`, drag jobContext to Applications,
+          then run this once in Terminal (these builds aren't notarized yet, so
+          macOS quarantines them and shows a "damaged" warning):
+
+          ```
+          xattr -dr com.apple.quarantine /Applications/jobContext.app
+          ```
+
+          Apple Silicon → `aarch64` dmg; Intel Mac → `x64` dmg.
+
+          **Windows** — download `jobContext_*_x64-setup.exe` (per-user install,
+          no admin prompt). It's code-signed, but until the certificate builds
+          reputation SmartScreen may warn — click **More info → Run anyway**.
+
+          **Linux** — `.AppImage` (chmod +x and run) or `.deb` (`sudo dpkg -i`).
+
+          ---
+          EOF
+
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --prerelease \
             --title "jobContext Desktop ${GITHUB_REF_NAME#desktop-}" \
+            --notes-file NOTES.md \
             --generate-notes \
             "${files[@]}"

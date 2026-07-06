@@ -231,10 +231,19 @@ jobs:
         run: |
           npm ci
           npm run icon
+          # MSI (WiX) rejects non-numeric pre-release versions: WiX ProductVersion
+          # allows only a numeric 4th field, so a semver pre-release tag like
+          # 1.0.0-beta.1 fails "pre-release identifier must be numeric-only". Drop
+          # msi for pre-release versions (any '-' in VERSION); keep it for finals
+          # and branch CI (empty VERSION). NSIS is the per-user installer testers
+          # use anyway; msi is only for enterprise (Group Policy / SCCM).
+          BUNDLES="${{ matrix.bundles }}"
+          if [ "$RUNNER_OS" = "Windows" ] && printf '%s' "${VERSION:-}" | grep -q -- '-'; then
+            BUNDLES="$(printf '%s' "$BUNDLES" | tr ',' '\n' | grep -vx msi | paste -sd, -)"
+            echo "pre-release version ${VERSION} — Windows bundles: ${BUNDLES} (msi dropped)"
+          fi
           # One merged --config overlay: release version stamp and/or the
-          # Windows signCommand. NOTE: MSI (WiX) requires a numeric x.y.z
-          # ProductVersion — if a pre-release tag (1.3.0-beta.1) breaks the
-          # msi bundle, drop msi from prerelease tags and keep nsis.
+          # Windows signCommand.
           OVERLAY=""
           if [ -n "${VERSION:-}" ]; then
             OVERLAY+="\"version\":\"${VERSION}\","
@@ -246,7 +255,7 @@ jobs:
           if [ -n "$OVERLAY" ]; then
             EXTRA+=(--config "{${OVERLAY%,}}")
           fi
-          npm run build -- --bundles ${{ matrix.bundles }} "${EXTRA[@]}"
+          npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
