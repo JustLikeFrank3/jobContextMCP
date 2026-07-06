@@ -24,6 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
 from lib.app_dirs import resource_root
+from lib.version import __version__ as _APP_VERSION
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
@@ -230,7 +231,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
             "resume generation, and context retrieval for browser / iPad / "
             "Open WebUI clients. The stdio MCP server is unaffected."
         ),
-        version="0.7.0-dev",
+        version=_APP_VERSION,
         lifespan=lifespan,
     )
 

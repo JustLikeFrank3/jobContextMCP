@@ -2,13 +2,12 @@
 
 from fastapi import APIRouter
 
+from lib.version import __version__ as _VERSION
 from transport.http.config import get_settings
 from transport.http.models import HealthResponse
 
 
 router = APIRouter(tags=["health"])
-
-_VERSION = "0.7.0-dev"
 
 
 @router.get("/health")

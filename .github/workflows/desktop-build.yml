@@ -1,0 +1,257 @@
+name: Desktop Build (reusable)
+
+# The desktop build matrix, shared by:
+#   desktop-backend.yml — CI on branch pushes (no version input)
+#   desktop-release.yml — desktop-v* tags (stamps the version everywhere)
+#
+# Per platform: freeze the sidecar (packaging/pyinstaller/*.spec), run the
+# frozen binary's --selftest, then bundle the Tauri shell into installers:
+# dmg (macOS arm64 + Intel), NSIS exe + msi (Windows, Authenticode-signed
+# via Azure Trusted Signing when secrets are present), AppImage + deb (Linux).
+#
+# Completely separate from deploy.yml (AKS) — the cloud product never
+# builds or ships from here.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Tag-derived version (e.g. desktop-v1.3.0-beta.1); empty = dev build"
+        type: string
+        default: ""
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    env:
+      # Azure Trusted Signing (Windows Authenticode). Empty on forks /
+      # secretless runs — every signing step is guarded on CLIENT_ID.
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+      RAW_VERSION: ${{ inputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macos-arm64
+            binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: dmg
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          # macos-13 was retired 2025-12-08; macos-15-intel is the last Intel
+          # image (until Fall 2027). Plan to go arm64-only when it sunsets.
+          - os: macos-15-intel
+            label: macos-x64
+            binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: dmg
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            label: windows-x64
+            binary: dist/jobcontext-backend/jobcontext-backend.exe
+            bundles: nsis,msi
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/nsis/*.exe
+              desktop/src-tauri/target/release/bundle/msi/*.msi
+          - os: ubuntu-22.04    # oldest supported glibc for AppImage compatibility
+            label: linux-x64
+            binary: dist/jobcontext-backend/jobcontext-backend
+            bundles: appimage,deb
+            installer_glob: |
+              desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              desktop/src-tauri/target/release/bundle/deb/*.deb
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Native libs for WeasyPrint ─────────────────────────────────────────
+      - name: Install Pango/Cairo (macOS)
+        if: runner.os == 'macOS'
+        # WeasyPrint resolves Homebrew dylibs via dyld fallback paths; the
+        # runner doesn't have brew's lib dir there by default. The PyInstaller
+        # hook imports weasyprint at build time to find (and collect) the
+        # dylibs, so the build env must resolve them or the bundle ships empty.
+        run: |
+          brew install pango gdk-pixbuf libffi
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+
+      - name: Install Pango/Cairo (Linux)
+        if: runner.os == 'Linux'
+        # No libharfbuzz-subset0: on jammy libharfbuzz0b ships libharfbuzz-subset.so.0
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 \
+            libharfbuzz0b libfontconfig1 shared-mime-info
+
+      - name: Install MSYS2 GTK runtime (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-pango mingw-w64-x86_64-gdk-pixbuf2
+
+      - name: Expose MSYS2 DLLs to WeasyPrint (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # setup-msys2 installs under RUNNER_TEMP\msys64 on hosted runners
+          echo "WEASYPRINT_DLL_DIRECTORIES=${RUNNER_TEMP}\\msys64\\mingw64\\bin" >> "$GITHUB_ENV"
+          echo "${RUNNER_TEMP}\\msys64\\mingw64\\bin" >> "$GITHUB_PATH"
+
+      # ── Build the React SPA (bundled into the sidecar) ────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build SPA
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ── Freeze the backend ────────────────────────────────────────────────
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      # Release builds: stamp lib/version.py (the single version source —
+      # /healthz + API docs) from the tag before freezing.
+      - name: Stamp version
+        if: inputs.version != ''
+        shell: bash
+        run: |
+          VERSION="${RAW_VERSION#desktop-v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          python - <<'EOF'
+          import os, pathlib, re
+          version = os.environ["RAW_VERSION"].removeprefix("desktop-v")
+          path = pathlib.Path("lib/version.py")
+          path.write_text(re.sub(r'__version__ = ".*"', f'__version__ = "{version}"', path.read_text()))
+          print("stamped lib/version.py:", version)
+          EOF
+
+      # Fail fast if WeasyPrint's native libs aren't resolvable in the build
+      # env — otherwise the PyInstaller hook silently collects nothing and
+      # the failure only shows up at selftest.
+      - name: Verify WeasyPrint imports in build env
+        shell: bash
+        run: python -c "import weasyprint; print('weasyprint', weasyprint.__version__)"
+
+      - name: PyInstaller build
+        run: pyinstaller packaging/pyinstaller/jobcontext-backend.spec --noconfirm
+
+      # The hooks-contrib WeasyPrint hook does not collect the MinGW DLL tree
+      # on Windows the way it collects Homebrew dylibs on macOS — bundle the
+      # GTK runtime into _internal so the artifact runs on clean machines.
+      - name: Bundle GTK DLLs into _internal (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          MINGW_BIN="$(cygpath -u "$RUNNER_TEMP")/msys64/mingw64/bin"
+          for pat in libpango libpangowin32 libpangocairo libpangoft2 libcairo \
+                     libglib libgobject libgio libgmodule libharfbuzz libfontconfig \
+                     libfreetype libfribidi libthai libdatrie libpixman libpng16 \
+                     zlib1 libexpat libbz2 libbrotli libintl libiconv libffi \
+                     libpcre2 libgraphite2 libgdk_pixbuf libjpeg libtiff libstdc++ \
+                     libgcc libwinpthread libssp; do
+            cp -v "${MINGW_BIN}/${pat}"*.dll dist/jobcontext-backend/_internal/ 2>/dev/null || true
+          done
+
+      # ── Prove the frozen binary works headless ────────────────────────────
+      - name: Selftest frozen binary
+        shell: bash
+        run: |
+          # Simulate a clean machine: the bundle must not lean on the build
+          # env (MSYS2 PATH entries / WEASYPRINT_DLL_DIRECTORIES / brew paths).
+          unset WEASYPRINT_DLL_DIRECTORIES DYLD_FALLBACK_LIBRARY_PATH
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export PATH="$(echo "$PATH" | tr ':' '\n' | grep -vi msys64 | paste -sd: -)"
+          fi
+          "${{ matrix.binary }}" --data-dir "${{ runner.temp }}/jc-selftest" --selftest
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobcontext-backend-${{ matrix.label }}
+          path: dist/jobcontext-backend/
+          retention-days: 14
+
+      # ── Bundle the Tauri shell into installers ────────────────────────────
+      - name: Install Tauri system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            file patchelf
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      # ── Windows Authenticode via Azure Trusted Signing (Phase 7) ─────────
+      # Signs with the jobContext account's jobcontext-public profile through
+      # trusted-signing-cli. Guarded on the secrets so forks and secretless
+      # runs still produce (unsigned) installers.
+      - name: Install trusted-signing-cli (Windows)
+        if: runner.os == 'Windows' && env.AZURE_CLIENT_ID != ''
+        run: cargo install trusted-signing-cli --locked
+
+      - name: Stage sidecar into shell resources
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_CLIENT_ID" ]; then
+            trusted-signing-cli -e https://eus.codesigning.azure.net \
+              -a jobContext -c jobcontext-public \
+              dist/jobcontext-backend/jobcontext-backend.exe
+          fi
+          mkdir -p desktop/src-tauri/binaries
+          cp -R dist/jobcontext-backend desktop/src-tauri/binaries/
+
+      - name: Build installers
+        working-directory: desktop
+        shell: bash
+        env:
+          # AppImage bundling on hosted runners fails stripping the AppRun;
+          # harmless to skip (no symbols worth stripping in release anyway).
+          NO_STRIP: "true"
+        run: |
+          npm ci
+          npm run icon
+          # One merged --config overlay: release version stamp and/or the
+          # Windows signCommand. NOTE: MSI (WiX) requires a numeric x.y.z
+          # ProductVersion — if a pre-release tag (1.3.0-beta.1) breaks the
+          # msi bundle, drop msi from prerelease tags and keep nsis.
+          OVERLAY=""
+          if [ -n "${VERSION:-}" ]; then
+            OVERLAY+="\"version\":\"${VERSION}\","
+          fi
+          if [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_CLIENT_ID" ]; then
+            OVERLAY+="\"bundle\":{\"windows\":{\"signCommand\":\"trusted-signing-cli -e https://eus.codesigning.azure.net -a jobContext -c jobcontext-public %1\"}},"
+          fi
+          EXTRA=()
+          if [ -n "$OVERLAY" ]; then
+            EXTRA+=(--config "{${OVERLAY%,}}")
+          fi
+          npm run build -- --bundles ${{ matrix.bundles }} "${EXTRA[@]}"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobcontext-installer-${{ matrix.label }}
+          path: ${{ matrix.installer_glob }}
+          retention-days: 14
+          if-no-files-found: error
