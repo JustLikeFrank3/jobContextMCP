@@ -481,6 +481,20 @@ def get_github_metrics_config() -> dict:
     }
 
 
+def update_runtime_config(updates: dict[str, Any]) -> None:
+    """Merge keys into the live global config (desktop Settings saves).
+
+    Only mutates the in-memory dict — callers persist to the config file
+    themselves. Keys with value None are removed. Path constants are NOT
+    re-derived; use _reconfigure for changes to folder keys.
+    """
+    for key, value in updates.items():
+        if value is None:
+            _cfg.pop(key, None)
+        else:
+            _cfg[key] = value
+
+
 # ── reconfigure (called by server._reconfigure and tests) ────────────────────
 
 def _reconfigure(cfg: dict) -> None:
