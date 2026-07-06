@@ -367,12 +367,13 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     """Return (openai_client, model_name) for the configured LLM provider.
 
     Supported providers (config.json key ``llm_provider``):
-      - ``"openai"``   (default) — calls api.openai.com
-      - ``"ollama"``             — calls localhost:11434/v1 (OpenAI-compatible)
-      - ``"foundry"``            — calls Azure AI Foundry endpoint (AzureOpenAI)
+      - ``"openai"``    (default) — calls api.openai.com
+      - ``"ollama"``              — calls localhost:11434/v1 (OpenAI-compatible)
+      - ``"anthropic"``           — calls api.anthropic.com/v1 (OpenAI-compat endpoint)
+      - ``"foundry"``             — calls Azure AI Foundry endpoint (AzureOpenAI)
 
-    Returns ``(None, "")`` when no API key is configured and provider is openai,
-    allowing callers to gracefully degrade rather than crash.
+    Returns ``(None, "")`` when no API key is configured and the provider
+    needs one, allowing callers to gracefully degrade rather than crash.
     """
     try:
         from openai import OpenAI
@@ -390,6 +391,17 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         ollama_model = active_cfg.get("ollama_model", "llama3.1:8b")
         client = OpenAI(base_url=ollama_base, api_key="ollama")
         return client, ollama_model
+
+    if provider == "anthropic":
+        # BYOK Claude via Anthropic's OpenAI-compatible endpoint — supports
+        # chat completions incl. tool calling, so the whole existing call
+        # surface (chat agent loop, generation) works unchanged.
+        api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("anthropic_api_key", "")
+        if not api_key:
+            return None, ""
+        anthropic_model = active_cfg.get("anthropic_model", "claude-sonnet-5")
+        client = OpenAI(base_url="https://api.anthropic.com/v1/", api_key=api_key)
+        return client, anthropic_model
 
     if provider == "foundry":
         try:
@@ -467,6 +479,20 @@ def get_github_metrics_config() -> dict:
         "username": block.get("username", ""),
         "repos": list(block.get("repos", []) or []),
     }
+
+
+def update_runtime_config(updates: dict[str, Any]) -> None:
+    """Merge keys into the live global config (desktop Settings saves).
+
+    Only mutates the in-memory dict — callers persist to the config file
+    themselves. Keys with value None are removed. Path constants are NOT
+    re-derived; use _reconfigure for changes to folder keys.
+    """
+    for key, value in updates.items():
+        if value is None:
+            _cfg.pop(key, None)
+        else:
+            _cfg[key] = value
 
 
 # ── reconfigure (called by server._reconfigure and tests) ────────────────────

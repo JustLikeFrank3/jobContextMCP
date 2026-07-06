@@ -222,6 +222,82 @@ def test_mcp_routes_absent_outside_desktop_mode(http_client_noauth):
     assert http_client_noauth.get("/desktop/mcp-clients").status_code in (404, 405)
 
 
+# ── AI provider settings (BYOK) ───────────────────────────────────────────────
+
+@pytest.fixture()
+def desktop_config(monkeypatch, tmp_path):
+    """Point desktop config writes at a temp config.json."""
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("JOBCONTEXT_CONFIG", str(path))
+    return path
+
+
+def test_ai_provider_get_reports_providers(desktop_client, desktop_config):
+    resp = desktop_client.get("/desktop/ai-provider")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body["providers"]) == {"openai", "anthropic", "ollama"}
+    assert body["providers"]["anthropic"]["has_key"] is False
+    assert "running" in body["providers"]["ollama"]
+
+
+def test_ai_provider_save_persists_and_applies(desktop_client, desktop_config):
+    resp = desktop_client.post(
+        "/desktop/ai-provider",
+        json={"provider": "anthropic", "api_key": "sk-ant-test123", "model": "claude-opus-4-8"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "saved"
+    # (body["model"] comes from get_llm_client, which conftest stubs offline —
+    # the live-model path is covered by test_anthropic_provider_branch.)
+
+    # Persisted to the desktop config file…
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert stored["llm_provider"] == "anthropic"
+    assert stored["anthropic_api_key"] == "sk-ant-test123"
+    assert stored["anthropic_model"] == "claude-opus-4-8"
+
+    # …and visible live without a restart (GET re-derives from runtime config).
+    info = desktop_client.get("/desktop/ai-provider").json()
+    assert info["provider"] == "anthropic"
+    assert info["providers"]["anthropic"]["has_key"] is True
+    # Key is never echoed anywhere in the payload.
+    assert "sk-ant-test123" not in json.dumps(info)
+
+
+def test_ai_provider_key_validation(desktop_client, desktop_config):
+    resp = desktop_client.post(
+        "/desktop/ai-provider",
+        json={"provider": "anthropic", "api_key": "not-a-key"},
+    )
+    assert resp.status_code == 422
+
+    assert desktop_client.post(
+        "/desktop/ai-provider", json={"provider": "emacs"}
+    ).status_code == 404
+
+
+def test_ai_provider_empty_key_keeps_existing(desktop_client, desktop_config):
+    desktop_client.post(
+        "/desktop/ai-provider", json={"provider": "openai", "api_key": "sk-first"}
+    )
+    # Switching model only (blank key) must not clobber the stored key.
+    desktop_client.post(
+        "/desktop/ai-provider", json={"provider": "openai", "model": "gpt-4o"}
+    )
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert stored["openai_api_key"] == "sk-first"
+    assert stored["openai_model"] == "gpt-4o"
+
+    # clear_key removes it.
+    desktop_client.post(
+        "/desktop/ai-provider", json={"provider": "openai", "clear_key": True}
+    )
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert "openai_api_key" not in stored
+
+
 # ── desktop_main bootstrap ────────────────────────────────────────────────────
 
 def test_bootstrap_first_run_creates_layout(tmp_path):
