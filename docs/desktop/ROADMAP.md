@@ -83,6 +83,17 @@ workspace tree, personas).
 - `packaging/pyinstaller/jobcontext-backend.spec` — onedir build, ~21 s.
   Only two hidden imports needed: `tiktoken_ext` + `tiktoken_ext.openai_public`.
   langgraph, cryptography, numpy, uvicorn, mcp all froze with stock hooks.
+- **macOS dylib saga** (the roadmap's predicted `install_name_tool` pain,
+  resolved 2026-07-06): a truly self-contained WeasyPrint stack needs all
+  three of: (1) a runtime hook so `find_library` searches the bundle
+  (Homebrew-patched CPython hides this failure on dev machines), (2)
+  collecting the Homebrew libs realpath-deduped into `weasyprint_libs/` so
+  PyInstaller can't dedup them against Pillow's vendored harfbuzz, and (3)
+  spec post-processing that rebinds intra-dir deps to `@loader_path`
+  siblings + ad-hoc re-signs — otherwise Pango loads Pillow's harfbuzz while
+  WeasyPrint dlopens Homebrew's, and an `hb_face_t` crossing two harfbuzz
+  builds dies with SIGBUS. Verified with `DYLD_PRINT_LIBRARIES=1`: zero
+  `/opt/homebrew` loads.
 - `desktop_main.py --selftest` diagnostics (config / sqlite / tools /
   templates / pdf) all PASS from the frozen binary; intended as the CI smoke
   test on every platform build.
