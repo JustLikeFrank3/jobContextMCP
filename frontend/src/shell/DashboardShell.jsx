@@ -1,5 +1,6 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Logo, NavTabs, Button, Icon } from '../design-system'
+import useDesktopMode from './useDesktopMode.js'
 
 /* DashboardShell — app chrome: header (logo + title + settings gear + sign
    out) and the tab bar. Converted from the design handoff's shell.jsx IIFE to
@@ -24,6 +25,10 @@ const TABS = [
   { label: 'API Keys', key: 'api-keys' },
 ]
 
+// Desktop-only tab, spliced in before API Keys when the backend is the
+// desktop app (useDesktopMode probe) — hosted deployments never show it.
+const CHAT_TAB = { label: 'Chat', key: 'chat' }
+
 const PAGE_META = {
   home: ['', 'Your career command center'],
   pipeline: [
@@ -37,6 +42,7 @@ const PAGE_META = {
   people: ['Outreach', 'Contacts, follow-up queue, warm vs cold'],
   health: ['Wellbeing', 'Mood & energy log, trend sparklines'],
   interviews: ['Interviews', 'Upcoming schedule, debrief log, verbatim quotes'],
+  chat: ['Chat', 'Ask about your job search — answers come from your local data'],
   settings: ['Settings', 'API keys, integrations (Oura ring) & account preferences'],
   'api-keys': ['API Keys', 'Personal access tokens for MCP clients'],
 }
@@ -60,9 +66,13 @@ function signOut() {
 export default function DashboardShell() {
   const navigate = useNavigate()
   const location = useLocation()
+  const isDesktop = useDesktopMode()
+  const tabs = isDesktop
+    ? [...TABS.slice(0, -1), CHAT_TAB, TABS[TABS.length - 1]]
+    : TABS
   const tab = pathToKey(location.pathname)
   const [title, subtitle] = PAGE_META[tab] || [
-    TABS.find((t) => t.key === tab)?.label || '',
+    tabs.find((t) => t.key === tab)?.label || '',
     '',
   ]
 
@@ -126,7 +136,7 @@ export default function DashboardShell() {
 
       <div style={{ marginBottom: 22 }}>
         <NavTabs
-          items={TABS}
+          items={tabs}
           active={tab}
           onSelect={(key) => navigate(keyToPath(key))}
         />
