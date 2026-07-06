@@ -27,9 +27,24 @@ _EXAMPLE_PATH = _HERE / "config.example.json"
 _ACTIVE_CONFIG_CTX: ContextVar[dict[str, Any] | None] = ContextVar("active_config_ctx", default=None)
 
 
+def _config_search_paths() -> list[Path]:
+    """Candidate config paths, highest precedence first.
+
+    JOBCONTEXT_CONFIG (set by the desktop entrypoint) points at a config
+    living in the per-OS app-data dir — installed desktop apps are read-only
+    next to the executable, so config.json can't live in the repo root there.
+    """
+    paths: list[Path] = []
+    env_path = os.environ.get("JOBCONTEXT_CONFIG", "").strip()
+    if env_path:
+        paths.append(Path(env_path).expanduser())
+    paths.extend((_CONFIG_PATH, _EXAMPLE_PATH))
+    return paths
+
+
 def _load_config() -> dict:
     """Load config.json; fall back to config.example.json on missing file."""
-    for path in (_CONFIG_PATH, _EXAMPLE_PATH):
+    for path in _config_search_paths():
         if path.exists():
             try:
                 return json.loads(path.read_text(encoding="utf-8"))
