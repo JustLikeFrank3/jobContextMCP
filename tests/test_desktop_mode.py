@@ -6,6 +6,7 @@ alias, the /desktop/shutdown route, and desktop_main bootstrap.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -143,6 +144,82 @@ def test_shutdown_route_invokes_handler(desktop_client):
         assert calls == [True]
     finally:
         desktop_runtime.register_shutdown(None)
+
+
+# ── one-click MCP client connect ──────────────────────────────────────────────
+
+@pytest.fixture()
+def fake_home(monkeypatch, tmp_path):
+    """Point the MCP client registry at a temp home dir."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    if sys.platform not in ("darwin",) and os.name != "nt":
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    return home
+
+
+def test_mcp_clients_detection(desktop_client, fake_home):
+    from transport.http import desktop as desktop_runtime
+
+    # "Install" Claude Desktop by creating its config dir with an existing config.
+    claude_path = desktop_runtime._mcp_client_registry()["claude-desktop"]["path"]
+    claude_path.parent.mkdir(parents=True)
+    claude_path.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}), encoding="utf-8")
+
+    resp = desktop_client.get("/desktop/mcp-clients")
+    assert resp.status_code == 200
+    clients = {c["id"]: c for c in resp.json()["clients"]}
+    assert set(clients) == {"claude-desktop", "vscode", "cursor"}
+    assert clients["claude-desktop"]["installed"] is True
+    assert clients["claude-desktop"]["connected"] is False
+    assert clients["cursor"]["installed"] is False
+
+
+def test_mcp_connect_merges_preserving_existing(desktop_client, fake_home):
+    from transport.http import desktop as desktop_runtime
+
+    spec = desktop_runtime._mcp_client_registry()["claude-desktop"]
+    path = spec["path"]
+    path.parent.mkdir(parents=True)
+    original = {"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}
+    path.write_text(json.dumps(original), encoding="utf-8")
+
+    resp = desktop_client.post("/desktop/mcp-connect", json={"client": "claude-desktop"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "connected"
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["theme"] == "dark"                      # untouched keys survive
+    assert written["mcpServers"]["other"] == {"command": "x"}
+    entry = written["mcpServers"]["jobcontext"]
+    assert entry["args"][-1] == "--mcp-stdio"
+    assert path.with_suffix(".json.bak").exists()          # previous version backed up
+
+    # Detection now reports connected.
+    clients = {c["id"]: c for c in desktop_client.get("/desktop/mcp-clients").json()["clients"]}
+    assert clients["claude-desktop"]["connected"] is True
+
+
+def test_mcp_connect_vscode_uses_typed_servers_key(desktop_client, fake_home):
+    from transport.http import desktop as desktop_runtime
+
+    resp = desktop_client.post("/desktop/mcp-connect", json={"client": "vscode"})
+    assert resp.status_code == 200
+
+    path = desktop_runtime._mcp_client_registry()["vscode"]["path"]
+    written = json.loads(path.read_text(encoding="utf-8"))
+    entry = written["servers"]["jobcontext"]
+    assert entry["type"] == "stdio"
+
+
+def test_mcp_connect_unknown_client(desktop_client, fake_home):
+    resp = desktop_client.post("/desktop/mcp-connect", json={"client": "emacs"})
+    assert resp.status_code == 404
+
+
+def test_mcp_routes_absent_outside_desktop_mode(http_client_noauth):
+    assert http_client_noauth.get("/desktop/mcp-clients").status_code in (404, 405)
 
 
 # ── desktop_main bootstrap ────────────────────────────────────────────────────
