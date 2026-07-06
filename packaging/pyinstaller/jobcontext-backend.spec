@@ -22,6 +22,7 @@ Known packaging hotspots handled here:
     have them installed.
 """
 import os
+import sys
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))  # noqa: F821 — SPECPATH is a PyInstaller global
 
@@ -42,7 +43,11 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[os.path.join(SPECPATH, "hooks")],  # noqa: F821
-    runtime_hooks=[],
+    runtime_hooks=[
+        # Makes the bundled Pango/GObject dylibs win over any system/Homebrew
+        # copies at run time (see the rthook's docstring for the full story).
+        os.path.join(SPECPATH, "rthooks", "pyi_rth_weasyprint_libs.py"),  # noqa: F821
+    ],
     excludes=[
         # dev/test-only weight
         "pytest",
@@ -79,3 +84,34 @@ coll = COLLECT(
     upx=False,
     name="jobcontext-backend",
 )
+
+# ── macOS post-processing: bind the WeasyPrint stack to its own dir ──────────
+# PyInstaller rewrites the collected dylibs' rpath to @loader_path/.. (the
+# _internal root), where dedup may have left same-named libraries from other
+# packages (Pillow vendors its own harfbuzz). Pango resolving harfbuzz to
+# Pillow's build while WeasyPrint dlopens the Homebrew one SIGBUSes the
+# moment an hb_face_t crosses images. Rewriting intra-directory deps to
+# @loader_path/<name> pins every weasyprint_libs dylib to its siblings,
+# independent of rpath search order; ad-hoc re-sign afterwards (arm64
+# requires valid signatures; sign every Mach-O, roadmap Phase 7 note).
+if sys.platform == "darwin":
+    import glob
+    import subprocess
+
+    _wl_dir = os.path.join(DISTPATH, "jobcontext-backend", "_internal", "weasyprint_libs")  # noqa: F821
+    _wl_libs = glob.glob(os.path.join(_wl_dir, "*.dylib"))
+    _wl_names = {os.path.basename(p) for p in _wl_libs}
+    for _lib in _wl_libs:
+        _deps = subprocess.run(
+            ["otool", "-L", _lib], capture_output=True, text=True, check=True
+        ).stdout.splitlines()[1:]
+        for _line in _deps:
+            _dep = _line.strip().split(" ")[0]
+            _base = os.path.basename(_dep)
+            if _dep.startswith("@rpath/") and _base in _wl_names:
+                subprocess.run(
+                    ["install_name_tool", "-change", _dep, f"@loader_path/{_base}", _lib],
+                    check=True, capture_output=True,
+                )
+        subprocess.run(["codesign", "-f", "-s", "-", _lib], check=True, capture_output=True)
+    print(f"weasyprint_libs: rebound {len(_wl_libs)} dylibs to @loader_path siblings")

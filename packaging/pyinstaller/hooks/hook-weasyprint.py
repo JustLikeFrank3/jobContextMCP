@@ -63,33 +63,47 @@ def _brew_prefix() -> str:
 
 
 try:
-    lib_basenames = []
-    for lib in _LIB_NAMES:
-        libname = ctypes.util.find_library(lib)
-        if libname is not None:
-            lib_basenames.append(os.path.basename(libname))
-    for lib in _FONTCONFIG_NAMES:
-        libname = ctypes.util.find_library(lib)
-        if libname is not None:
-            lib_basenames.append(os.path.basename(libname))
-            # On Windows (GTK/MSYS2 install), ship its fontconfig config too.
-            if is_win:
-                fontconfig_config_dir = Path(libname).parent.parent / "etc/fonts"
-                if fontconfig_config_dir.is_dir():
-                    datas.append((str(fontconfig_config_dir), "etc/fonts"))
-                    fontconfig_config_dir_found = True
-    if lib_basenames:
-        for resolved_lib in _resolveCtypesImports(lib_basenames):
-            binaries.append((resolved_lib[1], "."))
-
     if is_darwin:
-        collected = {os.path.basename(src) for src, _dest in binaries}
+        # Collect the whole WeasyPrint native stack from Homebrew into its
+        # own bundle subdir, one realpath-deduped versioned file per family.
+        # Two hard-won constraints (SIGBUS crashes observed 2026-07-06):
+        #   1. No unversioned-symlink duplicates — a second image of the same
+        #      library (Pango loading the versioned name, WeasyPrint's dlopen
+        #      the unversioned copy) crashes when objects cross images.
+        #   2. Do NOT collect into _internal root: PyInstaller dedups against
+        #      identically-named libs from other packages (Pillow vendors its
+        #      own harfbuzz), and pairing Homebrew's harfbuzz-subset with
+        #      Pillow's harfbuzz across an hb_face_t is fatal. The runtime
+        #      hook resolves this dir first so the stack stays coherent.
+        collected: set = set()
         lib_dir = os.path.join(_brew_prefix(), "lib")
         for family in _DARWIN_LIB_FAMILIES:
-            for path in glob.glob(os.path.join(lib_dir, f"lib{family}*.dylib")):
-                if os.path.basename(path) not in collected:
-                    binaries.append((path, "."))
-                    collected.add(os.path.basename(path))
+            matches = glob.glob(os.path.join(lib_dir, f"lib{family}.dylib")) + glob.glob(
+                os.path.join(lib_dir, f"lib{family}.*.dylib")
+            )
+            for path in matches:
+                real = os.path.realpath(path)
+                if real not in collected:
+                    binaries.append((real, "weasyprint_libs"))
+                    collected.add(real)
+    else:
+        lib_basenames = []
+        for lib in _LIB_NAMES:
+            libname = ctypes.util.find_library(lib)
+            if libname is not None:
+                lib_basenames.append(os.path.basename(libname))
+        for lib in _FONTCONFIG_NAMES:
+            libname = ctypes.util.find_library(lib)
+            if libname is not None:
+                lib_basenames.append(os.path.basename(libname))
+                # On Windows (GTK/MSYS2 install), ship its fontconfig config too.
+                if is_win:
+                    fontconfig_config_dir = Path(libname).parent.parent / "etc/fonts"
+                    if fontconfig_config_dir.is_dir():
+                        datas.append((str(fontconfig_config_dir), "etc/fonts"))
+                        fontconfig_config_dir_found = True
+        for resolved_lib in _resolveCtypesImports(lib_basenames):
+            binaries.append((resolved_lib[1], "."))
 
     fontconfig_config_dir = Path("/etc/fonts")
     if fontconfig_config_dir.is_dir():
