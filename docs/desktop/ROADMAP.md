@@ -20,7 +20,7 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 3 | PyInstaller onedir freeze of backend (`desktop_main.py`) | ✅ spec + hooks + selftest; windows-x64 & linux-x64 green in CI, macOS fix landed (custom weasyprint hook) |
 | 4 | Tauri 2 shell + sidecar lifecycle | ✅ compiled & verified live on macOS (dashboard in webview); anti-orphan watchdog covers SIGTERM/SIGKILL; tray mode deferred |
 | 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ✅ endpoints + Settings UI ("AI clients (MCP)" section, desktop-only); live-verified detection of Claude Desktop / VS Code / Cursor |
-| 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ⬜ |
+| 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ◐ first `.dmg` built (62 MB, arm64, unsigned) — sidecar selftests PASS from the mounted read-only image; Win/Linux bundles via CI next |
 | 7 | Signing & notarization — **start Apple Dev Program + Azure Trusted Signing paperwork now** | ⬜ lead-time bound |
 | 8 | Auto-update + GitHub Actions release matrix | ⬜ |
 | 9 | QA on clean VMs, beta, launch | ⬜ |
