@@ -21,9 +21,9 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 4 | Tauri 2 shell + sidecar lifecycle | ✅ compiled & verified live on macOS (dashboard in webview); anti-orphan watchdog covers SIGTERM/SIGKILL; tray mode deferred |
 | 5 | MCP client one-click connect (`--mcp-stdio` flag already shipped) | ✅ endpoints + Settings UI ("AI clients (MCP)" section, desktop-only); live-verified detection of Claude Desktop / VS Code / Cursor |
 | 5.5 | Embedded chat panel (agent loop + tool calling in the SPA) | ⬜ scoped, queued after Phase 8 — see "Phase 5.5 scope" below |
-| 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ◐ first `.dmg` built (62 MB, arm64, unsigned) — sidecar selftests PASS from the mounted read-only image; Win/Linux bundles via CI next |
-| 7 | Signing & notarization — **start Apple Dev Program + Azure Trusted Signing paperwork now** | ⬜ lead-time bound |
-| 8 | Auto-update + GitHub Actions release matrix | ⬜ |
+| 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ✅ all four platforms green in CI (2026-07-06): arm64+Intel dmg, NSIS exe+msi, AppImage+deb — unsigned pending Phase 7 |
+| 7 | Signing & notarization | ◐ Apple Dev Program submitted; Azure: org validation needs 3+yr business history → use **individual** validation (LLC too new), switch to org later |
+| 8 | Auto-update + GitHub Actions release matrix | ◐ build+release matrix done (v* tags attach installers); updater plugin + version stamping pending signing keys |
 | 9 | QA on clean VMs, beta, launch | ⬜ |
 
 ## What Phase 0/1 shipped
