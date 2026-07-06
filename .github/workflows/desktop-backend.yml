@@ -1,0 +1,143 @@
+name: Desktop Backend Freeze (PyInstaller)
+
+# Builds the desktop sidecar (packaging/pyinstaller/jobcontext-backend.spec)
+# on every target platform and runs the frozen binary's --selftest, which
+# exercises the known packaging risks: WeasyPrint native libs, tiktoken data
+# files, SQLite bootstrap, bundled templates, tool registration.
+#
+# macOS arm64 was validated locally (2026-07-06); this matrix exists chiefly
+# to answer the Windows GTK-DLL question and to produce artifacts the Tauri
+# shell (Phase 4) consumes as sidecars.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/desktop-app
+    paths:
+      - desktop_main.py
+      - packaging/**
+      - lib/**
+      - transport/**
+      - tools/**
+      - services/**
+      - server.py
+      - requirements*.txt
+      - frontend/**
+      - .github/workflows/desktop-backend.yml
+
+jobs:
+  freeze:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macos-arm64
+            binary: dist/jobcontext-backend/jobcontext-backend
+          - os: macos-13
+            label: macos-x64
+            binary: dist/jobcontext-backend/jobcontext-backend
+          - os: windows-latest
+            label: windows-x64
+            binary: dist/jobcontext-backend/jobcontext-backend.exe
+          - os: ubuntu-22.04   # oldest supported glibc for AppImage compatibility
+            label: linux-x64
+            binary: dist/jobcontext-backend/jobcontext-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Native libs for WeasyPrint ─────────────────────────────────────────
+      - name: Install Pango/Cairo (macOS)
+        if: runner.os == 'macOS'
+        run: brew install pango gdk-pixbuf libffi
+
+      - name: Install Pango/Cairo (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 \
+            libharfbuzz0b libharfbuzz-subset0 libfontconfig1 shared-mime-info
+
+      - name: Install MSYS2 GTK runtime (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-pango mingw-w64-x86_64-gdk-pixbuf2
+
+      - name: Expose MSYS2 DLLs to WeasyPrint (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # setup-msys2 installs under RUNNER_TEMP\msys64 on hosted runners
+          echo "WEASYPRINT_DLL_DIRECTORIES=${RUNNER_TEMP}\\msys64\\mingw64\\bin" >> "$GITHUB_ENV"
+          echo "${RUNNER_TEMP}\\msys64\\mingw64\\bin" >> "$GITHUB_PATH"
+
+      # ── Build the React SPA (bundled into the sidecar) ────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build SPA
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ── Freeze the backend ────────────────────────────────────────────────
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: PyInstaller build
+        run: pyinstaller packaging/pyinstaller/jobcontext-backend.spec --noconfirm
+
+      # The hooks-contrib WeasyPrint hook does not collect the MinGW DLL tree
+      # on Windows the way it collects Homebrew dylibs on macOS — bundle the
+      # GTK runtime into _internal so the artifact runs on clean machines.
+      - name: Bundle GTK DLLs into _internal (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          MINGW_BIN="$(cygpath -u "$RUNNER_TEMP")/msys64/mingw64/bin"
+          for pat in libpango libpangowin32 libpangocairo libpangoft2 libcairo \
+                     libglib libgobject libgio libgmodule libharfbuzz libfontconfig \
+                     libfreetype libfribidi libthai libdatrie libpixman libpng16 \
+                     zlib1 libexpat libbz2 libbrotli libintl libiconv libffi \
+                     libpcre2 libgraphite2 libgdk_pixbuf libjpeg libtiff libstdc++ \
+                     libgcc libwinpthread libssp; do
+            cp -v "${MINGW_BIN}/${pat}"*.dll dist/jobcontext-backend/_internal/ 2>/dev/null || true
+          done
+
+      # ── Prove the frozen binary works headless ────────────────────────────
+      - name: Selftest frozen binary
+        shell: bash
+        run: |
+          # Simulate a clean machine: the bundle must not lean on the build
+          # env (MSYS2 PATH entries / WEASYPRINT_DLL_DIRECTORIES).
+          unset WEASYPRINT_DLL_DIRECTORIES
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export PATH="$(echo "$PATH" | tr ':' '\n' | grep -vi msys64 | paste -sd: -)"
+          fi
+          "${{ matrix.binary }}" --data-dir "${{ runner.temp }}/jc-selftest" --selftest
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobcontext-backend-${{ matrix.label }}
+          path: dist/jobcontext-backend/
+          retention-days: 14
