@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter(tags=["desktop"])
@@ -249,6 +249,80 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
         "model": model or "",
         "configured": client is not None,
     }
+
+
+# ── Workspace import ──────────────────────────────────────────────────────────
+# Counterpart of GET /api/dashboard/export: the user downloads a zip of their
+# cloud workspace from the hosted dashboard, then imports it here to replace
+# the local data. Raw zip body (no multipart — python-multipart isn't a dep).
+
+
+@router.post("/desktop/import-workspace")
+async def import_workspace(request: "Request") -> dict:
+    """Replace the local workspace with an exported zip; requires app restart.
+
+    The current data dir is moved aside (never deleted) to
+    ``<data-dir>-backup-<timestamp>`` before the zip contents take its place.
+    Open SQLite handles may still point at the old inode, so the response
+    tells the shell/user a restart is required — nothing re-reads config
+    until then.
+    """
+    import datetime
+    import shutil
+    import tempfile
+    import zipfile
+
+    from lib.app_dirs import desktop_data_dir
+
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=422, detail="No file received.")
+
+    data_dir = desktop_data_dir()
+    staging = Path(tempfile.mkdtemp(prefix="jc-import-"))
+    try:
+        archive = staging / "import.zip"
+        archive.write_bytes(body)
+        extract_root = staging / "extracted"
+        extract_root.mkdir()
+        try:
+            with zipfile.ZipFile(archive) as zf:
+                names = zf.namelist()
+                # Zip-slip guard: every entry must resolve inside extract_root.
+                for name in names:
+                    target = (extract_root / name).resolve()
+                    if not str(target).startswith(str(extract_root.resolve())):
+                        raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
+                zf.extractall(extract_root)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(status_code=422, detail="That file isn't a valid zip archive.") from exc
+
+        # Accept both a bare export (config.json at the root) and a zip that
+        # wraps everything in a single top-level folder.
+        root = extract_root
+        entries = [p for p in root.iterdir() if not p.name.startswith("__MACOSX")]
+        if len(entries) == 1 and entries[0].is_dir():
+            root = entries[0]
+        if not (root / "config.json").exists() and not (root / "db").is_dir():
+            raise HTTPException(
+                status_code=422,
+                detail="That zip doesn't look like a jobContext export (no config.json or db/).",
+            )
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = data_dir.with_name(f"{data_dir.name}-backup-{stamp}")
+        if data_dir.exists():
+            shutil.move(str(data_dir), str(backup))
+        else:
+            backup = None
+        shutil.move(str(root), str(data_dir))
+        return {
+            "status": "imported",
+            "restart_required": True,
+            "backup": str(backup) if backup else "",
+        }
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 @router.get("/desktop/mcp-clients")

@@ -402,3 +402,140 @@ def test_config_loader_respects_env_path(monkeypatch, tmp_path):
     paths = config_module._config_search_paths()
     assert paths[0] == external
     assert config_module._load_config().get("name") == "desktop-test"
+
+
+# ── workspace export / import ─────────────────────────────────────────────────
+
+def _make_export_zip(entries: dict[str, bytes]) -> bytes:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+@pytest.fixture()
+def desktop_data_dir_env(monkeypatch, tmp_path):
+    data_dir = tmp_path / "appdata"
+    data_dir.mkdir()
+    (data_dir / "config.json").write_text('{"llm_provider": "old"}')
+    (data_dir / "db").mkdir()
+    (data_dir / "db" / "jobcontextmcp.db").write_bytes(b"old-db")
+    monkeypatch.setenv("JOBCONTEXT_DATA_DIR", str(data_dir))
+    return data_dir
+
+
+def test_export_workspace_zips_data_dir(desktop_client, desktop_data_dir_env):
+    import io
+    import zipfile
+
+    resp = desktop_client.get("/api/dashboard/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        names = set(zf.namelist())
+    assert "config.json" in names
+    assert "db/jobcontextmcp.db" in names
+
+
+def test_import_workspace_replaces_and_backs_up(desktop_client, desktop_data_dir_env):
+    payload = _make_export_zip({
+        "config.json": b'{"llm_provider": "imported"}',
+        "db/jobcontextmcp.db": b"new-db",
+        "workspace/01-Current-Optimized/resume.md": b"hi",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "imported"
+    assert body["restart_required"] is True
+    assert (desktop_data_dir_env / "config.json").read_text() == '{"llm_provider": "imported"}'
+    assert (desktop_data_dir_env / "db" / "jobcontextmcp.db").read_bytes() == b"new-db"
+    backup = Path(body["backup"])
+    assert backup.is_dir()
+    assert (backup / "config.json").read_text() == '{"llm_provider": "old"}'
+
+
+def test_import_workspace_accepts_single_top_folder(desktop_client, desktop_data_dir_env):
+    payload = _make_export_zip({
+        "jobContext/config.json": b"{}",
+        "jobContext/db/jobcontextmcp.db": b"x",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (desktop_data_dir_env / "db" / "jobcontextmcp.db").read_bytes() == b"x"
+
+
+def test_import_workspace_rejects_garbage(desktop_client, desktop_data_dir_env):
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=b"definitely not a zip",
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 422
+    # Nothing was touched.
+    assert (desktop_data_dir_env / "config.json").read_text() == '{"llm_provider": "old"}'
+
+
+def test_import_workspace_rejects_non_export_zip(desktop_client, desktop_data_dir_env):
+    payload = _make_export_zip({"random.txt": b"hello"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 422
+    assert (desktop_data_dir_env / "config.json").read_text() == '{"llm_provider": "old"}'
+
+
+def test_import_workspace_rejects_zip_slip(desktop_client, desktop_data_dir_env, tmp_path):
+    payload = _make_export_zip({
+        "config.json": b"{}",
+        "../evil.txt": b"escape",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 422
+    assert not (tmp_path / "evil.txt").exists()
+    assert (desktop_data_dir_env / "config.json").read_text() == '{"llm_provider": "old"}'
+
+
+def test_import_route_absent_outside_desktop_mode(http_client_noauth):
+    resp = http_client_noauth.post("/desktop/import-workspace", content=b"x")
+    assert resp.status_code in (404, 405)
+
+
+# ── Oura PAT connect endpoint ─────────────────────────────────────────────────
+
+def test_oura_pat_endpoint_validates_and_saves(desktop_client, desktop_data_dir_env, monkeypatch):
+    import tools.oura as oura
+
+    saved = {}
+    monkeypatch.setattr(oura, "validate_oura_pat", lambda tok: True)
+    monkeypatch.setattr(oura, "save_oura_pat", lambda tok: saved.setdefault("pat", tok))
+    monkeypatch.setattr(oura, "sync_oura", lambda: {"ok": True, "connected": True})
+
+    resp = desktop_client.post("/api/dashboard/oura/pat", json={"token": " pat-xyz "})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ouraConnected"] is True
+    assert saved["pat"] == "pat-xyz"
+
+
+def test_oura_pat_endpoint_rejects_bad_token(desktop_client, desktop_data_dir_env, monkeypatch):
+    import tools.oura as oura
+
+    monkeypatch.setattr(oura, "validate_oura_pat", lambda tok: False)
+    resp = desktop_client.post("/api/dashboard/oura/pat", json={"token": "nope"})
+    assert resp.status_code == 422
+
+    resp = desktop_client.post("/api/dashboard/oura/pat", json={"token": "  "})
+    assert resp.status_code == 422

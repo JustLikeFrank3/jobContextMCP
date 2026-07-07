@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApi, Screen, SectionHead, Badge, fmtDate } from './_shared.jsx'
 import { apiFetch, apiPost, ApiError } from '../auth/api.js'
 import { Panel, Button } from '../design-system'
@@ -217,10 +217,158 @@ function Connected({ oura, lastSync, onReload }) {
   )
 }
 
-function OuraSection({ data, reload }) {
+/* Desktop connect path: paste an Oura Personal Access Token. The OAuth flow
+   needs server client credentials + a public HTTPS redirect URI registered
+   with Oura — a local loopback app has neither. */
+function PatConnect({ onReload }) {
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function connect() {
+    const trimmed = token.trim()
+    if (!trimmed || busy) return
+    setErr(''); setBusy(true)
+    try {
+      await apiPost('/api/dashboard/oura/pat', { token: trimmed })
+      setToken('')
+      onReload()
+    } catch (e) {
+      setErr(e instanceof ApiError && e.body?.detail
+        ? e.body.detail
+        : 'Could not connect. Check the token and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Panel>
+      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+        Connect your ring with a <strong>Personal Access Token</strong>: sign in at{' '}
+        <code style={{ color: 'var(--cyan-300)' }}>cloud.ouraring.com</code> {'→'} Personal
+        Access Tokens {'→'} Create New. Paste it below — it stays on this machine and
+        pulls your daily readiness, sleep, and HRV for the Home dashboard.
+      </div>
+      {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') connect() }}
+          placeholder="Personal access token"
+          style={{
+            flex: 1, padding: '9px 13px', background: 'var(--surface)',
+            border: '1px solid var(--surface-chip)', borderRadius: 'var(--radius-md)',
+            color: 'var(--text-strong)', fontSize: 'var(--fs-sm)', outline: 'none',
+          }}
+        />
+        <Button size="sm" onClick={connect} disabled={busy || !token.trim()}>
+          {busy ? 'Connecting…' : 'Connect'}
+        </Button>
+      </div>
+    </Panel>
+  )
+}
+
+/* Your data: export a zip of the whole workspace anywhere; import one on
+   desktop (the "move my cloud workspace into the desktop app" path). Import
+   swaps the local data dir (old one is kept as a timestamped backup) and
+   requires an app restart. */
+function DataSection({ isDesktop }) {
+  const [state, setState] = useState({ phase: 'idle', detail: '' })
+  const fileRef = useRef(null)
+
+  async function importZip(file) {
+    if (!file) return
+    setState({ phase: 'busy', detail: '' })
+    try {
+      const res = await fetch('/desktop/import-workspace', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/zip' },
+        body: file,
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.detail || `Import failed (${res.status})`)
+      setState({ phase: 'done', detail: body?.backup || '' })
+    } catch (e) {
+      setState({ phase: 'error', detail: e.message })
+    }
+  }
+
+  function quit() {
+    apiPost('/desktop/shutdown', {}).catch(() => {})
+  }
+
+  return (
+    <>
+      <SectionHead title="Your data" />
+      <Panel style={{ marginBottom: 20 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+          Everything lives in one folder: settings, the SQLite database, and your
+          resume/materials files. <strong>Export</strong> downloads it all as a zip
+          {isDesktop
+            ? ' — and Import replaces this app’s data with a zip exported elsewhere (e.g. your cloud workspace). The current data is kept as a backup.'
+            : ' you can import into the jobContext desktop app.'}
+        </div>
+        {state.phase === 'done' ? (
+          <div>
+            <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>
+              Import complete{state.detail ? ` — previous data saved to ${state.detail}` : ''}. Quit and
+              reopen jobContext to load the imported workspace.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button size="sm" onClick={quit}>Quit jobContext</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {state.phase === 'error' && (
+              <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{state.detail}</div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
+              {isDesktop && (
+                <>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".zip,application/zip"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { importZip(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={state.phase === 'busy'}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {state.phase === 'busy' ? 'Importing…' : 'Import from zip…'}
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                onClick={() => { globalThis.location.href = '/api/dashboard/export' }}
+              >
+                Export workspace (.zip)
+              </Button>
+            </div>
+          </>
+        )}
+      </Panel>
+    </>
+  )
+}
+
+function OuraSection({ data, reload, isDesktop }) {
+  if (data?.ouraConnected) {
+    return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
+  }
+  if (isDesktop) return <PatConnect onReload={reload} />
   if (!data?.ouraConfigured) return <NotConfigured isOwner={Boolean(data?.isOwner)} />
-  if (!data?.ouraConnected) return <NotConnected />
-  return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
+  return <NotConnected />
 }
 
 /* Desktop-only: one-click MCP client connect.
@@ -527,10 +675,11 @@ export default function Settings() {
 
       <AiProviderSection />
       <McpClientsSection />
+      <DataSection isDesktop={isDesktop} />
 
       <SectionHead title="Oura Ring" />
       <OuraCompatChip />
-      <OuraSection data={data} reload={reload} />
+      <OuraSection data={data} reload={reload} isDesktop={isDesktop} />
     </Screen>
   )
 }

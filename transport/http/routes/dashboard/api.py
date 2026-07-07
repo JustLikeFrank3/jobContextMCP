@@ -11,9 +11,10 @@ from __future__ import annotations
 import asyncio
 import datetime
 import html  # noqa: F401  (retained for potential HTML responses)
+import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -422,4 +423,111 @@ async def oura_disconnect(
 
     removed = clear_oura_tokens()
     return JSONResponse({"ok": True, "removed": bool(removed), "ouraConnected": False})
+
+
+# ── Workspace export ───────────────────────────────────────────────────────────
+# One zip of the active user's entire data root (config.json, db/, workspace/,
+# personas/). On the hosted product this is how a user pulls their cloud
+# workspace down to move into the desktop app (Settings → Import); on desktop
+# it doubles as a local backup.
+
+
+def _active_user_root() -> "Path":
+    """The directory that IS the current user's workspace, on any deployment."""
+    from pathlib import Path
+
+    from lib.user_context import get_data_folder_override
+
+    override = get_data_folder_override()
+    if override is not None:
+        return override
+    from lib.app_dirs import desktop_data_dir, is_desktop_mode
+
+    if is_desktop_mode():
+        return desktop_data_dir()
+    return Path(str(config.DATA_FOLDER))
+
+
+@router.get("/export", response_model=None)
+async def export_workspace(
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
+):
+    """Download the whole workspace (config, SQLite DB, files) as a zip."""
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    root = _active_user_root()
+    if not root.is_dir():
+        raise HTTPException(status_code=404, detail="No workspace data to export yet.")
+
+    def build() -> str:
+        fd, tmp = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(root.rglob("*")):
+                if not path.is_file():
+                    continue
+                rel = path.relative_to(root)
+                # SQLite sidecar journals are point-in-time noise; the .db
+                # itself is checkpointed on connection close.
+                if rel.suffix in (".db-wal", ".db-shm") or rel.name.endswith(("-wal", "-shm")):
+                    continue
+                zf.write(path, str(rel))
+        return tmp
+
+    tmp = await asyncio.to_thread(build)
+    stamp = datetime.date.today().isoformat()
+    return FileResponse(
+        tmp,
+        media_type="application/zip",
+        filename=f"jobcontext-export-{stamp}.zip",
+        background=BackgroundTask(os.unlink, tmp),
+    )
+
+
+class OuraPatRequest(BaseModel):
+    token: str
+
+
+@router.post("/oura/pat", response_model=None)
+async def oura_pat_connect(
+    request: OuraPatRequest,
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
+) -> JSONResponse:
+    """Connect Oura with a Personal Access Token (desktop's auth path).
+
+    The OAuth handshake needs server client credentials and a public HTTPS
+    redirect URI registered with Oura — a local loopback app has neither, so
+    the desktop pastes a PAT from cloud.ouraring.com instead. Validated
+    against the Oura API before storing; a first sync runs immediately so
+    the Home hero flips to readiness without waiting for the auto-sync.
+    """
+    from tools.oura import OuraError, save_oura_pat, sync_oura, validate_oura_pat
+
+    token = request.token.strip()
+    if not token:
+        raise HTTPException(status_code=422, detail="Personal access token is empty.")
+    try:
+        valid = await asyncio.to_thread(validate_oura_pat, token)
+    except OuraError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if not valid:
+        raise HTTPException(
+            status_code=422,
+            detail="Oura rejected that token — generate one at cloud.ouraring.com → Personal Access Tokens.",
+        )
+    save_oura_pat(token)
+    result = await asyncio.to_thread(sync_oura)  # first pull is best-effort
+    return JSONResponse(
+        {
+            "ok": True,
+            "synced": bool(result.get("ok")),
+            "ouraConnected": True,
+            "oura": _oura_settings_payload(_load_oura()),
+        }
+    )
 
