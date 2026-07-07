@@ -273,21 +273,28 @@ jobs:
           rm -f "$RUNNER_TEMP/AuthKey.raw.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
-          # Sign every Mach-O in the sidecar with hardened runtime + entitlements.
-          # dylibs/.so first, main exe last, so nested code is sealed before the
-          # container that references it.
+          # Sign the sidecar with hardened runtime. Order matters:
+          #   1. nested .framework bundles — sign each version dir AS A BUNDLE so
+          #      codesign re-seals _CodeSignature. PyInstaller ships Python as a
+          #      framework; signing only the inner Mach-O leaves the framework's
+          #      seal mismatched → Apple: "signature of the binary is invalid".
+          #   2. loose dylibs/.so outside frameworks.
+          #   3. remaining loose Mach-O outside frameworks (the sidecar exe).
           ENTS="desktop/src-tauri/entitlements.plist"
           SIDECAR="desktop/src-tauri/binaries/jobcontext-backend"
-          sign() { codesign --force --timestamp --options runtime \
-            --entitlements "$ENTS" --sign "$IDENTITY" "$1"; }
-          find "$SIDECAR" -type f \( -name '*.dylib' -o -name '*.so' \) -print0 \
+          sign()   { codesign --force --timestamp --options runtime --entitlements "$ENTS" --sign "$IDENTITY" "$1"; }
+          signfw() { codesign --force --timestamp --options runtime --sign "$IDENTITY" "$1"; }
+          while IFS= read -r -d '' fw; do
+            while IFS= read -r -d '' ver; do signfw "$ver"; done \
+              < <(find "$fw/Versions" -mindepth 1 -maxdepth 1 -type d -print0)
+          done < <(find "$SIDECAR" -type d -name '*.framework' -print0)
+          find "$SIDECAR" -type f \( -name '*.dylib' -o -name '*.so' \) ! -path '*.framework/*' -print0 \
             | while IFS= read -r -d '' f; do sign "$f"; done
-          # Catch any remaining Mach-O without a .dylib/.so name (rare).
-          find "$SIDECAR" -type f ! -name '*.dylib' ! -name '*.so' -print0 \
+          find "$SIDECAR" -type f ! -name '*.dylib' ! -name '*.so' ! -path '*.framework/*' -print0 \
             | while IFS= read -r -d '' f; do
                 if file "$f" | grep -q 'Mach-O'; then sign "$f"; fi
               done
-          echo "signed $(find "$SIDECAR" -type f | wc -l | tr -d ' ') sidecar files"
+          echo "sidecar signed (frameworks as bundles)"
 
       - name: Build installers
         working-directory: desktop
