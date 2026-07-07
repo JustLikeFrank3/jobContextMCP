@@ -336,8 +336,12 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign --display --verbose=2 "$APP/$SIDECAR_EXE" 2>&1 | grep runtime
 
-          # Package the dmg (app + /Applications symlink) with Tauri's naming:
-          # jobContext_<version>_<aarch64|x64>.dmg in bundle/dmg/.
+          # Package a styled dmg (branded background, drag-to-Applications
+          # layout — desktop/src-tauri/dmg-settings.py) with Tauri's naming:
+          # jobContext_<version>_<aarch64|x64>.dmg in bundle/dmg/. dmgbuild
+          # writes the .DS_Store directly, no Finder needed; verified that its
+          # copy preserves the app's signature (deep-strict passes inside the
+          # mounted image).
           DMG_VERSION="${VERSION:-$(python -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")}"
           case "$(uname -m)" in
             arm64) DMG_ARCH="aarch64" ;;
@@ -345,11 +349,9 @@ jobs:
           esac
           DMG_DIR="desktop/src-tauri/target/release/bundle/dmg"
           DMG="$DMG_DIR/jobContext_${DMG_VERSION}_${DMG_ARCH}.dmg"
-          STAGE="$RUNNER_TEMP/dmg-stage"
-          mkdir -p "$DMG_DIR" "$STAGE"
-          ditto "$APP" "$STAGE/jobContext.app"   # ditto preserves signatures + symlinks
-          ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "jobContext" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          mkdir -p "$DMG_DIR"
+          pip install --quiet dmgbuild
+          dmgbuild -s desktop/src-tauri/dmg-settings.py -D app="$APP" "jobContext" "$DMG"
           rcodesign sign --p12-file "$RUNNER_TEMP/cert.p12" \
             --p12-password-file "$RUNNER_TEMP/cert.pass" "$DMG"
           rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.pass"
