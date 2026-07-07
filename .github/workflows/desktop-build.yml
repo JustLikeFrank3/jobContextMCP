@@ -230,71 +230,33 @@ jobs:
           mkdir -p desktop/src-tauri/binaries
           cp -R dist/jobcontext-backend desktop/src-tauri/binaries/
 
-      # ── Apple Developer ID: import cert, sign the sidecar (Phase 7) ──────
-      # Notarization requires EVERY Mach-O in the bundle to be signed with a
-      # Developer ID identity + hardened runtime — not just the .app. Tauri
-      # signs its own shell + notarizes the dmg, but it does NOT deep-sign the
-      # ~90 dylibs and the exe inside the frozen sidecar, so we sign those here
-      # first (inner files → main exe last). Then the "Build installers" step's
-      # tauri build wraps, signs the shell, and notarizes via the API key.
-      - name: Import cert & sign sidecar (macOS)
+      # ── Apple Developer ID signing prep (Phase 7) ────────────────────────
+      # Signing happens AFTER Tauri bundles, on the final .app, with rcodesign
+      # (pure-Rust apple-codesign — no keychain needed, takes the .p12 file
+      # directly). Pre-bundle signing of the sidecar can never work: Tauri's
+      # resource copy dereferences symlinks, so the .app ends up with real
+      # duplicate Python binaries (_internal/Python, Python.framework/Python)
+      # that no pre-bundle signature covers — exactly the paths Apple rejected.
+      # This step only stages the credentials and installs rcodesign.
+      - name: Prepare Apple signing materials (macOS)
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         shell: bash
         run: |
           set -euo pipefail
-          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KP="$(openssl rand -base64 24)"
-          security create-keychain -p "$KP" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KP" "$KEYCHAIN"
-          # Keep the temp keychain in the search list so codesign/tauri find it.
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/["[:space:]]//g')
-
           echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KEYCHAIN" >/dev/null
-          rm -f "$RUNNER_TEMP/cert.p12"
+          printf '%s' "$APPLE_CERTIFICATE_PASSWORD" > "$RUNNER_TEMP/cert.pass"
 
-          # Split on the quotes around the identity — the name itself contains
-          # a ')' in "(TEAMID)", so a greedy .*) sed overshoots.
-          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
-            | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
-          if [ -z "$IDENTITY" ]; then echo "no Developer ID Application identity found"; exit 1; fi
-          echo "signing identity: $IDENTITY"
-          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-
-          # notarytool key file for Tauri's notarization step. Normalize the
-          # PEM through openssl: notarytool's parser rejects an unwrapped key
-          # body (invalidPEMDocument) that openssl happily reads, so re-emit
+          # Notary API key. Normalize the PEM through openssl: a stored key
+          # with an unwrapped body is rejected by strict parsers, so re-emit
           # standard 64-col wrapping regardless of how the secret was stored.
           echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.raw.p8"
           openssl pkey -in "$RUNNER_TEMP/AuthKey.raw.p8" -out "$RUNNER_TEMP/AuthKey.p8"
           rm -f "$RUNNER_TEMP/AuthKey.raw.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
-          # Sign the sidecar with hardened runtime. Order matters:
-          #   1. nested .framework bundles — sign each version dir AS A BUNDLE so
-          #      codesign re-seals _CodeSignature. PyInstaller ships Python as a
-          #      framework; signing only the inner Mach-O leaves the framework's
-          #      seal mismatched → Apple: "signature of the binary is invalid".
-          #   2. loose dylibs/.so outside frameworks.
-          #   3. remaining loose Mach-O outside frameworks (the sidecar exe).
-          ENTS="desktop/src-tauri/entitlements.plist"
-          SIDECAR="desktop/src-tauri/binaries/jobcontext-backend"
-          sign()   { codesign --force --timestamp --options runtime --entitlements "$ENTS" --sign "$IDENTITY" "$1"; }
-          signfw() { codesign --force --timestamp --options runtime --sign "$IDENTITY" "$1"; }
-          while IFS= read -r -d '' fw; do
-            while IFS= read -r -d '' ver; do signfw "$ver"; done \
-              < <(find "$fw/Versions" -mindepth 1 -maxdepth 1 -type d -print0)
-          done < <(find "$SIDECAR" -type d -name '*.framework' -print0)
-          find "$SIDECAR" -type f \( -name '*.dylib' -o -name '*.so' \) ! -path '*.framework/*' -print0 \
-            | while IFS= read -r -d '' f; do sign "$f"; done
-          find "$SIDECAR" -type f ! -name '*.dylib' ! -name '*.so' ! -path '*.framework/*' -print0 \
-            | while IFS= read -r -d '' f; do
-                if file "$f" | grep -q 'Mach-O'; then sign "$f"; fi
-              done
-          echo "sidecar signed (frameworks as bundles)"
+          if ! command -v rcodesign >/dev/null; then
+            cargo install apple-codesign --locked
+          fi
 
       - name: Build installers
         working-directory: desktop
@@ -331,17 +293,70 @@ jobs:
             EXTRA+=(--config "{${OVERLAY%,}}")
           fi
           if [ "$RUNNER_OS" = "macOS" ] && [ -n "$APPLE_CERTIFICATE" ]; then
-            # Sign here, but do NOT let Tauri notarize — a dedicated step
-            # submits and prints the notarytool log so we can see exactly which
-            # binary Apple rejects (Tauri surfaces an empty error on rejection).
-            env -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH \
-              npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
+            # Build only the bare .app and keep Tauri away from signing and
+            # notarization entirely (it signs whenever APPLE_CERTIFICATE /
+            # APPLE_SIGNING_IDENTITY are visible). The next step signs the
+            # final .app with rcodesign — signing before or during bundling
+            # can't cover the duplicate Mach-Os Tauri's symlink-dereferencing
+            # resource copy creates — and packages the dmg itself.
+            env -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD \
+                -u APPLE_SIGNING_IDENTITY -u APPLE_API_KEY -u APPLE_API_ISSUER \
+                -u APPLE_API_KEY_PATH \
+              npm run build -- --bundles app "${EXTRA[@]}"
           else
             npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
           fi
 
+      # Sign the FINAL .app — every Mach-O inside it, including the duplicate
+      # Python binaries Tauri's resource copy materialized — then package the
+      # dmg ourselves with Tauri's naming so the artifact glob and release
+      # flow are unchanged. Two passes because rcodesign 0.29's unscoped
+      # settings only reach the main executable of the path being signed:
+      #   1. the sidecar exe as its own unit → hardened runtime + entitlements
+      #      (required by notarization AND to launch frozen CPython at all);
+      #   2. the whole .app with the sidecar exe --exclude'd so pass 2 keeps
+      #      pass 1's signature instead of re-signing it bare.
+      # (`--code-signature-flags <path>:runtime` scoping hits a parser bug in
+      # rcodesign 0.29, so per-path flags can't do this in one pass.)
+      - name: Sign app & package dmg via rcodesign (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="desktop/src-tauri/target/release/bundle/macos/jobContext.app"
+          ENTS="desktop/src-tauri/entitlements.plist"
+          SIDECAR_EXE="Contents/Resources/binaries/jobcontext-backend/jobcontext-backend"
+          RC=(rcodesign sign
+              --p12-file "$RUNNER_TEMP/cert.p12"
+              --p12-password-file "$RUNNER_TEMP/cert.pass"
+              --code-signature-flags runtime
+              --entitlements-xml-file "$ENTS")
+          "${RC[@]}" "$APP/$SIDECAR_EXE"
+          "${RC[@]}" --exclude "$SIDECAR_EXE" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --display --verbose=2 "$APP/$SIDECAR_EXE" 2>&1 | grep runtime
+
+          # Package the dmg (app + /Applications symlink) with Tauri's naming:
+          # jobContext_<version>_<aarch64|x64>.dmg in bundle/dmg/.
+          DMG_VERSION="${VERSION:-$(python -c "import json; print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")}"
+          case "$(uname -m)" in
+            arm64) DMG_ARCH="aarch64" ;;
+            *)     DMG_ARCH="x64" ;;
+          esac
+          DMG_DIR="desktop/src-tauri/target/release/bundle/dmg"
+          DMG="$DMG_DIR/jobContext_${DMG_VERSION}_${DMG_ARCH}.dmg"
+          STAGE="$RUNNER_TEMP/dmg-stage"
+          mkdir -p "$DMG_DIR" "$STAGE"
+          ditto "$APP" "$STAGE/jobContext.app"   # ditto preserves signatures + symlinks
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "jobContext" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          rcodesign sign --p12-file "$RUNNER_TEMP/cert.p12" \
+            --p12-password-file "$RUNNER_TEMP/cert.pass" "$DMG"
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.pass"
+          echo "signed dmg: $DMG"
+
       # Notarize the signed dmg ourselves so the submission log is visible.
-      # notarytool log lists every issue (unsigned/unhardened Mach-O, bad
+      # The Notary log lists every issue (unsigned/unhardened Mach-O, bad
       # entitlements, …); on Accepted we staple the dmg for offline Gatekeeper.
       # Apple's `notarytool submit` crashes (Trace/BPT trap: 5 → exit 133) on
       # the GitHub macOS runner images — a known notarytool bug, deterministic
@@ -353,9 +368,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v rcodesign >/dev/null; then
-            cargo install apple-codesign --locked
-          fi
           rcodesign encode-app-store-connect-api-key \
             --output-path /tmp/asc-api-key.json \
             "$APPLE_API_ISSUER" "$APPLE_API_KEY" "$APPLE_API_KEY_PATH"
