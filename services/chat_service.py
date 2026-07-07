@@ -32,9 +32,11 @@ from lib.db import get_connection
 
 _log = logging.getLogger(__name__)
 
-# Tools the chat model may call. Curated: job-hunt state, queue, people,
-# interviews, digests, generation. Nothing filesystem-ish or admin-ish.
+# Tools the chat model may call. Curated: onboarding, job-hunt state, queue,
+# people, interviews, digests, generation. Nothing export-ish or admin-ish.
 CHAT_TOOL_ALLOWLIST: tuple[str, ...] = (
+    "check_workspace",
+    "setup_workspace",
     "get_job_hunt_status",
     "get_job_queue",
     "queue_job",
@@ -67,7 +69,10 @@ You are jobContext's built-in assistant, embedded in a local-first job search
 app. You have tools that read and update the user's real job hunt data
 (applications, queue, interviews, contacts, digests). Prefer calling a tool
 over guessing; never invent data. Be concise and concrete. When you change
-data (queue a job, log an event), confirm exactly what changed.\
+data (queue a job, log an event), confirm exactly what changed.
+For a new or empty workspace, check_workspace reports what's missing and
+setup_workspace fills it in from details the user gives you (contact info,
+master resume content).\
 """
 
 
