@@ -32,32 +32,23 @@ from lib.db import get_connection
 
 _log = logging.getLogger(__name__)
 
-# Tools the chat model may call. Curated: onboarding, job-hunt state, queue,
-# people, interviews, digests, generation. Nothing export-ish or admin-ish.
+# Tools the chat model may call. With the consolidated domain surface
+# (tools/consolidated.py) the full capability set fits in one context window
+# — 11 schemas instead of 85 — so chat carries everything. Overridable per-
+# config via "chat_tools" (and JOBCONTEXT_LEGACY_TOOLS servers can list the
+# old per-function names there).
 CHAT_TOOL_ALLOWLIST: tuple[str, ...] = (
-    "check_workspace",
-    "setup_workspace",
-    "get_job_hunt_status",
-    "get_job_queue",
-    "queue_job",
-    "evaluate_queued_job",
-    "assess_job_fitment",
-    "decide_job",
-    "update_application",
-    "log_application_event",
-    "get_daily_digest",
-    "weekly_summary",
-    "search_jobs",
-    "scrape_job_url",
-    "get_interviews",
-    "get_upcoming_interviews",
-    "log_interview",
-    "get_people",
-    "get_person",
-    "log_person",
-    "get_rejections",
-    "log_rejection",
-    "get_compensation_comparison",
+    "applications",
+    "job_search",
+    "documents",
+    "materials",
+    "interviews",
+    "people",
+    "stories",
+    "wellbeing",
+    "brand",
+    "insights",
+    "workspace",
 )
 
 MAX_TOOL_HOPS = 8
@@ -70,9 +61,11 @@ app. You have tools that read and update the user's real job hunt data
 (applications, queue, interviews, contacts, digests). Prefer calling a tool
 over guessing; never invent data. Be concise and concrete. When you change
 data (queue a job, log an event), confirm exactly what changed.
-For a new or empty workspace, check_workspace reports what's missing and
-setup_workspace fills it in from details the user gives you (contact info,
-master resume content).\
+Each tool covers one domain and takes an "action" parameter — its description
+lists every action with required/optional parameters. For a new or empty
+workspace, workspace(action="check") reports what's missing and
+workspace(action="setup") fills it in from details the user gives you
+(contact info, master resume content).\
 """
 
 
