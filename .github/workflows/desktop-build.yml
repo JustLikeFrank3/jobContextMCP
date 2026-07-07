@@ -340,27 +340,34 @@ jobs:
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         shell: bash
         run: |
-          set -euo pipefail
+          # NOTE: no `set -e` — notarytool returns non-zero on a rejected
+          # submission, and we must still fetch + print its log before failing.
+          set -uo pipefail
+          NT=(--key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER")
+          overall=0
           for dmg in desktop/src-tauri/target/release/bundle/dmg/*.dmg; do
             echo "== notarizing ${dmg} =="
-            SUBMIT="$(xcrun notarytool submit "$dmg" \
-              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" \
-              --wait --output-format json)"
-            echo "$SUBMIT"
-            ID="$(printf '%s' "$SUBMIT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')"
-            STATUS="$(printf '%s' "$SUBMIT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')"
-            echo "--- notarytool log ($ID) ---"
-            xcrun notarytool log "$ID" \
-              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" || true
-            if [ "$STATUS" != "Accepted" ]; then
-              echo "::error::notarization $STATUS for $dmg"
-              exit 1
+            xcrun notarytool submit "$dmg" "${NT[@]}" --wait --timeout 30m \
+              --output-format json > /tmp/submit.json 2> /tmp/submit.err
+            rc=$?
+            echo "submit exit=$rc"
+            echo "--- stderr ---"; cat /tmp/submit.err || true
+            echo "--- json ---";   cat /tmp/submit.json || true; echo
+            ID="$(python3 -c 'import json;print(json.load(open("/tmp/submit.json")).get("id",""))' 2>/dev/null || true)"
+            STATUS="$(python3 -c 'import json;print(json.load(open("/tmp/submit.json")).get("status",""))' 2>/dev/null || true)"
+            if [ -n "$ID" ]; then
+              echo "--- notarytool log ($ID) ---"
+              xcrun notarytool log "$ID" "${NT[@]}" || true
             fi
-            xcrun stapler staple "$dmg"
-            xcrun stapler validate "$dmg"
-            spctl -a -vvv -t open --context context:primary-signature "$dmg" 2>&1 | grep -iE 'accepted|Notarized' || true
+            if [ "$STATUS" = "Accepted" ]; then
+              xcrun stapler staple "$dmg" && xcrun stapler validate "$dmg"
+              spctl -a -vvv -t open --context context:primary-signature "$dmg" 2>&1 | grep -iE 'accepted|Notarized' || true
+            else
+              echo "::error::notarization status='${STATUS}' exit=$rc for $dmg"
+              overall=1
+            fi
           done
-          echo "macOS notarized + stapled"
+          exit $overall
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
