@@ -204,11 +204,10 @@ same reusable workflow, used by both branch CI and tag releases.
 
 ```mermaid
 flowchart TB
-    spa["vite build<br/>(React SPA)"] --> freeze["PyInstaller freeze<br/>+ --selftest"]
-    freeze --> presign["sign nested Mach-O (mac)<br/>bundle GTK DLLs (win)"]
-    presign --> bundle["tauri build<br/>dmg · nsis · AppImage · deb"]
-    bundle --> sign["Authenticode (win)<br/>Developer ID + notarize (mac)"]
-    sign --> verify["verify signatures<br/>codesign · stapler"]
+    spa["vite build<br/>(React SPA)"] --> freeze["PyInstaller freeze<br/>+ --selftest<br/>+ GTK DLLs (win)"]
+    freeze --> bundle["tauri build<br/>.app · nsis · AppImage · deb"]
+    bundle --> sign["Authenticode (win)<br/>Developer ID sign .app<br/>+ package dmg (mac)"]
+    sign --> verify["notarize + staple (mac)<br/>codesign --deep --strict"]
     verify --> rel["GitHub pre-release<br/>on desktop-v* tag"]
 
     classDef accent fill:#00B5C8,stroke:#0a3d47,color:#06222a;
@@ -216,11 +215,14 @@ flowchart TB
 ```
 
 **Signing is guarded on secrets** — forks and secretless runs still produce
-(unsigned) installers. macOS notarization requires every Mach-O in the frozen
-sidecar (~90 dylibs + the exe) to be individually Developer ID signed with the
-hardened runtime, not just the app — CI does that before Tauri wraps the
-bundle, then a verify gate (`codesign --deep --strict` + `stapler validate`)
-fails the build rather than the tester's Gatekeeper.
+(unsigned) installers. macOS notarization requires every Mach-O in the bundle
+(~90 dylibs + both executables) to carry a Developer ID signature with the
+hardened runtime — and it must happen on the **final** `.app`, because Tauri's
+resource copy dereferences symlinks and materializes duplicate Python binaries
+that no pre-bundle signature covers. CI signs the built app with `rcodesign`
+(two passes, so the sidecar exe gets entitlements), packages the dmg itself,
+then notarizes + staples; a verify gate (`codesign --deep --strict` +
+`stapler validate`) fails the build rather than the tester's Gatekeeper.
 
 **Cutting a release:**
 
