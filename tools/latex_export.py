@@ -111,6 +111,20 @@ def _latex_dir() -> Path | None:
     return d
 
 
+def _tenant_latex_assets_dir() -> Path:
+    """Return the per-request writable LaTeX assets overlay directory.
+
+    Resolves through the tenant-aware workspace resolver
+    (``cfg.get_active_workspace_folder``), so an authenticated guest gets
+    ``data/users/{oid}/workspace/latex_assets`` and the owner / local dev gets
+    their own workspace copy. The bundled ``templates/latex_assets`` dir is a
+    shared, READ-ONLY source of defaults only: user-supplied section content
+    must never be written there or it would leak across tenants (every tenant
+    compiles from the same bundled path).
+    """
+    return cfg.get_active_workspace_folder() / "latex_assets"
+
+
 def _user_identity() -> dict[str, str]:
     """Read contact info from the active user's config.json at call time.
 
@@ -565,6 +579,15 @@ def generate_resume_latex(
         # the temp workspace so \input{sections/skills} and friends resolve.
         shutil.copytree(str(latex_src), str(tmp_path), dirs_exist_ok=True)
 
+        # Overlay the caller's per-tenant LaTeX assets (sections they tailored
+        # via write_latex_section) on top of the shared source so their edits
+        # win at compile time — and so no other tenant's sections can ever bleed
+        # into this compile. Tenant assets live under the request-scoped
+        # workspace, resolved by _tenant_latex_assets_dir().
+        tenant_assets = _tenant_latex_assets_dir()
+        if tenant_assets.exists():
+            shutil.copytree(str(tenant_assets), str(tmp_path), dirs_exist_ok=True)
+
         # Override the header identity + role on the temp copy only, so the
         # source resume.tex on disk is never mutated AND a shared template
         # (e.g. the bundled assets used on AKS) can never emit another user's
@@ -635,13 +658,19 @@ _WRITABLE_LATEX_SECTIONS: set[str] = {
 
 
 def read_latex_asset(filename: str) -> str:
-    """Read a file from the bundled LaTeX resume assets.
+    """Read a LaTeX resume asset, tenant overlay first, bundled default second.
 
     Allows the AI to inspect TLCresume.sty, resume.tex, _header.tex, and any
     section file so it understands the available macros before writing content.
 
+    Resolution order (tenant isolation): the requesting user's own overlay copy
+    under ``_tenant_latex_assets_dir()`` is preferred; if they have not written
+    that file yet, the shared read-only bundled default is returned. A user
+    therefore only ever sees their own edits or the pristine template — never
+    another tenant's content.
+
     Args:
-        filename: Relative path within templates/latex_assets/, e.g.
+        filename: Relative path within the assets tree, e.g.
                   ``"TLCresume.sty"`` or ``"sections/experience.tex"``.
 
     Returns:
@@ -649,26 +678,40 @@ def read_latex_asset(filename: str) -> str:
 
     Raises:
         PermissionError: If the filename is not in the readable allowlist.
-        FileNotFoundError: If the file does not exist.
+        FileNotFoundError: If neither the tenant overlay nor a bundled default
+            exists for the file.
     """
     if filename not in _READABLE_LATEX_ASSETS:
         raise PermissionError(
             f"'{filename}' is not in the readable LaTeX asset allowlist. "
             f"Allowed files: {sorted(_READABLE_LATEX_ASSETS)}"
         )
-    target = _BUNDLED_LATEX_ASSETS_DIR / filename
-    if not target.exists():
-        raise FileNotFoundError(f"LaTeX asset not found: {target}")
-    return target.read_text(encoding="utf-8")
+    tenant_target = _tenant_latex_assets_dir() / filename
+    if tenant_target.exists():
+        return tenant_target.read_text(encoding="utf-8")
+    bundled = _BUNDLED_LATEX_ASSETS_DIR / filename
+    if bundled.exists():
+        return bundled.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"LaTeX asset not found: {filename} "
+        "(checked the tenant overlay and the bundled defaults)."
+    )
 
 
 def write_latex_section(section_filename: str, content: str) -> str:
-    """Overwrite a section file in the bundled LaTeX resume assets.
+    """Write a tailored resume section into the caller's per-tenant overlay.
 
     Use this to inject tailored content (summary, experience, skills) into the
-    resume before calling ``export_resume_latex``.  Only files in
-    ``templates/latex_assets/sections/`` are writable.  The base template files
+    resume before calling ``export_resume_latex``.  Only the section files in
+    the writable allowlist may be written; the base template files
     (``TLCresume.sty``, ``resume.tex``, ``_header.tex``) are read-only.
+
+    Tenant isolation: content is written under ``_tenant_latex_assets_dir()``
+    (the request-scoped workspace, e.g. ``data/users/{oid}/workspace/
+    latex_assets/sections/``), NEVER the shared bundled template dir. One
+    tenant's section content can therefore never be read back or compiled by
+    another tenant.  ``read_latex_asset`` and ``export_resume_latex`` both
+    prefer this overlay over the bundled defaults.
 
     Workflow::
 
@@ -697,7 +740,11 @@ def write_latex_section(section_filename: str, content: str) -> str:
             f"'{section_filename}' is not in the writable sections allowlist. "
             f"Writable: {sorted(_WRITABLE_LATEX_SECTIONS)}"
         )
-    target = _BUNDLED_LATEX_ASSETS_DIR / "sections" / section_filename
+    # Write into the per-tenant overlay, NEVER the shared bundled template dir.
+    # _tenant_latex_assets_dir() resolves through the request-scoped ContextVar
+    # (get_active_workspace_folder), so each user's sections stay in their own
+    # data partition and can never leak into another tenant's read or compile.
+    target = _tenant_latex_assets_dir() / "sections" / section_filename
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return f"✓ Written: {target} ({len(content)} chars)"
