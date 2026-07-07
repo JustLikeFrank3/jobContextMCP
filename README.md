@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version 1.2.0"/>
-  <img src="https://img.shields.io/badge/tests-1250%20passing-brightgreen" alt="1250 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1313%20passing-brightgreen" alt="1313 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-85-informational" alt="85 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -35,7 +35,7 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 | | |
 |---|---|
 | 85 MCP tools | Resume + cover letter generation |
-| 1250 passing tests | Job fitment analysis with persona lenses |
+| 1313 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
