@@ -264,8 +264,13 @@ jobs:
           echo "signing identity: $IDENTITY"
           echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
-          # notarytool key file for Tauri's notarization step
-          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          # notarytool key file for Tauri's notarization step. Normalize the
+          # PEM through openssl: notarytool's parser rejects an unwrapped key
+          # body (invalidPEMDocument) that openssl happily reads, so re-emit
+          # standard 64-col wrapping regardless of how the secret was stored.
+          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.raw.p8"
+          openssl pkey -in "$RUNNER_TEMP/AuthKey.raw.p8" -out "$RUNNER_TEMP/AuthKey.p8"
+          rm -f "$RUNNER_TEMP/AuthKey.raw.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
           # Sign every Mach-O in the sidecar with hardened runtime + entitlements.
