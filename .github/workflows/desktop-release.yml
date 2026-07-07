@@ -54,14 +54,14 @@ jobs:
           ## Installing this beta
 
           **macOS** — download `jobContext_*.dmg`, drag jobContext to Applications,
-          then run this once in Terminal (these builds aren't notarized yet, so
-          macOS quarantines them and shows a "damaged" warning):
+          and double-click to open. These builds are signed and notarized by
+          Apple, so it should just open. (Apple Silicon → `aarch64` dmg; Intel
+          Mac → `x64` dmg.) If you ever *do* hit a "damaged" or quarantine
+          warning, this clears it:
 
           ```
           xattr -dr com.apple.quarantine /Applications/jobContext.app
           ```
-
-          Apple Silicon → `aarch64` dmg; Intel Mac → `x64` dmg.
 
           **Windows** — download `jobContext_*_x64-setup.exe` (per-user install,
           no admin prompt). It's code-signed, but until the certificate builds
