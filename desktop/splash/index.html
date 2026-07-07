@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>jobContext</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0b1220;
+      color: #e6edf5;
+    }
+    .wrap {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+    .mark {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: #00B5C8; /* Miami Blue */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      font-weight: 700;
+      color: #06222a;
+      letter-spacing: -1px;
+    }
+    .spinner {
+      width: 26px;
+      height: 26px;
+      border: 3px solid rgba(0, 181, 200, 0.25);
+      border-top-color: #00B5C8;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #status { font-size: 14px; opacity: 0.75; max-width: 520px; text-align: center; padding: 0 24px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mark">jC</div>
+    <div class="spinner"></div>
+    <div id="status">Starting jobContext…</div>
+  </div>
+</body>
+</html>

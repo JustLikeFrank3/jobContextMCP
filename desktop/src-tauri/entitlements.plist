@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hardened-runtime entitlements for the PyInstaller-frozen backend sidecar.
+    Notarization requires the hardened runtime, but a frozen CPython process
+    needs these exceptions or it crashes on launch:
+      - disable-library-validation: the sidecar dlopens ~90 bundled dylibs
+        (WeasyPrint's Pango/Cairo/HarfBuzz stack, C extensions) that aren't
+        part of the main executable's signature seal.
+      - allow-*-executable-memory / allow-jit: CPython and some C extensions
+        allocate executable pages.
+      - allow-dyld-environment-variables: PyInstaller's bootloader sets DYLD_*
+        to locate its bundled libs.
+    Applied to both the sidecar and the Tauri shell (harmless on the shell).
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+</dict>
+</plist>

@@ -663,14 +663,6 @@ export default function Pipeline() {
           </label>
         )}
         <Button size="sm" onClick={() => setAddOpen(true)}>{'\uFF0B'} Add Job</Button>
-        <a
-          href="/dashboard/pipeline"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none', marginLeft: 'auto' }}
-        >
-          Open classic pipeline {'\u2197'}
-        </a>
       </div>
 
       {busy && (

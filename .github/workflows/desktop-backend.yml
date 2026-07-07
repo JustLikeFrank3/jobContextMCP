@@ -1,0 +1,30 @@
+name: Desktop CI
+
+# Branch-push CI for the desktop app: runs the shared build matrix
+# (.github/workflows/desktop-build.yml) without a version stamp. Releases
+# are cut by desktop-release.yml on desktop-v* tags — deliberately a
+# separate pipeline from this AND from deploy.yml (AKS cloud product).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/desktop-app
+    paths:
+      - desktop_main.py
+      - packaging/**
+      - desktop/**
+      - lib/**
+      - transport/**
+      - tools/**
+      - services/**
+      - server.py
+      - requirements*.txt
+      - frontend/**
+      - .github/workflows/desktop-build.yml
+      - .github/workflows/desktop-backend.yml
+
+jobs:
+  build:
+    uses: ./.github/workflows/desktop-build.yml
+    secrets: inherit

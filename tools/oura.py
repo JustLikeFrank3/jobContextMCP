@@ -249,6 +249,55 @@ def save_oura_tokens(tokens: dict) -> None:
         )
 
 
+def save_oura_pat(pat: str) -> None:
+    """Persist a Personal Access Token as the current user's Oura credential.
+
+    PATs (cloud.ouraring.com/personal-access-tokens) don't expire on a
+    schedule and have no refresh token — the desktop app uses them because
+    the OAuth flow needs server client credentials and a public HTTPS
+    redirect URI, neither of which a local loopback app has. Stored in the
+    same oura_tokens row as OAuth; an empty refresh_token marks it as a PAT
+    so the sync path skips the refresh dance.
+    """
+    pat = (pat or "").strip()
+    if not pat:
+        raise OuraError("empty personal access token")
+    now = _now_utc().isoformat()
+    far_future = (_now_utc() + datetime.timedelta(days=365 * 10)).isoformat()
+
+    from lib.crypto import encrypt_secret
+
+    oid = get_current_user_oid()
+    with get_connection() as con:
+        con.execute(
+            """INSERT INTO oura_tokens
+                   (oid, access_token, refresh_token, expires_at, scope, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(oid) DO UPDATE SET
+                   access_token  = excluded.access_token,
+                   refresh_token = excluded.refresh_token,
+                   expires_at    = excluded.expires_at,
+                   scope         = excluded.scope,
+                   updated_at    = excluded.updated_at""",
+            (oid, encrypt_secret(pat), "", far_future, "pat", now, now),
+        )
+
+
+def validate_oura_pat(pat: str) -> bool:
+    """True when the PAT is accepted by the Oura API (cheap personal_info GET)."""
+    import httpx
+
+    try:
+        resp = httpx.get(
+            f"{OURA_API_BASE}/personal_info",
+            headers={"Authorization": f"Bearer {(pat or '').strip()}"},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        raise OuraError(f"could not reach the Oura API: {exc}") from exc
+    return resp.status_code == 200
+
+
 def get_oura_tokens() -> "dict | None":
     """Return the current user's stored Oura token row, or None.
 
@@ -352,6 +401,10 @@ def _valid_access_token() -> "str | None":
     row = get_oura_tokens()
     if not row:
         return None
+    # An empty refresh_token marks a Personal Access Token (save_oura_pat):
+    # PATs have no expiry schedule and nothing to refresh with.
+    if not row.get("refresh_token"):
+        return row["access_token"]
     try:
         expires_at = datetime.datetime.fromisoformat(row["expires_at"])
     except (ValueError, TypeError):
@@ -444,8 +497,13 @@ def sync_oura() -> dict:
     Returns a structured result the API/MCP layers can surface:
       {ok, connected, reading|None, error?}
     """
-    if not oura_configured():
-        return {"ok": False, "connected": False, "error": "not_configured"}
+    # A stored token (OAuth or PAT) is sufficient; client credentials are
+    # only needed for the OAuth connect/refresh dance, so their absence
+    # matters only when there's nothing stored yet.
+    if get_oura_tokens() is None:
+        if not oura_configured():
+            return {"ok": False, "connected": False, "error": "not_configured"}
+        return {"ok": False, "connected": False, "error": "not_connected"}
     try:
         access = _valid_access_token()
     except OuraError as exc:

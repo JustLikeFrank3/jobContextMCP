@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../design-system'
 import { apiFetch } from '../auth/api.js'
+import useDesktopMode from '../shell/useDesktopMode.js'
 
 /* HomeScreen — the Oura-readiness redesign. Converted from the design
    handoff's home.jsx IIFE to ESM.
@@ -32,6 +33,7 @@ const DEFAULT_CARDS = [
 
 const MOCK = {
   welcomeName: 'there',
+  welcomeIsDefault: false,
   hasOura: false,
   oura: null,
   today: {
@@ -431,6 +433,7 @@ function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }
 /* ---------- screen ---------- */
 export default function Home() {
   const navigate = useNavigate()
+  const isDesktop = useDesktopMode()
   const [data, setData] = useState(MOCK)
   const [hasOura, setHasOura] = useState(false)
   const [ouraConnected, setOuraConnected] = useState(false)
@@ -468,8 +471,35 @@ export default function Home() {
           margin: '2px 0 18px',
         }}
       >
-        Welcome back, {data.welcomeName}.
+        {data.welcomeIsDefault ? 'Welcome.' : `Welcome back, ${data.welcomeName}.`}
       </div>
+
+      {data.welcomeIsDefault && isDesktop && (
+        <div style={{ textAlign: 'center', margin: '-8px 0 18px' }}>
+          <button
+            onClick={() =>
+              navigate('/chat', {
+                state: {
+                  seed:
+                    "I'm new here — check my workspace and walk me through setting it up.",
+                },
+              })
+            }
+            style={{
+              background: 'var(--surface-raised)',
+              border: '1px solid color-mix(in srgb, var(--cyan-500) 50%, transparent)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--cyan-300)',
+              padding: '8px 16px',
+              fontSize: 'var(--fs-sm)',
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            Set up your workspace with the assistant {'→'}
+          </button>
+        </div>
+      )}
 
       <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
 

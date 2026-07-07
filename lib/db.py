@@ -177,6 +177,26 @@ _MIGRATIONS = [
         created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
         updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     )""",
+    # v6 — embedded chat (desktop Phase 5.5): conversations + messages.
+    # Messages mirror the OpenAI chat shape so history rebuilds losslessly:
+    # role ∈ user/assistant/tool; assistant rows may carry tool_calls JSON;
+    # tool rows carry the tool_call_id + tool name they answer.
+    """CREATE TABLE IF NOT EXISTS chat_sessions (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        title      TEXT    NOT NULL DEFAULT '',
+        created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""",
+    """CREATE TABLE IF NOT EXISTS chat_messages (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id   INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        role         TEXT    NOT NULL CHECK (role IN ('user','assistant','tool')),
+        content      TEXT    NOT NULL DEFAULT '',
+        tool_calls   TEXT,
+        tool_call_id TEXT,
+        tool_name    TEXT,
+        created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""",
 ]
 
 

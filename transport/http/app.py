@@ -23,6 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
+from lib.app_dirs import resource_root
+from lib.version import __version__ as _APP_VERSION
 from transport.http.config import get_settings
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
@@ -50,7 +52,9 @@ _PNG_MEDIA_TYPE = "image/png"
 
 # Vite build output for the React SPA. Module-level so tests can repoint it at
 # a temporary build directory; only exists in prod after `npm run build`.
-_SPA_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+# resource_root() is sys._MEIPASS-aware so the SPA also resolves from inside
+# a PyInstaller bundle (desktop app).
+_SPA_DIST = resource_root() / "frontend" / "dist"
 
 
 def _mount_spa(app: FastAPI) -> None:
@@ -227,7 +231,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
             "resume generation, and context retrieval for browser / iPad / "
             "Open WebUI clients. The stdio MCP server is unaffected."
         ),
-        version="0.7.0-dev",
+        version=_APP_VERSION,
         lifespan=lifespan,
     )
 
@@ -252,6 +256,11 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
     app.include_router(oauth_routes.router)   # must be before MCP catch-all
     app.include_router(health_routes.router)
+    if settings.desktop_mode:
+        from transport.http import desktop as desktop_routes
+        from transport.http.routes import chat as chat_routes
+        app.include_router(desktop_routes.router)
+        app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)

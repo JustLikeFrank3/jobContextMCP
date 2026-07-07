@@ -1,0 +1,81 @@
+name: Desktop Release
+
+# Cut a desktop release: push a tag like `desktop-v1.3.0-beta.1`.
+#
+#   git tag desktop-v1.3.0-beta.1 && git push origin desktop-v1.3.0-beta.1
+#
+# Builds the full installer matrix with the version stamped from the tag,
+# then publishes a GitHub *pre-release* with every installer attached.
+# The desktop-v* namespace is intentionally disjoint from the cloud
+# product's v* tags (create-releases.yml + deploy.yml), so desktop betas
+# never appear as /releases/latest for MCP-connector users. Tag triggers
+# carry no paths filter — GitHub's paths matching is unreliable on tags.
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets: inherit
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jobcontext-installer-*
+          path: installers
+          merge-multiple: false
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s globstar nullglob
+          files=(installers/**/*.dmg installers/**/*.exe installers/**/*.msi
+                 installers/**/*.AppImage installers/**/*.deb)
+          echo "attaching ${#files[@]} installers"
+
+          # Install notes prepended above the auto-generated changelog. These
+          # builds aren't Apple-notarized yet (Phase 7), so testers need the
+          # quarantine workaround; Windows is Authenticode-signed but new-cert
+          # SmartScreen reputation is still accruing.
+          cat > NOTES.md <<'EOF'
+          ## Installing this beta
+
+          **macOS** — download `jobContext_*.dmg`, drag jobContext to Applications,
+          and double-click to open. These builds are signed and notarized by
+          Apple, so it should just open. (Apple Silicon → `aarch64` dmg; Intel
+          Mac → `x64` dmg.) If you ever *do* hit a "damaged" or quarantine
+          warning, this clears it:
+
+          ```
+          xattr -dr com.apple.quarantine /Applications/jobContext.app
+          ```
+
+          **Windows** — download `jobContext_*_x64-setup.exe` (per-user install,
+          no admin prompt). It's code-signed, but until the certificate builds
+          reputation SmartScreen may warn — click **More info → Run anyway**.
+
+          **Linux** — `.AppImage` (chmod +x and run) or `.deb` (`sudo dpkg -i`).
+
+          ---
+          EOF
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --prerelease \
+            --title "jobContext Desktop ${GITHUB_REF_NAME#desktop-}" \
+            --notes-file NOTES.md \
+            --generate-notes \
+            "${files[@]}"

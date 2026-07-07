@@ -9,6 +9,7 @@ import Posts from './screens/Posts.jsx'
 import People from './screens/People.jsx'
 import Health from './screens/Health.jsx'
 import Interviews from './screens/Interviews.jsx'
+import Chat from './screens/Chat.jsx'
 import Settings from './screens/Settings.jsx'
 import ApiKeys from './screens/ApiKeys.jsx'
 import { ProtectedRoute } from './auth/AuthContext.jsx'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/people" element={<People />} />
         <Route path="/health" element={<Health />} />
         <Route path="/interviews" element={<Interviews />} />
+        <Route path="/chat" element={<Chat />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/api-keys" element={<ApiKeys />} />
       </Route>

@@ -10,6 +10,8 @@ Recognized variables:
     API_KEY         Required bearer token. If unset, auth is DISABLED and a
                     warning is logged. Never deploy without an API_KEY.
     CORS_ORIGINS    Comma-separated origins for CORS (default: empty = same-origin only).
+    DEPLOY_MODE     "desktop" → single-user desktop profile: loopback-only bind
+                    (ENABLE_REMOTE ignored) and the /desktop/* runtime routes.
 """
 
 from dataclasses import dataclass
@@ -25,10 +27,15 @@ class HttpSettings:
     enable_remote: bool
     api_key: str | None
     cors_origins: tuple[str, ...]
+    desktop_mode: bool = False
 
     @property
     def bind_host(self) -> str:
         """The address actually passed to uvicorn (respects ENABLE_REMOTE)."""
+        # Desktop mode is single-user and local-first: always loopback, even
+        # if a stray ENABLE_REMOTE is set in the environment.
+        if self.desktop_mode:
+            return "127.0.0.1"
         # 0.0.0.0 only when the operator explicitly opts in via ENABLE_REMOTE;
         # the safe default remains 127.0.0.1. nosec B104
         return "0.0.0.0" if self.enable_remote else self.host  # nosec B104
@@ -58,12 +65,14 @@ def get_settings() -> HttpSettings:
     """Build and cache HttpSettings from the current process environment."""
     cors_raw = os.environ.get("CORS_ORIGINS", "").strip()
     cors = tuple(o.strip() for o in cors_raw.split(",") if o.strip()) if cors_raw else ()
+    desktop = os.environ.get("DEPLOY_MODE", "").strip().lower() == "desktop"
     return HttpSettings(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=_env_port(8000),
-        enable_remote=_env_bool("ENABLE_REMOTE", False),
+        enable_remote=_env_bool("ENABLE_REMOTE", False) and not desktop,
         api_key=os.environ.get("API_KEY") or None,
         cors_origins=cors,
+        desktop_mode=desktop,
     )
 
 

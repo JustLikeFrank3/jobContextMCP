@@ -1,0 +1,17 @@
+[package]
+name = "jobcontext-desktop"
+version = "0.1.0"
+description = "jobContext Desktop — local-first job search copilot"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
