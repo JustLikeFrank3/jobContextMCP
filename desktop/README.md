@@ -10,13 +10,53 @@ unchanged.
 - **Windows** — NSIS `.exe` (per-user, no admin), Authenticode signed
 - **Linux** — `.AppImage` + `.deb`
 
-> **Download:** grab the latest installer from the
-> [Releases page](https://github.com/JustLikeFrank3/jobContextMCP/releases).
-> Each release's notes include per-platform install steps.
-
 The stack is a **Tauri 2 shell** (Rust, ~10 MB) that renders the existing
 React SPA in the OS's native webview and manages a **PyInstaller-frozen
 Python backend** as a sidecar process. No Electron, no bundled Chromium.
+
+---
+
+## Download & install
+
+Grab the newest `desktop-v*` build from the
+**[Releases page](https://github.com/JustLikeFrank3/jobContextMCP/releases)**
+(desktop builds use the `desktop-v*` tag namespace, separate from the cloud
+product's `v*` releases). First launch provisions your local workspace — no
+account, no sign-in; everything stays on your machine.
+
+### macOS
+
+Download the `.dmg` for your chip, open it, drag **jobContext** to
+Applications, and double-click. Signed + notarized builds open straight away.
+
+| Chip | File |
+|------|------|
+| Apple Silicon (M1–M4) | `jobContext_*_aarch64.dmg` |
+| Intel | `jobContext_*_x64.dmg` |
+
+> If you grabbed an early unsigned build and hit a **"damaged / can't be
+> opened"** warning, clear the download quarantine flag once:
+> ```
+> xattr -dr com.apple.quarantine /Applications/jobContext.app
+> ```
+
+### Windows
+
+Download `jobContext_*_x64-setup.exe` and run it — a **per-user install**, no
+admin prompt. It's Authenticode-signed; until the certificate accrues
+reputation, SmartScreen may warn — click **More info → Run anyway**.
+
+### Linux
+
+- **AppImage:** `chmod +x jobContext_*_amd64.AppImage && ./jobContext_*_amd64.AppImage`
+- **Debian/Ubuntu:** `sudo dpkg -i jobContext_*_amd64.deb`
+
+### First run
+
+Open **Settings** to (optionally) add an AI provider key — OpenAI, Anthropic,
+or a local Ollama — for the built-in chat and generation, then **Connect** to
+Claude Desktop / VS Code / Cursor with one click to give your AI client the
+full job-search toolset against your local data.
 
 ---
 
