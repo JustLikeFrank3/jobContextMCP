@@ -241,7 +241,10 @@ def test_ai_provider_get_reports_providers(desktop_client, desktop_config):
     assert "running" in body["providers"]["ollama"]
 
 
-def test_ai_provider_save_persists_and_applies(desktop_client, desktop_config):
+def test_ai_provider_save_persists_and_applies(desktop_client, desktop_config, monkeypatch):
+    # Deploy-pipeline test env sets LLM_PROVIDER=foundry, which outranks the
+    # config this test writes — clear it so the save is what's asserted.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     resp = desktop_client.post(
         "/desktop/ai-provider",
         json={"provider": "anthropic", "api_key": "sk-ant-test123", "model": "claude-opus-4-8"},
