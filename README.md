@@ -125,7 +125,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 
 | Area | Included capabilities |
 |------|----------------------|
-| Authentication + multi-user | Entra ID OAuth2 PKCE browser login for AKS-hosted dashboard; JWT validation (v1/v2 audience); per-user data isolation via `ContextVar` — each guest gets their own SQLite DB, workspace folder, and JSON partition; owner OID routes to full corpus; auto-provisioning with placeholder resume on first login; logout button on all dashboard pages |
+| Authentication + multi-user | Entra ID OAuth2 PKCE browser login for AKS-hosted dashboard; JWT validation (v1/v2 audience); per-user data isolation via `ContextVar` — every authenticated user (owner included) gets their own SQLite DB, workspace folder, and JSON partition under `/app/data/users/{oid}/`; auto-provisioning with placeholder resume on first login; logout button on all dashboard pages |
 | Persistent context | Master resume, STAR stories, tone samples, personal stories, HBDI profile, contacts, interviews, pipeline, rejections, compensation, LinkedIn posts, mental-health logs |
 | Application pipeline | Job queue, duplicate-safe intake, fitment assessment, persona lenses, add/dismiss decisions, immutable application events, compensation comparison, rejection analysis |
 | Dashboard + mobile UI | Local browser dashboard, LAN/phone mode, token login, daily digest (with NEEDS DECISION queue section), pipeline triage, queue assessment, cover-letter edit dialog with draft versioning, resume/cover-letter generation, PDF export, people/outreach/wellbeing views |
@@ -192,8 +192,8 @@ graph TB
   end
 
   subgraph AKS_FILES["Storage (AKS mode)"]
-    AKS_OWNER["Owner corpus — /app/data/\nFull SQLite DB + workspace (ENTRA_OWNER_OID)"]
-    AKS_USERS["Per-user partitions — /app/data/users/{oid}/\nIsolated SQLite + workspace per guest\nAuto-provisioned with placeholder resume"]
+    AKS_GLOBAL["Global root — /app/data/\nShared DB for pre-auth API-key lookups only\nNo tenant request is scoped here"]
+    AKS_USERS["Per-user partitions — /app/data/users/{oid}/\nIsolated SQLite + workspace per user (owner included)\nAuto-provisioned with placeholder resume"]
     BLOB["Azure Blob Storage — jcmcpstore/workspace\nSidecar syncs PVC → blob every 15 min"]
   end
 
@@ -203,10 +203,10 @@ graph TB
   TOOLS --> MATERIALS
   TOOLS --> INDEX
   TOOLS --> PROJECTS
-  TOOLS --> AKS_OWNER
   TOOLS --> AKS_USERS
   ENTRA --> AKS_USERS
-  AKS_OWNER --> BLOB
+  ENTRA --> AKS_GLOBAL
+  AKS_GLOBAL --> BLOB
   AKS_USERS --> BLOB
 ```
 
@@ -246,7 +246,7 @@ sequenceDiagram
     MW->>Store: provision_user_data(oid) — idempotent\ncreate SQLite DB + workspace dirs + placeholder resume
     MW-->>Browser: Set jc_session cookie → redirect /dashboard/
 
-    note over MW,Store: Owner OID → /app/data/ (full corpus)\nAll others → /app/data/users/{oid}/ (isolated)
+    note over MW,Store: Every authenticated user (owner included) → /app/data/users/{oid}/ (isolated)\nGlobal /app/data/ DB is used only for pre-auth API-key lookups
 ```
 
 ### End-to-End: Mobile/Dashboard Pipeline Flow
@@ -260,7 +260,7 @@ sequenceDiagram
     participant LLM as OpenAI, Ollama, or Copilot Fallback
     participant Store as Data Partition (ContextVar-scoped)
 
-    note over API,Store: ContextVar set by UserDataContextMiddleware per request\nOwner → /app/data/  ·  Guest → /app/data/users/{oid}/
+    note over API,Store: ContextVar set by UserDataContextMiddleware per request\nEvery authenticated user (owner included) → /app/data/users/{oid}/
 
     You->>UI: Paste or queue job description
     UI->>API: POST /jobs/queue
@@ -1185,10 +1185,10 @@ The guest must accept the Entra invitation before their first login. After accep
 
 | User | Data path | Rule |
 |---|---|---|
-| Service owner (`ENTRA_OWNER_OID`) | `/app/data/` | Full corpus; all tools, pipeline, and generated materials |
-| Any other authenticated user | `/app/data/users/{entra_oid}/` | Isolated SQLite DB + workspace; placeholder resume seeded on first login |
+| Any authenticated Entra user (owner included) | `/app/data/users/{entra_oid}/` | Isolated SQLite DB + workspace; placeholder resume seeded on first login |
+| Global root | `/app/data/db/` | Not a tenant destination; holds only the shared DB used for pre-auth per-user API-key lookups |
 
-The `UserDataContextMiddleware` handles routing transparently — tools and dashboard routes read and write the caller's partition with no code changes required.
+The `UserDataContextMiddleware` handles routing transparently — tools and dashboard routes read and write the caller's partition with no code changes required. `ENTRA_OWNER_OID` only governs contact-info fallback and owner-only UI flags; it does **not** change storage routing, so the owner is isolated to their own `/app/data/users/{oid}/` partition like everyone else.
 
 
 
@@ -1531,7 +1531,7 @@ PDFs land in `03-Resume-PDFs/` inside your `resume_folder`. Available templates:
 v1.0 completes the transformation from a local stdio context server into a multi-user, cloud-hosted job-search platform:
 
 - **Entra ID browser authentication** — full PKCE OAuth2 login flow for the AKS-hosted dashboard; JWT validation (v1 + v2 audiences); secure `jc_session` cookie; logout from every page.
-- **Per-user data isolation** — each authenticated user (guest or tenant member) gets their own isolated SQLite DB, workspace folder tree, and JSON partition. The service owner routes to the full corpus; everyone else is scoped to `/app/data/users/{oid}/`. Auto-provisioned on first login with a placeholder resume so the setup flow works immediately.
+- **Per-user data isolation** — each authenticated user (owner included) gets their own isolated SQLite DB, workspace folder tree, and JSON partition, scoped to `/app/data/users/{oid}/`. Auto-provisioned on first login with a placeholder resume so the setup flow works immediately.
 - **Root landing page** — browser-friendly `/` with project banner and Sign In CTA, replacing the bare 404.
 - **MCP Streamable HTTP transport (`2025-03-26`)** — VS Code + GitHub Copilot (and any HTTP MCP client) can connect to the live AKS pod over the standard transport via `kubectl port-forward`.
 - **SQLite + dual-write persistence** — all pipeline writes go to both SQLite and JSON; reads come from SQLite when `USE_SQLITE=1`; `SQLITE_ONLY=1` skips JSON for production AKS.
