@@ -54,6 +54,13 @@ reputation, SmartScreen may warn — click **More info → Run anyway**.
 - **AppImage:** `chmod +x jobContext_*_amd64.AppImage && ./jobContext_*_amd64.AppImage`
 - **Debian/Ubuntu:** `sudo dpkg -i jobContext_*_amd64.deb`
 
+### Updating
+
+From `v1.0.0-beta.5` onward the app checks for updates at launch and offers
+**Update & restart** (signed manifest, downloads from GitHub Releases). Older
+builds: download the new installer and install over the existing app — your
+data lives in the per-OS app-data folder and is never touched by upgrades.
+
 ### First run
 
 Open **Settings** to (optionally) add an AI provider key — OpenAI, Anthropic,

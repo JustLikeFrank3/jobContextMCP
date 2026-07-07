@@ -148,6 +148,64 @@ fn stop_backend(state: &BackendState) {
     }
 }
 
+/// Background update check (shell-side, no SPA involvement): ask the rolling
+/// `desktop-latest` manifest whether a newer build exists; if so, offer a
+/// native dialog and on Yes download + install + relaunch. Any failure is
+/// silent — updates must never break a working app, and the user can always
+/// install a release manually.
+fn check_for_updates(handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        use tauri_plugin_updater::UpdaterExt;
+
+        let updater = match handle.updater() {
+            Ok(u) => u,
+            Err(_) => return,
+        };
+        let update = match updater.check().await {
+            Ok(Some(update)) => update,
+            _ => return,
+        };
+        let version = update.version.clone();
+        let proceed = handle
+            .dialog()
+            .message(format!(
+                "jobContext {version} is available (you have {}).\n\nDownload and install now? \
+                 The app restarts when it finishes.",
+                handle.package_info().version
+            ))
+            .title("Update available")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Update & restart".into(),
+                "Later".into(),
+            ))
+            .blocking_show();
+        if !proceed {
+            return;
+        }
+        match update.download_and_install(|_, _| {}, || {}).await {
+            Ok(()) => {
+                // The backend must exit cleanly before the new shell spawns
+                // its own (SQLite single-writer). RunEvent::Exit handles it,
+                // and restart() takes the normal exit path.
+                handle.restart();
+            }
+            Err(_) => {
+                handle
+                    .dialog()
+                    .message(
+                        "The update could not be installed. You can download the latest \
+                         version from the jobContext releases page.",
+                    )
+                    .title("Update failed")
+                    .kind(MessageDialogKind::Warning)
+                    .blocking_show();
+            }
+        }
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -156,8 +214,12 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .manage(BackendState(Mutex::new(None)))
         .setup(|app| {
+            check_for_updates(app.handle().clone());
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let result = spawn_backend(&handle).and_then(|backend| {
