@@ -539,3 +539,10 @@ def test_oura_pat_endpoint_rejects_bad_token(desktop_client, desktop_data_dir_en
 
     resp = desktop_client.post("/api/dashboard/oura/pat", json={"token": "  "})
     assert resp.status_code == 422
+
+
+def test_export_refused_without_user_partition_outside_desktop(http_client_noauth):
+    """Cloud API-key sessions have no per-user data root; export must refuse
+    rather than fall back to the global DATA_FOLDER (all tenants)."""
+    resp = http_client_noauth.get("/api/dashboard/export")
+    assert resp.status_code == 403

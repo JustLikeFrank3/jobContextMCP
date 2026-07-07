@@ -433,9 +433,14 @@ async def oura_disconnect(
 
 
 def _active_user_root() -> "Path":
-    """The directory that IS the current user's workspace, on any deployment."""
-    from pathlib import Path
+    """The directory that IS the current user's workspace, on any deployment.
 
+    Entra sessions carry a per-user override (UserDataContextMiddleware);
+    desktop is single-user with a fixed app-data dir. Anything else — e.g. an
+    API-key admin session on the hosted product — has no single-user root,
+    and falling back to the global DATA_FOLDER would export every tenant at
+    once, so it's refused outright.
+    """
     from lib.user_context import get_data_folder_override
 
     override = get_data_folder_override()
@@ -445,7 +450,10 @@ def _active_user_root() -> "Path":
 
     if is_desktop_mode():
         return desktop_data_dir()
-    return Path(str(config.DATA_FOLDER))
+    raise HTTPException(
+        status_code=403,
+        detail="Workspace export requires a user session (sign in via the dashboard).",
+    )
 
 
 @router.get("/export", response_model=None)
