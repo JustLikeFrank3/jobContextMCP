@@ -155,35 +155,44 @@ mcp = FastMCP(
 )
 
 
-session.register(mcp)  # MUST be first — session startup tool
-job_hunt.register(mcp)
-resume.register(mcp)
-fitment.register(mcp)
-interview.register(mcp)
-interviews.register(mcp)
-project_scanner.register(mcp)
-health.register(mcp)
-oura.register(mcp)
-context.register(mcp)
-tone.register(mcp)
-rag.register(mcp)
-star.register(mcp)
-outreach.register(mcp)
-export.register(mcp)
-generate.register(mcp)
-langgraph_pipeline.register(mcp)
-people.register(mcp)
-posts.register(mcp)
-rejections.register(mcp)
-digest.register(mcp)
-compensation.register(mcp)
-ingest.register(mcp)
-hbdi.register(mcp)
-crossref.register(mcp)
-job_queue.register(mcp)
-setup.register(mcp)
-job_scraper.register(mcp)
-github.register(mcp)
+# Default surface: 11 consolidated domain tools (action-dispatch facades over
+# the same functions) — MCP clients budget tools, and VS Code caps 128 across
+# every server. JOBCONTEXT_LEGACY_TOOLS=1 restores the historical per-function
+# surface (85 tools) for anything that hardcoded the old names.
+if os.getenv("JOBCONTEXT_LEGACY_TOOLS", "").strip().lower() in ("1", "true", "yes"):
+    session.register(mcp)  # MUST be first — session startup tool
+    job_hunt.register(mcp)
+    resume.register(mcp)
+    fitment.register(mcp)
+    interview.register(mcp)
+    interviews.register(mcp)
+    project_scanner.register(mcp)
+    health.register(mcp)
+    oura.register(mcp)
+    context.register(mcp)
+    tone.register(mcp)
+    rag.register(mcp)
+    star.register(mcp)
+    outreach.register(mcp)
+    export.register(mcp)
+    generate.register(mcp)
+    langgraph_pipeline.register(mcp)
+    people.register(mcp)
+    posts.register(mcp)
+    rejections.register(mcp)
+    digest.register(mcp)
+    compensation.register(mcp)
+    ingest.register(mcp)
+    hbdi.register(mcp)
+    crossref.register(mcp)
+    job_queue.register(mcp)
+    setup.register(mcp)
+    job_scraper.register(mcp)
+    github.register(mcp)
+else:
+    from tools import consolidated
+
+    consolidated.register(mcp)
 
 
 get_job_hunt_status = job_hunt.get_job_hunt_status
