@@ -1,5 +1,6 @@
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Logo, NavTabs, Button, Icon } from '../design-system'
+import useDesktopMode from './useDesktopMode.js'
 
 /* DashboardShell — app chrome: header (logo + title + settings gear + sign
    out) and the tab bar. Converted from the design handoff's shell.jsx IIFE to
@@ -24,6 +25,13 @@ const TABS = [
   { label: 'API Keys', key: 'api-keys' },
 ]
 
+// Desktop-only tabs (useDesktopMode probe) — hosted deployments never show
+// them. Chat is spliced in before API Keys; Settings becomes a nav tab
+// because the desktop header drops the top-right buttons (Sign out and
+// "Why use jobContext?" make no sense against a local single-user server).
+const CHAT_TAB = { label: 'Chat', key: 'chat' }
+const SETTINGS_TAB = { label: 'Settings', key: 'settings' }
+
 const PAGE_META = {
   home: ['', 'Your career command center'],
   pipeline: [
@@ -37,6 +45,7 @@ const PAGE_META = {
   people: ['Outreach', 'Contacts, follow-up queue, warm vs cold'],
   health: ['Wellbeing', 'Mood & energy log, trend sparklines'],
   interviews: ['Interviews', 'Upcoming schedule, debrief log, verbatim quotes'],
+  chat: ['Chat', 'Ask about your job search — answers come from your local data'],
   settings: ['Settings', 'API keys, integrations (Oura ring) & account preferences'],
   'api-keys': ['API Keys', 'Personal access tokens for MCP clients'],
 }
@@ -60,9 +69,13 @@ function signOut() {
 export default function DashboardShell() {
   const navigate = useNavigate()
   const location = useLocation()
+  const isDesktop = useDesktopMode()
+  const tabs = isDesktop
+    ? [...TABS.slice(0, -1), CHAT_TAB, TABS[TABS.length - 1], SETTINGS_TAB]
+    : TABS
   const tab = pathToKey(location.pathname)
   const [title, subtitle] = PAGE_META[tab] || [
-    TABS.find((t) => t.key === tab)?.label || '',
+    tabs.find((t) => t.key === tab)?.label || '',
     '',
   ]
 
@@ -97,36 +110,38 @@ export default function DashboardShell() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
-          >
-            <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-              <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <circle cx="10" cy="10" r="7.5" />
-                <path d="M10 9v4.5" strokeLinecap="round" />
-                <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
-              </svg>
-            </span>
-            Why use jobContext?
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
-            <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-              <Icon name="settings" size={15} />
-            </span>
-            Settings
-          </Button>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            Sign out
-          </Button>
-        </div>
+        {!isDesktop && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
+            >
+              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+                <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <circle cx="10" cy="10" r="7.5" />
+                  <path d="M10 9v4.5" strokeLinecap="round" />
+                  <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+              Why use jobContext?
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+                <Icon name="settings" size={15} />
+              </span>
+              Settings
+            </Button>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              Sign out
+            </Button>
+          </div>
+        )}
       </header>
 
       <div style={{ marginBottom: 22 }}>
         <NavTabs
-          items={TABS}
+          items={tabs}
           active={tab}
           onSelect={(key) => navigate(keyToPath(key))}
         />

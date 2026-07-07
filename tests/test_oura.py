@@ -142,9 +142,12 @@ def test_get_oura_readiness_empty(tmp_data, oura_mod):
 
 
 def test_get_oura_readiness_lists_rows(tmp_data, oura_mod):
-    oura_mod.log_oura_readiness(readiness_score=88, sleep_score=80, hrv=72, recovery_index=90, date="2026-06-29")
+    import datetime
+    # Relative date: a hardcoded one rots out of the 7-day window over time.
+    day = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+    oura_mod.log_oura_readiness(readiness_score=88, sleep_score=80, hrv=72, recovery_index=90, date=day)
     out = oura_mod.get_oura_readiness(days=7)
-    assert "2026-06-29" in out
+    assert day in out
     assert "88" in out
     assert "High" in out  # >= 85
 
@@ -602,3 +605,57 @@ def test_sync_oura_readiness_no_data_message(tmp_data, oura_mod, monkeypatch):
 def test_sync_oura_readiness_not_connected_message(tmp_data, oura_mod, monkeypatch):
     monkeypatch.setattr(oura_mod, "sync_oura", lambda: {"ok": False, "error": "not_connected"})
     assert "connect" in oura_mod.sync_oura_readiness().lower()
+
+
+# ── Personal Access Token path (desktop) ─────────────────────────────────────
+
+def test_save_oura_pat_stores_and_returns_token(tmp_data, oura_mod):
+    oura_mod.save_oura_pat("pat-abc-123")
+    row = oura_mod.get_oura_tokens()
+    assert row is not None
+    assert row["access_token"] == "pat-abc-123"
+    assert row["refresh_token"] == ""  # empty refresh marks a PAT
+    # A PAT never goes through the refresh dance, even with no client creds.
+    assert oura_mod._valid_access_token() == "pat-abc-123"
+
+
+def test_save_oura_pat_rejects_empty(tmp_data, oura_mod):
+    with pytest.raises(oura_mod.OuraError):
+        oura_mod.save_oura_pat("   ")
+
+
+def test_connection_status_connected_via_pat(tmp_data, oura_mod):
+    assert oura_mod.oura_connection_status()["connected"] is False
+    oura_mod.save_oura_pat("pat-abc-123")
+    status = oura_mod.oura_connection_status()
+    assert status["connected"] is True
+    assert status["scope"] == "pat"
+
+
+def test_sync_uses_pat_without_client_creds(tmp_data, oura_mod, monkeypatch):
+    """sync_oura() must work from a stored PAT alone — no OURA_CLIENT_ID/SECRET."""
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    oura_mod.save_oura_pat("pat-abc-123")
+
+    seen = {}
+
+    def fake_fetch(access_token):
+        seen["token"] = access_token
+        return {
+            "date": "2026-07-07", "readiness_score": 88, "sleep_score": 90,
+            "hrv": 55, "recovery_index": 80, "raw_json": "{}",
+        }
+
+    monkeypatch.setattr(oura_mod, "fetch_latest_from_oura", fake_fetch)
+    result = oura_mod.sync_oura()
+    assert result["ok"] is True
+    assert seen["token"] == "pat-abc-123"
+
+
+def test_sync_without_any_credentials_reports_not_configured(tmp_data, oura_mod, monkeypatch):
+    monkeypatch.delenv("OURA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OURA_CLIENT_SECRET", raising=False)
+    result = oura_mod.sync_oura()
+    assert result["ok"] is False
+    assert result["error"] == "not_configured"

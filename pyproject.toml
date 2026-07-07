@@ -6,7 +6,7 @@ markers     = [
 ]
 
 [tool.coverage.run]
-source  = ["server", "lib", "tools", "transport"]
+source  = ["server", "lib", "tools", "transport", "services"]
 omit    = ["tests/*", ".venv/*"]
 
 [tool.coverage.report]

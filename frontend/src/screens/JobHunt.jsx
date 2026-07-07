@@ -170,11 +170,6 @@ export default function JobHunt() {
         </div>
       )}
 
-      <div style={{ marginTop: 16, textAlign: 'center' }}>
-        <a href="/dashboard/job-hunt" target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>
-          Open the classic tracker {'\u2197'}
-        </a>
-      </div>
     </Screen>
   )
 }

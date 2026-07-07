@@ -18,6 +18,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
       '/dashboard': { target: 'http://localhost:8000', changeOrigin: true },
+      '/desktop': { target: 'http://localhost:8000', changeOrigin: true },
       '/oauth': { target: 'http://localhost:8000', changeOrigin: true },
       '/logout': { target: 'http://localhost:8000', changeOrigin: true },
     },

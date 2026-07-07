@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApi, Screen, SectionHead, Badge, fmtDate } from './_shared.jsx'
-import { apiPost, ApiError } from '../auth/api.js'
+import { apiFetch, apiPost, ApiError } from '../auth/api.js'
 import { Panel, Button } from '../design-system'
+import useDesktopMode from '../shell/useDesktopMode.js'
 
 /* Settings: account integrations and the Oura Ring connection.
 
@@ -216,10 +217,395 @@ function Connected({ oura, lastSync, onReload }) {
   )
 }
 
-function OuraSection({ data, reload }) {
+/* Desktop connect path: paste an Oura Personal Access Token. The OAuth flow
+   needs server client credentials + a public HTTPS redirect URI registered
+   with Oura — a local loopback app has neither. */
+function PatConnect({ onReload }) {
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function connect() {
+    const trimmed = token.trim()
+    if (!trimmed || busy) return
+    setErr(''); setBusy(true)
+    try {
+      await apiPost('/api/dashboard/oura/pat', { token: trimmed })
+      setToken('')
+      onReload()
+    } catch (e) {
+      setErr(e instanceof ApiError && e.body?.detail
+        ? e.body.detail
+        : 'Could not connect. Check the token and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Panel>
+      <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+        Connect your ring with a <strong>Personal Access Token</strong>: sign in at{' '}
+        <code style={{ color: 'var(--cyan-300)' }}>cloud.ouraring.com</code> {'→'} Personal
+        Access Tokens {'→'} Create New. Paste it below — it stays on this machine and
+        pulls your daily readiness, sleep, and HRV for the Home dashboard.
+      </div>
+      {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') connect() }}
+          placeholder="Personal access token"
+          style={{
+            flex: 1, padding: '9px 13px', background: 'var(--surface)',
+            border: '1px solid var(--surface-chip)', borderRadius: 'var(--radius-md)',
+            color: 'var(--text-strong)', fontSize: 'var(--fs-sm)', outline: 'none',
+          }}
+        />
+        <Button size="sm" onClick={connect} disabled={busy || !token.trim()}>
+          {busy ? 'Connecting…' : 'Connect'}
+        </Button>
+      </div>
+    </Panel>
+  )
+}
+
+/* Your data: export a zip of the whole workspace anywhere; import one on
+   desktop (the "move my cloud workspace into the desktop app" path). Import
+   swaps the local data dir (old one is kept as a timestamped backup) and
+   requires an app restart. */
+function DataSection({ isDesktop }) {
+  const [state, setState] = useState({ phase: 'idle', detail: '' })
+  const fileRef = useRef(null)
+
+  async function importZip(file) {
+    if (!file) return
+    setState({ phase: 'busy', detail: '' })
+    try {
+      const res = await fetch('/desktop/import-workspace', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/zip' },
+        body: file,
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.detail || `Import failed (${res.status})`)
+      setState({ phase: 'done', detail: body?.backup || '' })
+    } catch (e) {
+      setState({ phase: 'error', detail: e.message })
+    }
+  }
+
+  function quit() {
+    apiPost('/desktop/shutdown', {}).catch(() => {})
+  }
+
+  return (
+    <>
+      <SectionHead title="Your data" />
+      <Panel style={{ marginBottom: 20 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+          Everything lives in one folder: settings, the SQLite database, and your
+          resume/materials files. <strong>Export</strong> downloads it all as a zip
+          {isDesktop
+            ? ' — and Import replaces this app’s data with a zip exported elsewhere (e.g. your cloud workspace). The current data is kept as a backup.'
+            : ' you can import into the jobContext desktop app.'}
+        </div>
+        {state.phase === 'done' ? (
+          <div>
+            <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>
+              Import complete{state.detail ? ` — previous data saved to ${state.detail}` : ''}. Quit and
+              reopen jobContext to load the imported workspace.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button size="sm" onClick={quit}>Quit jobContext</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {state.phase === 'error' && (
+              <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{state.detail}</div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
+              {isDesktop && (
+                <>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".zip,application/zip"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { importZip(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={state.phase === 'busy'}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {state.phase === 'busy' ? 'Importing…' : 'Import from zip…'}
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                onClick={() => { globalThis.location.href = '/api/dashboard/export' }}
+              >
+                Export workspace (.zip)
+              </Button>
+            </div>
+          </>
+        )}
+      </Panel>
+    </>
+  )
+}
+
+function OuraSection({ data, reload, isDesktop }) {
+  if (data?.ouraConnected) {
+    return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
+  }
+  if (isDesktop) return <PatConnect onReload={reload} />
   if (!data?.ouraConfigured) return <NotConfigured isOwner={Boolean(data?.isOwner)} />
-  if (!data?.ouraConnected) return <NotConnected />
-  return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
+  return <NotConnected />
+}
+
+/* Desktop-only: one-click MCP client connect.
+
+   GET  /desktop/mcp-clients  — which clients are installed / already wired
+   POST /desktop/mcp-connect  — write the jobcontext entry into that client
+
+   These routes exist only when the backend runs as the desktop app
+   (DEPLOY_MODE=desktop); on the hosted product the GET 404s and the whole
+   section renders nothing. */
+/* Desktop-only: AI provider + BYOK key entry.
+
+   GET  /desktop/ai-provider — active provider, per-provider readiness
+   POST /desktop/ai-provider — save provider/key/model to the app-data config
+
+   Keys are write-only: the UI never sees a stored key back, only has_key. */
+const INPUT_STYLE = {
+  width: '100%', padding: '8px 12px', boxSizing: 'border-box',
+  background: 'var(--surface)', border: '1px solid var(--surface-chip)',
+  borderRadius: 'var(--radius-md)', color: 'var(--text-strong)',
+  fontSize: 'var(--fs-sm)', fontFamily: 'inherit', outline: 'none',
+}
+
+function AiProviderSection() {
+  const [info, setInfo] = useState(null)      // GET payload; null = hidden/probing
+  const [provider, setProvider] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)        // { tone: 'ok'|'err', text }
+
+  const load = () =>
+    apiFetch('/desktop/ai-provider')
+      .then((data) => {
+        setInfo(data)
+        setProvider((current) => current || data.provider)
+      })
+      .catch(() => setInfo(null)) // hosted mode — section hides
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  if (!info) return null
+  const spec = info.providers[provider] || {}
+  const needsKey = provider !== 'ollama'
+
+  async function save() {
+    setMsg(null)
+    setBusy(true)
+    try {
+      const res = await apiPost('/desktop/ai-provider', {
+        provider,
+        api_key: apiKey.trim(),
+        model: model.trim(),
+      })
+      setApiKey('')
+      setMsg(
+        res.configured
+          ? { tone: 'ok', text: `Saved — chat and generation now use ${res.provider} · ${res.model}.` }
+          : { tone: 'err', text: 'Saved, but no key is stored for this provider yet.' },
+      )
+      load()
+    } catch (e) {
+      const detail = e?.body?.detail || 'Could not save. Check the key and try again.'
+      setMsg({ tone: 'err', text: typeof detail === 'string' ? detail : 'Could not save.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <SectionHead title="AI provider" />
+      <Panel style={{ marginBottom: 20 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+          Powers chat, resume generation, and assessments. Your key is stored
+          only in this machine's config file and is never sent anywhere except
+          the provider you choose.
+        </div>
+        <div style={{ display: 'grid', gap: 10, maxWidth: 460 }}>
+          <select
+            value={provider}
+            onChange={(e) => { setProvider(e.target.value); setModel(''); setMsg(null) }}
+            style={INPUT_STYLE}
+          >
+            {Object.entries(info.providers).map(([id, p]) => (
+              <option key={id} value={id}>
+                {p.label}
+                {id === 'ollama' ? (p.running ? ' — detected' : ' — not running') : p.has_key ? ' — key saved' : ''}
+              </option>
+            ))}
+          </select>
+          {needsKey && (
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={spec.has_key ? 'Key saved — paste a new one to replace it' : `Paste your ${spec.label || provider} API key`}
+              autoComplete="off"
+              style={INPUT_STYLE}
+            />
+          )}
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={`Model (default: ${spec.model || ''})`}
+            style={INPUT_STYLE}
+          />
+        </div>
+        {msg && (
+          <div
+            style={{
+              marginTop: 12,
+              color: msg.tone === 'ok' ? 'var(--green-300)' : 'var(--danger-soft)',
+              fontSize: 'var(--fs-sm)',
+            }}
+          >
+            {msg.text}
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <Button size="sm" onClick={save} disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </Panel>
+    </>
+  )
+}
+
+function useMcpClients() {
+  const [state, setState] = useState({ clients: null, loading: true })
+  useEffect(() => {
+    let cancelled = false
+    apiFetch('/desktop/mcp-clients')
+      .then((data) => {
+        if (!cancelled) setState({ clients: data?.clients || [], loading: false })
+      })
+      .catch(() => {
+        if (!cancelled) setState({ clients: null, loading: false }) // not desktop mode
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const reload = () =>
+    apiFetch('/desktop/mcp-clients')
+      .then((data) => setState({ clients: data?.clients || [], loading: false }))
+      .catch(() => setState({ clients: null, loading: false }))
+  return { ...state, reload }
+}
+
+function McpClientRow({ client, onConnect, busy }) {
+  const status = client.connected ? 'connected' : client.installed ? 'detected' : 'not detected'
+  const tone = client.connected ? 'green' : client.installed ? 'muted' : 'muted'
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        padding: '14px 16px', borderRadius: 'var(--radius-md)',
+        background: 'var(--surface-sunken)', border: '1px solid var(--border-soft)',
+      }}
+    >
+      <div>
+        <div style={{ color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-base)' }}>
+          {client.label}
+        </div>
+        <div style={{ color: 'var(--faint)', fontSize: 'var(--fs-2xs)', marginTop: 3 }}>
+          {client.config_path}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <Badge tone={tone}>{status}</Badge>
+        <Button
+          size="sm"
+          variant={client.connected ? 'ghost' : undefined}
+          onClick={() => onConnect(client.id)}
+          disabled={Boolean(busy)}
+        >
+          {busy === client.id ? 'Connecting…' : client.connected ? 'Reconnect' : 'Connect'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function McpClientsSection() {
+  const { clients, loading, reload } = useMcpClients()
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState(null) // { tone: 'ok'|'err', text }
+
+  if (loading || clients === null) return null // hosted mode or still probing
+
+  async function connect(id) {
+    setMsg(null)
+    setBusy(id)
+    try {
+      const res = await apiPost('/desktop/mcp-connect', { client: id })
+      setMsg({ tone: 'ok', text: `Done — restart the app to pick up jobContext. Config written to ${res.config_path}.` })
+      reload()
+    } catch {
+      setMsg({ tone: 'err', text: 'Could not write that client’s config. Is the app installed?' })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <>
+      <SectionHead title="AI clients (MCP)" />
+      <Panel style={{ marginBottom: 20 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
+          Give Claude Desktop, VS Code, or Cursor direct access to your job
+          search tools. One click writes the MCP configuration; jobContext runs
+          locally, so your data never leaves this machine.
+        </div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {clients.map((c) => (
+            <McpClientRow key={c.id} client={c} onConnect={connect} busy={busy} />
+          ))}
+        </div>
+        {msg && (
+          <div
+            style={{
+              marginTop: 12,
+              color: msg.tone === 'ok' ? 'var(--green-300)' : 'var(--danger-soft)',
+              fontSize: 'var(--fs-sm)',
+            }}
+          >
+            {msg.text}
+          </div>
+        )}
+      </Panel>
+    </>
+  )
 }
 
 /* Factual "works with" chip — the Oura name used descriptively, no Oura logo,
@@ -255,6 +641,7 @@ function OuraCompatChip() {
 export default function Settings() {
   const { data, loading, error, reload } = useApi('/api/dashboard/settings')
   const flash = useOuraFlash()
+  const isDesktop = useDesktopMode()
 
   return (
     <Screen loading={loading} error={error}>
@@ -270,19 +657,29 @@ export default function Settings() {
             Readiness data powers the Home dashboard hero.
           </StatusRow>
         </div>
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <a
-            href={data?.classicUrl || '/dashboard/settings'}
-            style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}
-          >
-            Edit AI key and preferences {'\u2192'}
-          </a>
-        </div>
+        {/* Legacy server-rendered settings page. Hidden on desktop: the
+            webview has no back button, so a full-page nav out of the SPA
+            strands the user \u2014 and the AI provider section below covers
+            key entry there anyway. */}
+        {!isDesktop && (
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <a
+              href={data?.classicUrl || '/dashboard/settings'}
+              style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}
+            >
+              Edit AI key and preferences {'\u2192'}
+            </a>
+          </div>
+        )}
       </Panel>
+
+      <AiProviderSection />
+      <McpClientsSection />
+      <DataSection isDesktop={isDesktop} />
 
       <SectionHead title="Oura Ring" />
       <OuraCompatChip />
-      <OuraSection data={data} reload={reload} />
+      <OuraSection data={data} reload={reload} isDesktop={isDesktop} />
     </Screen>
   )
 }
