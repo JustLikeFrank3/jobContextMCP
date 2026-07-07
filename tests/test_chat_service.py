@@ -234,8 +234,11 @@ def test_chat_http_session_lifecycle(desktop_client):
     assert desktop_client.get("/api/chat/sessions/424242/messages").status_code == 404
 
 
-def test_chat_config_endpoint(desktop_client):
+def test_chat_config_endpoint(desktop_client, monkeypatch):
     # Offline conftest stub: get_llm_client → (None, None) ⇒ unconfigured.
+    # Ambient LLM_PROVIDER (e.g. foundry in the deploy pipeline's test job)
+    # overrides config in the endpoint — clear it so the assert sees config.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     resp = desktop_client.get("/api/chat/config")
     assert resp.status_code == 200
     body = resp.json()

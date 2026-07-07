@@ -241,7 +241,10 @@ def test_ai_provider_get_reports_providers(desktop_client, desktop_config):
     assert "running" in body["providers"]["ollama"]
 
 
-def test_ai_provider_save_persists_and_applies(desktop_client, desktop_config):
+def test_ai_provider_save_persists_and_applies(desktop_client, desktop_config, monkeypatch):
+    # Deploy-pipeline test env sets LLM_PROVIDER=foundry, which outranks the
+    # config this test writes — clear it so the save is what's asserted.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     resp = desktop_client.post(
         "/desktop/ai-provider",
         json={"provider": "anthropic", "api_key": "sk-ant-test123", "model": "claude-opus-4-8"},
@@ -546,3 +549,30 @@ def test_export_refused_without_user_partition_outside_desktop(http_client_noaut
     rather than fall back to the global DATA_FOLDER (all tenants)."""
     resp = http_client_noauth.get("/api/dashboard/export")
     assert resp.status_code == 403
+
+
+def test_import_workspace_allows_real_world_filenames(desktop_client, desktop_data_dir_env):
+    """The zip-slip allowlist must not over-reject legitimately named user
+    files (spaces, parens, apostrophes, unicode)."""
+    payload = _make_export_zip({
+        "config.json": b"{}",
+        "db/jobcontextmcp.db": b"x",
+        "workspace/06-Reference-Materials/Frank's resume (v2, final) #1 @draft.pdf": b"pdf",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (desktop_data_dir_env / "workspace" / "06-Reference-Materials" /
+            "Frank's resume (v2, final) #1 @draft.pdf").read_bytes() == b"pdf"
+
+
+def test_import_workspace_rejects_absolute_and_backslash_paths(desktop_client, desktop_data_dir_env):
+    for evil in ("/etc/passwd", "db\\..\\..\\evil.db"):
+        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
+        resp = desktop_client.post(
+            "/desktop/import-workspace", content=payload,
+            headers={"Content-Type": "application/zip"},
+        )
+        assert resp.status_code == 422, evil
