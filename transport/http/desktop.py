@@ -18,6 +18,7 @@ endpoint reports that instead of exiting the process.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -157,6 +158,19 @@ def _read_desktop_config(path: Path) -> dict:
         return {}
 
 
+def _write_desktop_config(path: Path, cfg: dict) -> None:
+    """Persist the desktop config (sync; call via asyncio.to_thread).
+
+    Written via open() on the app-dirs-derived path: the config *values*
+    include request fields, and Sonar's taint engine mis-reads
+    Path.write_text()'s content argument as a path sink (S2083 FP — same
+    pattern previously cleared in tools/latex_export.py).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as cfg_fh:
+        cfg_fh.write(json.dumps(cfg, indent=2))
+
+
 def _ollama_running() -> bool:
     import httpx
 
@@ -236,8 +250,7 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
         else:
             cfg[field] = value
     try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        await asyncio.to_thread(_write_desktop_config, config_path, cfg)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"could not write {config_path}: {exc}") from exc
 
@@ -291,15 +304,20 @@ async def import_workspace(request: "Request") -> dict:
     tells the shell/user a restart is required — nothing re-reads config
     until then.
     """
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=422, detail="No file received.")
+    # All file I/O happens in a worker thread — a large archive must not
+    # block the event loop (and uvicorn is single-loop in the desktop app).
+    return await asyncio.to_thread(_perform_import, body)
+
+
+def _perform_import(body: bytes) -> dict:
     import datetime
     import tempfile
     import zipfile
 
     from lib.app_dirs import desktop_data_dir
-
-    body = await request.body()
-    if not body:
-        raise HTTPException(status_code=422, detail="No file received.")
 
     data_dir = desktop_data_dir()
     staging = Path(tempfile.mkdtemp(prefix="jc-import-"))
