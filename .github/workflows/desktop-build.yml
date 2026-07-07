@@ -385,12 +385,9 @@ jobs:
             rm -f "$MAC_DIR"/*.app.tar.gz "$MAC_DIR"/*.app.tar.gz.sig
             UPDATER_TAR="$MAC_DIR/jobContext_${DMG_VERSION}_${DMG_ARCH}.app.tar.gz"
             tar -czf "$UPDATER_TAR" -C "$MAC_DIR" jobContext.app
-            printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/updater.key"
-            (cd desktop && npx tauri signer sign \
-              --private-key-path "$RUNNER_TEMP/updater.key" \
-              --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-              "$GITHUB_WORKSPACE/$UPDATER_TAR")
-            rm -f "$RUNNER_TEMP/updater.key"
+            # The tauri CLI reads TAURI_SIGNING_PRIVATE_KEY(_PASSWORD) from
+            # the environment; passing key flags as well is a CLI conflict.
+            (cd desktop && npx tauri signer sign "$GITHUB_WORKSPACE/$UPDATER_TAR")
             test -s "$UPDATER_TAR.sig"
             echo "updater artifact: $UPDATER_TAR"
           fi
