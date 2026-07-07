@@ -256,8 +256,10 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KEYCHAIN" >/dev/null
           rm -f "$RUNNER_TEMP/cert.p12"
 
+          # Split on the quotes around the identity — the name itself contains
+          # a ')' in "(TEAMID)", so a greedy .*) sed overshoots.
           IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
-            | grep 'Developer ID Application' | head -1 | sed -E 's/.*\) "(.*)"$/\1/')"
+            | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
           if [ -z "$IDENTITY" ]; then echo "no Developer ID Application identity found"; exit 1; fi
           echo "signing identity: $IDENTITY"
           echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
