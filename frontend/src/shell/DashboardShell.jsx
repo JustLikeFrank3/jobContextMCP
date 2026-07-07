@@ -25,9 +25,12 @@ const TABS = [
   { label: 'API Keys', key: 'api-keys' },
 ]
 
-// Desktop-only tab, spliced in before API Keys when the backend is the
-// desktop app (useDesktopMode probe) — hosted deployments never show it.
+// Desktop-only tabs (useDesktopMode probe) — hosted deployments never show
+// them. Chat is spliced in before API Keys; Settings becomes a nav tab
+// because the desktop header drops the top-right buttons (Sign out and
+// "Why use jobContext?" make no sense against a local single-user server).
 const CHAT_TAB = { label: 'Chat', key: 'chat' }
+const SETTINGS_TAB = { label: 'Settings', key: 'settings' }
 
 const PAGE_META = {
   home: ['', 'Your career command center'],
@@ -68,7 +71,7 @@ export default function DashboardShell() {
   const location = useLocation()
   const isDesktop = useDesktopMode()
   const tabs = isDesktop
-    ? [...TABS.slice(0, -1), CHAT_TAB, TABS[TABS.length - 1]]
+    ? [...TABS.slice(0, -1), CHAT_TAB, TABS[TABS.length - 1], SETTINGS_TAB]
     : TABS
   const tab = pathToKey(location.pathname)
   const [title, subtitle] = PAGE_META[tab] || [
@@ -107,31 +110,33 @@ export default function DashboardShell() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
-          >
-            <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-              <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <circle cx="10" cy="10" r="7.5" />
-                <path d="M10 9v4.5" strokeLinecap="round" />
-                <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
-              </svg>
-            </span>
-            Why use jobContext?
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
-            <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-              <Icon name="settings" size={15} />
-            </span>
-            Settings
-          </Button>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            Sign out
-          </Button>
-        </div>
+        {!isDesktop && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
+            >
+              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+                <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <circle cx="10" cy="10" r="7.5" />
+                  <path d="M10 9v4.5" strokeLinecap="round" />
+                  <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+              Why use jobContext?
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+                <Icon name="settings" size={15} />
+              </span>
+              Settings
+            </Button>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              Sign out
+            </Button>
+          </div>
+        )}
       </header>
 
       <div style={{ marginBottom: 22 }}>

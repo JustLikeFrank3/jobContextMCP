@@ -47,6 +47,31 @@ def _first_name(user: User) -> str:
     return raw.split()[0]
 
 
+def _welcome(user: User) -> "tuple[str, bool]":
+    """(greeting name, is_default) for the Home header.
+
+    Desktop has no identity provider — its synthetic auth user is "Admin" —
+    so greet with the contact name from config.json instead. That block is
+    exactly what setup_workspace fills in, so the placeholder (and the
+    onboarding CTA the frontend hangs off is_default) disappears once the
+    user finishes setup.
+    """
+    from lib.app_dirs import is_desktop_mode
+
+    if is_desktop_mode():
+        try:
+            from lib.config import get_contact_info
+
+            contact = (get_contact_info().get("name") or "").strip()
+        except Exception:  # noqa: BLE001 — greeting must never break Home
+            contact = ""
+        if contact:
+            return contact.split()[0], False
+        return "user", True
+    name = _first_name(user)
+    return name, name == "there"
+
+
 def _oura_payload(oura: "dict | None") -> "dict | None":
     """Shape the Oura row into the frontend's oura object, or None."""
     if not oura:
@@ -203,8 +228,10 @@ async def dashboard_home_data(
         for i, p in enumerate(snap.get("priorities", []))
     ]
 
+    welcome_name, welcome_is_default = _welcome(user)
     payload = {
-        "welcomeName": _first_name(user),
+        "welcomeName": welcome_name,
+        "welcomeIsDefault": welcome_is_default,
         "hasOura": oura is not None,
         "oura": _oura_payload(oura),
         "today": {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiFetch, apiPost } from '../auth/api.js'
 import { Panel, Button } from '../design-system'
 import { EmptyState } from './_shared.jsx'
@@ -330,6 +331,19 @@ export default function Chat() {
     await send(sessionId, text)
     loadSessions() // pick up auto-title / ordering
   }
+
+  // Seeded first message (e.g. Home's "Set up your workspace" CTA passes
+  // router state). Sent once into a fresh session; the state is cleared so
+  // a webview reload doesn't re-fire it.
+  const location = useLocation()
+  const seededRef = useRef(false)
+  useEffect(() => {
+    const seed = location.state?.seed
+    if (!seed || !isDesktop || seededRef.current) return
+    seededRef.current = true
+    window.history.replaceState({}, '')
+    handleSend(seed)
+  }, [isDesktop]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isDesktop) {
     return (

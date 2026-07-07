@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApi, Screen, SectionHead, Badge, fmtDate } from './_shared.jsx'
 import { apiFetch, apiPost, ApiError } from '../auth/api.js'
 import { Panel, Button } from '../design-system'
+import useDesktopMode from '../shell/useDesktopMode.js'
 
 /* Settings: account integrations and the Oura Ring connection.
 
@@ -492,6 +493,7 @@ function OuraCompatChip() {
 export default function Settings() {
   const { data, loading, error, reload } = useApi('/api/dashboard/settings')
   const flash = useOuraFlash()
+  const isDesktop = useDesktopMode()
 
   return (
     <Screen loading={loading} error={error}>
@@ -507,14 +509,20 @@ export default function Settings() {
             Readiness data powers the Home dashboard hero.
           </StatusRow>
         </div>
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <a
-            href={data?.classicUrl || '/dashboard/settings'}
-            style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}
-          >
-            Edit AI key and preferences {'\u2192'}
-          </a>
-        </div>
+        {/* Legacy server-rendered settings page. Hidden on desktop: the
+            webview has no back button, so a full-page nav out of the SPA
+            strands the user \u2014 and the AI provider section below covers
+            key entry there anyway. */}
+        {!isDesktop && (
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <a
+              href={data?.classicUrl || '/dashboard/settings'}
+              style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}
+            >
+              Edit AI key and preferences {'\u2192'}
+            </a>
+          </div>
+        )}
       </Panel>
 
       <AiProviderSection />
