@@ -27,15 +27,18 @@ account, no sign-in; everything stays on your machine.
 ### macOS
 
 Download the `.dmg` for your chip, open it, drag **jobContext** to
-Applications, and double-click. Signed + notarized builds open straight away.
+Applications, and double-click. Every release from `v1.0.0-beta.2` onward is
+Developer ID signed and Apple-notarized (ticket stapled), so it opens straight
+away — no security warnings, no terminal commands.
 
 | Chip | File |
 |------|------|
 | Apple Silicon (M1–M4) | `jobContext_*_aarch64.dmg` |
 | Intel | `jobContext_*_x64.dmg` |
 
-> If you grabbed an early unsigned build and hit a **"damaged / can't be
-> opened"** warning, clear the download quarantine flag once:
+> Only if you kept the old unsigned `beta.1` build and see a **"damaged /
+> can't be opened"** warning: either grab the current release (recommended)
+> or clear the download quarantine flag once:
 > ```
 > xattr -dr com.apple.quarantine /Applications/jobContext.app
 > ```
@@ -227,8 +230,8 @@ then notarizes + staples; a verify gate (`codesign --deep --strict` +
 **Cutting a release:**
 
 ```bash
-git tag desktop-v1.0.0-beta.2
-git push origin desktop-v1.0.0-beta.2
+git tag desktop-v1.0.0-beta.3
+git push origin desktop-v1.0.0-beta.3
 ```
 
 The `desktop-v*` tag namespace is disjoint from the cloud product's `v*` tags,
