@@ -336,38 +336,28 @@ jobs:
       # Notarize the signed dmg ourselves so the submission log is visible.
       # notarytool log lists every issue (unsigned/unhardened Mach-O, bad
       # entitlements, …); on Accepted we staple the dmg for offline Gatekeeper.
-      - name: Notarize, staple & verify (macOS)
+      # Apple's `notarytool submit` crashes (Trace/BPT trap: 5 → exit 133) on
+      # the GitHub macOS runner images — a known notarytool bug, deterministic
+      # across arches. Submit to the Notary API directly with rcodesign
+      # (pure-Rust apple-codesign), which is reliable in CI and prints a clear
+      # reason on rejection. --staple attaches the ticket for offline Gatekeeper.
+      - name: Notarize & staple via rcodesign (macOS)
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         shell: bash
         run: |
-          # NOTE: no `set -e` — notarytool returns non-zero on a rejected
-          # submission, and we must still fetch + print its log before failing.
-          set -uo pipefail
-          NT=(--key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER")
-          overall=0
+          set -euo pipefail
+          if ! command -v rcodesign >/dev/null; then
+            cargo install apple-codesign --locked
+          fi
+          rcodesign encode-app-store-connect-api-key \
+            --output-path /tmp/asc-api-key.json \
+            "$APPLE_API_ISSUER" "$APPLE_API_KEY" "$APPLE_API_KEY_PATH"
           for dmg in desktop/src-tauri/target/release/bundle/dmg/*.dmg; do
             echo "== notarizing ${dmg} =="
-            xcrun notarytool submit "$dmg" "${NT[@]}" --wait --timeout 30m \
-              --output-format json > /tmp/submit.json 2> /tmp/submit.err
-            rc=$?
-            echo "submit exit=$rc"
-            echo "--- stderr ---"; cat /tmp/submit.err || true
-            echo "--- json ---";   cat /tmp/submit.json || true; echo
-            ID="$(python3 -c 'import json;print(json.load(open("/tmp/submit.json")).get("id",""))' 2>/dev/null || true)"
-            STATUS="$(python3 -c 'import json;print(json.load(open("/tmp/submit.json")).get("status",""))' 2>/dev/null || true)"
-            if [ -n "$ID" ]; then
-              echo "--- notarytool log ($ID) ---"
-              xcrun notarytool log "$ID" "${NT[@]}" || true
-            fi
-            if [ "$STATUS" = "Accepted" ]; then
-              xcrun stapler staple "$dmg" && xcrun stapler validate "$dmg"
-              spctl -a -vvv -t open --context context:primary-signature "$dmg" 2>&1 | grep -iE 'accepted|Notarized' || true
-            else
-              echo "::error::notarization status='${STATUS}' exit=$rc for $dmg"
-              overall=1
-            fi
+            rcodesign notary-submit --api-key-file /tmp/asc-api-key.json --staple "$dmg"
+            xcrun stapler validate "$dmg"
           done
-          exit $overall
+          echo "macOS notarized + stapled"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
