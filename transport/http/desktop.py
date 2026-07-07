@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -256,6 +258,28 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
 # cloud workspace from the hosted dashboard, then imports it here to replace
 # the local data. Raw zip body (no multipart — python-multipart isn't a dep).
 
+# Zip-slip guard: each path component of an archive entry must match this
+# allowlist (unicode word chars + common filename punctuation — covers the
+# provisioned tree and user-named materials). No separators, no drive
+# letters, and ".."/"." are rejected outright, so a validated entry can only
+# land inside the extraction root.
+_SAFE_ZIP_PART = re.compile(r"[\w .()'@#&+,%=\[\]{}~^-]+", re.UNICODE)
+
+
+def _validated_member_path(extract_root: Path, name: str) -> Path:
+    """Return the extraction path for a zip entry, or 422 on traversal attempts."""
+    import posixpath
+
+    parts = posixpath.normpath(name).split("/")
+    if name.startswith(("/", "\\")) or not parts:
+        raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
+    target = extract_root
+    for part in parts:
+        if part in ("..", ".", "") or "\\" in part or not _SAFE_ZIP_PART.fullmatch(part):
+            raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
+        target = target / part
+    return target
+
 
 @router.post("/desktop/import-workspace")
 async def import_workspace(request: "Request") -> dict:
@@ -268,7 +292,6 @@ async def import_workspace(request: "Request") -> dict:
     until then.
     """
     import datetime
-    import shutil
     import tempfile
     import zipfile
 
@@ -287,13 +310,14 @@ async def import_workspace(request: "Request") -> dict:
         extract_root.mkdir()
         try:
             with zipfile.ZipFile(archive) as zf:
-                names = zf.namelist()
-                # Zip-slip guard: every entry must resolve inside extract_root.
-                for name in names:
-                    target = (extract_root / name).resolve()
-                    if not str(target).startswith(str(extract_root.resolve())):
-                        raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
-                zf.extractall(extract_root)
+                for member in zf.infolist():
+                    target = _validated_member_path(extract_root, member.filename)
+                    if member.is_dir():
+                        target.mkdir(parents=True, exist_ok=True)
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(member) as src, open(target, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
         except zipfile.BadZipFile as exc:
             raise HTTPException(status_code=422, detail="That file isn't a valid zip archive.") from exc
 

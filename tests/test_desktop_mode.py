@@ -549,3 +549,30 @@ def test_export_refused_without_user_partition_outside_desktop(http_client_noaut
     rather than fall back to the global DATA_FOLDER (all tenants)."""
     resp = http_client_noauth.get("/api/dashboard/export")
     assert resp.status_code == 403
+
+
+def test_import_workspace_allows_real_world_filenames(desktop_client, desktop_data_dir_env):
+    """The zip-slip allowlist must not over-reject legitimately named user
+    files (spaces, parens, apostrophes, unicode)."""
+    payload = _make_export_zip({
+        "config.json": b"{}",
+        "db/jobcontextmcp.db": b"x",
+        "workspace/06-Reference-Materials/Frank's resume (v2, final) #1 @draft.pdf": b"pdf",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (desktop_data_dir_env / "workspace" / "06-Reference-Materials" /
+            "Frank's resume (v2, final) #1 @draft.pdf").read_bytes() == b"pdf"
+
+
+def test_import_workspace_rejects_absolute_and_backslash_paths(desktop_client, desktop_data_dir_env):
+    for evil in ("/etc/passwd", "db\\..\\..\\evil.db"):
+        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
+        resp = desktop_client.post(
+            "/desktop/import-workspace", content=payload,
+            headers={"Content-Type": "application/zip"},
+        )
+        assert resp.status_code == 422, evil
