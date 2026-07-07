@@ -323,27 +323,44 @@ jobs:
           if [ -n "$OVERLAY" ]; then
             EXTRA+=(--config "{${OVERLAY%,}}")
           fi
-          npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$APPLE_CERTIFICATE" ]; then
+            # Sign here, but do NOT let Tauri notarize — a dedicated step
+            # submits and prints the notarytool log so we can see exactly which
+            # binary Apple rejects (Tauri surfaces an empty error on rejection).
+            env -u APPLE_API_KEY -u APPLE_API_ISSUER -u APPLE_API_KEY_PATH \
+              npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
+          else
+            npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
+          fi
 
-      # Fail here (not at the tester's Gatekeeper) if signing/notarization
-      # didn't fully take. --deep --strict walks the nested sidecar Mach-O;
-      # stapler validate confirms the notarization ticket is attached.
-      - name: Verify macOS signature & notarization
+      # Notarize the signed dmg ourselves so the submission log is visible.
+      # notarytool log lists every issue (unsigned/unhardened Mach-O, bad
+      # entitlements, …); on Accepted we staple the dmg for offline Gatekeeper.
+      - name: Notarize, staple & verify (macOS)
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         shell: bash
         run: |
           set -euo pipefail
           for dmg in desktop/src-tauri/target/release/bundle/dmg/*.dmg; do
-            echo "== ${dmg} =="
-            MNT="$(mktemp -d)"
-            hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$MNT"
-            APP="$(find "$MNT" -maxdepth 1 -name '*.app' | head -1)"
-            codesign --verify --deep --strict --verbose=2 "$APP"
-            xcrun stapler validate "$APP"
-            spctl -a -vvv -t exec "$APP" 2>&1 | grep -iE 'accepted|Notarized' || true
-            hdiutil detach "$MNT" -quiet
+            echo "== notarizing ${dmg} =="
+            SUBMIT="$(xcrun notarytool submit "$dmg" \
+              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" \
+              --wait --output-format json)"
+            echo "$SUBMIT"
+            ID="$(printf '%s' "$SUBMIT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')"
+            STATUS="$(printf '%s' "$SUBMIT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')"
+            echo "--- notarytool log ($ID) ---"
+            xcrun notarytool log "$ID" \
+              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" || true
+            if [ "$STATUS" != "Accepted" ]; then
+              echo "::error::notarization $STATUS for $dmg"
+              exit 1
+            fi
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+            spctl -a -vvv -t open --context context:primary-signature "$dmg" 2>&1 | grep -iE 'accepted|Notarized' || true
           done
-          echo "macOS signature + notarization verified"
+          echo "macOS notarized + stapled"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
