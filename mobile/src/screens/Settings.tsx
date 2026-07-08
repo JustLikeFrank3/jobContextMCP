@@ -1,0 +1,83 @@
+// Settings: cloud URL + personal access token (device keychain) and push.
+import { useEffect, useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { DEFAULT_URL, fetchEvents, getConfig, setConfig } from '../api'
+import { ensurePushRegistration } from '../push'
+import { colors } from '../theme'
+
+export default function Settings() {
+  const [url, setUrl] = useState('')
+  const [pat, setPat] = useState('')
+  const [hasPat, setHasPat] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    getConfig().then((c) => {
+      setUrl(c.url)
+      setHasPat(Boolean(c.pat))
+    })
+  }, [])
+
+  async function save() {
+    setBusy(true)
+    try {
+      await setConfig(url || DEFAULT_URL, pat)
+      await fetchEvents() // proves the key works
+      await ensurePushRegistration()
+      setPat('')
+      setHasPat(true)
+      Alert.alert('Connected', 'Signed in — inbox and notifications are live.')
+    } catch (e: any) {
+      Alert.alert('Could not connect', e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <View style={styles.root}>
+      <Text style={styles.label}>Cloud URL</Text>
+      <TextInput
+        style={styles.input}
+        value={url}
+        onChangeText={setUrl}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder={DEFAULT_URL}
+        placeholderTextColor={colors.faint}
+      />
+      <Text style={styles.label}>API key</Text>
+      <TextInput
+        style={styles.input}
+        value={pat}
+        onChangeText={setPat}
+        secureTextEntry
+        autoCapitalize="none"
+        placeholder={hasPat ? 'Saved — paste to replace' : 'From the dashboard’s API Keys tab'}
+        placeholderTextColor={colors.faint}
+      />
+      <Pressable style={[styles.button, busy && { opacity: 0.6 }]} onPress={save} disabled={busy}>
+        <Text style={styles.buttonText}>{busy ? 'Connecting…' : 'Save & connect'}</Text>
+      </Pressable>
+      <Text style={styles.hint}>
+        Desktop creates. Mobile captures. Cloud synchronizes. This app talks to your
+        cloud workspace — everything you capture here reaches your desktop within a sync.
+      </Text>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg, padding: 16 },
+  label: { color: colors.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginTop: 18, marginBottom: 6 },
+  input: {
+    backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+    borderRadius: 10, color: colors.text, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
+  },
+  button: {
+    backgroundColor: colors.cyan, borderRadius: 10, alignItems: 'center',
+    paddingVertical: 13, marginTop: 24,
+  },
+  buttonText: { color: '#04222a', fontWeight: '700', fontSize: 15 },
+  hint: { color: colors.faint, fontSize: 13, lineHeight: 19, marginTop: 28, textAlign: 'center' },
+})

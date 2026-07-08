@@ -261,9 +261,11 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         from transport.http.routes import chat as chat_routes
         app.include_router(desktop_routes.router)
         app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
+    from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
 
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
+    app.include_router(mobile_routes.router)  # Career Inbox / push / capture
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)
