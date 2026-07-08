@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Panel, Button } from '../design-system'
 import { apiFetch, apiPost, ApiError } from '../auth/api.js'
+import useDesktopMode from '../shell/useDesktopMode.js'
+import { nativeAnchorHandler } from '../shell/nativeOpen.js'
 import {
   Screen, StatGrid, Stat, Badge, statusTone, EmptyState, EYEBROW, fmtDate,
 } from './_shared.jsx'
@@ -329,6 +331,7 @@ function EditResumeModal({ job, resumeOptions, onClose, onDone }) {
 
 /* ---------- Edit Cover Letter (draft \u2192 review \u2192 accept/discard) ---------- */
 function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDone }) {
+  const isDesktop = useDesktopMode()
   const options = coverLetterOptions || []
   const [clName, setClName] = useState(job.suggested_edit_cover_letter || options[0] || '')
   const [instructions, setInstructions] = useState('')
@@ -390,7 +393,7 @@ function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDon
           </div>
         </div>
         {accepted?.href && (
-          <a href={accepted.href} target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the updated file {'\u2197'}</a>
+          <a href={accepted.href} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(isDesktop, accepted.href, 'file')} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the updated file {'\u2197'}</a>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
           <Button size="sm" onClick={onDone}>Done</Button>
@@ -409,7 +412,7 @@ function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDon
         {draft.save_result && <ResultLine>{draft.save_result}</ResultLine>}
         {draft.pdf_result && <ResultLine>{draft.pdf_result}</ResultLine>}
         {draft.pdf_href && (
-          <a href={draft.pdf_href} target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open PDF preview {'\u2197'}</a>
+          <a href={draft.pdf_href} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(isDesktop, draft.pdf_href, 'file')} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open PDF preview {'\u2197'}</a>
         )}
         {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', margin: '12px 0', whiteSpace: 'pre-wrap' }}>{err}</div>}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14, flexWrap: 'wrap' }}>
