@@ -13,6 +13,8 @@
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
     "expo": "~52.0.0",
+    "expo-auth-session": "^57.0.2",
+    "expo-crypto": "^57.0.0",
     "expo-notifications": "~0.29.11",
     "expo-secure-store": "~14.0.0",
     "expo-share-intent": "^3.2.1",

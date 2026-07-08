@@ -1,6 +1,7 @@
 // Thin client for the jobContext cloud API. Auth is a personal access token
 // (cloud dashboard → API Keys) stored in the device keychain.
 import * as SecureStore from 'expo-secure-store'
+import { getAccessToken } from './auth'
 
 const URL_KEY = 'jc_base_url'
 const PAT_KEY = 'jc_pat'
@@ -21,12 +22,14 @@ export async function setConfig(url: string, pat: string): Promise<void> {
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const { url, pat } = await getConfig()
-  if (!pat) throw new Error('Not signed in — add your API key in Settings.')
+  // Entra sign-in first (silently refreshed); PAT is the advanced fallback.
+  const bearer = (await getAccessToken(url)) || pat
+  if (!bearer) throw new Error('Not signed in — use Settings.')
   const res = await fetch(`${url}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${pat}`,
+      Authorization: `Bearer ${bearer}`,
       ...(init?.headers || {}),
     },
   })
