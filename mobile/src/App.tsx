@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import { Alert, Text } from 'react-native'
 import { useShareIntent } from 'expo-share-intent'
 import Inbox from './screens/Inbox'
+import Today from './screens/Today'
 import Settings from './screens/Settings'
 import { captureUrl } from './api'
 import { ensurePushRegistration } from './push'
@@ -63,6 +64,11 @@ export default function App() {
           tabBarInactiveTintColor: colors.faint,
         }}
       >
+        <Tab.Screen
+          name="Today"
+          component={Today}
+          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>☀</Text> }}
+        />
         <Tab.Screen
           name="Inbox"
           component={Inbox}
