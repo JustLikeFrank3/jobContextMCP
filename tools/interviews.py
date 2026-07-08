@@ -51,6 +51,25 @@ def _next_id(interviews: list[dict]) -> int:
     return max(i.get("id", 0) for i in interviews) + 1
 
 
+def _as_str_list(value) -> list[str]:
+    """Coerce a list-ish tool argument to a list of strings.
+
+    LLM tool calls routinely pass a plain string where the schema says
+    list[str]; ``list("Proceed as…")`` explodes it into characters (the Cox
+    follow_up_commitments corruption). A string becomes a one-item list; an
+    iterable is stringified item-wise; None is empty.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = value.strip()
+        return [value] if value else []
+    try:
+        return [str(v).strip() for v in value if str(v).strip()]
+    except TypeError:
+        return [str(value)]
+
+
 def _find_interview(
     interviews: list[dict],
     interview_id: int | None = None,
@@ -80,6 +99,8 @@ def _normalize_quotes(quotes) -> list[dict]:
     list[dict] with {speaker, quote, context} keys. Return list[dict]."""
     if not quotes:
         return []
+    if isinstance(quotes, str):
+        quotes = [quotes]  # a bare string would iterate as characters
     normalized = []
     for q in quotes:
         if isinstance(q, str):
@@ -165,11 +186,11 @@ def log_interview(  # NOSONAR — 18 params are intentional: structured debrief 
         except (TypeError, ValueError):
             return "✗ self_rating must be an integer 1-10."
 
-    what_landed = list(what_landed or [])
-    what_didnt = list(what_didnt or [])
-    surfaced_priorities = list(surfaced_priorities or [])
-    follow_up_commitments = list(follow_up_commitments or [])
-    tags = list(tags or [])
+    what_landed = _as_str_list(what_landed)
+    what_didnt = _as_str_list(what_didnt)
+    surfaced_priorities = _as_str_list(surfaced_priorities)
+    follow_up_commitments = _as_str_list(follow_up_commitments)
+    tags = _as_str_list(tags)
     quotes = _normalize_quotes(verbatim_quotes)
 
     data = _load_json(config.INTERVIEWS_FILE, {"interviews": []})
