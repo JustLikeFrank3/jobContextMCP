@@ -271,12 +271,13 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
 # cloud workspace from the hosted dashboard, then imports it here to replace
 # the local data. Raw zip body (no multipart — python-multipart isn't a dep).
 
-# Zip-slip guard: each path component of an archive entry must match this
-# allowlist (unicode word chars + common filename punctuation — covers the
-# provisioned tree and user-named materials). No separators, no drive
-# letters, and ".."/"." are rejected outright, so a validated entry can only
-# land inside the extraction root.
-_SAFE_ZIP_PART = re.compile(r"[\w .()'@#&+,%=\[\]{}~^-]+", re.UNICODE)
+# Zip-slip guard: every character of a path component must be outside the
+# dangerous set — separators (/, \\), drive colons, and control chars — and
+# ".."/"." components are rejected outright, so a validated entry can only
+# land inside the extraction root. A denylist, not a charset allowlist: user
+# filenames legitimately carry unicode punctuation (em dashes, curly quotes)
+# that an allowlist kept rejecting — from zips our own export produced.
+_SAFE_ZIP_PART = re.compile(r"[^/\\:\x00-\x1f]+")
 
 
 def _validated_member_path(extract_root: Path, name: str) -> Path:
