@@ -644,3 +644,57 @@ def test_import_workspace_rejects_colons_on_windows(desktop_client, desktop_data
             headers={"Content-Type": "application/zip"},
         )
         assert resp.status_code == 422, evil
+
+
+# ── native open (files + URLs) ────────────────────────────────────────────────
+
+def test_open_file_opens_workspace_file(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
+    import transport.http.desktop as desktop_mod
+    from transport.http.routes.dashboard import materials
+
+    folder = tmp_path / "cls"
+    folder.mkdir()
+    (folder / "Cover — Letter.pdf").write_bytes(b"pdf")
+    monkeypatch.setattr(materials, "_folder_path", lambda key: folder if key == "cover_letters" else None)
+    opened = {}
+    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
+
+    resp = desktop_client.post(
+        "/desktop/open-file",
+        json={"href": "/dashboard/materials/file/cover_letters/Cover%20%E2%80%94%20Letter.pdf"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert opened["t"].endswith("Cover — Letter.pdf")
+
+
+def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
+    import transport.http.desktop as desktop_mod
+    from transport.http.routes.dashboard import materials
+
+    folder = tmp_path / "cls"
+    folder.mkdir()
+    monkeypatch.setattr(materials, "_folder_path", lambda key: folder if key == "cover_letters" else None)
+    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: (_ for _ in ()).throw(AssertionError("must not open")))
+
+    for href, expected in [
+        ("/etc/passwd", 422),
+        ("/dashboard/materials/file/cover_letters/..%2F..%2Fsecrets.txt", 404),
+        ("/dashboard/materials/file/nope/x.pdf", 404),
+        ("/dashboard/materials/file/cover_letters/missing.pdf", 404),
+    ]:
+        resp = desktop_client.post("/desktop/open-file", json={"href": href})
+        assert resp.status_code == expected, href
+
+
+def test_open_url_http_only(desktop_client, monkeypatch):
+    import transport.http.desktop as desktop_mod
+
+    opened = {}
+    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
+    resp = desktop_client.post("/desktop/open-url", json={"url": "https://www.linkedin.com/posts/x"})
+    assert resp.status_code == 200
+    assert opened["t"].startswith("https://")
+
+    for bad in ("file:///etc/passwd", "javascript:alert(1)", "ftp://x", "notaurl"):
+        resp = desktop_client.post("/desktop/open-url", json={"url": bad})
+        assert resp.status_code == 422, bad

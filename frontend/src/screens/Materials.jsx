@@ -3,6 +3,8 @@ import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, EmptyState, EYEBROW,
 } from './_shared.jsx'
 import { Panel } from '../design-system'
+import useDesktopMode from '../shell/useDesktopMode.js'
+import { openFileNative } from '../shell/nativeOpen.js'
 
 /* Materials — generated resumes, cover letters, PDFs, and prep docs.
    Data: GET /dashboard/materials/data (_materials_payload).
@@ -100,10 +102,13 @@ function openPreview(file) {
 
 function FileButton({ file }) {
   const ext = extOf(file) || 'file'
+  // Desktop: the webview can't open popup previews or downloads — the
+  // backend opens the file in its OS-default app instead (view/print/save).
+  const isDesktop = useDesktopMode()
   return (
     <button
       type="button"
-      onClick={() => openPreview(file)}
+      onClick={() => (isDesktop ? openFileNative(file.href) : openPreview(file))}
       title={`Preview ${file.name}`}
       style={{
         appearance: 'none', cursor: 'pointer', textAlign: 'left', width: '100%',

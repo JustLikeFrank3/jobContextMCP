@@ -266,6 +266,80 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
     }
 
 
+# ── Native open (files + URLs) ────────────────────────────────────────────────
+# The Tauri webview supports neither window.open popups nor download-attribute
+# navigation, so the SPA's file previews and external links dead-end on
+# desktop. Instead the SPA posts here and the OS opens the target natively —
+# Preview/Word/etc. for workspace files (view, print, and save in one move),
+# the default browser for links.
+
+
+def _open_with_os(target: str) -> None:
+    import subprocess
+
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", target])
+    elif os.name == "nt":
+        os.startfile(target)  # noqa: S606 — the whole point; validated upstream
+    else:
+        subprocess.Popen(["xdg-open", target])
+
+
+class OpenFileRequest(BaseModel):
+    href: str  # the /dashboard/materials/file/... href the backend emitted
+
+
+@router.post("/desktop/open-file")
+async def open_file(request: OpenFileRequest) -> dict:
+    """Open a workspace file with its OS-default application.
+
+    Accepts only the material-file hrefs this server itself generates, and
+    re-runs the same folder-containment resolution the file-serving route
+    uses — nothing outside the workspace folders can be opened.
+    """
+    from urllib.parse import unquote
+
+    prefix = "/dashboard/materials/file/"
+    href = request.href.strip()
+    if not href.startswith(prefix):
+        raise HTTPException(status_code=422, detail="Not a workspace file link.")
+    folder_key, _, quoted_name = href[len(prefix):].partition("/")
+    if not quoted_name:
+        raise HTTPException(status_code=422, detail="Not a workspace file link.")
+
+    from transport.http.routes.dashboard.materials import _folder_path
+
+    folder = _folder_path(folder_key)
+    if folder is None or not folder.exists():
+        raise HTTPException(status_code=404, detail=f"Unknown folder: {folder_key}")
+    root = folder.resolve()
+    target = (folder / unquote(quoted_name)).resolve()
+    if root != target.parent and root not in target.parents:
+        raise HTTPException(status_code=404, detail="Invalid file path")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    _open_with_os(str(target))
+    return {"status": "opened", "name": target.name}
+
+
+class OpenUrlRequest(BaseModel):
+    url: str
+
+
+@router.post("/desktop/open-url")
+async def open_url(request: OpenUrlRequest) -> dict:
+    """Open an http(s) URL in the system browser."""
+    from urllib.parse import urlsplit
+
+    url = request.url.strip()
+    scheme = urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise HTTPException(status_code=422, detail="Only http(s) links can be opened.")
+    _open_with_os(url)
+    return {"status": "opened"}
+
+
 # ── Workspace import ──────────────────────────────────────────────────────────
 # Counterpart of GET /api/dashboard/export: the user downloads a zip of their
 # cloud workspace from the hosted dashboard, then imports it here to replace

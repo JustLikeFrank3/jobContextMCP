@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import useDesktopMode from '../shell/useDesktopMode.js'
+import { nativeAnchorHandler } from '../shell/nativeOpen.js'
 import {
   useApi, Screen, SectionHead, StatGrid, Stat,
   ExpandableCard, Chips, DetailLine, EYEBROW, fmtDate, fmtNum,
@@ -24,6 +26,7 @@ function MetricCell({ label, value, tone }) {
 }
 
 function PostCard({ post }) {
+  const useDesktopModeValue = useDesktopMode()
   const hasMetrics = (post.impressions || 0) + (post.reactions || 0) + (post.comments || 0) > 0
   const compact = hasMetrics
     ? `${fmtNum(post.impressions)} views \u00b7 ${fmtNum(post.reactions)} reactions`
@@ -59,7 +62,7 @@ function PostCard({ post }) {
 
       {post.url ? (
         <div style={{ marginTop: 12 }}>
-          <a href={post.url} target="_blank" rel="noreferrer" style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>
+          <a href={post.url} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(useDesktopModeValue, post.url)} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>
             View on LinkedIn {'\u2197'}
           </a>
         </div>
