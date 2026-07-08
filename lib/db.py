@@ -262,6 +262,13 @@ def _apply_migrations(con: sqlite3.Connection, is_global: bool = False) -> None:
             else:
                 raise
         _ledger_migration(con)
+    # Sync journal + triggers (idempotent CREATE IF NOT EXISTS; owns its own
+    # DDL in lib/sync.py so table specs and triggers stay colocated). Not
+    # applicable to the global DB, which has none of the synced tables.
+    if not is_global:
+        from lib.sync import ensure_sync_schema
+
+        ensure_sync_schema(con)
     con.commit()
 
 
