@@ -698,3 +698,28 @@ def test_open_url_http_only(desktop_client, monkeypatch):
     for bad in ("file:///etc/passwd", "javascript:alert(1)", "ftp://x", "notaurl"):
         resp = desktop_client.post("/desktop/open-url", json={"url": bad})
         assert resp.status_code == 422, bad
+
+
+def test_open_file_renders_markdown_to_pdf(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
+    import transport.http.desktop as desktop_mod
+    from transport.http.routes.dashboard import materials
+
+    folder = tmp_path / "assessments"
+    folder.mkdir()
+    (folder / "Cox — Fitment.md").write_text("# Fitment\n\n**Score:** 9/10\n\n| a | b |\n|---|---|\n| 1 | 2 |\n")
+    monkeypatch.setattr(materials, "_folder_path", lambda key: folder if key == "assessments" else None)
+    opened = {}
+    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
+
+    resp = desktop_client.post(
+        "/desktop/open-file",
+        json={"href": "/dashboard/materials/file/assessments/Cox%20%E2%80%94%20Fitment.md"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rendered"] is True
+    assert opened["t"].endswith(".pdf")
+    from pathlib import Path
+    assert Path(opened["t"]).read_bytes()[:5] == b"%PDF-"
+    # Cache is outside the sync root's synced set.
+    from lib.sync import _file_synced
+    assert _file_synced(Path("cache/md-pdf/x.pdf")) is False
