@@ -30,7 +30,7 @@ JobContextMCP gives AI assistants access to structured job-search context that p
 
 Instead of re-explaining your resume, applications, interview history, outreach, and portfolio every session, the platform provides that context through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
 
-Available as a local MCP server, local dashboard, or cloud-hosted multi-user deployment on Azure AKS.
+Available as a **double-clickable desktop app** (macOS · Windows · Linux), a local MCP server, or a cloud-hosted multi-user deployment on Azure AKS.
 
 | | |
 |---|---|
@@ -54,6 +54,33 @@ I got laid off and started using AI assistants to manage my job search. Every ne
 I built a few tools to stop re-explaining myself. They grew into this.
 
 If you're in the same situation, it's yours.
+
+---
+
+## jobContext Desktop
+
+The whole platform as a native app — no terminal, no Python, no account.
+Download, drag to Applications (or run the installer), double-click.
+
+**[⬇ Download the latest desktop release](https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&expanded=true)** — look for the newest `desktop-v*` tag.
+
+| Platform | File | Notes |
+|----------|------|-------|
+| macOS (Apple Silicon) | `jobContext_*_aarch64.dmg` | Signed + notarized |
+| macOS (Intel) | `jobContext_*_x64.dmg` | Signed + notarized |
+| Windows | `jobContext_*_x64-setup.exe` | Authenticode-signed, per-user install |
+| Linux | `.AppImage` / `.deb` | AppImage auto-updates; deb is manual |
+
+What you get on top of the server: an **embedded AI chat** over your own
+job-search data (bring your own OpenAI/Anthropic key, or local Ollama),
+**one-click MCP connect** for Claude Desktop / VS Code / Cursor, **import
+your cloud workspace** (Settings → Your data on the hosted dashboard →
+Export, then Import in the app), Oura readiness via personal access token,
+and **automatic updates** from `v1.0.0-beta.5` onward. Everything stays on
+your machine: local SQLite, loopback-only server, keys in your local config.
+
+Architecture, build docs, and the full decision log live in
+[desktop/README.md](desktop/README.md).
 
 ---
 
