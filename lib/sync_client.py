@@ -40,10 +40,28 @@ def sync_settings() -> dict:
 
     cfg = get_active_config()
     return {
-        "url": str(cfg.get("cloud_sync_url", "") or "").rstrip("/"),
+        "url": _normalize_url(str(cfg.get("cloud_sync_url", "") or "")),
         "pat": str(cfg.get("cloud_sync_pat", "") or ""),
         "auto": bool(cfg.get("cloud_sync_auto", True)),
     }
+
+
+def _normalize_url(url: str) -> str:
+    """Coerce user-entered sync URLs to something the ingress accepts.
+
+    A bare host gets https://; plain http is upgraded to https except for
+    loopback (dev/self-sync) — the hosted ingress 308-redirects http anyway.
+    """
+    url = url.strip().rstrip("/")
+    if not url:
+        return ""
+    if "://" not in url:
+        url = f"https://{url}"
+    if url.startswith("http://") and not any(
+        h in url for h in ("127.0.0.1", "localhost")
+    ):
+        url = "https://" + url[len("http://"):]
+    return url
 
 
 def is_configured() -> bool:
@@ -58,6 +76,9 @@ def _client(url: str, pat: str):
         base_url=url,
         headers={"Authorization": f"Bearer {pat}"},
         timeout=60.0,
+        # Ingresses 308 http→https (and may redirect on host normalization);
+        # httpx doesn't follow redirects by default and a POST would fail.
+        follow_redirects=True,
     )
 
 
