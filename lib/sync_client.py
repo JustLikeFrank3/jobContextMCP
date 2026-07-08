@@ -102,6 +102,12 @@ def run_sync() -> dict:
 
     summary: dict = {"status": "ok", "started": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}
     root = _local_root()
+    # Crash recovery: a process killed mid-apply leaves sync_state.applying=1,
+    # which silences every journal trigger. No apply can be in flight when a
+    # pass starts, so reset unconditionally.
+    with get_connection() as con:
+        con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
+        con.commit()
     try:
         with _client(settings["url"], settings["pat"]) as http:
             # 1. pull rows (loop while the cloud batch is truncated)
