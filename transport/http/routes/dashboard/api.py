@@ -222,7 +222,7 @@ async def dashboard_home_data(
     # zeroed oura_readiness row must never flip Home into the readiness view —
     # an unconnected user always sees the daily digest. Connection status is
     # token-based and makes no network call.
-    oura = _load_oura() if status.get("connected", False) else None
+    oura = _load_oura() if (status.get("connected", False) or _oura_via_sync()) else None
 
     priorities = [
         {"n": str(i + 1), "text": p}
@@ -344,6 +344,28 @@ def _oura_settings_payload(oura: "dict | None") -> "dict | None":
     }
 
 
+def _oura_via_sync() -> bool:
+    """Desktop: readiness rows arriving via cloud sync count as connected.
+
+    Oura deprecated personal access tokens, so a desktop app often has no
+    local Oura credential at all — the ring is OAuth-connected on the hosted
+    product and oura_readiness rows flow down through workspace sync. A
+    recent row is as good as a connection for the Home hero.
+    """
+    from lib.app_dirs import is_desktop_mode
+
+    if not is_desktop_mode():
+        return False
+    row = _load_oura()
+    if not row or not row.get("date"):
+        return False
+    try:
+        latest = datetime.date.fromisoformat(str(row["date"]))
+    except ValueError:
+        return False
+    return (datetime.date.today() - latest).days <= 7
+
+
 def _oura_status() -> dict:
     """Oura connection status (no network calls).
 
@@ -368,7 +390,8 @@ async def settings_summary(
             "isOwner": _is_owner(),
             "openaiKeySet": _openai_key_set(),
             "ouraConfigured": bool(status.get("configured")),
-            "ouraConnected": bool(status.get("connected")),
+            "ouraConnected": bool(status.get("connected")) or _oura_via_sync(),
+            "ouraViaSync": not status.get("connected") and _oura_via_sync(),
             "ouraLastSync": status.get("last_sync") or "",
             "oura": _oura_settings_payload(_load_oura()),
             "classicUrl": "/dashboard/settings",

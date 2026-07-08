@@ -245,10 +245,11 @@ function PatConnect({ onReload }) {
   return (
     <Panel>
       <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, marginBottom: 14 }}>
-        Connect your ring with a <strong>Personal Access Token</strong>: sign in at{' '}
-        <code style={{ color: 'var(--cyan-300)' }}>cloud.ouraring.com</code> {'→'} Personal
-        Access Tokens {'→'} Create New. Paste it below — it stays on this machine and
-        pulls your daily readiness, sleep, and HRV for the Home dashboard.
+        <strong>Easiest path:</strong> connect your ring on the hosted dashboard
+        (Settings {'→'} Oura {'→'} Connect) and enable Cloud sync above — readiness
+        flows here automatically. Alternatively, if you have a legacy Oura{' '}
+        <strong>Personal Access Token</strong> (Oura has deprecated creating new
+        ones), paste it below — it stays on this machine.
       </div>
       {err && <div style={{ color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)', marginBottom: 12 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 10 }}>
@@ -464,6 +465,20 @@ function CloudSyncSection() {
 }
 
 function OuraSection({ data, reload, isDesktop }) {
+  if (data?.ouraViaSync) {
+    // Readiness arrives through cloud workspace sync (the ring is OAuth-
+    // connected on the hosted product) — nothing to manage locally.
+    return (
+      <Panel>
+        {data?.oura ? <OuraReading oura={data.oura} /> : null}
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
+          Synced from your cloud connection — your ring is connected on the hosted
+          dashboard and readiness flows here automatically with Cloud sync. Nothing
+          to configure on this machine.
+        </div>
+      </Panel>
+    )
+  }
   if (data?.ouraConnected) {
     return <Connected oura={data?.oura || null} lastSync={data?.ouraLastSync || ''} onReload={reload} />
   }
