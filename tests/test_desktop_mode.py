@@ -576,3 +576,35 @@ def test_import_workspace_rejects_absolute_and_backslash_paths(desktop_client, d
             headers={"Content-Type": "application/zip"},
         )
         assert resp.status_code == 422, evil
+
+
+def test_import_workspace_allows_unicode_punctuation_filenames(desktop_client, desktop_data_dir_env):
+    """Regression: the export produces filenames with em dashes / curly quotes
+    (e.g. '07-Job-Assessments/Airbnb — Shannon Mock Interview Script.md') and
+    the old charset allowlist rejected them on import."""
+    name = "workspace/07-Job-Assessments/Airbnb — Shannon’s Mock – Interview Script.md"
+    payload = _make_export_zip({
+        "config.json": b"{}",
+        "db/jobcontextmcp.db": b"x",
+        name: b"script",
+    })
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    target = desktop_data_dir_env / "workspace" / "07-Job-Assessments" / "Airbnb — Shannon’s Mock – Interview Script.md"
+    assert target.read_bytes() == b"script"
+
+
+def test_import_workspace_still_rejects_dangerous_parts(desktop_client, desktop_data_dir_env):
+    # (No NUL-byte case: Python's zipfile truncates names at \x00 on read,
+    # so it can't be constructed here — the control-char regex still guards
+    # against zips from writers that pass them through.)
+    for evil in ("../evil.txt", "a/../../evil.txt", "db:alt.db"):
+        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
+        resp = desktop_client.post(
+            "/desktop/import-workspace", content=payload,
+            headers={"Content-Type": "application/zip"},
+        )
+        assert resp.status_code == 422, evil
