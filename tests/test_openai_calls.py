@@ -100,3 +100,52 @@ def test_create_chat_completion_non_429_raises(monkeypatch):
 
     with pytest.raises(_FakeExc):
         oc.create_chat_completion(fake_client, label="unit", max_attempts=3, model="gpt")
+
+
+# ── provider-rejected sampling params (Claude 4.6+ rejects temperature) ──────
+
+class _Rejecting400:
+    """Client whose create() 400s on temperature once, then succeeds."""
+
+    def __init__(self):
+        self.calls = []
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        if "temperature" in kwargs:
+            exc = Exception('{"error":{"message":"`temperature` is deprecated for this model.","type":"invalid_request_error"}}')
+            exc.body = {"error": {"message": "`temperature` is deprecated for this model."}}
+            response = type("R", (), {"status_code": 400, "headers": {}})()
+            exc.response = response
+            raise exc
+
+        class _Msg:  # minimal response shape
+            content = "ok"
+
+        class _Choice:
+            message = _Msg()
+
+        class _Resp:
+            choices = [_Choice()]
+            usage = None
+
+        return _Resp()
+
+
+def test_create_chat_completion_drops_rejected_temperature(monkeypatch):
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _Rejecting400()
+    resp = oc.create_chat_completion(
+        client, label="test", model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.2, max_tokens=5,
+    )
+    assert resp.choices[0].message.content == "ok"
+    assert len(client.calls) == 2
+    assert "temperature" in client.calls[0]
+    assert "temperature" not in client.calls[1]   # dropped on retry
+    assert client.calls[1]["max_tokens"] == 5     # everything else intact
