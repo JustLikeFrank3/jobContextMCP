@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - "**.md"
       - "docs/**"
+      - "mobile/**"
   workflow_dispatch:
 
 env:
