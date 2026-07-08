@@ -568,14 +568,25 @@ def test_import_workspace_allows_real_world_filenames(desktop_client, desktop_da
             "Frank's resume (v2, final) #1 @draft.pdf").read_bytes() == b"pdf"
 
 
-def test_import_workspace_rejects_absolute_and_backslash_paths(desktop_client, desktop_data_dir_env):
-    for evil in ("/etc/passwd", "db\\..\\..\\evil.db"):
-        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
-        resp = desktop_client.post(
-            "/desktop/import-workspace", content=payload,
-            headers={"Content-Type": "application/zip"},
-        )
-        assert resp.status_code == 422, evil
+def test_import_workspace_rejects_absolute_and_contains_backslash_paths(desktop_client, desktop_data_dir_env, tmp_path):
+    # Absolute paths are always rejected.
+    payload = _make_export_zip({"config.json": b"{}", "/etc/passwd": b"nope"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 422
+    # On POSIX a backslash is filename content, not a separator: the entry
+    # becomes ONE literal file inside the data dir — no traversal happens.
+    # (Windows rejects it outright — see the _IS_WINDOWS test.)
+    payload = _make_export_zip({"config.json": b"{}", "db\\..\\..\\evil.db": b"safe"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (desktop_data_dir_env / "db\\..\\..\\evil.db").read_bytes() == b"safe"
+    assert not (tmp_path / "evil.db").exists()
 
 
 def test_import_workspace_allows_unicode_punctuation_filenames(desktop_client, desktop_data_dir_env):
@@ -601,7 +612,32 @@ def test_import_workspace_still_rejects_dangerous_parts(desktop_client, desktop_
     # (No NUL-byte case: Python's zipfile truncates names at \x00 on read,
     # so it can't be constructed here — the control-char regex still guards
     # against zips from writers that pass them through.)
-    for evil in ("../evil.txt", "a/../../evil.txt", "db:alt.db"):
+    for evil in ("../evil.txt", "a/../../evil.txt"):
+        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
+        resp = desktop_client.post(
+            "/desktop/import-workspace", content=payload,
+            headers={"Content-Type": "application/zip"},
+        )
+        assert resp.status_code == 422, evil
+
+
+def test_import_workspace_allows_colons_and_backslashes_on_posix(desktop_client, desktop_data_dir_env):
+    """Regression: scraped-job filenames embed URLs ("… https:--jobs… .md");
+    colons/backslashes are legal on macOS/Linux and must import there."""
+    name = "workspace/07-Job-Assessments/Home, RI URL Source: https:--jobs.example.com - Fitment Assessment.md"
+    payload = _make_export_zip({"config.json": b"{}", name: b"fit"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_import_workspace_rejects_colons_on_windows(desktop_client, desktop_data_dir_env, monkeypatch):
+    import transport.http.desktop as desktop_mod
+
+    monkeypatch.setattr(desktop_mod, "_IS_WINDOWS", True)
+    for evil in ("db:alt.db", "a\\b.txt"):
         payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
         resp = desktop_client.post(
             "/desktop/import-workspace", content=payload,

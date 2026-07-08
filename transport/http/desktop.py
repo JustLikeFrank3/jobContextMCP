@@ -271,13 +271,15 @@ async def set_ai_provider(request: AiProviderRequest) -> dict:
 # cloud workspace from the hosted dashboard, then imports it here to replace
 # the local data. Raw zip body (no multipart — python-multipart isn't a dep).
 
-# Zip-slip guard: every character of a path component must be outside the
-# dangerous set — separators (/, \\), drive colons, and control chars — and
-# ".."/"." components are rejected outright, so a validated entry can only
-# land inside the extraction root. A denylist, not a charset allowlist: user
-# filenames legitimately carry unicode punctuation (em dashes, curly quotes)
-# that an allowlist kept rejecting — from zips our own export produced.
-_SAFE_ZIP_PART = re.compile(r"[^/\\:\x00-\x1f]+")
+# Zip-slip guard: reject what is dangerous on the machine doing the
+# extraction, nothing more. Universally hostile: control chars and
+# ".."/"."/"" components ("/" can't appear — entries are split on it).
+# Windows-only: ":" (drive refs / NTFS alternate streams) and "\\" (a
+# separator there) — on macOS/Linux both are legal filename characters that
+# real exports contain (e.g. scraped-job filenames embedding "https:").
+_SAFE_ZIP_PART = re.compile(r"[^\x00-\x1f]+")
+_WINDOWS_BAD = re.compile(r"[:\\]")
+_IS_WINDOWS = os.name == "nt"
 
 
 def _validated_member_path(extract_root: Path, name: str) -> Path:
@@ -289,7 +291,9 @@ def _validated_member_path(extract_root: Path, name: str) -> Path:
         raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
     target = extract_root
     for part in parts:
-        if part in ("..", ".", "") or "\\" in part or not _SAFE_ZIP_PART.fullmatch(part):
+        if part in ("..", ".", "") or not _SAFE_ZIP_PART.fullmatch(part):
+            raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
+        if _IS_WINDOWS and _WINDOWS_BAD.search(part):
             raise HTTPException(status_code=422, detail=f"Unsafe path in archive: {name!r}")
         target = target / part
     return target
