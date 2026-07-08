@@ -91,7 +91,7 @@ def test_triggers_journal_local_writes(replicas):
         _log_interview()
         log = _rows("SELECT tbl, op, origin FROM sync_log ORDER BY id")
         assert {"tbl": "job_queue", "op": "upsert", "origin": "local"} in log
-        assert {"tbl": "interviews", "op": "insert", "origin": "local"} in log
+        assert {"tbl": "interviews", "op": "upsert", "origin": "local"} in log
 
 
 def test_row_roundtrip_desktop_to_cloud(replicas):
@@ -124,13 +124,66 @@ def test_apply_does_not_echo(replicas):
 def test_append_tables_dedupe_on_replay(replicas):
     desktop, cloud = replicas
     with desktop:
-        _log_interview()
+        with db.get_connection() as con:
+            con.execute(
+                "INSERT INTO rejections (company, role, stage, logged_at) "
+                "VALUES ('Acme', 'SWE', 'screen', '2026-07-08T12:00:00')"
+            )
         batch = _export()
     with cloud:
         assert _apply(batch["changes"])["applied"] == 1
         stats = _apply(batch["changes"])  # replay the same batch
         assert stats["applied"] == 0 and stats["skipped_dupe"] == 1
-        assert len(_rows("SELECT id FROM interviews")) == 1
+        assert len(_rows("SELECT id FROM rejections")) == 1
+
+
+def test_interview_enrichment_syncs(replicas):
+    """Debriefs UPDATE existing interview rows — they must journal and
+    LWW-replace on the peer (the Cox comp-signals field bug)."""
+    desktop, cloud = replicas
+    with desktop:
+        _log_interview(company="Cox", ts="2026-07-08T09:00:00")
+        first = _export()
+    with cloud:
+        _apply(first["changes"])
+    time.sleep(0.01)
+    with desktop:
+        with db.get_connection() as con:
+            con.execute(
+                "UPDATE interviews SET comp_signals = '135K base, 10% bonus' WHERE company = 'Cox'"
+            )
+        second = _export(since=first["last_id"])
+        assert second["changes"], "interview UPDATE must journal"
+    with cloud:
+        stats = _apply(second["changes"])
+        assert stats["applied"] == 1, stats
+        assert _rows("SELECT comp_signals FROM interviews WHERE company='Cox'") == [
+            {"comp_signals": "135K base, 10% bonus"}
+        ]
+
+
+def test_backfill_journals_pretrigger_rows(replicas):
+    """Rows written before the sync schema existed must export after backfill
+    and survive LWW against older peer entries."""
+    desktop, _ = replicas
+    with desktop:
+        with db.get_connection() as con:
+            # Simulate pre-sync-era data: silence triggers, wipe the journal
+            # and the backfill guard, then write.
+            con.execute("UPDATE sync_state SET applying = 1 WHERE id = 1")
+            con.execute(
+                "INSERT INTO interviews (timestamp, company, role, interview_date, interview_type) "
+                "VALUES ('2026-07-01T09:00:00', 'PreSync Co', 'SWE', '2026-07-01', 'recruiter_screen')"
+            )
+            con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
+            con.execute("DELETE FROM sync_meta WHERE key = 'journal_backfill_v1'")
+            con.commit()
+        # Next connection re-runs ensure_sync_schema → backfill.
+        batch = _export()
+        assert any(
+            c["tbl"] == "interviews" and c["row"] and c["row"].get("company") == "PreSync Co"
+            for c in batch["changes"]
+        ), batch
 
 
 def test_lww_newer_local_wins(replicas):

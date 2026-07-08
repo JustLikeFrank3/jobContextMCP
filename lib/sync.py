@@ -72,7 +72,9 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     TableSpec("job_queue", "upsert", ("company", "role")),
     TableSpec("people", "upsert", ("name",)),
     TableSpec("oura_readiness", "upsert", ("date",), exclude=("id", "oid"), oid_col="oid"),
-    TableSpec("interviews", "append", ("timestamp", "company", "role")),
+    # Interviews are enriched after the fact (debriefs add comp signals,
+    # process details) — upsert semantics so updates journal and replace.
+    TableSpec("interviews", "upsert", ("timestamp", "company", "role")),
     TableSpec(
         "application_events", "append", ("type", "date", "notes"),
         parent={"table": "applications", "fk_col": "application_id"},
@@ -129,6 +131,45 @@ def ensure_sync_schema(con) -> None:
                         VALUES ('{spec.name}', '{op}', {nk_expr}, {ts}, 'local');
                     END"""
             )
+    _backfill_journal(con)
+
+
+def _backfill_journal(con) -> None:
+    """One-time: journal every synced-table row that predates the triggers.
+
+    Rows written before the sync schema existed (pre-sync app builds — or any
+    table created after ensure ran) have no journal entry, so they are
+    invisible to export AND unprotected from LWW overwrites on pull. Journal
+    them at now-time once; the guard key makes this idempotent. Runs before
+    any pull can apply (ensure precedes every engine call), so pre-existing
+    local state wins LWW against older peer timestamps.
+    """
+    done = con.execute(
+        "SELECT value FROM sync_meta WHERE key = 'journal_backfill_v1'"
+    ).fetchone()
+    if done:
+        return
+    existing = {
+        r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    ts = _now_ts()
+    for spec in TABLE_SPECS:
+        if spec.name not in existing:
+            continue
+        nk_expr = "json_array(" + ", ".join(f"t.{c}" for c in spec.identity) + ")"
+        op = "upsert" if spec.kind == "upsert" else "insert"
+        con.execute(
+            f"""INSERT INTO sync_log (tbl, op, nk, ts, origin)
+                SELECT '{spec.name}', '{op}', {nk_expr}, ?, 'local'
+                FROM {spec.name} t
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM sync_log sl WHERE sl.tbl = '{spec.name}' AND sl.nk = {nk_expr}
+                )""",
+            (ts,),
+        )
+    con.execute(
+        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('journal_backfill_v1', ?)", (ts,)
+    )
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
