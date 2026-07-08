@@ -23,7 +23,7 @@ pywebview spike remains a cheap fallback demo if ever needed.
 | 5.5 | Embedded chat panel (agent loop + tool calling in the SPA) | ✅ agent loop + SSE + persistence, chat UI w/ tool chips + model indicator, Anthropic/OpenAI/Ollama BYOK with in-app Settings key entry — all live-verified; deferred polish: markdown rendering, token streaming |
 | 6 | Installers (dmg / NSIS+msi / AppImage+deb) | ✅ all four platforms green in CI (2026-07-06): arm64+Intel dmg, NSIS exe+msi, AppImage+deb — unsigned pending Phase 7 |
 | 7 | Signing & notarization | ✅ (2026-07-06) Windows Authenticode via Azure Trusted Signing (individual validation; org later). macOS Developer ID + notarization green: sign the **final** .app with rcodesign two-pass — Tauri's resource copy dereferences symlinks into duplicate Python Mach-Os that pre-bundle signing can never cover; notarytool crashes on GH runners → rcodesign notary-submit + staple |
-| 8 | Auto-update + GitHub Actions release matrix | ◐ release pipeline done & validated: reusable desktop-build.yml shared by Desktop CI (branch pushes) and Desktop Release (`desktop-v*` tags → version-stamped pre-release with installers; namespace disjoint from cloud `v*`/AKS). Remaining: updater plugin (wants signing keys) |
+| 8 | Auto-update + GitHub Actions release matrix | ◐ release pipeline done & validated: reusable desktop-build.yml shared by Desktop CI (branch pushes) and Desktop Release (`desktop-v*` tags → version-stamped pre-release with installers; namespace disjoint from cloud `v*`/AKS). updater plugin shipped (launch-time check against the rolling desktop-latest manifest, native dialog, update & restart) — first self-update exercised beta.5 → beta.6 |
 | 9 | QA on clean VMs, beta, launch | ⬜ |
 
 ## What Phase 0/1 shipped

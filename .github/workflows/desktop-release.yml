@@ -43,8 +43,56 @@ jobs:
         run: |
           shopt -s globstar nullglob
           files=(installers/**/*.dmg installers/**/*.exe installers/**/*.msi
-                 installers/**/*.AppImage installers/**/*.deb)
-          echo "attaching ${#files[@]} installers"
+                 installers/**/*.AppImage installers/**/*.deb
+                 installers/**/*.app.tar.gz installers/**/*.sig)
+          echo "attaching ${#files[@]} installers + updater artifacts"
+
+          # Updater manifest: version + per-platform artifact URL/signature,
+          # consumed by tauri-plugin-updater in the installed apps. Attached
+          # to this release AND clobbered onto the rolling `desktop-latest`
+          # release (the fixed endpoint apps poll — /releases/latest can't be
+          # used because desktop releases are pre-releases in a shared repo).
+          python3 - "$GITHUB_REF_NAME" <<'PYEOF'
+          import datetime, json, os, pathlib, sys
+
+          tag = sys.argv[1]
+          version = tag.removeprefix("desktop-v")
+          repo = os.environ["GITHUB_REPOSITORY"]
+          base = f"https://github.com/{repo}/releases/download/{tag}"
+          arts = {p.name: p for p in pathlib.Path("installers").rglob("*") if p.is_file()}
+
+          def entry(name):
+              sig = arts.get(name + ".sig")
+              if name not in arts or sig is None:
+                  return None
+              return {"signature": sig.read_text().strip(), "url": f"{base}/{name}"}
+
+          platforms = {}
+          for key, name in [
+              ("darwin-aarch64", f"jobContext_{version}_aarch64.app.tar.gz"),
+              ("darwin-x86_64",  f"jobContext_{version}_x64.app.tar.gz"),
+              ("windows-x86_64", f"jobContext_{version}_x64-setup.exe"),
+              ("linux-x86_64",   f"jobContext_{version}_amd64.AppImage"),
+          ]:
+              e = entry(name)
+              if e:
+                  platforms[key] = e
+          if not platforms:
+              print("no signed updater artifacts found — skipping latest.json")
+              raise SystemExit(0)
+          manifest = {
+              "version": version,
+              "notes": f"jobContext Desktop {version}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc)
+                  .isoformat(timespec="seconds").replace("+00:00", "Z"),
+              "platforms": platforms,
+          }
+          pathlib.Path("latest.json").write_text(json.dumps(manifest, indent=2))
+          print(f"latest.json: {sorted(platforms)}")
+          PYEOF
+          if [ -f latest.json ]; then
+            files+=(latest.json)
+          fi
 
           # Install notes prepended above the auto-generated changelog. These
           # builds aren't Apple-notarized yet (Phase 7), so testers need the
@@ -79,3 +127,17 @@ jobs:
             --notes-file NOTES.md \
             --generate-notes \
             "${files[@]}"
+
+          # Refresh the rolling updater channel: a fixed-tag release whose
+          # only job is hosting the newest latest.json at a stable URL.
+          if [ -f latest.json ]; then
+            if ! gh release view desktop-latest --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              gh release create desktop-latest \
+                --repo "${GITHUB_REPOSITORY}" \
+                --prerelease \
+                --title "Desktop updater channel" \
+                --notes "Machine-consumed update manifest for jobContext Desktop's auto-updater. Install from the newest desktop-v* release, not from here."
+            fi
+            gh release upload desktop-latest latest.json --clobber --repo "${GITHUB_REPOSITORY}"
+            echo "updater channel now points at ${GITHUB_REF_NAME}"
+          fi
