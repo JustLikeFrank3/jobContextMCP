@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version 1.2.0"/>
-  <img src="https://img.shields.io/badge/tests-1357%20passing-brightgreen" alt="1357 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1359%20passing-brightgreen" alt="1359 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2085%20actions-informational" alt="11 domain tools, 85 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -35,7 +35,7 @@ Available as a **double-clickable desktop app** (macOS · Windows · Linux), a l
 | | |
 |---|---|
 | 11 domain tools (85 actions) | Resume + cover letter generation |
-| 1357 passing tests | Job fitment analysis with persona lenses |
+| 1359 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
