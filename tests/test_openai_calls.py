@@ -149,3 +149,52 @@ def test_create_chat_completion_drops_rejected_temperature(monkeypatch):
     assert "temperature" in client.calls[0]
     assert "temperature" not in client.calls[1]   # dropped on retry
     assert client.calls[1]["max_tokens"] == 5     # everything else intact
+
+
+class _EmptyAtCap:
+    """First call returns empty content with the cap consumed; retry succeeds."""
+
+    def __init__(self):
+        self.calls = []
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
+
+        class _Usage:
+            prompt_tokens = 100
+            total_tokens = 100 + kwargs.get("max_tokens", 0)
+            completion_tokens = kwargs.get("max_tokens", 0)
+
+        content = "" if len(self.calls) == 1 else "REAL ASSESSMENT TEXT"
+
+        class _Msg:
+            pass
+        _Msg.content = content
+
+        class _Choice:
+            message = _Msg()
+
+        class _Resp:
+            choices = [_Choice()]
+            usage = _Usage()
+
+        return _Resp()
+
+
+def test_create_chat_completion_retries_empty_content_at_cap(monkeypatch):
+    """Thinking models can spend the whole completion budget on reasoning and
+    return empty text — the helper must retry with a bigger budget."""
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _EmptyAtCap()
+    resp = oc.create_chat_completion(
+        client, label="test", model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "assess"}],
+        max_tokens=1200,
+    )
+    assert resp.choices[0].message.content == "REAL ASSESSMENT TEXT"
+    assert len(client.calls) == 2
+    assert client.calls[1]["max_tokens"] == 4800  # 4x bump on retry

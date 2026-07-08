@@ -130,6 +130,30 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 raise
 
             _LAST_CHAT_CALL = time.monotonic()
+            # Thinking models (Claude 4.6+, OpenAI o-series) count internal
+            # reasoning against the completion budget: a too-small max_tokens
+            # yields an EMPTY message with the cap fully consumed. Retry once
+            # with 4x budget rather than returning nothing.
+            choices = getattr(response, "choices", None) or []
+            message = getattr(choices[0], "message", None) if choices else None
+            content_empty = not getattr(message, "content", None)
+            requested_cap = kwargs.get("max_tokens") or kwargs.get("max_completion_tokens")
+            used = getattr(getattr(response, "usage", None), "completion_tokens", None)
+            if (
+                content_empty
+                and requested_cap
+                and used
+                and used >= requested_cap
+                and attempt < max_attempts
+            ):
+                bumped = int(requested_cap) * 4
+                key = "max_tokens" if "max_tokens" in kwargs else "max_completion_tokens"
+                kwargs[key] = bumped
+                _LOG.warning(
+                    "openai.chat empty_at_cap label=%s cap=%s -> retrying with %s",
+                    label, requested_cap, bumped,
+                )
+                continue
             usage = getattr(response, "usage", None)
             prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
