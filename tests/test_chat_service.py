@@ -96,21 +96,21 @@ def test_plain_answer_turn(mcp_instance):
     request = client.requests[0]
     assert request["messages"][0]["role"] == "system"
     names = {t["function"]["name"] for t in request["tools"]}
-    assert "get_job_hunt_status" in names
+    assert "applications" in names
     assert names <= set(chat_service.CHAT_TOOL_ALLOWLIST)
 
 
 def test_tool_call_turn_roundtrip(mcp_instance):
     sid = chat_service.create_session()
     client = FakeClient([
-        _response(tool_calls=[_tool_call("c1", "get_job_hunt_status", {})]),
+        _response(tool_calls=[_tool_call("c1", "applications", {"action": "status"})]),
         _response(content="You have N active applications."),
     ])
 
     events = _run_turn(mcp_instance, sid, "how's my pipeline?", client)
 
     assert [e.type for e in events] == ["tool_call", "tool_result", "message", "done"]
-    assert events[0].data["name"] == "get_job_hunt_status"
+    assert events[0].data["name"] == "applications"
     # Real tool executed against the isolated workspace: non-empty, no error.
     assert events[1].data["content"].strip()
     assert not events[1].data["content"].startswith("[error]")
@@ -118,7 +118,7 @@ def test_tool_call_turn_roundtrip(mcp_instance):
     # Second model request carries the assistant tool_calls + tool result.
     followup = client.requests[1]["messages"]
     assert followup[-2]["role"] == "assistant"
-    assert followup[-2]["tool_calls"][0]["function"]["name"] == "get_job_hunt_status"
+    assert followup[-2]["tool_calls"][0]["function"]["name"] == "applications"
     assert followup[-1]["role"] == "tool"
     assert followup[-1]["tool_call_id"] == "c1"
 

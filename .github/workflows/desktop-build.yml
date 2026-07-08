@@ -40,6 +40,10 @@ jobs:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      # Tauri updater artifact signing (all platforms). Empty on forks —
+      # updater artifacts are simply skipped without it.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +54,8 @@ jobs:
             bundles: dmg
             installer_glob: |
               desktop/src-tauri/target/release/bundle/dmg/*.dmg
+              desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz
+              desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
           # macos-13 was retired 2025-12-08; macos-15-intel is the last Intel
           # image (until Fall 2027). Plan to go arm64-only when it sunsets.
           - os: macos-15-intel
@@ -58,12 +64,15 @@ jobs:
             bundles: dmg
             installer_glob: |
               desktop/src-tauri/target/release/bundle/dmg/*.dmg
+              desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz
+              desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
           - os: windows-latest
             label: windows-x64
             binary: dist/jobcontext-backend/jobcontext-backend.exe
             bundles: nsis,msi
             installer_glob: |
               desktop/src-tauri/target/release/bundle/nsis/*.exe
+              desktop/src-tauri/target/release/bundle/nsis/*.sig
               desktop/src-tauri/target/release/bundle/msi/*.msi
           - os: ubuntu-22.04    # oldest supported glibc for AppImage compatibility
             label: linux-x64
@@ -71,6 +80,7 @@ jobs:
             bundles: appimage,deb
             installer_glob: |
               desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              desktop/src-tauri/target/release/bundle/appimage/*.sig
               desktop/src-tauri/target/release/bundle/deb/*.deb
 
     steps:
@@ -279,14 +289,24 @@ jobs:
             BUNDLES="$(printf '%s' "$BUNDLES" | tr ',' '\n' | grep -vx msi | paste -sd, -)"
             echo "pre-release version ${VERSION} — Windows bundles: ${BUNDLES} (msi dropped)"
           fi
-          # One merged --config overlay: release version stamp and/or the
-          # Windows signCommand.
+          # One merged --config overlay: release version stamp, the Windows
+          # signCommand, and updater artifacts (.sig files via the
+          # TAURI_SIGNING_* secrets). macOS skips createUpdaterArtifacts —
+          # Tauri would tar the .app BEFORE rcodesign signs it, so the mac
+          # signing step builds the updater archive itself from the signed app.
           OVERLAY=""
+          BUNDLE_OVERLAY=""
           if [ -n "${VERSION:-}" ]; then
             OVERLAY+="\"version\":\"${VERSION}\","
           fi
           if [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_CLIENT_ID" ]; then
-            OVERLAY+="\"bundle\":{\"windows\":{\"signCommand\":\"trusted-signing-cli -e https://eus.codesigning.azure.net -a jobContext -c jobcontext-public %1\"}},"
+            BUNDLE_OVERLAY+="\"windows\":{\"signCommand\":\"trusted-signing-cli -e https://eus.codesigning.azure.net -a jobContext -c jobcontext-public %1\"},"
+          fi
+          if [ "$RUNNER_OS" != "macOS" ] && [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            BUNDLE_OVERLAY+="\"createUpdaterArtifacts\":true,"
+          fi
+          if [ -n "$BUNDLE_OVERLAY" ]; then
+            OVERLAY+="\"bundle\":{${BUNDLE_OVERLAY%,}},"
           fi
           EXTRA=()
           if [ -n "$OVERLAY" ]; then
@@ -356,6 +376,21 @@ jobs:
             --p12-password-file "$RUNNER_TEMP/cert.pass" "$DMG"
           rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.pass"
           echo "signed dmg: $DMG"
+
+          # Updater artifact: tar of the SIGNED .app + minisign signature.
+          # (Tauri's own createUpdaterArtifacts would archive the pre-signing
+          # app, so it's disabled on macOS and built here instead.)
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            MAC_DIR="desktop/src-tauri/target/release/bundle/macos"
+            rm -f "$MAC_DIR"/*.app.tar.gz "$MAC_DIR"/*.app.tar.gz.sig
+            UPDATER_TAR="$MAC_DIR/jobContext_${DMG_VERSION}_${DMG_ARCH}.app.tar.gz"
+            tar -czf "$UPDATER_TAR" -C "$MAC_DIR" jobContext.app
+            # The tauri CLI reads TAURI_SIGNING_PRIVATE_KEY(_PASSWORD) from
+            # the environment; passing key flags as well is a CLI conflict.
+            (cd desktop && npx tauri signer sign "$GITHUB_WORKSPACE/$UPDATER_TAR")
+            test -s "$UPDATER_TAR.sig"
+            echo "updater artifact: $UPDATER_TAR"
+          fi
 
       # Notarize the signed dmg ourselves so the submission log is visible.
       # The Notary log lists every issue (unsigned/unhardened Mach-O, bad

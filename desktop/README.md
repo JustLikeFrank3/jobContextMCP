@@ -54,6 +54,13 @@ reputation, SmartScreen may warn — click **More info → Run anyway**.
 - **AppImage:** `chmod +x jobContext_*_amd64.AppImage && ./jobContext_*_amd64.AppImage`
 - **Debian/Ubuntu:** `sudo dpkg -i jobContext_*_amd64.deb`
 
+### Updating
+
+From `v1.0.0-beta.5` onward the app checks for updates at launch and offers
+**Update & restart** (signed manifest, downloads from GitHub Releases). Older
+builds: download the new installer and install over the existing app — your
+data lives in the per-OS app-data folder and is never touched by upgrades.
+
 ### First run
 
 Open **Settings** to (optionally) add an AI provider key — OpenAI, Anthropic,
@@ -79,7 +86,7 @@ flowchart TB
         subgraph sidecar["<b>PyInstaller sidecar</b> (frozen CPython)"]
             direction TB
             api["FastAPI + FastMCP<br/>127.0.0.1:PORT (loopback only)"]
-            tools["85 MCP tools<br/>resume · pipeline · interviews · …"]
+            tools["11 domain tools · 85 actions<br/>resume · pipeline · interviews · …"]
             db[("SQLite<br/>per-OS app-data dir")]
             api --> tools --> db
         end
@@ -93,7 +100,7 @@ flowchart TB
     class shell accent
 ```
 
-**Why a sidecar, not a rewrite:** the backend is 85 tools, WeasyPrint PDF
+**Why a sidecar, not a rewrite:** the backend is 85 tool actions, WeasyPrint PDF
 rendering, LangGraph, and 1,300+ tests of Python. Freezing it with
 PyInstaller and shipping it as a managed subprocess reuses all of it verbatim
 — the desktop app and the cloud app run byte-identical server code.

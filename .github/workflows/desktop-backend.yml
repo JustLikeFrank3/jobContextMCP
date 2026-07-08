@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/desktop-app
+      - feat/desktop-*
     paths:
       - desktop_main.py
       - packaging/**

@@ -4,9 +4,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version 1.2.0"/>
-  <img src="https://img.shields.io/badge/tests-1313%20passing-brightgreen" alt="1313 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1328%20passing-brightgreen" alt="1328 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-85-informational" alt="85 MCP tools"/>
+  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2085%20actions-informational" alt="11 domain tools, 85 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -20,7 +20,7 @@ A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serv
 
 Built in Python using [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (with dual-write JSON fallback), optional OpenAI/Azure AI Foundry/Ollama generation, WeasyPrint PDF export, a mobile-friendly dashboard, and a Kubernetes deployment on AKS with workload identity and Azure Blob Storage workspace seeding.
 
-> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes all 85 tools directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
+> **The agent is optional.** MCP servers are protocol-driven capability layers — any client that speaks the protocol can call them. jobContextMCP ships with a CLI (`cli.py`) that invokes every tool action directly from the terminal, no AI client required. Automation scripts, CI pipelines, cron/launchd jobs, the web dashboard, and scheduled tasks can consume the same underlying capabilities as Claude or Copilot. The AI is one type of client, not the only one.
 
 ---
 
@@ -34,8 +34,8 @@ Available as a local MCP server, local dashboard, or cloud-hosted multi-user dep
 
 | | |
 |---|---|
-| 85 MCP tools | Resume + cover letter generation |
-| 1313 passing tests | Job fitment analysis with persona lenses |
+| 11 domain tools (85 actions) | Resume + cover letter generation |
+| 1328 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -171,7 +171,7 @@ graph TB
     PROV["User provisioning\nauto-create on first Entra login"]
   end
 
-  subgraph TOOLS["85 MCP / CLI tools"]
+  subgraph TOOLS["11 MCP / CLI tools"]
     CTX["Context + identity"]
     PIPE["Pipeline + queue + compensation"]
     DOCS["Resume + cover letter generation"]
@@ -646,7 +646,7 @@ brew install python@3.12
 
 # Smoke test: confirm the server imports cleanly and registers all tools
 .venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
-# Expected: OK, 85 tools
+# Expected: OK, 11 tools (85 actions; set JOBCONTEXT_LEGACY_TOOLS=1 for the old per-function surface)
 ```
 
 > ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.
@@ -730,7 +730,7 @@ The server speaks MCP — it works with any compatible client. You don't need an
 
 #### Terminal (no AI client required)
 
-`cli.py` is a first-class client. Invoke any of the 85 tools directly:
+`cli.py` is a first-class client. Invoke any tool action directly:
 
 ```bash
 # List all tools
@@ -989,7 +989,7 @@ In `.env`:
 MCP_MODE=local
 ```
 
-Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 85 tools` (or whatever your current count is) within ~0.5s instead of ~1.5s.
+Then **Command Palette → MCP: List Servers → restart jobContextMCP**. The startup logs should no longer mention `Container … Creating` / `Container … Created`. You'll see `Discovered 11 tools` (or 85 with JOBCONTEXT_LEGACY_TOOLS=1) within ~0.5s instead of ~1.5s.
 
 #### What's live vs. baked-in
 
