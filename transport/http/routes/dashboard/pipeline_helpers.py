@@ -635,23 +635,44 @@ def _synthesize_assessment(j: dict) -> tuple[str, str]:
     recommendation = _first_sentence(recommendation_section, max_len=220)
     next_action = _next_action_for_recommendation(recommendation)
 
-    short_notes = re.sub(r"\s+", " ", notes)[:450] if notes else "No decision notes saved."
+    short_notes = re.sub(r"\s+", " ", notes)[:450] if notes else ""
+
+    # Unassessed job: no score, no fitment context, no notes. Say so in three
+    # lines instead of eleven rows of "No X extracted." boilerplate plus a
+    # full-resume AI-evidence dump — that wall reads like a *failed*
+    # assessment when none has run.
+    if not fitment_context and not effective_score and not short_notes:
+        detail = "\n".join([
+            f"Signal tags: {signal_line}",
+            "No assessment has been run for this job yet — use Run Assessment.",
+            f"Source: {_source_url_from_jd(jd)}",
+        ])
+        return summary, detail
 
     strengths_line = " | ".join(strong_matches) if strong_matches else "No extracted strengths."
     risks_line = " | ".join(gaps_risks) if gaps_risks else "No extracted risks."
 
-    detail = "\n".join([
+    # The AI-evidence caveat exists to rebut assessments that underweighted
+    # AI experience; capped so it annotates the card instead of swallowing it.
+    if len(ai_caveat) > 300:
+        ai_caveat = ai_caveat[:297].rstrip() + "…"
+
+    lines = [
         f"Status: {status}",
         f"Fitment score: {effective_score or 'n/a'}",
         f"Signal tags: {signal_line}",
         f"Recommendation: {recommendation or 'No recommendation extracted.'}",
         f"Top strengths: {strengths_line}",
         f"Top risks: {risks_line}",
-        f"AI platform evidence: {ai_caveat or 'No AI-specific evidence surfaced for this role.'}",
-        f"Next action: {next_action}",
-        f"Fitment context preview: {fitment_summary or 'No stored fitment context.'}",
-        f"Notes: {short_notes}",
-        f"Source: {_source_url_from_jd(jd)}",
-    ])
+    ]
+    if ai_caveat:
+        lines.append(f"AI platform evidence: {ai_caveat}")
+    lines.append(f"Next action: {next_action}")
+    if fitment_summary:
+        lines.append(f"Fitment context preview: {fitment_summary}")
+    if short_notes:
+        lines.append(f"Notes: {short_notes}")
+    lines.append(f"Source: {_source_url_from_jd(jd)}")
+    detail = "\n".join(lines)
     return summary, detail
 
