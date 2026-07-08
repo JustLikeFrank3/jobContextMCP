@@ -13,6 +13,11 @@ instead (escape hatch; the underlying modules are unchanged).
 Adding an action: add one row to the domain's spec below — the per-action
 "Requires/Optional" documentation in the tool description is generated from
 the target function's real signature, so it can't drift.
+
+Wide signatures are intentional (Sonar S107 is excluded for this file in
+sonar-project.properties): FastMCP derives each tool's inputSchema from the
+function signature, so a facade's parameter list must be the union of its
+actions' parameters. These functions are dispatch-only — no human call sites.
 """
 from __future__ import annotations
 
