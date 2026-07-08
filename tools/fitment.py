@@ -305,7 +305,9 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.2,
-            max_tokens=1200,
+            # Thinking models (claude-sonnet-5) spend completion budget on
+            # reasoning before any visible text; 1200 produced 0-byte output.
+            max_tokens=8000,
         )
         content = response.choices[0].message.content or ""
     except Exception as exc:
