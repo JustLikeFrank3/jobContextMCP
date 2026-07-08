@@ -5,6 +5,11 @@ on:
     branches:
       - qa
       - main
+    # Docs-only pushes don't need a rebuild + redeploy of identical code.
+    # (Mixed pushes that touch code AND docs still deploy.)
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
 
 env:
