@@ -255,3 +255,14 @@ def test_file_manifest_excludes_machine_local(tmp_path):
     (tmp_path / "resume.bak").write_text("old")
     manifest = sync.file_manifest(tmp_path)
     assert list(manifest) == ["notes.md"]
+
+
+def test_sync_url_normalization():
+    from lib.sync_client import _normalize_url
+
+    assert _normalize_url("app.jobcontext.ai") == "https://app.jobcontext.ai"
+    assert _normalize_url("http://app.jobcontext.ai/") == "https://app.jobcontext.ai"
+    assert _normalize_url("https://app.jobcontext.ai") == "https://app.jobcontext.ai"
+    assert _normalize_url("http://127.0.0.1:8801") == "http://127.0.0.1:8801"
+    assert _normalize_url("http://localhost:8801") == "http://localhost:8801"
+    assert _normalize_url("  ") == ""
