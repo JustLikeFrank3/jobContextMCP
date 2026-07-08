@@ -50,6 +50,11 @@
       "backgroundColor": "#0b1117",
       "image": "./assets/icon.png",
       "resizeMode": "contain"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d0996a26-fa80-45fc-9de7-b43cfe095ebc"
+      }
     }
   }
 }
