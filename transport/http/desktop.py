@@ -387,6 +387,22 @@ async def open_file(request: OpenFileRequest) -> dict:
     if not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Markdown is writer-friendly, not reader-friendly: render assessments /
+    # prep docs to a styled PDF (content-hash cached outside the sync root)
+    # and open that instead, so "view" means Preview, not a text editor.
+    if target.suffix.lower() in (".md", ".markdown"):
+        from lib.app_dirs import desktop_data_dir
+        from lib.md_render import rendered_pdf_for
+
+        try:
+            pdf = await asyncio.to_thread(
+                rendered_pdf_for, target, desktop_data_dir() / "cache" / "md-pdf"
+            )
+        except Exception:  # noqa: BLE001 — fall back to the raw file
+            pdf = target
+        _open_with_os(str(pdf))
+        return {"status": "opened", "name": target.name, "rendered": str(pdf) != str(target)}
+
     _open_with_os(str(target))
     return {"status": "opened", "name": target.name}
 

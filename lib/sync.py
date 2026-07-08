@@ -364,7 +364,7 @@ def set_cursor(con, key: str, value: int) -> None:
 
 # Everything document-like syncs; databases, config, backups, and index
 # artifacts stay machine-local.
-_FILE_EXCLUDE_PARTS = ("db",)
+_FILE_EXCLUDE_PARTS = ("db", "cache")
 _FILE_EXCLUDE_NAMES = ("config.json", ".DS_Store")
 _FILE_EXCLUDE_SUFFIXES = (".bak", ".faiss", ".pkl")
 

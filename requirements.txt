@@ -14,3 +14,4 @@ httpx2>=2.3.0
 sse-starlette>=2.1
 tiktoken>=0.7.0
 platformdirs>=4.0.0
+markdown>=3.6  # md → HTML for on-the-fly PDF rendering of assessments/prep docs
