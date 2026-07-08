@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "jobContext",
+    "slug": "jobcontext",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "jobcontext",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b1117",
+    "ios": {
+      "bundleIdentifier": "app.jobcontext.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.jobcontext.mobile",
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": ["DEFAULT"],
+          "data": [{ "mimeType": "text/plain" }]
+        }
+      ]
+    },
+    "plugins": [
+      ["expo-share-intent", { "iosActivationRules": { "NSExtensionActivationSupportsWebURLWithMaxCount": 1, "NSExtensionActivationSupportsText": true } }],
+      "expo-secure-store",
+      "expo-notifications"
+    ]
+  }
+}
