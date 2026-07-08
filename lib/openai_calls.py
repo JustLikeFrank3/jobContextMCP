@@ -52,6 +52,30 @@ def _retry_after_seconds(exc: Exception, fallback: float) -> float:
     return fallback
 
 
+# Sampling knobs that some providers/models reject outright — e.g. Claude
+# 4.6+ models behind Anthropic's OpenAI-compat endpoint return 400
+# "`temperature` is deprecated for this model.". When a 400 names one of
+# these, we drop it and retry: the request is otherwise fine and the model's
+# default sampling is what the provider wants us to use anyway.
+_DROPPABLE_PARAMS = ("temperature", "top_p", "presence_penalty", "frequency_penalty")
+
+
+def _drop_rejected_param(kwargs: dict, payload: str) -> "str | None":
+    """Remove the sampling param a 400 payload complains about; return its name."""
+    lowered = payload.lower()
+    if not any(word in lowered for word in ("deprecated", "unsupported", "not supported", "invalid_request")):
+        return None
+    for param in _DROPPABLE_PARAMS:
+        if param in kwargs and param in lowered:
+            kwargs.pop(param)
+            return param
+    # OpenAI reasoning models reject max_tokens in favor of max_completion_tokens.
+    if "max_tokens" in kwargs and "max_completion_tokens" in lowered:
+        kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        return "max_tokens→max_completion_tokens"
+    return None
+
+
 def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: int = 3, **kwargs: Any) -> Any:
     """Create a chat completion with process-local spacing and usage logging.
 
@@ -94,6 +118,15 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                     _LOG.info("openai.chat retry_sleep label=%s wait=%.2fs", label, backoff)
                     time.sleep(backoff)
                     continue
+                if status_code == 400 and attempt < max_attempts:
+                    dropped = _drop_rejected_param(kwargs, payload)
+                    if dropped:
+                        _LOG.info(
+                            "openai.chat dropped_param label=%s param=%s (provider rejected it)",
+                            label,
+                            dropped,
+                        )
+                        continue
                 raise
 
             _LAST_CHAT_CALL = time.monotonic()
