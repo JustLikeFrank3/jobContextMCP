@@ -180,6 +180,35 @@ def _bind_socket(port: int) -> socket.socket:
     return sock
 
 
+def _start_auto_sync(interval_seconds: int = 900) -> None:
+    """Background cloud sync: once shortly after boot, then every 15 minutes.
+
+    Daemon thread so it never blocks shutdown; every pass is guarded on the
+    user having configured sync (cloud URL + PAT in config.json) and any
+    failure is contained in run_sync()'s summary — a broken network can never
+    take the app down.
+    """
+    import threading
+    import time
+
+    def loop() -> None:
+        time.sleep(10)  # let the server finish booting first
+        while True:
+            try:
+                from lib.sync_client import is_configured, run_sync
+
+                if is_configured():
+                    from lib.sync_client import sync_settings
+
+                    if sync_settings()["auto"]:
+                        run_sync()
+            except Exception:  # noqa: BLE001 — sync must never crash the app
+                pass
+            time.sleep(interval_seconds)
+
+    threading.Thread(target=loop, name="cloud-sync", daemon=True).start()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="jobcontext-desktop",
@@ -242,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.parent_watchdog:
         _start_parent_watchdog(server)
+
+    _start_auto_sync()
 
     # The shell parses this line to find the backend; keep the format stable.
     print(f"JOBCONTEXT_PORT={port}", flush=True)
