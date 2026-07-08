@@ -25,7 +25,11 @@
             }
           ]
         }
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0b1117"
+      }
     },
     "plugins": [
       [
@@ -40,6 +44,12 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-asset"
-    ]
+    ],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#0b1117",
+      "image": "./assets/icon.png",
+      "resizeMode": "contain"
+    }
   }
 }
