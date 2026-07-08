@@ -850,6 +850,7 @@ class TestDashboardSettingsApiCoverage:
             "openaiKeySet": True,
             "ouraConfigured": True,
             "ouraConnected": True,
+            "ouraViaSync": False,
             "ouraLastSync": "2026-06-29T08:00:00",
             "oura": {
                 "date": "",
@@ -1893,3 +1894,28 @@ class TestDashboardPipelineCoverage:
         assert response.status_code == 200
         assert "Dear Hiring Manager" in response.text
         assert "SOFTWARE_ENGINEER" in response.text
+
+
+def test_home_shows_readiness_from_synced_rows_on_desktop(monkeypatch, tmp_path):
+    """Oura deprecated PATs: desktop readiness can arrive purely via cloud
+    sync (oura_readiness rows, no local token) and must still power Home."""
+    import datetime
+
+    from transport.http.routes.dashboard import api as dash_api
+
+    monkeypatch.setenv("DEPLOY_MODE", "desktop")
+    monkeypatch.setattr(dash_api, "_oura_status", lambda: {"connected": False})
+    monkeypatch.setattr(
+        dash_api, "_load_oura",
+        lambda: {"date": datetime.date.today().isoformat(), "readiness_score": 82,
+                 "sleep_score": 78, "hrv": 45, "recovery_index": 70},
+    )
+    assert dash_api._oura_via_sync() is True
+
+    # Stale rows don't count as connected.
+    monkeypatch.setattr(
+        dash_api, "_load_oura",
+        lambda: {"date": "2020-01-01", "readiness_score": 82, "sleep_score": 78,
+                 "hrv": 45, "recovery_index": 70},
+    )
+    assert dash_api._oura_via_sync() is False
