@@ -29,7 +29,7 @@ TestFlight when ready: `npx eas build --platform ios && npx eas submit`.
 ## Ship it
 
 ```bash
-npx eas login                                   # once
+npx eas login                                   # once (eas-cli is a devDependency — plain `npx eas` works)
 npx eas build --profile development --platform ios    # dev build → your iPhone (share sheet + push work)
 npx eas build --profile preview --platform android    # installable APK link → the Windows/Android tester
 npx eas build --platform ios && npx eas submit -p ios # TestFlight
