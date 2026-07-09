@@ -19,6 +19,7 @@ product the middleware resolves the caller's partition.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 from typing import Annotated
@@ -177,7 +178,24 @@ class CaptureRequest(BaseModel):
 
 
 def _capture_and_assess(url: str) -> None:
-    """Blocking worker: import → queue → assess → push. Runs off-loop."""
+    """Blocking worker: import → queue → assess → push. Runs off-loop.
+
+    Must execute inside a copy of the request's context (see capture()) so the
+    per-user data-folder ContextVar still scopes every read/write and the push
+    lookup to the caller's partition.
+    """
+    try:
+        _capture_and_assess_inner(url)
+    except Exception:  # noqa: BLE001 — the user is waiting on a push either way
+        _log.exception("capture worker failed for %s", url)
+        send_push(
+            "Assessment failed",
+            "Something went wrong while evaluating that job. Try sharing it again.",
+            {"type": "capture_failed"},
+        )
+
+
+def _capture_and_assess_inner(url: str) -> None:
     from tools.job_scraper import scrape_job_url
 
     result = scrape_job_url(url, auto_queue=True)
@@ -223,6 +241,10 @@ async def capture(
     url = request.url.strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Share a job posting URL.")
+    # run_in_executor does NOT propagate contextvars (asyncio.to_thread does,
+    # but it would tie the worker's lifetime to this handler). Copy the request
+    # context explicitly so the worker stays inside the caller's partition.
+    ctx = contextvars.copy_context()
     loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _capture_and_assess, url)
+    loop.run_in_executor(None, ctx.run, _capture_and_assess, url)
     return {"status": "capturing", "detail": "Saved. Assessment running…"}

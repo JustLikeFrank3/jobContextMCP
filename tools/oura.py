@@ -168,6 +168,30 @@ def log_oura_readiness(
     )
 
 
+def oura_readiness_rows(days: int = 14) -> list[dict]:
+    """Recent readiness rows for the current user, oldest first (for graphing)."""
+    days = min(max(1, days), 90)
+    cutoff = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    oid = get_current_user_oid()
+    with get_connection() as con:
+        rows = con.execute(
+            "SELECT date, readiness_score, sleep_score, hrv, recovery_index "
+            "FROM oura_readiness WHERE oid = ? AND date >= ? "
+            "ORDER BY date ASC",
+            (oid, cutoff),
+        ).fetchall()
+    return [
+        {
+            "date": r["date"],
+            "readiness": r["readiness_score"],
+            "sleep": r["sleep_score"],
+            "hrv": r["hrv"],
+            "recovery": r["recovery_index"],
+        }
+        for r in rows
+    ]
+
+
 def get_oura_readiness(days: int = 7) -> str:
     """Return recent Oura readiness records for the current user.
 

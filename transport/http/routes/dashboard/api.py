@@ -407,6 +407,21 @@ async def settings_summary(
 # user's real Oura account via OAuth (the MCP tool remains for the iOS Shortcut).
 
 
+@router.get("/oura/history", response_model=None)
+async def oura_history(
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
+    days: int = 14,
+) -> JSONResponse:
+    """Readiness history for graphing (mobile Today, future web sparkline)."""
+    from tools.oura import oura_readiness_rows
+
+    try:
+        rows = await asyncio.to_thread(oura_readiness_rows, days)
+    except Exception:  # noqa: BLE001 — an unprovisioned table just means no data
+        rows = []
+    return JSONResponse({"days": rows})
+
+
 @router.post("/oura/sync", response_model=None)
 async def oura_sync(
     user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001

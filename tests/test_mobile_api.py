@@ -77,3 +77,57 @@ def test_capture_kicks_background_assessment(mobile_client, monkeypatch):
 
     resp = mobile_client.post("/api/capture", json={"url": "javascript:alert(1)"})
     assert resp.status_code == 422
+
+
+def test_capture_worker_inherits_request_context(monkeypatch):
+    """run_in_executor drops contextvars unless the handler copies them — the
+    worker must see the same data-folder override as the request (multi-tenant
+    partitioning), or it reads/writes the wrong user's database."""
+    import asyncio
+
+    import transport.http.routes.mobile as mobile_mod
+    from lib.user_context import get_data_folder_override, reset_data_folder, set_data_folder
+
+    seen = {}
+
+    def probe(url):
+        seen["override"] = get_data_folder_override()
+
+    monkeypatch.setattr(mobile_mod, "_capture_and_assess", probe)
+
+    async def request_with_partition():
+        # Mirrors UserDataContextMiddleware: the override is active only for
+        # the duration of the handler coroutine.
+        token = set_data_folder("/partitions/user-abc")
+        try:
+            resp = await mobile_mod.capture(
+                mobile_mod.CaptureRequest(url="https://jobs.example.com/9"), user=None
+            )
+        finally:
+            reset_data_folder(token)
+        assert resp["status"] == "capturing"
+        # Wait for the executor thread without blocking the loop.
+        for _ in range(100):
+            if "override" in seen:
+                break
+            await asyncio.sleep(0.02)
+
+    asyncio.run(request_with_partition())
+    assert str(seen["override"]) == "/partitions/user-abc"
+
+
+def test_capture_worker_failure_sends_push(monkeypatch):
+    """An exception mid-assessment must surface as a failure push, not silence."""
+    import transport.http.routes.mobile as mobile_mod
+
+    pushes = []
+    monkeypatch.setattr(
+        mobile_mod, "send_push", lambda title, body, data=None: pushes.append((title, data))
+    )
+    monkeypatch.setattr(
+        mobile_mod,
+        "_capture_and_assess_inner",
+        lambda url: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    mobile_mod._capture_and_assess("https://jobs.example.com/9")
+    assert pushes and pushes[0][1]["type"] == "capture_failed"
