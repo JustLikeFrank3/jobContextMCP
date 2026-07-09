@@ -51,10 +51,10 @@ export type InboxEvent = {
 }
 
 export const fetchEvents = () => api<{ events: InboxEvent[] }>('/api/events')
-export const captureUrl = (url: string) =>
+export const captureUrl = (url: string, text = '') =>
   api<{ status: string; detail: string }>('/api/capture', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, text }),
   })
 export const registerPush = (token: string, platform: string) =>
   api('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform }) })

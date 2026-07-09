@@ -13,6 +13,7 @@ import Pipeline from './screens/Pipeline'
 import Networking from './screens/Networking'
 import Settings from './screens/Settings'
 import { captureUrl } from './api'
+import { extractJobPage } from './pageExtract'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
 import { setCaptureStatus, useCaptureStatus } from './captureStatus'
@@ -45,7 +46,10 @@ function useIncomingShares() {
       return
     }
     setCaptureStatus({ kind: 'busy', text: 'Saving…' })
-    captureUrl(url)
+    // Read the page here first: the phone's residential IP gets real content
+    // where LinkedIn authwalls our cloud. Server falls back if this yields ''.
+    extractJobPage(url)
+      .then((text) => captureUrl(url, text))
       .then((r) => setCaptureStatus({ kind: 'ok', text: `${r.detail} You can keep browsing — a notification arrives with the score.` }, 6000))
       .catch((e) => setCaptureStatus({ kind: 'error', text: e.message }))
   }, [hasShareIntent])
