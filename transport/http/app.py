@@ -215,14 +215,21 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     # ── Lifespan: drive MCP session manager alongside FastAPI startup ─────────
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        if mcp_starlette is not None:
-            # The Starlette sub-app carries its own lifespan that initialises
-            # the StreamableHTTPSessionManager task group.  We must enter it
-            # here; FastAPI does NOT propagate lifespan into mounted sub-apps.
-            async with mcp_starlette.router.lifespan_context(mcp_starlette):
+        from lib import work as _work
+
+        # Control plane: durable background work (capture, doc generation).
+        await _work.start_dispatcher()
+        try:
+            if mcp_starlette is not None:
+                # The Starlette sub-app carries its own lifespan that initialises
+                # the StreamableHTTPSessionManager task group.  We must enter it
+                # here; FastAPI does NOT propagate lifespan into mounted sub-apps.
+                async with mcp_starlette.router.lifespan_context(mcp_starlette):
+                    yield
+            else:
                 yield
-        else:
-            yield
+        finally:
+            await _work.stop_dispatcher()
 
     app = FastAPI(
         title="jobContextMCP HTTP API",
@@ -263,9 +270,11 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
     from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
+    from transport.http.routes import work as work_routes
 
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
+    app.include_router(work_routes.router)  # control-plane work-item status
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)
