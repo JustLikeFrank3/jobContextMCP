@@ -98,7 +98,7 @@ def test_capture_worker_failure_sends_push(monkeypatch):
     monkeypatch.setattr(
         mobile_mod,
         "_capture_and_assess_inner",
-        lambda url: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda url, text="": (_ for _ in ()).throw(RuntimeError("boom")),
     )
     with _pytest.raises(RuntimeError):
         mobile_mod._capture_and_assess({"url": "https://jobs.example.com/9"})
