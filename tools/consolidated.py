@@ -252,8 +252,9 @@ def job_search(
     company_slug: str | None = None,
     url: str | None = None,
     auto_queue: bool | None = None,
+    page_text: str | None = None,
 ) -> str:
-    """Find job postings: open-web search, Greenhouse/Lever company boards, or scrape a posting URL."""
+    """Find job postings: open-web search, Greenhouse/Lever company boards, or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
     return _run("job_search", action, locals())
 
 

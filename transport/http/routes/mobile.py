@@ -18,8 +18,6 @@ product the middleware resolves the caller's partition.
 """
 from __future__ import annotations
 
-import asyncio
-import contextvars
 import json
 import logging
 from typing import Annotated
@@ -27,6 +25,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from lib import work
 from transport.http.auth import require_authenticated_user
 from transport.http.security import User
 
@@ -174,18 +173,20 @@ def send_push(title: str, body: str, data: "dict | None" = None) -> int:
 
 class CaptureRequest(BaseModel):
     url: str = ""
-    text: str = ""   # future: pasted JD text instead of a URL
+    text: str = ""   # client-extracted page content (or pasted JD text)
 
 
-def _capture_and_assess(url: str) -> None:
-    """Blocking worker: import → queue → assess → push. Runs off-loop.
+def _capture_and_assess(inputs: dict) -> dict:
+    """Work executor (kind=capture_url): import → queue → assess → push.
 
-    Must execute inside a copy of the request's context (see capture()) so the
-    per-user data-folder ContextVar still scopes every read/write and the push
-    lookup to the caller's partition.
+    Runs under the dispatcher, which sets the partition context from the work
+    row's home partition — the outcome (success, failure, artifacts, error)
+    is durably recorded on the row either way. Pushes are the human-facing
+    signal; the row is the system of record.
     """
+    url = inputs["url"]
     try:
-        _capture_and_assess_inner(url)
+        return _capture_and_assess_inner(url, inputs.get("text", ""))
     except Exception:  # noqa: BLE001 — the user is waiting on a push either way
         _log.exception("capture worker failed for %s", url)
         send_push(
@@ -193,12 +194,15 @@ def _capture_and_assess(url: str) -> None:
             "Something went wrong while evaluating that job. Try sharing it again.",
             {"type": "capture_failed"},
         )
+        raise  # the work row records the failure + traceback
 
 
-def _capture_and_assess_inner(url: str) -> None:
+def _capture_and_assess_inner(url: str, text: str = "") -> dict:
     from tools.job_scraper import scrape_job_url
 
-    result = scrape_job_url(url, auto_queue=True)
+    # text = client-extracted page content (the phone can read pages that
+    # block our datacenter IPs — e.g. LinkedIn's authwall).
+    result = scrape_job_url(url, auto_queue=True, page_text=text)
     company = role = ""
     for line in str(result).splitlines():
         if line.lower().startswith("company:"):
@@ -207,7 +211,7 @@ def _capture_and_assess_inner(url: str) -> None:
             role = line.split(":", 1)[1].strip()
     if not company:
         send_push("Import failed", "Couldn't read that job posting.", {"type": "capture_failed"})
-        return
+        return {"imported": False}
 
     from lib.db import get_connection
 
@@ -230,6 +234,10 @@ def _capture_and_assess_inner(url: str) -> None:
         f"{company} — {role}",
         {"type": "assessment_done", "company": company, "role": role},
     )
+    return {"imported": True, "company": company, "role": role, "score": score}
+
+
+work.register_kind("capture_url", _capture_and_assess)
 
 
 @router.post("/capture")
@@ -237,14 +245,14 @@ async def capture(
     request: CaptureRequest,
     user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
 ) -> dict:
-    """Share-sheet entry: return fast, assess in the background, push after."""
+    """Share-sheet entry: enqueue a durable work item, return its id fast.
+    The dispatcher assesses in the background and pushes when it lands."""
     url = request.url.strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Share a job posting URL.")
-    # run_in_executor does NOT propagate contextvars (asyncio.to_thread does,
-    # but it would tie the worker's lifetime to this handler). Copy the request
-    # context explicitly so the worker stays inside the caller's partition.
-    ctx = contextvars.copy_context()
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, ctx.run, _capture_and_assess, url)
-    return {"status": "capturing", "detail": "Saved. Assessment running…"}
+    work_id = work.enqueue(
+        "capture_url",
+        {"url": url, "text": request.text[:100_000]},
+        origin="mobile-share",
+    )
+    return {"status": "capturing", "work_id": work_id, "detail": "Saved. Assessment running…"}

@@ -147,6 +147,59 @@ def _fetch_linkedin_direct(url: str) -> str:  # NOSONAR
     return ""
 
 
+def _fetch_linkedin_guest(url: str) -> str:
+    """Fallback: LinkedIn's public jobs-guest fragment endpoint.
+
+    /jobs-guest/jobs/api/jobPosting/{id} serves a server-rendered HTML
+    fragment of the posting without login and is less aggressively gated for
+    datacenter IPs than the full page (which often serves an authwall with no
+    JSON-LD from cloud egress). Returns plain text or "".
+    """
+    m = re.search(r"/jobs/view/(\d+)", url) or re.search(r"currentJobId=(\d+)", url)
+    if not m:
+        return ""
+    guest_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{m.group(1)}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        resp = httpx.get(guest_url, headers=headers, timeout=_HTTP_TIMEOUT, follow_redirects=True)
+        if resp.status_code != 200:
+            return ""
+        # LinkedIn HTML wraps attributes across lines — normalize before any
+        # tag-level regex work.
+        html = re.sub(r"\s+", " ", resp.text)
+        # Extract the title from its dedicated element. No title element ⇒
+        # authwall/expired/interstitial — refuse rather than import junk
+        # (a nonexistent job id still returns 200 with a decorative page).
+        m_title = re.search(
+            r"<h2[^>]*(?:top-card|title)[^>]*>(.*?)</h2>", html, re.IGNORECASE)
+        title = _strip_html(m_title.group(1)).strip() if m_title else ""
+        if not title:
+            return ""
+        m_org = re.search(
+            r"<a[^>]*org-name[^>]*>(.*?)</a>|<h4[^>]*>(.*?)</h4>", html, re.IGNORECASE)
+        company = ""
+        if m_org:
+            company = _strip_html(m_org.group(1) or m_org.group(2) or "").strip()
+            company = re.sub(r"^at\s+", "", company)
+        body = _strip_html(html)
+        parts = [f"# {title}"]
+        if company:
+            parts.append(f"at {company}")
+        parts.append(body[:8000])
+        text = "\n\n".join(parts)
+        return text if len(text) > 100 else ""
+    except Exception:
+        return ""
+
+
 def _fetch_jina(url: str) -> str:
     """Return cleaned markdown text for *url* via Jina Reader.
 
@@ -155,7 +208,7 @@ def _fetch_jina(url: str) -> str:
     :exc:`LinkedInBlockedError` if no usable content can be extracted.
     """
     if _is_linkedin_url(url):
-        fallback = _fetch_linkedin_direct(url)
+        fallback = _fetch_linkedin_direct(url) or _fetch_linkedin_guest(url)
         if fallback.strip():
             return fallback
         raise LinkedInBlockedError(url)
@@ -250,27 +303,36 @@ def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def scrape_job_url(url: str, auto_queue: bool = True) -> str:
+def scrape_job_url(url: str, auto_queue: bool = True, page_text: str = "") -> str:
     """Fetch a job posting from a URL, extract the content, and optionally queue it for fitment review.
 
     Uses Jina Reader (r.jina.ai) to strip HTML and return clean text from any
     job board page — Greenhouse, Lever, Ashby, Workday, and company career
-    pages all work well.  LinkedIn job pages are not reliably supported.
+    pages all work well.  LinkedIn job pages are not reliably supported
+    server-side; clients that can read the page themselves (the mobile app
+    fetches from a residential IP where LinkedIn serves real content) pass
+    the extracted content as *page_text* and no server fetch happens at all.
 
     Args:
         url:        Full URL to the job posting (https://...).
         auto_queue: If True (default), immediately calls queue_job so the
                     posting enters the evaluation pipeline.  If False, returns
                     the extracted content for review without queuing.
+        page_text:  Optional client-supplied page content. When non-empty it
+                    is trusted as the posting text and the URL is only used
+                    for metadata (company-from-URL, source link).
     """
-    try:
-        text = _fetch_jina(url)
-    except LinkedInBlockedError as exc:
-        return str(exc)
-    except httpx.HTTPStatusError as exc:
-        return f"HTTP {exc.response.status_code} fetching {url}. The page may require login."
-    except httpx.HTTPError as exc:
-        return f"Failed to fetch {url}: {exc}"
+    if page_text.strip():
+        text = page_text
+    else:
+        try:
+            text = _fetch_jina(url)
+        except LinkedInBlockedError as exc:
+            return str(exc)
+        except httpx.HTTPStatusError as exc:
+            return f"HTTP {exc.response.status_code} fetching {url}. The page may require login."
+        except httpx.HTTPError as exc:
+            return f"Failed to fetch {url}: {exc}"
 
     if not text.strip():
         return (
