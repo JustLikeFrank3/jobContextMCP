@@ -1,5 +1,6 @@
-// Contacts — phones are communication devices. Tap a person: call, email,
-// LinkedIn, notes, follow-up state. Follow-up queue floats to the top.
+// Networking — the relationship surface. Filter by where the conversation
+// stands (needs reply / awaiting reply / drafted), search everything, act
+// with one tap: call, email, LinkedIn. Follow-ups float to the top.
 import { useCallback, useEffect, useState } from 'react'
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
@@ -17,7 +18,16 @@ type Person = {
   last_updated?: string
 }
 
-type PeopleData = { total: number; follow_up_queue: Person[]; recent: Person[] }
+type PeopleData = { total: number; follow_up_queue: Person[]; recent: Person[]; people?: Person[] }
+
+// outreach_status vocabulary: none | drafted | sent | responded
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'responded', label: 'Needs reply' },
+  { key: 'sent', label: 'Awaiting reply' },
+  { key: 'drafted', label: 'Drafted' },
+] as const
+type FilterKey = (typeof FILTERS)[number]['key']
 
 function extractActions(p: Person) {
   const info = `${p.contact_info || ''} ${p.notes || ''} ${p.context || ''}`
@@ -61,11 +71,12 @@ function PersonCard({ p, highlight }: { p: Person; highlight?: boolean }) {
   )
 }
 
-export default function Contacts() {
+export default function Networking() {
   const [data, setData] = useState<PeopleData | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<FilterKey>('all')
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -89,6 +100,19 @@ export default function Contacts() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.cyan} />}
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.filterRow}>
+        {FILTERS.map((f) => (
+          <Pressable
+            key={f.key}
+            style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
+            onPress={() => setFilter(f.key)}
+          >
+            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <TextInput
         style={styles.search}
         value={query}
@@ -99,10 +123,15 @@ export default function Contacts() {
       />
       {(() => {
         const q = query.trim().toLowerCase()
-        const match = (p: Person) =>
-          !q || `${p.name} ${p.company} ${p.relationship} ${p.context} ${p.notes}`.toLowerCase().includes(q)
+        const match = (p: Person) => {
+          if (filter !== 'all' && (p.outreach_status || 'none').toLowerCase() !== filter) return false
+          return !q || `${p.name} ${p.company} ${p.relationship} ${p.context} ${p.notes}`.toLowerCase().includes(q)
+        }
+        // Prefer the full roster (newer API); fall back to the recent slice.
+        const roster = data?.people?.length ? data.people : (data?.recent || [])
+        const followupIds = new Set((data?.follow_up_queue || []).map((p) => p.id))
         const followups = (data?.follow_up_queue || []).filter(match)
-        const rest = (data?.recent || []).filter(match)
+        const rest = roster.filter((p) => match(p) && !followupIds.has(p.id))
         // Group by relationship so the list reads like a network, not a log.
         const groups = new Map<string, Person[]>()
         for (const p of rest) {
@@ -123,8 +152,10 @@ export default function Contacts() {
                 {people.map((p) => <PersonCard key={p.id} p={p} />)}
               </View>
             ))}
-            {q && followups.length === 0 && groups.size === 0 && (
-              <Text style={styles.empty}>No matches for “{query}”.</Text>
+            {(q || filter !== 'all') && followups.length === 0 && groups.size === 0 && (
+              <Text style={styles.empty}>
+                {q ? `No matches for “${query}”.` : 'Nobody in this state right now.'}
+              </Text>
             )}
           </>
         )
@@ -162,4 +193,12 @@ const styles = StyleSheet.create({
     fontSize: 14, marginHorizontal: 12, marginTop: 12,
   },
   empty: { color: colors.muted, textAlign: 'center', marginTop: 40 },
+  filterRow: { flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 12 },
+  filterChip: {
+    backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+    borderRadius: 999, paddingHorizontal: 13, paddingVertical: 7,
+  },
+  filterChipActive: { borderColor: colors.cyan, backgroundColor: colors.surfaceRaised },
+  filterText: { color: colors.muted, fontSize: 13 },
+  filterTextActive: { color: colors.cyan, fontWeight: '600' },
 })

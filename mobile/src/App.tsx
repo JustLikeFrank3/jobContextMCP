@@ -10,7 +10,7 @@ import { useShareIntent } from 'expo-share-intent'
 import Inbox from './screens/Inbox'
 import Today from './screens/Today'
 import Pipeline from './screens/Pipeline'
-import Contacts from './screens/Contacts'
+import Networking from './screens/Networking'
 import Settings from './screens/Settings'
 import { captureUrl } from './api'
 import { ensurePushRegistration } from './push'
@@ -129,8 +129,8 @@ export default function App() {
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>▥</Text> }}
         />
         <Tab.Screen
-          name="Contacts"
-          component={Contacts}
+          name="Networking"
+          component={Networking}
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>☎</Text> }}
         />
         <Tab.Screen
