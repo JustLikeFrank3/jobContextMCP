@@ -10,7 +10,14 @@ import lib.config as cfg
 
 
 @pytest.fixture()
-def desktop_workspace(tmp_path, monkeypatch):
+def desktop_workspace(isolated_server, tmp_path, monkeypatch):
+    """Desktop-mode workspace on top of the suite's canonical isolation.
+
+    isolated_server redirects EVERY module path global to tmp and restores
+    after — without it, environments lacking a repo-root config.json (CI)
+    fall back to placeholder defaults like /path/to/… and setup_workspace's
+    directory steps try to mkdir at the filesystem root.
+    """
     from lib.user_provisioning import provision_user_data
 
     monkeypatch.setenv("DEPLOY_MODE", "desktop")
