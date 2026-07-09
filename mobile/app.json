@@ -9,7 +9,10 @@
     "backgroundColor": "#0b1117",
     "ios": {
       "bundleIdentifier": "app.jobcontext.mobile",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "app.jobcontext.mobile",
@@ -43,13 +46,19 @@
       ],
       "expo-secure-store",
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      "expo-status-bar"
     ],
     "icon": "./assets/icon.png",
     "splash": {
       "backgroundColor": "#0b1117",
       "image": "./assets/icon.png",
       "resizeMode": "contain"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d0996a26-fa80-45fc-9de7-b43cfe095ebc"
+      }
     }
   }
 }

@@ -1,17 +1,30 @@
 {
-  "cli": { "appVersionSource": "remote" },
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "ios": { "simulator": false }
+      "ios": {
+        "simulator": false,
+        "image": "latest"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "image": "latest"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest"
+      }
     }
   },
   "submit": {
