@@ -173,7 +173,7 @@ def send_push(title: str, body: str, data: "dict | None" = None) -> int:
 
 class CaptureRequest(BaseModel):
     url: str = ""
-    text: str = ""   # future: pasted JD text instead of a URL
+    text: str = ""   # client-extracted page content (or pasted JD text)
 
 
 def _capture_and_assess(inputs: dict) -> dict:
@@ -186,7 +186,7 @@ def _capture_and_assess(inputs: dict) -> dict:
     """
     url = inputs["url"]
     try:
-        return _capture_and_assess_inner(url)
+        return _capture_and_assess_inner(url, inputs.get("text", ""))
     except Exception:  # noqa: BLE001 — the user is waiting on a push either way
         _log.exception("capture worker failed for %s", url)
         send_push(
@@ -197,10 +197,12 @@ def _capture_and_assess(inputs: dict) -> dict:
         raise  # the work row records the failure + traceback
 
 
-def _capture_and_assess_inner(url: str) -> dict:
+def _capture_and_assess_inner(url: str, text: str = "") -> dict:
     from tools.job_scraper import scrape_job_url
 
-    result = scrape_job_url(url, auto_queue=True)
+    # text = client-extracted page content (the phone can read pages that
+    # block our datacenter IPs — e.g. LinkedIn's authwall).
+    result = scrape_job_url(url, auto_queue=True, page_text=text)
     company = role = ""
     for line in str(result).splitlines():
         if line.lower().startswith("company:"):
@@ -248,5 +250,9 @@ async def capture(
     url = request.url.strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Share a job posting URL.")
-    work_id = work.enqueue("capture_url", {"url": url}, origin="mobile-share")
+    work_id = work.enqueue(
+        "capture_url",
+        {"url": url, "text": request.text[:100_000]},
+        origin="mobile-share",
+    )
     return {"status": "capturing", "work_id": work_id, "detail": "Saved. Assessment running…"}

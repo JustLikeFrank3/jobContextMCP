@@ -105,11 +105,65 @@ class TestScrapeJobUrl:
         result = srv.scrape_job_url("https://boards.greenhouse.io/stripe/jobs/12345")
         assert "403" in result or "login" in result.lower()
 
-    def test_linkedin_url_returns_blocked_message(self, isolated_server):
-        # LinkedIn URLs bypass Jina entirely and return a user-friendly message.
+    def test_linkedin_url_returns_blocked_message(self, isolated_server, monkeypatch):
+        # LinkedIn URLs bypass Jina entirely; when neither the page (no
+        # JSON-LD) nor the jobs-guest fragment (no title element) yields a
+        # posting, the user gets the friendly blocked message.
+        monkeypatch.setattr(
+            "httpx.get", lambda *a, **kw: _mock_response("<html>authwall page</html>"))
         result = srv.scrape_job_url("https://www.linkedin.com/jobs/view/12345")
         assert "linkedin" in result.lower()
         assert "paste" in result.lower() or "dashboard" in result.lower()
+
+    def test_page_text_skips_network_entirely(self, isolated_server, monkeypatch):
+        """Client-supplied content (mobile fetches pages our datacenter IP
+        can't) must be used verbatim — no server-side fetch at all."""
+        def _no_network(*a, **kw):
+            raise AssertionError("network fetch attempted despite page_text")
+
+        monkeypatch.setattr("httpx.get", _no_network)
+        result = srv.scrape_job_url(
+            "https://www.linkedin.com/jobs/view/12345",
+            auto_queue=True,
+            page_text=_SAMPLE_MARKDOWN,
+        )
+        assert "Scraped" in result
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        assert data["jobs"][0]["company"] == "Stripe"
+
+    def test_linkedin_guest_fallback_rescues_blocked_direct(self, isolated_server, monkeypatch):
+        """When the full page serves an authwall (no JSON-LD), the jobs-guest
+        fragment endpoint is tried before giving up."""
+        from tools import job_scraper as scraper
+
+        guest_html = (
+            '<h2 class="top-card-layout__title">Senior Platform Engineer</h2>'
+            '<h4>at Cox Automotive</h4>'
+            '<div class="description__text">' + "Build the dealer platform. " * 20 + "</div>"
+        )
+
+        def fake_get(url, *a, **kw):
+            if "jobs-guest" in url:
+                return _mock_response(guest_html)
+            return _mock_response("<html>authwall</html>")  # no JSON-LD
+
+        monkeypatch.setattr("httpx.get", fake_get)
+        result = scraper.scrape_job_url(
+            "https://www.linkedin.com/jobs/view/4242", auto_queue=True)
+        assert "Scraped" in result
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        assert data["jobs"][0]["company"] == "Cox Automotive"
+
+    def test_linkedin_guest_rejects_authwall_boilerplate(self, isolated_server, monkeypatch):
+        from tools import job_scraper as scraper
+
+        def fake_get(url, *a, **kw):
+            return _mock_response(
+                "<html>Join LinkedIn " + "to see who you already know. " * 20 + "</html>")
+
+        monkeypatch.setattr("httpx.get", fake_get)
+        result = scraper.scrape_job_url("https://www.linkedin.com/jobs/view/4242")
+        assert "linkedin" in result.lower()  # blocked message, not junk import
 
     def test_empty_response_handled_gracefully(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response("   "))
