@@ -7,7 +7,8 @@
     "start": "expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.2.0",
@@ -28,7 +29,7 @@
   },
   "devDependencies": {
     "@types/react": "~18.3.12",
-    "eas-cli": "^20.5.1",
+    "patch-package": "^8.0.1",
     "typescript": "^5.3.3"
   }
 }
