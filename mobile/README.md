@@ -29,10 +29,10 @@ TestFlight when ready: `npx eas build --platform ios && npx eas submit`.
 ## Ship it
 
 ```bash
-npx eas login                                   # once
-npx eas build --profile development --platform ios    # dev build → your iPhone (share sheet + push work)
-npx eas build --profile preview --platform android    # installable APK link → the Windows/Android tester
-npx eas build --platform ios && npx eas submit -p ios # TestFlight
+npx eas-cli login                               # once (expo doctor forbids eas-cli as a project dep — npx eas-cli needs no install)
+npx eas-cli build --profile development --platform ios   # dev build → your iPhone (share sheet + push work)
+npx eas-cli build --profile preview --platform android   # installable APK link → the Windows/Android tester
+npx eas-cli build --platform ios && npx eas-cli submit -p ios  # TestFlight
 ```
 
 Sign in with Microsoft inside the app (Settings tab) — it self-registers
