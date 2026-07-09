@@ -1,7 +1,7 @@
 // Contacts — phones are communication devices. Tap a person: call, email,
 // LinkedIn, notes, follow-up state. Follow-up queue floats to the top.
 import { useCallback, useEffect, useState } from 'react'
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
 
@@ -65,6 +65,7 @@ export default function Contacts() {
   const [data, setData] = useState<PeopleData | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -88,14 +89,46 @@ export default function Contacts() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.cyan} />}
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {(data?.follow_up_queue?.length ?? 0) > 0 && (
-        <>
-          <Text style={styles.section}>Follow-ups due</Text>
-          {data!.follow_up_queue.map((p) => <PersonCard key={`f${p.id}`} p={p} highlight />)}
-        </>
-      )}
-      <Text style={styles.section}>Recent {data ? `(${data.total} total)` : ''}</Text>
-      {(data?.recent || []).map((p) => <PersonCard key={p.id} p={p} />)}
+      <TextInput
+        style={styles.search}
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search people, companies, context…"
+        placeholderTextColor={colors.faint}
+        autoCapitalize="none"
+      />
+      {(() => {
+        const q = query.trim().toLowerCase()
+        const match = (p: Person) =>
+          !q || `${p.name} ${p.company} ${p.relationship} ${p.context} ${p.notes}`.toLowerCase().includes(q)
+        const followups = (data?.follow_up_queue || []).filter(match)
+        const rest = (data?.recent || []).filter(match)
+        // Group by relationship so the list reads like a network, not a log.
+        const groups = new Map<string, Person[]>()
+        for (const p of rest) {
+          const key = (p.relationship || 'other').toLowerCase()
+          groups.set(key, [...(groups.get(key) || []), p])
+        }
+        return (
+          <>
+            {followups.length > 0 && (
+              <>
+                <Text style={styles.section}>Follow-ups due</Text>
+                {followups.map((p) => <PersonCard key={`f${p.id}`} p={p} highlight />)}
+              </>
+            )}
+            {[...groups.entries()].map(([rel, people]) => (
+              <View key={rel}>
+                <Text style={styles.section}>{rel} ({people.length})</Text>
+                {people.map((p) => <PersonCard key={p.id} p={p} />)}
+              </View>
+            ))}
+            {q && followups.length === 0 && groups.size === 0 && (
+              <Text style={styles.empty}>No matches for “{query}”.</Text>
+            )}
+          </>
+        )
+      })()}
     </ScrollView>
   )
 }
@@ -123,4 +156,10 @@ const styles = StyleSheet.create({
   },
   actionText: { color: colors.text, fontSize: 13 },
   error: { color: colors.danger, padding: 12, textAlign: 'center' },
+  search: {
+    backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+    borderRadius: 10, color: colors.text, paddingHorizontal: 14, paddingVertical: 10,
+    fontSize: 14, marginHorizontal: 12, marginTop: 12,
+  },
+  empty: { color: colors.muted, textAlign: 'center', marginTop: 40 },
 })

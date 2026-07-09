@@ -4,7 +4,7 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
-import { Alert, Text } from 'react-native'
+import { Text, View } from 'react-native'
 import { useShareIntent } from 'expo-share-intent'
 import Inbox from './screens/Inbox'
 import Today from './screens/Today'
@@ -14,6 +14,7 @@ import Settings from './screens/Settings'
 import { captureUrl } from './api'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
+import { setCaptureStatus, useCaptureStatus } from './captureStatus'
 
 const Tab = createBottomTabNavigator()
 
@@ -39,13 +40,26 @@ function useIncomingShares() {
       ''
     resetShareIntent()
     if (!url) {
-      Alert.alert('Nothing to capture', 'Share a job posting link.')
+      setCaptureStatus({ kind: 'error', text: 'Nothing to capture — share a job posting link.' })
       return
     }
+    setCaptureStatus({ kind: 'busy', text: 'Saving…' })
     captureUrl(url)
-      .then((r) => Alert.alert('Saved', r.detail))
-      .catch((e) => Alert.alert('Capture failed', e.message))
+      .then((r) => setCaptureStatus({ kind: 'ok', text: `${r.detail} You can keep browsing — a notification arrives with the score.` }, 6000))
+      .catch((e) => setCaptureStatus({ kind: 'error', text: e.message }))
   }, [hasShareIntent])
+}
+
+function CaptureBanner() {
+  const status = useCaptureStatus()
+  if (!status) return null
+  const bg = status.kind === 'error' ? '#3a1b1e' : status.kind === 'ok' ? '#12321f' : colors.surfaceRaised
+  const fg = status.kind === 'error' ? colors.danger : status.kind === 'ok' ? colors.green : colors.cyanSoft
+  return (
+    <View style={{ backgroundColor: bg, borderBottomColor: colors.border, borderBottomWidth: 1, paddingVertical: 10, paddingHorizontal: 14 }}>
+      <Text style={{ color: fg, fontSize: 13, lineHeight: 18 }}>{status.text}</Text>
+    </View>
+  )
 }
 
 export default function App() {
@@ -57,6 +71,7 @@ export default function App() {
   return (
     <NavigationContainer theme={theme}>
       <StatusBar style="light" />
+      <CaptureBanner />
       <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
