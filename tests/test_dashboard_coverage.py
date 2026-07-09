@@ -1704,6 +1704,8 @@ class TestDashboardPeopleCoverage:
         assert [person["name"] for person in payload["follow_up_queue"]] == ["Dana", "Eli"]
         assert payload["by_status"][0] == {"status": "sent", "count": 1}
         assert {"relationship": "peer", "count": 1} in payload["by_relationship"]
+        # full roster for client-side facet filtering (mobile Networking tab)
+        assert [person["name"] for person in payload["people"]] == ["Dana", "Eli", "Fran"]
 
 
 class TestDashboardPipelineCoverage:

@@ -152,6 +152,21 @@ def test_get_oura_readiness_lists_rows(tmp_data, oura_mod):
     assert "High" in out  # >= 85
 
 
+def test_oura_readiness_rows_for_graphing(tmp_data, oura_mod):
+    import datetime
+    d1 = (datetime.date.today() - datetime.timedelta(days=2)).isoformat()
+    d2 = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    oura_mod.log_oura_readiness(readiness_score=70, sleep_score=60, hrv=50, recovery_index=75, date=d1)
+    oura_mod.log_oura_readiness(readiness_score=85, sleep_score=78, hrv=66, recovery_index=88, date=d2)
+    rows = oura_mod.oura_readiness_rows(days=7)
+    # oldest first, typed dicts ready for a chart
+    assert [r["date"] for r in rows] == [d1, d2]
+    assert rows[1] == {"date": d2, "readiness": 85, "sleep": 78, "hrv": 66, "recovery": 88}
+    # days clamps to >= 1: a 1-day window keeps only yesterday's row
+    assert oura_mod.oura_readiness_rows(days=0) == [rows[1]]
+    assert oura_mod.oura_readiness_rows(days=1) == [rows[1]]
+
+
 # ── dashboard _load_oura integration ─────────────────────────────────────────
 
 def test_load_oura_prefers_sqlite(tmp_data, oura_mod):
