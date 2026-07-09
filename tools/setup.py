@@ -11,7 +11,9 @@ Two tools:
 """
 
 import json
+import os
 import shutil
+import sys
 from pathlib import Path
 
 from lib import config
@@ -474,10 +476,11 @@ def setup_workspace(  # NOSONAR
     # contact block into the user's own data-folder config.json instead of
     # the repo-root config.json (which is read-only, injected via ConfigMap).
     from lib.user_context import get_data_folder_override
-    override = get_data_folder_override()
-    if override is not None:
-        # Per-user session: write/update contact info in user's config.json
-        user_config_path = override / _CONFIG_FILENAME
+
+    def _merge_user_config(user_config_path: Path) -> dict:
+        """Merge contact + resolution keys into an existing config (never a
+        wholesale rebuild — the file may carry API keys, sync settings, and
+        machine-correct folder paths that must survive)."""
         try:
             existing: dict = json.loads(user_config_path.read_text(encoding="utf-8")) if user_config_path.exists() else {}
         except Exception:
@@ -493,20 +496,48 @@ def setup_workspace(  # NOSONAR
         }
         if address:
             existing["contact"]["address"] = address.strip()
-        # Persist per-user resolution keys (relative paths / values only — the
-        # folder roots come from the shared AKS config). Without these the
-        # merged config falls back to the owner's defaults, so check_workspace
-        # reports the master resume / cheatsheet missing and the LeetCode
-        # language as "(not set)" for every tenant.
         existing["master_resume_path"]       = f"01-Current-Optimized/{mr_filename}"
         existing["leetcode_cheatsheet_path"] = _LC_CHEATSHEET_FILENAME
         existing["quick_reference_path"]     = _LC_QUICK_REF_FILENAME
         existing["leetcode_language"]        = lang
         existing["leetcode_problems_dir"]    = lc_problems_subdir
+        user_config_path.parent.mkdir(parents=True, exist_ok=True)
         user_config_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
+        return existing
+
+    override = get_data_folder_override()
+    from lib.app_dirs import is_desktop_mode
+
+    if override is not None:
+        # Per-user session (AKS): the folder roots come from the shared
+        # config; only contact + resolution keys live per-user.
+        _merge_user_config(override / _CONFIG_FILENAME)
+        _mark("config.json (contact block)", True)
+    elif is_desktop_mode() or getattr(sys, "frozen", False):
+        # Desktop / frozen app: the real config lives in app-data
+        # (JOBCONTEXT_CONFIG). _HERE is INSIDE the signed bundle — writing
+        # there breaks the code signature, and _build_config would point
+        # data_folder at the bundle: a live _reconfigure onto that blanks
+        # every screen until restart (the "empty pipeline" field bug).
+        env_cfg = os.environ.get("JOBCONTEXT_CONFIG", "").strip()
+        if env_cfg:
+            desktop_config_path = Path(env_cfg).expanduser()
+        else:
+            from lib.app_dirs import desktop_data_dir
+
+            desktop_config_path = desktop_data_dir() / _CONFIG_FILENAME
+        merged = _merge_user_config(desktop_config_path)
+        # Refresh only the merged keys in the live config — folder paths are
+        # untouched, so no _reconfigure (and no blanked UI).
+        from lib.config import update_runtime_config
+
+        update_runtime_config({k: merged[k] for k in (
+            "contact", "master_resume_path", "leetcode_cheatsheet_path",
+            "quick_reference_path", "leetcode_language", "leetcode_problems_dir",
+        )})
         _mark("config.json (contact block)", True)
     else:
-        # Local mode: write the full config.json at the repo root
+        # Local dev checkout: write the full config.json at the repo root
         config_path = _HERE / _CONFIG_FILENAME
         if not config_path.exists():
             cfg = _build_config(
