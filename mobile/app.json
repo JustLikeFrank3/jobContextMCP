@@ -9,7 +9,10 @@
     "backgroundColor": "#0b1117",
     "ios": {
       "bundleIdentifier": "app.jobcontext.mobile",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "app.jobcontext.mobile",
