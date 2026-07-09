@@ -43,6 +43,9 @@ def _people_payload() -> dict:
         "by_relationship": [{"relationship": r, "count": c} for r, c in relationship_counts.most_common()],
         "follow_up_queue": follow_up[:30],
         "recent": people_sorted[:20],
+        # Full roster (recency-sorted, sanity-capped) so clients can filter by
+        # outreach_status/relationship without a round-trip per facet.
+        "people": people_sorted[:500],
     }
 
 
