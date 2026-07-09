@@ -4,7 +4,8 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
-import { Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, Text } from 'react-native'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShareIntent } from 'expo-share-intent'
 import Inbox from './screens/Inbox'
 import Today from './screens/Today'
@@ -52,13 +53,43 @@ function useIncomingShares() {
 
 function CaptureBanner() {
   const status = useCaptureStatus()
+  const insets = useSafeAreaInsets()
   if (!status) return null
   const bg = status.kind === 'error' ? '#3a1b1e' : status.kind === 'ok' ? '#12321f' : colors.surfaceRaised
   const fg = status.kind === 'error' ? colors.danger : status.kind === 'ok' ? colors.green : colors.cyanSoft
+  const icon = status.kind === 'error' ? '✕' : status.kind === 'ok' ? '✓' : null
   return (
-    <View style={{ backgroundColor: bg, borderBottomColor: colors.border, borderBottomWidth: 1, paddingVertical: 10, paddingHorizontal: 14 }}>
-      <Text style={{ color: fg, fontSize: 13, lineHeight: 18 }}>{status.text}</Text>
-    </View>
+    <Pressable
+      onPress={() => setCaptureStatus(null)}
+      style={{
+        position: 'absolute',
+        top: insets.top + 8,
+        left: 12,
+        right: 12,
+        zIndex: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: bg,
+        borderColor: colors.border,
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        shadowColor: '#000',
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
+      }}
+    >
+      {icon ? (
+        <Text style={{ color: fg, fontSize: 15, fontWeight: '700' }}>{icon}</Text>
+      ) : (
+        <ActivityIndicator size="small" color={fg} />
+      )}
+      <Text style={{ color: fg, fontSize: 13, lineHeight: 18, flex: 1 }}>{status.text}</Text>
+    </Pressable>
   )
 }
 
@@ -69,9 +100,10 @@ export default function App() {
   }, [])
 
   return (
-    <NavigationContainer theme={theme}>
-      <StatusBar style="light" />
-      <CaptureBanner />
+    <SafeAreaProvider>
+      <NavigationContainer theme={theme}>
+        <StatusBar style="light" />
+        <CaptureBanner />
       <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
@@ -107,6 +139,7 @@ export default function App() {
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>⚙</Text> }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </SafeAreaProvider>
   )
 }
