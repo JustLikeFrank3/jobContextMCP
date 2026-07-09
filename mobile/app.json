@@ -46,7 +46,8 @@
       ],
       "expo-secure-store",
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      "expo-status-bar"
     ],
     "icon": "./assets/icon.png",
     "splash": {
