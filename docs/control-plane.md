@@ -42,6 +42,25 @@ executor sends; **the row is the system of record**.
 
 Kinds registered today: `capture_url` (mobile share → import → assess → push).
 
+## Telemetry (P0, shipped alongside)
+
+Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
+
+- **`GET /metrics`** — Prometheus text format from an in-process registry.
+  Instrumented: every HTTP request (`http_requests_total` /
+  `http_request_seconds`, labeled by route *template* to bound cardinality),
+  every work item (`work_items_total` / `work_item_seconds` by kind/status),
+  and every LLM call through the `create_chat_completion` funnel
+  (`llm_calls_total` by label/model/outcome, `llm_call_seconds`,
+  `llm_tokens_total` by direction). Aggregates only — no user data. The AKS
+  pods carry `prometheus.io/*` annotations for Azure Monitor's managed
+  Prometheus (enable pod-annotation scraping in
+  ama-metrics-settings-configmap to activate collection).
+- **`GET /api/work/stats`** — per-tenant JSON aggregates straight off the
+  work_items table (counts + avg duration by kind/status, recent failures
+  with error heads): the control plane doubling as its own telemetry source,
+  consumable by the dashboard, mobile, or Claude in chat.
+
 ## Roadmap
 
 - **P1 — document generation**: route assessment / interview-prep /
