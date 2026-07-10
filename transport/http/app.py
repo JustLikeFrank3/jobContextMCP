@@ -12,13 +12,14 @@ can connect to the remote server via type:"http" in mcp.json).
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
@@ -87,6 +88,33 @@ def _mount_spa(app: FastAPI) -> None:
     _logger.info("React SPA mounted at /app (dist=%s)", spa_dist)
 
 
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Time every request; label by method + route TEMPLATE (bounded
+    cardinality) + status. /metrics and /health are excluded as self-noise."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        from lib import metrics
+
+        path = request.url.path
+        if path in ("/metrics", "/health", "/healthz"):
+            return await call_next(request)
+        started = time.monotonic()
+        status = "500"  # if call_next raises, record the request as a 500
+        try:
+            response = await call_next(request)
+            status = str(response.status_code)
+            return response
+        finally:
+            route = request.scope.get("route")
+            route_path = getattr(route, "path", None) or "(unrouted)"
+            labels = {"method": request.method, "route": route_path, "status": status}
+            metrics.inc("http_requests_total", **labels)
+            metrics.observe(
+                "http_request_seconds", time.monotonic() - started,
+                method=request.method, route=route_path,
+            )
+
+
 class UserDataContextMiddleware(BaseHTTPMiddleware):
     """Starlette middleware that routes each authenticated request to the
     requesting user's own data partition under DATA_FOLDER/users/{oid}/.
@@ -121,6 +149,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         _PUBLIC_PREFIXES = (
             "/.well-known/",
             "/health",
+            "/metrics",       # aggregate counters only — no user data (scraped by ama-metrics)
             "/oauth/",
             "/logout",
             "/setup",
@@ -245,6 +274,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     # Per-user data isolation for every authenticated request.
     # Registered first so it sits inside CORS (CORS must be outermost).
     app.add_middleware(UserDataContextMiddleware)
+    app.add_middleware(MetricsMiddleware)
 
     if settings.cors_origins:
         app.add_middleware(
@@ -282,6 +312,12 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(personas_routes.router)
     app.include_router(dashboard_api_router)  # /api/dashboard/* JSON for the React SPA
     app.include_router(dashboard_router)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def _metrics() -> PlainTextResponse:
+        from lib import metrics
+
+        return PlainTextResponse(metrics.render_prometheus(), media_type="text/plain; version=0.0.4")
 
     @app.get("/", include_in_schema=False)
     async def _root_landing() -> HTMLResponse:

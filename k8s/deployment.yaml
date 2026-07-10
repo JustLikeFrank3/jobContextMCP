@@ -17,6 +17,13 @@ spec:
       labels:
         app: jcmcp
         azure.workload.identity/use: "true"
+      annotations:
+        # Azure Monitor managed Prometheus (ama-metrics) pod-annotation
+        # scraping — requires podannotationnamespaceregex to include this
+        # namespace in the ama-metrics-settings-configmap.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
     spec:
       serviceAccountName: jcmcp-workload-sa
       initContainers:

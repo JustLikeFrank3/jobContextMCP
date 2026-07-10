@@ -7,6 +7,8 @@ import time
 from random import SystemRandom
 from typing import Any
 
+from lib import metrics
+
 _LOG = logging.getLogger(__name__)
 # Cryptographically-seeded RNG used only for retry-backoff jitter. Avoids the
 # non-secure global PRNG so static analysers don't flag it (Sonar S2245 / B311).
@@ -104,6 +106,12 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
             except Exception as exc:
                 _LAST_CHAT_CALL = time.monotonic()
                 status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                metrics.inc(
+                    "llm_calls_total",
+                    label=label,
+                    model=str(kwargs.get("model")),
+                    outcome=f"error_{status_code or 'network'}",
+                )
                 payload = _error_payload(exc)
                 _LOG.warning(
                     "openai.chat error label=%s attempt=%s status=%s requested_max_tokens=%s payload=%s",
@@ -158,6 +166,16 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
             prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
             total_tokens = getattr(usage, "total_tokens", None) if usage else None
+            model = str(kwargs.get("model"))
+            metrics.inc("llm_calls_total", label=label, model=model, outcome="ok")
+            metrics.observe(
+                "llm_call_seconds", time.monotonic() - started, label=label, model=model)
+            if prompt_tokens:
+                metrics.inc("llm_tokens_total", float(prompt_tokens),
+                            label=label, model=model, direction="prompt")
+            if completion_tokens:
+                metrics.inc("llm_tokens_total", float(completion_tokens),
+                            label=label, model=model, direction="completion")
             _LOG.info(
                 "openai.chat usage label=%s attempt=%s elapsed=%.2fs model=%s requested_max_tokens=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
                 label,

@@ -146,10 +146,6 @@ def _save_message(
 def _history_as_openai_messages(session_id: int) -> list[dict]:
     """Rebuild the OpenAI-shaped message list from stored rows (capped)."""
     rows = list_messages(session_id)[-MAX_HISTORY_MESSAGES:]
-    # Never start history with orphaned tool results (their assistant row was
-    # capped away) — providers reject tool messages with no matching call.
-    while rows and rows[0]["role"] == "tool":
-        rows.pop(0)
     messages: list[dict] = []
     for row in rows:
         if row["role"] == "assistant" and row["tool_calls"]:
@@ -170,7 +166,49 @@ def _history_as_openai_messages(session_id: int) -> list[dict]:
             )
         else:
             messages.append({"role": row["role"], "content": row["content"]})
-    return messages
+    return _repair_tool_pairing(messages)
+
+
+def _repair_tool_pairing(messages: list[dict]) -> list[dict]:
+    """Make replayed history provider-legal, whatever state it was saved in.
+
+    Providers hard-reject (400) two shapes that real crashes produce:
+      - an assistant message with tool_calls not followed by a tool result for
+        EVERY tool_call_id (turn died mid-execution → results never saved;
+        the session is then permanently poisoned without this repair)
+      - a tool result with no preceding matching call (its assistant row was
+        capped away, or the same interrupted turn saved out of order)
+
+    Missing results are synthesized as interruption notes; orphaned results
+    are dropped.
+    """
+    repaired: list[dict] = []
+    pending: set[str] = set()  # ids from the last assistant tool_calls still unanswered
+
+    def _flush_pending() -> None:
+        repaired.extend(
+            {
+                "role": "tool",
+                "tool_call_id": missing_id,
+                "content": "(tool execution was interrupted — no result was recorded)",
+            }
+            for missing_id in sorted(pending)
+        )
+        pending.clear()
+
+    for msg in messages:
+        if msg["role"] == "tool":
+            if msg.get("tool_call_id") in pending:
+                pending.discard(msg["tool_call_id"])
+                repaired.append(msg)
+            # else: orphaned result — drop it
+            continue
+        _flush_pending()  # any non-tool message closes the response window
+        if msg["role"] == "assistant" and msg.get("tool_calls"):
+            pending.update(tc["id"] for tc in msg["tool_calls"] if tc.get("id"))
+        repaired.append(msg)
+    _flush_pending()
+    return repaired
 
 
 # ── tool surface ───────────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
+from lib import metrics
 from lib.db import get_connection
 from lib.user_context import (
     get_data_folder_override,
@@ -187,13 +188,17 @@ def _execute(partition: "str | None", item_id: int) -> None:
 
     if fn is None:
         _finish("failed", error=f"no executor registered for kind '{kind}'")
+        metrics.inc("work_items_total", kind=kind, status="failed")
         return
     try:
-        artifacts = _in_partition(partition, lambda: fn(inputs))
+        with metrics.timed("work_item_seconds", kind=kind):
+            artifacts = _in_partition(partition, lambda: fn(inputs))
         _finish("succeeded", artifacts=artifacts if isinstance(artifacts, dict) else None)
+        metrics.inc("work_items_total", kind=kind, status="succeeded")
     except Exception as exc:  # noqa: BLE001 — outcome is the record, never a crash
         _log.exception("work item %s (%s) failed", item_id, kind)
         _finish("failed", error=f"{exc}\n{traceback.format_exc(limit=8)}")
+        metrics.inc("work_items_total", kind=kind, status="failed")
 
 
 async def _worker_loop() -> None:
