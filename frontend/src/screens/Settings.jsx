@@ -766,7 +766,7 @@ export default function Settings() {
       <SectionHead title="Integrations" />
       <Panel style={{ marginBottom: 20 }}>
         <div style={{ display: 'grid', gap: 10 }}>
-          <StatusRow label="AI generation (OpenAI key)" ok={data?.openaiKeySet} okText="configured" offText="not set">
+          <StatusRow label={`AI generation${data?.aiProvider ? ` (${data.aiProvider})` : ''}`} ok={data?.openaiKeySet} okText="configured" offText="not set">
             Enables resume generation, cover letter drafting, and semantic search.
           </StatusRow>
           <StatusRow label="Oura Ring" ok={data?.ouraConnected} okText="connected" offText="not connected">

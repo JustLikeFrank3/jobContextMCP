@@ -257,6 +257,7 @@ def test_check_workspace_shows_no_openai_when_missing(monkeypatch, tmp_path):
 def test_check_workspace_shows_openai_when_key_set(monkeypatch, tmp_path):
     import tools.setup as s
     _patch_here(monkeypatch, tmp_path, s)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
     s.setup_workspace(**_MINIMAL, openai_api_key="sk-abc")
     result = s.check_workspace()
     assert "auto-generation enabled" in result

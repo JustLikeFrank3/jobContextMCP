@@ -310,25 +310,22 @@ def _is_owner() -> bool:
         return False
 
 
-def _openai_key_set() -> bool:
-    """Whether AI generation has a usable key for the active request/tenant.
-
-    Mirrors the exact resolution used by lib.config.get_llm_client() so the
-    Settings screen reports the same truth generation will actually see:
-    the LLM_API_KEY env var (global override) or the active tenant's merged
-    config.json openai_api_key. Works for single-tenant/local runs and the
-    owner session, not just when a per-user data-folder override is active.
-    """
+def _ai_generation_status() -> "tuple[str, bool]":
+    """Provider-aware AI readiness for the active request/tenant. The old
+    check only looked at openai_api_key and lied in both directions once
+    other providers existed (field report: badge said configured while the
+    chat said not)."""
     try:
-        import os
-        from lib.config import get_active_config
+        from lib.config import llm_generation_status
 
-        api_key = os.environ.get("LLM_API_KEY") or get_active_config().get(
-            "openai_api_key", ""
-        )
-        return bool(str(api_key or "").strip())
+        return llm_generation_status()
     except Exception:
-        return False
+        return "unknown", False
+
+
+def _openai_key_set() -> bool:
+    """Back-compat shim for existing callers/tests."""
+    return _ai_generation_status()[1]
 
 
 def _oura_settings_payload(oura: "dict | None") -> "dict | None":
@@ -388,7 +385,8 @@ async def settings_summary(
     return JSONResponse(
         {
             "isOwner": _is_owner(),
-            "openaiKeySet": _openai_key_set(),
+            "openaiKeySet": _openai_key_set(),  # legacy field name; provider-aware
+            "aiProvider": _ai_generation_status()[0],
             "ouraConfigured": bool(status.get("configured")),
             "ouraConnected": bool(status.get("connected")) or _oura_via_sync(),
             "ouraViaSync": not status.get("connected") and _oura_via_sync(),

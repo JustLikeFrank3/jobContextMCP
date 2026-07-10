@@ -842,12 +842,14 @@ class TestDashboardSettingsApiCoverage:
         monkeypatch.setattr(
             dashboard_api_routes, "_load_oura", lambda: {"readiness_score": 70}
         )
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
 
         response = http_client_noauth.get("/api/dashboard/settings")
         assert response.status_code == 200
         assert response.json() == {
             "isOwner": True,
             "openaiKeySet": True,
+            "aiProvider": "openai",
             "ouraConfigured": True,
             "ouraConnected": True,
             "ouraViaSync": False,
@@ -911,6 +913,7 @@ class TestOpenAiKeySetHelper:
         import lib.config as config
 
         monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
         monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "sk-abc"})
         assert dashboard_api_routes._openai_key_set() is True
 
@@ -918,6 +921,7 @@ class TestOpenAiKeySetHelper:
         import lib.config as config
 
         monkeypatch.setenv("LLM_API_KEY", "env-provided-key")
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
         monkeypatch.setattr(config, "get_active_config", lambda: {})
         assert dashboard_api_routes._openai_key_set() is True
 
@@ -925,6 +929,7 @@ class TestOpenAiKeySetHelper:
         import lib.config as config
 
         monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
         monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "   "})
         assert dashboard_api_routes._openai_key_set() is False
 

@@ -363,6 +363,26 @@ def get_active_master_resume_path() -> Path:
 
 # ── LLM client factory ────────────────────────────────────────────────────────
 
+def llm_generation_status() -> "tuple[str, bool]":
+    """(provider, ready) — mirrors get_llm_client()'s per-provider key
+    resolution WITHOUT constructing a client, for status surfaces (Settings
+    badge, check_workspace). Keep in lockstep with get_llm_client below.
+    """
+    cfg = get_active_config()
+    provider = str(cfg.get("llm_provider", "openai")).lower()
+    provider = os.environ.get("LLM_PROVIDER", provider).lower()
+    env_key = str(os.environ.get("LLM_API_KEY", "") or "").strip()
+    if provider == "ollama":
+        return provider, True  # local endpoint, no key needed
+    if provider == "anthropic":
+        return provider, bool(env_key or str(cfg.get("anthropic_api_key", "") or "").strip())
+    if provider == "foundry":
+        # Endpoint is the hard requirement; the key can come from workload
+        # identity (DefaultAzureCredential) in AKS.
+        return provider, bool(str(cfg.get("azure_foundry_endpoint", "") or "").strip())
+    return provider, bool(env_key or str(cfg.get("openai_api_key", "") or "").strip())
+
+
 def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     """Return (openai_client, model_name) for the configured LLM provider.
 
