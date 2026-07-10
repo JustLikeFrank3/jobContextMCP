@@ -103,3 +103,80 @@ def test_capture_worker_failure_sends_push(monkeypatch):
     with _pytest.raises(RuntimeError):
         mobile_mod._capture_and_assess({"url": "https://jobs.example.com/9"})
     assert pushes and pushes[0][1]["type"] == "capture_failed"
+
+
+def test_failed_import_fails_work_row_with_one_push(monkeypatch):
+    """An unreadable posting must fail the work row with a diagnosable
+    one-liner (path + text length + scraper reason) — and send exactly ONE
+    push, not 'Import failed' followed by 'Assessment failed'."""
+    import pytest as _pytest
+
+    import tools.job_scraper as scraper_mod
+    import transport.http.routes.mobile as mobile_mod
+
+    pushes = []
+    monkeypatch.setattr(
+        mobile_mod, "send_push", lambda title, body, data=None: pushes.append(title)
+    )
+    monkeypatch.setattr(
+        scraper_mod, "scrape_job_url",
+        lambda url, auto_queue=True, page_text="": "LinkedIn blocked automated access to https://x",
+    )
+    with _pytest.raises(mobile_mod.CaptureImportError) as exc:
+        mobile_mod._capture_and_assess({"url": "https://www.linkedin.com/jobs/view/1"})
+    assert pushes == ["Import failed"]
+    msg = str(exc.value)
+    assert msg.startswith("import failed for https://www.linkedin.com/jobs/view/1")
+    assert "path=server-fetch" in msg and "page_text_len=0" in msg
+    assert "LinkedIn blocked" in msg
+
+
+def test_failed_import_records_client_text_path(monkeypatch):
+    import pytest as _pytest
+
+    import tools.job_scraper as scraper_mod
+    import transport.http.routes.mobile as mobile_mod
+
+    monkeypatch.setattr(mobile_mod, "send_push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        scraper_mod, "scrape_job_url",
+        lambda url, auto_queue=True, page_text="": "Could not extract a job title from https://x.",
+    )
+    with _pytest.raises(mobile_mod.CaptureImportError) as exc:
+        mobile_mod._capture_and_assess(
+            {"url": "https://www.linkedin.com/jobs/view/2", "text": "junk " * 50}
+        )
+    assert "path=client-text" in str(exc.value)
+    assert "page_text_len=250" in str(exc.value)
+
+
+def test_failed_import_visible_in_work_api(mobile_client, monkeypatch):
+    """End to end: authwalled share → failed work row with readable error_head
+    in /api/work/stats. The row is the diagnosis; no log archaeology."""
+    import time
+
+    import transport.http.routes.mobile as mobile_mod
+
+    monkeypatch.setattr(mobile_mod, "send_push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "httpx.get",
+        lambda *a, **kw: type("R", (), {"text": "<html>authwall</html>", "status_code": 200,
+                                        "raise_for_status": lambda self: None})(),
+    )
+    resp = mobile_client.post(
+        "/api/capture", json={"url": "https://www.linkedin.com/jobs/view/3"}
+    )
+    work_id = resp.json()["work_id"]
+    deadline = time.time() + 5
+    item = {}
+    while time.time() < deadline:
+        item = mobile_client.get(f"/api/work/{work_id}").json()
+        if item.get("status") in ("failed", "succeeded"):
+            break
+        time.sleep(0.05)
+    assert item["status"] == "failed"
+    assert item["error"].startswith("import failed for https://www.linkedin.com/jobs/view/3")
+
+    stats = mobile_client.get("/api/work/stats").json()
+    heads = [f["error_head"] for f in stats["recent_failures"]]
+    assert any(h.startswith("import failed for") for h in heads)
