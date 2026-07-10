@@ -176,6 +176,11 @@ class CaptureRequest(BaseModel):
     text: str = ""   # client-extracted page content (or pasted JD text)
 
 
+class CaptureImportError(Exception):
+    """Import produced no usable posting — raised so the work row records a
+    diagnosable failure instead of a 'succeeded' row with imported=False."""
+
+
 def _capture_and_assess(inputs: dict) -> dict:
     """Work executor (kind=capture_url): import → queue → assess → push.
 
@@ -187,6 +192,8 @@ def _capture_and_assess(inputs: dict) -> dict:
     url = inputs["url"]
     try:
         return _capture_and_assess_inner(url, inputs.get("text", ""))
+    except CaptureImportError:
+        raise  # "Import failed" push already sent — no second push
     except Exception:  # noqa: BLE001 — the user is waiting on a push either way
         _log.exception("capture worker failed for %s", url)
         send_push(
@@ -211,7 +218,12 @@ def _capture_and_assess_inner(url: str, text: str = "") -> dict:
             role = line.split(":", 1)[1].strip()
     if not company:
         send_push("Import failed", "Couldn't read that job posting.", {"type": "capture_failed"})
-        return {"imported": False}
+        # The scraper result is a status/error string (never page content).
+        reason = (str(result).strip().splitlines() or ["scraper returned empty result"])[0][:200]
+        path = "client-text" if text.strip() else "server-fetch"
+        raise CaptureImportError(
+            f"import failed for {url}: path={path}, page_text_len={len(text)}, reason: {reason}"
+        )
 
     from lib.db import get_connection
 
