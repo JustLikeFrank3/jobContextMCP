@@ -25,14 +25,29 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // Entra sign-in first (silently refreshed); PAT is the advanced fallback.
   const bearer = (await getAccessToken(url)) || pat
   if (!bearer) throw new Error('Not signed in — use Settings.')
-  const res = await fetch(`${url}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${bearer}`,
-      ...(init?.headers || {}),
-    },
-  })
+  // Time-bound every call: an unbounded fetch leaves UI states (e.g. the
+  // capture banner's "Saving…") hanging forever on a bad connection.
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 30_000)
+  let res: Response
+  try {
+    res = await fetch(`${url}${path}`, {
+      ...init,
+      signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${bearer}`,
+        ...(init?.headers || {}),
+      },
+    })
+  } catch (e: any) {
+    if (e?.name === 'AbortError' || /abort/i.test(String(e?.message))) {
+      throw new Error('Request timed out — check your connection and try again.')
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({} as any))
     throw new Error(body?.detail || `Request failed (${res.status})`)

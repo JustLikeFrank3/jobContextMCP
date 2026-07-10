@@ -16,6 +16,18 @@ export function setCaptureStatus(status: CaptureStatus, autoClearMs = 5000): voi
   if (timer) clearTimeout(timer)
   if (status && status.kind !== 'busy') {
     timer = setTimeout(() => setCaptureStatus(null), autoClearMs)
+  } else if (status && status.kind === 'busy') {
+    // A busy state must never outlive the work: if nothing resolves it
+    // (dropped connection, crashed request), degrade to a gentle error
+    // instead of an eternal spinner.
+    timer = setTimeout(
+      () =>
+        setCaptureStatus({
+          kind: 'error',
+          text: 'Still working — check the Inbox in a minute.',
+        }),
+      45_000,
+    )
   }
 }
 

@@ -78,6 +78,12 @@ export async function signIn(baseUrl: string): Promise<boolean> {
 }
 
 /** Current bearer token, silently refreshed when near expiry. Null = signed out. */
+// Single-flight guard: concurrent callers (Today fetch + share capture on a
+// cold launch) must share ONE refresh. Refresh tokens rotate — two parallel
+// refreshAsync calls spend the same token and the loser gets invalid_grant,
+// surfacing as a phantom "Not signed in" on whichever surface lost the race.
+let refreshInFlight: Promise<string | null> | null = null
+
 export async function getAccessToken(baseUrl: string): Promise<string | null> {
   const [access, refresh, expiresAt] = await Promise.all([
     SecureStore.getItemAsync(ACCESS_KEY),
@@ -87,17 +93,26 @@ export async function getAccessToken(baseUrl: string): Promise<string | null> {
   if (!access) return null
   if (Date.now() < Number(expiresAt || 0) - 60_000) return access
   if (!refresh) return null
-  try {
-    const clientId = await ensureClientId(baseUrl)
-    const tokens = await AuthSession.refreshAsync(
-      { clientId, refreshToken: refresh },
-      discovery(baseUrl),
-    )
-    await storeTokens(tokens)
-    return tokens.accessToken
-  } catch {
-    return null
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const clientId = await ensureClientId(baseUrl)
+        const tokens = await AuthSession.refreshAsync(
+          { clientId, refreshToken: refresh },
+          discovery(baseUrl),
+        )
+        await storeTokens(tokens)
+        return tokens.accessToken
+      } catch {
+        return null
+      } finally {
+        // Always clear, even on failure — a stuck promise would otherwise
+        // pin every future call to this one failed refresh until restart.
+        refreshInFlight = null
+      }
+    })()
   }
+  return refreshInFlight
 }
 
 export async function signOut(): Promise<void> {
