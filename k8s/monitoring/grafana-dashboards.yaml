@@ -1,0 +1,245 @@
+# Provisioned dashboard: jobContext Overview. Edit the JSON here (dashboards
+# as code) — in-UI edits to this dashboard do not persist across restarts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-jobcontext
+  namespace: monitoring
+data:
+  jobcontext-overview.json: |
+    {
+     "uid": "jobcontext-overview",
+     "title": "jobContext Overview",
+     "schemaVersion": 39,
+     "refresh": "30s",
+     "time": {
+      "from": "now-6h",
+      "to": "now"
+     },
+     "panels": [
+      {
+       "id": 1,
+       "title": "Request rate by route",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "reqps"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "sum(rate(http_requests_total[5m])) by (route)",
+         "legendFormat": "{{route}}",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 2,
+       "title": "5xx error rate",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "reqps"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))",
+         "legendFormat": "5xx",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 3,
+       "title": "Avg request latency by route",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "s"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "rate(http_request_seconds_sum[5m]) / rate(http_request_seconds_count[5m])",
+         "legendFormat": "{{route}}",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 4,
+       "title": "Work items (1h) by kind/status",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "sum(increase(work_items_total[1h])) by (kind, status)",
+         "legendFormat": "{{kind}} {{status}}",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 5,
+       "title": "Avg work-item duration",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "s"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "rate(work_item_seconds_sum[15m]) / rate(work_item_seconds_count[15m])",
+         "legendFormat": "{{kind}} ({{outcome}})",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 6,
+       "title": "LLM calls by model/outcome",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "sum(increase(llm_calls_total[1h])) by (model, outcome)",
+         "legendFormat": "{{model}} {{outcome}}",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 7,
+       "title": "LLM tokens/hour by direction",
+       "type": "timeseries",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "short"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)",
+         "legendFormat": "{{model}} {{direction}}",
+         "refId": "A"
+        }
+       ]
+      },
+      {
+       "id": 8,
+       "title": "App uptime",
+       "type": "stat",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+       },
+       "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+       },
+       "fieldConfig": {
+        "defaults": {
+         "unit": "s"
+        },
+        "overrides": []
+       },
+       "targets": [
+        {
+         "expr": "process_uptime_seconds",
+         "legendFormat": "{{pod}}",
+         "refId": "A"
+        }
+       ]
+      }
+     ]
+    }

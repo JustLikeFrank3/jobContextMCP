@@ -198,6 +198,56 @@ def test_history_replays_into_next_turn(mcp_instance):
     assert sent[2]["content"] == "Hi!"
 
 
+def test_dangling_tool_calls_get_synthesized_results(mcp_instance):
+    """A turn that died between saving the assistant tool_calls row and its
+    tool results permanently poisoned the session: every later replay was a
+    provider 400 ('tool_call_ids did not have response messages'). The repair
+    synthesizes interruption results so the session stays usable."""
+    sid = chat_service.create_session()
+    chat_service._save_message(sid, "user", "run something")
+    chat_service._save_message(
+        sid, "assistant", "",
+        tool_calls=[{"id": "toolu_dead", "type": "function",
+                     "function": {"name": "applications", "arguments": "{}"}}],
+    )
+    # no tool result row — the crash
+
+    client = FakeClient([_response(content="Recovered.")])
+    events = _run_turn(mcp_instance, sid, "Hello?", client)
+
+    assert any(e.type == "message" for e in events)
+    sent = client.requests[0]["messages"]
+    idx = next(i for i, m in enumerate(sent) if m["role"] == "assistant" and m.get("tool_calls"))
+    follow = sent[idx + 1]
+    assert follow["role"] == "tool" and follow["tool_call_id"] == "toolu_dead"
+    assert "interrupted" in follow["content"]
+
+
+def test_orphaned_tool_results_are_dropped():
+    """Tool results whose calls were capped away (or saved out of order) are
+    removed anywhere in history, not only at the head."""
+    messages = [
+        {"role": "tool", "tool_call_id": "gone", "content": "stale"},
+        {"role": "user", "content": "hi"},
+        {"role": "tool", "tool_call_id": "also-gone", "content": "stale"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    repaired = chat_service._repair_tool_pairing(messages)
+    assert [m["role"] for m in repaired] == ["user", "assistant"]
+
+
+def test_well_formed_history_passes_through_unchanged():
+    messages = [
+        {"role": "user", "content": "go"},
+        {"role": "assistant", "content": None,
+         "tool_calls": [{"id": "a", "type": "function",
+                         "function": {"name": "x", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "a", "content": "done"},
+        {"role": "assistant", "content": "all set"},
+    ]
+    assert chat_service._repair_tool_pairing(list(messages)) == messages
+
+
 # ── HTTP endpoints (desktop-gated) ─────────────────────────────────────────────
 
 def test_chat_routes_absent_outside_desktop_mode(http_client_noauth):
