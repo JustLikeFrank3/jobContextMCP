@@ -288,7 +288,7 @@ def check_workspace() -> str:  # NOSONAR
             try:
                 from lib.config import llm_generation_status
 
-                _provider, _ready = llm_generation_status()
+                _provider, _ready = llm_generation_status(cfg)
             except Exception:
                 _provider, _ready = "unknown", False
             if _ready:
