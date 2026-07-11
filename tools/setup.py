@@ -259,9 +259,23 @@ def check_workspace() -> str:  # NOSONAR
     # data partition, not at the repo root (which holds the shared base config
     # injected via ConfigMap). Resolve the right one before reading contact /
     # language details, otherwise every tenant sees the owner's values.
+    from lib.app_dirs import is_desktop_mode
     from lib.user_context import get_data_folder_override
     _override = get_data_folder_override()
-    config_path = (_override / _CONFIG_FILENAME) if _override is not None else (_HERE / _CONFIG_FILENAME)
+    if _override is not None:
+        config_path = _override / _CONFIG_FILENAME
+    elif is_desktop_mode() or getattr(sys, "frozen", False):
+        # Desktop / frozen: the real config lives in app-data, never beside
+        # the executable (same resolution as setup_workspace's write path).
+        env_cfg = os.environ.get("JOBCONTEXT_CONFIG", "").strip()
+        if env_cfg:
+            config_path = Path(env_cfg)
+        else:
+            from lib.app_dirs import desktop_data_dir
+
+            config_path = desktop_data_dir() / _CONFIG_FILENAME
+    else:
+        config_path = _HERE / _CONFIG_FILENAME
     if config_path.exists():
         lines.append("✓ config.json — present")
         try:
@@ -269,10 +283,18 @@ def check_workspace() -> str:  # NOSONAR
             contact = cfg.get("contact", {})
             lines.append(f"  Name:    {contact.get('name', '(missing)')}")
             lines.append(f"  Email:   {contact.get('email', '(missing)')}")
-            if cfg.get("openai_api_key"):
-                lines.append("  OpenAI:  key configured (auto-generation enabled)")
+            # Provider-aware: same resolution the Settings badge and
+            # generation itself use, so the three never contradict.
+            try:
+                from lib.config import llm_generation_status
+
+                _provider, _ready = llm_generation_status()
+            except Exception:
+                _provider, _ready = "unknown", False
+            if _ready:
+                lines.append(f"  AI:      {_provider} key configured (auto-generation enabled)")
             else:
-                lines.append("  OpenAI:  no key — Copilot-assisted generation mode")
+                lines.append("  AI:      no usable key — Copilot-assisted generation mode")
             lines.append(f"  LeetCode language: {cfg.get('leetcode_language', '(not set)')}")
         except Exception as e:
             lines.append(f"  ⚠ Could not parse config.json: {e}")
