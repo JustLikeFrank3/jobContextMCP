@@ -29,6 +29,10 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))  # noqa: F821 — SPE
 datas = [
     (os.path.join(ROOT, "templates"), "templates"),
     (os.path.join(ROOT, "frontend", "dist"), os.path.join("frontend", "dist")),
+    # Favicons/og-images served by transport/http/app.py from a path relative
+    # to the module — must travel into the bundle or every browser/webview
+    # favicon request errors in the frozen app (Windows field report).
+    (os.path.join(ROOT, "transport", "http", "static"), os.path.join("transport", "http", "static")),
 ]
 
 hiddenimports = [

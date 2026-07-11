@@ -363,12 +363,15 @@ def get_active_master_resume_path() -> Path:
 
 # ── LLM client factory ────────────────────────────────────────────────────────
 
-def llm_generation_status() -> "tuple[str, bool]":
+def llm_generation_status(cfg: "dict | None" = None) -> "tuple[str, bool]":
     """(provider, ready) — mirrors get_llm_client()'s per-provider key
     resolution WITHOUT constructing a client, for status surfaces (Settings
     badge, check_workspace). Keep in lockstep with get_llm_client below.
+    Pass *cfg* to report on a specific config dict (e.g. a file being
+    described) instead of the active runtime config.
     """
-    cfg = get_active_config()
+    if cfg is None:
+        cfg = get_active_config()
     provider = str(cfg.get("llm_provider", "openai")).lower()
     provider = os.environ.get("LLM_PROVIDER", provider).lower()
     env_key = str(os.environ.get("LLM_API_KEY", "") or "").strip()

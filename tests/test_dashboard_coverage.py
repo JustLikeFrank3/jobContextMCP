@@ -933,6 +933,37 @@ class TestOpenAiKeySetHelper:
         monkeypatch.setattr(config, "get_active_config", lambda: {"openai_api_key": "   "})
         assert dashboard_api_routes._openai_key_set() is False
 
+    def test_provider_branches(self, monkeypatch):
+        """llm_generation_status must report each provider's own readiness:
+        anthropic by anthropic_api_key, ollama always (local endpoint),
+        foundry by endpoint (key may come from workload identity)."""
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+        cases = [
+            ({"llm_provider": "anthropic", "anthropic_api_key": "sk-ant"}, ("anthropic", True)),
+            ({"llm_provider": "anthropic", "openai_api_key": "sk-abc"}, ("anthropic", False)),
+            ({"llm_provider": "ollama"}, ("ollama", True)),
+            ({"llm_provider": "foundry", "azure_foundry_endpoint": "https://x.ai"}, ("foundry", True)),
+            ({"llm_provider": "foundry"}, ("foundry", False)),
+        ]
+        for cfg, expected in cases:
+            monkeypatch.setattr(config, "get_active_config", lambda c=cfg: c)
+            assert config.llm_generation_status() == expected, cfg
+
+    def test_env_provider_overrides_config(self, monkeypatch):
+        import lib.config as config
+
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        monkeypatch.setattr(
+            config, "get_active_config",
+            lambda: {"llm_provider": "openai", "anthropic_api_key": "sk-ant"},
+        )
+        assert config.llm_generation_status() == ("anthropic", True)
+
     def test_false_and_safe_on_config_error(self, monkeypatch):
         import lib.config as config
 
