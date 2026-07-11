@@ -180,3 +180,77 @@ def test_failed_import_visible_in_work_api(mobile_client, monkeypatch):
     stats = mobile_client.get("/api/work/stats").json()
     heads = [f["error_head"] for f in stats["recent_failures"]]
     assert any(h.startswith("import failed for") for h in heads)
+
+
+def test_successful_import_parses_queue_result(monkeypatch):
+    """Regression for the never-worked success path: queue_job returns
+    "Scraped <url>\n→ Queued: {company} — {role}. Run evaluate_queued_job…"
+    and the worker must extract company/role from THAT (it used to scan for
+    "company:"/"role:" lines that never existed, so every good import pushed
+    "Import failed" and skipped its assessment — 2026-07-10 field report,
+    verified against real work rows)."""
+    import tools.job_scraper as scraper_mod
+    import transport.http.routes.mobile as mobile_mod
+
+    pushes = []
+    monkeypatch.setattr(
+        mobile_mod, "send_push", lambda title, body, data=None: pushes.append(title)
+    )
+    monkeypatch.setattr(
+        scraper_mod, "scrape_job_url",
+        lambda url, auto_queue=True, page_text="": (
+            "Scraped " + url + "\n"
+            "→ Queued: Elevance Health — Senior AI Solutions Engineer (Engineer Senior). "
+            "Run evaluate_queued_job to assess fitment before deciding."
+        ),
+    )
+    ran = {}
+
+    def fake_assess(company, role, jd):
+        ran.update(company=company, role=role)
+        return "## Fitment: 8/10"
+
+    monkeypatch.setattr("tools.fitment.run_job_assessment", fake_assess)
+    monkeypatch.setattr(
+        "lib.db.get_connection",
+        lambda: __import__("contextlib").nullcontext(
+            type("C", (), {"execute": lambda self, *a: type("R", (), {"fetchone": lambda s: None})()})()
+        ),
+    )
+
+    out = mobile_mod._capture_and_assess(
+        {"url": "https://careers.elevancehealth.com/x/job/ABC?source=LinkedIn", "text": "# jd"}
+    )
+    assert out["imported"] is True
+    assert out["company"] == "Elevance Health"
+    assert out["role"] == "Senior AI Solutions Engineer (Engineer Senior)"
+    assert ran["company"] == "Elevance Health"  # assessment actually ran
+    assert len(pushes) == 1
+    assert pushes[0].startswith("Assessment complete") and "8/10" in pushes[0]
+
+
+def test_already_queued_variant_still_assesses(monkeypatch):
+    """Re-sharing a job (dedupe path) must also read as success and re-assess."""
+    import tools.job_scraper as scraper_mod
+    import transport.http.routes.mobile as mobile_mod
+
+    monkeypatch.setattr(mobile_mod, "send_push", lambda *a, **k: None)
+    monkeypatch.setattr(
+        scraper_mod, "scrape_job_url",
+        lambda url, auto_queue=True, page_text="": (
+            "Scraped " + url + "\n"
+            "→ Already queued: Cox Automotive — Senior Platform Engineer (status: pending). "
+            "Use evaluate_queued_job to assess it."
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.fitment.run_job_assessment", lambda c, r, jd: "Score: 9/10 overall"
+    )
+    monkeypatch.setattr(
+        "lib.db.get_connection",
+        lambda: __import__("contextlib").nullcontext(
+            type("C", (), {"execute": lambda self, *a: type("R", (), {"fetchone": lambda s: None})()})()
+        ),
+    )
+    out = mobile_mod._capture_and_assess({"url": "https://x.example/1"})
+    assert out["imported"] is True and out["company"] == "Cox Automotive"

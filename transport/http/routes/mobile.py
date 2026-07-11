@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -204,18 +205,27 @@ def _capture_and_assess(inputs: dict) -> dict:
         raise  # the work row records the failure + traceback
 
 
+# queue_job's success formats (tools/job_queue.py): the em-dash separated
+# "Queued: {company} — {role}. Run evaluate_queued_job…" and its
+# "Already queued: … (status: …)" dedupe variant. The worker previously
+# scanned for "company:"/"role:" lines that NEVER existed in either format —
+# every successful import was misread as a failure (pushed "Import failed",
+# skipped the assessment) while the job silently landed in the queue.
+_QUEUED_RE = re.compile(
+    r"(?:Already )?[Qq]ueued: (?P<company>.+?) — (?P<role>.+?)"
+    r"(?:\. Run evaluate_queued_job| \(status:)"
+)
+
+
 def _capture_and_assess_inner(url: str, text: str = "") -> dict:
     from tools.job_scraper import scrape_job_url
 
     # text = client-extracted page content (the phone can read pages that
     # block our datacenter IPs — e.g. LinkedIn's authwall).
     result = scrape_job_url(url, auto_queue=True, page_text=text)
-    company = role = ""
-    for line in str(result).splitlines():
-        if line.lower().startswith("company:"):
-            company = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("role:"):
-            role = line.split(":", 1)[1].strip()
+    m = _QUEUED_RE.search(str(result))
+    company = m.group("company").strip() if m else ""
+    role = m.group("role").strip() if m else ""
     if not company:
         send_push("Import failed", "Couldn't read that job posting.", {"type": "capture_failed"})
         # The scraper result is a status/error string (never page content).
