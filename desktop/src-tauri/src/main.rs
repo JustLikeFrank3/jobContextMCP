@@ -59,11 +59,20 @@ fn spawn_backend(app: &tauri::AppHandle) -> Result<Backend, String> {
     // --parent-watchdog exits on stdin EOF, so even a SIGKILL to this shell
     // (which fires no Tauri exit event) can't orphan the backend against the
     // SQLite file.
-    let mut child = Command::new(&bin)
-        .arg("--parent-watchdog")
+    let mut cmd = Command::new(&bin);
+    cmd.arg("--parent-watchdog")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    // The sidecar is a console-subsystem exe (its stdout carries the port
+    // handshake). Without CREATE_NO_WINDOW, Windows materializes a visible
+    // terminal alongside the app.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("failed to spawn {bin:?}: {e}"))?;
 

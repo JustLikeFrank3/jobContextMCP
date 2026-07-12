@@ -85,3 +85,48 @@ def test_setup_leaves_live_data_folder_alone(desktop_workspace):
     from tools.job_queue import get_job_queue
 
     assert "KeepCo" in get_job_queue()
+
+
+def test_check_workspace_reads_appdata_config_on_desktop(desktop_workspace, monkeypatch):
+    """check_workspace must report from the SAME config setup writes to
+    (JOBCONTEXT_CONFIG in app-data) — never _HERE inside the signed bundle —
+    and its AI line must be provider-aware (anthropic key counts)."""
+    import tools.setup as s
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)  # CI sets foundry
+    from lib.app_dirs import is_desktop_mode
+    assert is_desktop_mode()  # DEPLOY_MODE=desktop via fixture
+
+    s.setup_workspace(
+        name="Frank Test",
+        email="f@example.com",
+        phone="555-000-0000",
+        linkedin="linkedin.com/in/franktest",
+        city_state="Atlanta, GA",
+        master_resume_content="EXPERIENCE\nEngineer | Acme | 2020 - 2026\n",
+    )
+    report = s.check_workspace()
+    assert "Frank Test" in report            # read the app-data config
+    assert "anthropic key configured" in report  # provider-aware AI line
+
+
+def test_check_workspace_desktop_data_dir_fallback(desktop_workspace, monkeypatch, tmp_path):
+    """Without JOBCONTEXT_CONFIG, the frozen/desktop path falls back to
+    desktop_data_dir()/config.json."""
+    import json as _json
+
+    import tools.setup as s
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("JOBCONTEXT_CONFIG", raising=False)
+    fallback_dir = tmp_path / "appdata"
+    fallback_dir.mkdir()
+    (fallback_dir / "config.json").write_text(_json.dumps({
+        "contact": {"name": "Fallback Frank", "email": "fb@example.com"},
+        "llm_provider": "anthropic",
+    }))
+    import lib.app_dirs as app_dirs
+    monkeypatch.setattr(app_dirs, "desktop_data_dir", lambda: fallback_dir)
+
+    report = s.check_workspace()
+    assert "Fallback Frank" in report
