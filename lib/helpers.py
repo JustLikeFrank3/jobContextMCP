@@ -1,6 +1,18 @@
 import datetime
+import re
 
 from lib import config
+
+# Windows-illegal filename characters plus control chars; macOS/Linux allow
+# these, so files named there can be unwritable on a Windows sync peer.
+_ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def sanitize_filename(name: str) -> str:
+    """Make a single filename component safe on every supported platform."""
+    cleaned = _ILLEGAL_FILENAME_CHARS.sub("-", name)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip().rstrip(". ")
+    return cleaned or "untitled"
 
 
 def _build_story_entry(stories: list, story: str, tags: list, people: list, title: str) -> dict:

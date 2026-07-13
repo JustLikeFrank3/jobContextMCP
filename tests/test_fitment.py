@@ -219,6 +219,30 @@ class TestFitmentCoverageExtras:
         assert "Referral-Team/summary.md" in out
         assert saved.read_text(encoding="utf-8") == "Line one\nLine two"
 
+    def test_save_job_assessment_sanitizes_windows_illegal_chars(self, isolated_server):
+        fitment.save_job_assessment(
+            "Coke",
+            "content",
+            filename="Coke Senior Software Engineer | Atlanta, GA US | Coca-Cola - Fitment Assessment.md",
+            source="run_job_assessment",
+        )
+
+        saved = (
+            fitment.config.get_active_job_assessments_dir()
+            / "run_job_assessment"
+            / "Coke Senior Software Engineer - Atlanta, GA US - Coca-Cola - Fitment Assessment.md"
+        )
+        assert saved.is_file()
+
+    def test_save_job_assessment_default_filename_is_sanitized(self, isolated_server):
+        fitment.save_job_assessment('Acme <Labs>: "AI"', "content")
+
+        folder = fitment.config.get_active_job_assessments_dir()
+        names = [p.name for p in folder.glob("*.md")]
+        assert names, "assessment file was not saved"
+        for name in names:
+            assert not set('<>:"/\\|?*') & set(name), name
+
     def test_run_job_assessment_handles_llm_client_boot_failure(self, isolated_server):
         with patch("lib.config.get_llm_client", side_effect=RuntimeError("boom")):
             out = fitment.run_job_assessment("Stripe", "Staff Engineer", JD)

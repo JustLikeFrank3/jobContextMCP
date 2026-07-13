@@ -11,9 +11,11 @@ resolves to the owner's partition. One `run_sync()` pass:
                  sibling instead of overwriting local work
 
 Cursors and the file baseline live in the local sync_meta table, a summary
-of the last run in sync_meta['last_summary'] for the Settings UI. Sync is
-deliberately conservative: any transport error aborts the pass with the
-cursors untouched, so a retry just resumes.
+of the last run in sync_meta['last_summary'] for the Settings UI. Row sync
+is deliberately conservative: any transport error aborts the pass with the
+cursors untouched, so a retry just resumes. File transfers skip-and-report
+per file (summary['files']['errors']) so one bad file — e.g. a
+Windows-illegal filename created on another OS — can't wedge sync forever.
 """
 from __future__ import annotations
 
@@ -157,19 +159,55 @@ def run_sync() -> dict:
             baseline = json.loads(row[0]) if row else {}
             plan = plan_file_sync(local, remote, baseline)
 
+            file_errors: list[dict] = []
+            files_skipped = 0
+            failed_pushes: set[str] = set()
+
+            def _record_failure(op: str, rel: str, exc: Exception) -> None:
+                nonlocal files_skipped
+                files_skipped += 1
+                _LOG.warning("file sync %s failed for %r: %s", op, rel, exc)
+                if len(file_errors) < 20:
+                    file_errors.append({"op": op, "rel": rel, "error": str(exc)[:200]})
+
+            # Skip-and-report per file: one bad filename (e.g. Windows-illegal
+            # chars in a Mac-created name) must not wedge the whole pass.
             for rel in plan["pull"]:
-                _pull_file(http, root, rel)
+                try:
+                    _pull_file(http, root, rel)
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("pull", rel, exc)
             for rel in plan["push"]:
-                _push_file(http, root, rel, local[rel])
+                try:
+                    _push_file(http, root, rel, local[rel])
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("push", rel, exc)
+                    failed_pushes.add(rel)
             for rel in plan["conflict"]:
                 # Keep local work; land the cloud version alongside it.
-                _pull_file(http, root, rel, conflict=True)
+                try:
+                    _pull_file(http, root, rel, conflict=True)
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("conflict", rel, exc)
             summary["files"] = {k: len(v) for k, v in plan.items()}
+            if files_skipped:
+                summary["files"]["skipped"] = files_skipped
+                summary["files"]["errors"] = file_errors
 
             # New baseline = post-sync local state.
-            baseline = file_manifest(root)
+            new_baseline = file_manifest(root)
             # Conflict copies are local-only working files, not sync state.
-            baseline = {k: v for k, v in baseline.items() if CONFLICT_TAG not in k}
+            new_baseline = {k: v for k, v in new_baseline.items() if CONFLICT_TAG not in k}
+            # A failed push never reached the cloud: keep the last agreed
+            # baseline entry so the next pass retries the push instead of
+            # mistaking the cloud's stale copy for an update and pulling it
+            # over the local work.
+            for rel in failed_pushes:
+                if rel in baseline:
+                    new_baseline[rel] = baseline[rel]
+                else:
+                    new_baseline.pop(rel, None)
+            baseline = new_baseline
             with get_connection() as con:
                 con.execute(
                     "INSERT INTO sync_meta (key, value) VALUES (?, ?) "

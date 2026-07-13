@@ -319,3 +319,123 @@ def test_sync_url_normalization():
     assert _normalize_url("http://127.0.0.1:8801") == "http://127.0.0.1:8801"
     assert _normalize_url("http://localhost:8801") == "http://localhost:8801"
     assert _normalize_url("  ") == ""
+
+
+# ── file sync execution: skip-and-report ──────────────────────────────────────
+
+class _FakeResp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _FakeHttp:
+    """Stands in for the httpx client run_sync opens against the cloud."""
+
+    def __init__(self, remote_files: dict[str, bytes], fail_put_rel: str = ""):
+        self.remote_files = remote_files
+        self.fail_put_rel = fail_put_rel
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, path, json=None):
+        import base64
+        import hashlib
+
+        if path == "/api/sync/changes":
+            return _FakeResp({"changes": [], "last_id": 0})
+        if path == "/api/sync/apply":
+            return _FakeResp({"applied": len(json["changes"])})
+        if path == "/api/sync/files/manifest":
+            manifest = {
+                rel: {"size": len(data), "mtime": 1.0, "sha256": hashlib.sha256(data).hexdigest()}
+                for rel, data in self.remote_files.items()
+            }
+            return _FakeResp({"manifest": manifest})
+        if path == "/api/sync/files/get":
+            data = self.remote_files[json["rel"]]
+            return _FakeResp({
+                "rel": json["rel"],
+                "mtime": 1.0,
+                "content_b64": base64.b64encode(data).decode("ascii"),
+            })
+        if path == "/api/sync/files/put":
+            if json["rel"] == self.fail_put_rel:
+                raise RuntimeError("upload rejected")
+            return _FakeResp({"status": "stored", "rel": json["rel"]})
+        raise AssertionError(f"unexpected POST {path}")
+
+
+def _wire_fake_sync(monkeypatch, root, http):
+    from lib import sync_client
+
+    monkeypatch.setattr(
+        sync_client, "sync_settings",
+        lambda: {"url": "https://cloud.test", "pat": "pat", "auto": True},
+    )
+    monkeypatch.setattr(sync_client, "_client", lambda url, pat: http)
+    monkeypatch.setattr(sync_client, "_local_root", lambda: root)
+    return sync_client
+
+
+def _stored_baseline():
+    rows = _rows("SELECT value FROM sync_meta WHERE key = 'file_sync_baseline'")
+    return json.loads(rows[0]["value"]) if rows else {}
+
+
+def test_run_sync_skips_unwritable_pull_and_reports(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        http = _FakeHttp({"good.md": b"good", "bad | name.md": b"bad"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        real_pull = sync_client._pull_file
+
+        def pull(http_, root_, rel, conflict=False):
+            if "|" in rel:  # deterministic stand-in for the Windows EINVAL
+                raise OSError(22, "Invalid argument", rel)
+            return real_pull(http_, root_, rel, conflict)
+
+        monkeypatch.setattr(sync_client, "_pull_file", pull)
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert (desktop.root / "good.md").read_bytes() == b"good"
+        assert summary["files"]["skipped"] == 1
+        [err] = summary["files"]["errors"]
+        assert err["op"] == "pull"
+        assert err["rel"] == "bad | name.md"
+        assert "Invalid argument" in err["error"]
+        # Skipped pull stays out of the baseline so the next pass retries it.
+        baseline = _stored_baseline()
+        assert "good.md" in baseline
+        assert "bad | name.md" not in baseline
+
+
+def test_run_sync_failed_push_keeps_rel_out_of_baseline(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        (desktop.root / "note.md").write_text("local work", encoding="utf-8")
+        http = _FakeHttp({}, fail_put_rel="note.md")
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert summary["files"]["skipped"] == 1
+        assert summary["files"]["errors"][0]["op"] == "push"
+        # note.md never reached the cloud: it must not enter the baseline,
+        # otherwise the next pass would misread the cloud copy as an update.
+        baseline = _stored_baseline()
+        assert "note.md" not in baseline
+        plan = sync.plan_file_sync(sync.file_manifest(desktop.root), {}, baseline)
+        assert "note.md" in plan["push"]

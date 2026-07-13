@@ -85,3 +85,41 @@ class TestNow:
         assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", result), (
             f"_now() returned unexpected format: {result}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# lib.helpers.sanitize_filename
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSanitizeFilename:
+    def test_replaces_windows_illegal_chars(self):
+        from lib.helpers import sanitize_filename
+
+        assert sanitize_filename(r'a<b>c:d"e/f\g|h?i*j') == "a-b-c-d-e-f-g-h-i-j"
+
+    def test_pipe_separated_job_title(self):
+        from lib.helpers import sanitize_filename
+
+        assert (
+            sanitize_filename(
+                "Coke Senior Software Engineer | Atlanta, GA US | Coca-Cola - Fitment Assessment.md"
+            )
+            == "Coke Senior Software Engineer - Atlanta, GA US - Coca-Cola - Fitment Assessment.md"
+        )
+
+    def test_strips_control_chars_and_trailing_dots(self):
+        from lib.helpers import sanitize_filename
+
+        assert sanitize_filename("report\x07.") == "report-"
+        assert sanitize_filename("name.md ") == "name.md"
+
+    def test_collapses_repeat_whitespace(self):
+        from lib.helpers import sanitize_filename
+
+        assert sanitize_filename("a   b") == "a b"
+
+    def test_empty_or_dot_only_falls_back(self):
+        from lib.helpers import sanitize_filename
+
+        assert sanitize_filename("   ") == "untitled"
+        assert sanitize_filename("...") == "untitled"
