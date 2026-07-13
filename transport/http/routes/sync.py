@@ -68,6 +68,39 @@ async def sync_apply(
         return apply_changes(con, request.changes)
 
 
+class ContactExchange(BaseModel):
+    contact: dict = {}
+
+
+@router.post("/contact")
+async def sync_contact(
+    request: ContactExchange,
+    user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
+) -> dict:
+    """Exchange the config.json contact block (fill-empty-only, both ways).
+
+    config.json stays out of file sync (machine-local keys), so a fresh peer
+    posts its contact block here: empty fields on this partition fill from
+    the peer, and the merged block returns for the peer to fill from.
+    """
+    import json
+
+    from lib.sync import merge_contact
+
+    config_path = _user_root() / "config.json"
+    try:
+        cfg = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cfg = {}
+    merged, filled = merge_contact(cfg.get("contact", {}) or {}, request.contact)
+    if filled:
+        cfg["contact"] = merged
+        config_path.write_text(
+            json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    return {"contact": merged, "filled": filled}
+
+
 @router.post("/files/manifest")
 async def sync_files_manifest(
     user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001

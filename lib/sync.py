@@ -360,6 +360,26 @@ def set_cursor(con, key: str, value: int) -> None:
     con.commit()
 
 
+# ── contact block exchange ─────────────────────────────────────────────────────
+
+def merge_contact(base: dict, incoming: dict) -> tuple[dict, int]:
+    """Fill empty fields of `base` from `incoming`; never overwrite non-empty.
+
+    config.json itself is machine-local (holds API keys, PAT, paths), so the
+    contact block is exchanged separately — a fresh peer would otherwise
+    generate documents with blank headers. Returns (merged, filled_count).
+    """
+    merged = dict(base)
+    filled = 0
+    for key in set(base) | set(incoming):
+        current = str(merged.get(key, "") or "").strip()
+        candidate = str(incoming.get(key, "") or "").strip()
+        if not current and candidate:
+            merged[key] = candidate
+            filled += 1
+    return merged, filled
+
+
 # ── workspace file sync ────────────────────────────────────────────────────────
 
 # Everything document-like syncs; databases, config, backups, and index

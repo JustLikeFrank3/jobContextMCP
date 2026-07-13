@@ -344,8 +344,9 @@ def test_sync_url_normalization():
 # ── file sync execution: skip-and-report ──────────────────────────────────────
 
 class _FakeResp:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
+        self.status_code = status_code
 
     def raise_for_status(self):
         pass
@@ -357,9 +358,18 @@ class _FakeResp:
 class _FakeHttp:
     """Stands in for the httpx client run_sync opens against the cloud."""
 
-    def __init__(self, remote_files: dict[str, bytes], fail_put_rel: str = ""):
+    def __init__(
+        self,
+        remote_files: dict[str, bytes],
+        fail_put_rel: str = "",
+        cloud_contact: dict | None = None,
+        contact_404: bool = False,
+    ):
         self.remote_files = remote_files
         self.fail_put_rel = fail_put_rel
+        self.cloud_contact = dict(cloud_contact or {})
+        self.contact_404 = contact_404
+        self.contact_posts: list[dict] = []
 
     def __enter__(self):
         return self
@@ -375,6 +385,15 @@ class _FakeHttp:
             return _FakeResp({"changes": [], "last_id": 0})
         if path == "/api/sync/apply":
             return _FakeResp({"applied": len(json["changes"])})
+        if path == "/api/sync/contact":
+            if self.contact_404:
+                return _FakeResp({"detail": "Not Found"}, status_code=404)
+            posted = dict(json.get("contact") or {})
+            self.contact_posts.append(posted)
+            from lib.sync import merge_contact
+
+            self.cloud_contact, filled = merge_contact(self.cloud_contact, posted)
+            return _FakeResp({"contact": self.cloud_contact, "filled": filled})
         if path == "/api/sync/files/manifest":
             manifest = {
                 rel: {"size": len(data), "mtime": 1.0, "sha256": hashlib.sha256(data).hexdigest()}
@@ -459,3 +478,121 @@ def test_run_sync_failed_push_keeps_rel_out_of_baseline(replicas, monkeypatch):
         assert "note.md" not in baseline
         plan = sync.plan_file_sync(sync.file_manifest(desktop.root), {}, baseline)
         assert "note.md" in plan["push"]
+
+
+# ── contact block exchange ─────────────────────────────────────────────────────
+
+def test_merge_contact_fill_empty_only():
+    base = {"name": "Frank", "email": "", "phone": "  ", "github": "gh"}
+    incoming = {"name": "Other", "email": "f@x.com", "phone": "555", "city": "Atlanta"}
+    merged, filled = sync.merge_contact(base, incoming)
+    assert merged == {
+        "name": "Frank",       # non-empty never overwritten
+        "email": "f@x.com",    # empty filled
+        "phone": "555",        # whitespace-only counts as empty
+        "github": "gh",        # keys missing from incoming survive
+        "city": "Atlanta",     # union of keys
+    }
+    assert filled == 3
+    assert sync.merge_contact({"name": "A"}, {"name": ""}) == ({"name": "A"}, 0)
+
+
+def _write_desktop_config(root, contact, monkeypatch):
+    config_path = root / "config.json"
+    config_path.write_text(
+        json.dumps({"contact": contact, "cloud_sync_pat": "keep-me"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JOBCONTEXT_CONFIG", str(config_path))
+    return config_path
+
+
+def test_run_sync_contact_pull_fills_local_config(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        config_path = _write_desktop_config(
+            desktop.root, {"name": "", "email": ""}, monkeypatch
+        )
+        monkeypatch.setattr(cfg, "_cfg", dict(cfg._cfg))  # runtime refresh, no leak
+        http = _FakeHttp({}, cloud_contact={"name": "Frank MacBride", "email": "f@x.com"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["contact"] == {"status": "ok", "filled_local": 2, "filled_cloud": 0}
+        saved = json.loads(config_path.read_text(encoding="utf-8"))
+        assert saved["contact"] == {"name": "Frank MacBride", "email": "f@x.com"}
+        assert saved["cloud_sync_pat"] == "keep-me"  # machine-local keys survive
+        assert cfg._cfg["contact"]["name"] == "Frank MacBride"  # live without restart
+
+
+def test_run_sync_contact_pushes_local_fields(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        _write_desktop_config(desktop.root, {"name": "Frank", "email": ""}, monkeypatch)
+        http = _FakeHttp({}, cloud_contact={"name": "", "email": "f@x.com"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert http.contact_posts == [{"name": "Frank", "email": ""}]
+        assert http.cloud_contact["name"] == "Frank"
+        assert summary["contact"] == {"status": "ok", "filled_local": 1, "filled_cloud": 1}
+
+
+def test_run_sync_contact_404_is_nonfatal(replicas, monkeypatch):
+    """An older cloud without the endpoint must not break the pass."""
+    desktop, _ = replicas
+    with desktop:
+        _write_desktop_config(desktop.root, {"name": ""}, monkeypatch)
+        http = _FakeHttp({"doc.md": b"hello"}, contact_404=True)
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert summary["contact"] == {"status": "unsupported"}
+        assert (desktop.root / "doc.md").read_bytes() == b"hello"  # files still sync
+
+
+def test_sync_contact_endpoint_merges_and_persists(tmp_path, monkeypatch):
+    import asyncio
+
+    from transport.http.routes import sync as sync_routes
+
+    monkeypatch.setattr(sync_routes, "_user_root", lambda: tmp_path)
+    (tmp_path / "config.json").write_text(
+        json.dumps({"contact": {"name": "", "email": "cloud@x.com"}, "openai_api_key": "sk-keep"}),
+        encoding="utf-8",
+    )
+
+    out = asyncio.run(
+        sync_routes.sync_contact(
+            sync_routes.ContactExchange(contact={"name": "Frank", "email": "peer@x.com"}),
+            user=None,
+        )
+    )
+
+    assert out["filled"] == 1
+    assert out["contact"] == {"name": "Frank", "email": "cloud@x.com"}
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert saved["contact"] == {"name": "Frank", "email": "cloud@x.com"}
+    assert saved["openai_api_key"] == "sk-keep"  # other keys preserved
+
+
+def test_sync_contact_endpoint_tolerates_missing_config(tmp_path, monkeypatch):
+    import asyncio
+
+    from transport.http.routes import sync as sync_routes
+
+    monkeypatch.setattr(sync_routes, "_user_root", lambda: tmp_path)
+
+    out = asyncio.run(
+        sync_routes.sync_contact(
+            sync_routes.ContactExchange(contact={"name": "Frank"}), user=None
+        )
+    )
+
+    assert out == {"contact": {"name": "Frank"}, "filled": 1}
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert saved["contact"] == {"name": "Frank"}

@@ -6,6 +6,8 @@ resolves to the owner's partition. One `run_sync()` pass:
 
   1. pull rows:  cloud journal since our cursor → apply locally
   2. push rows:  local journal since our cursor → cloud applies
+     (then the config.json contact block is exchanged fill-empty-only —
+     config itself is machine-local and never file-syncs)
   3. files:      manifest diff (lib.sync.plan_file_sync) → transfer both ways;
                  true conflicts keep the remote copy as a " (sync conflict…)"
                  sibling instead of overwriting local work
@@ -147,6 +149,10 @@ def run_sync() -> dict:
                     break
             summary["rows_pushed"] = pushed
 
+            # 2b. contact block (config.json is machine-local; exchange just
+            # the contact dict so a fresh peer doesn't generate blank headers)
+            summary["contact"] = _sync_contact(http)
+
             # 3. files
             local = file_manifest(root)
             resp = http.post("/api/sync/files/manifest", json={})
@@ -241,6 +247,53 @@ def last_summary() -> "dict | None":
             "SELECT value FROM sync_meta WHERE key = ?", (_LAST_SUMMARY,)
         ).fetchone()
     return json.loads(row[0]) if row else None
+
+
+def _desktop_config_path() -> Path:
+    env_cfg = os.environ.get("JOBCONTEXT_CONFIG", "").strip()
+    if env_cfg:
+        return Path(env_cfg).expanduser()
+    from lib.app_dirs import desktop_data_dir
+
+    return desktop_data_dir() / "config.json"
+
+
+def _sync_contact(http) -> dict:
+    """Exchange the contact block with the cloud; fill-empty-only both ways.
+
+    Non-fatal by design: an older cloud without the endpoint (404) or any
+    other failure is reported in the summary and the pass continues.
+    """
+    from lib.config import update_runtime_config
+    from lib.sync import merge_contact
+
+    try:
+        config_path = _desktop_config_path()
+        try:
+            cfg = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cfg = {}
+        local_contact = cfg.get("contact", {}) or {}
+        resp = http.post("/api/sync/contact", json={"contact": local_contact})
+        if getattr(resp, "status_code", 200) == 404:
+            return {"status": "unsupported"}
+        resp.raise_for_status()
+        data = resp.json()
+        merged, filled_local = merge_contact(local_contact, data.get("contact", {}) or {})
+        if filled_local:
+            cfg["contact"] = merged
+            config_path.write_text(
+                json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            update_runtime_config({"contact": merged})
+        return {
+            "status": "ok",
+            "filled_local": filled_local,
+            "filled_cloud": data.get("filled", 0),
+        }
+    except Exception as exc:  # noqa: BLE001 — reported in the summary
+        _LOG.warning("contact sync failed: %s", exc)
+        return {"status": "error", "error": str(exc)[:200]}
 
 
 def _conflict_name(rel: str) -> str:
