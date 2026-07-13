@@ -248,7 +248,15 @@ def _conflict_name(rel: str) -> str:
     return str(p.with_name(f"{p.stem}{CONFLICT_TAG}{p.suffix}"))
 
 
+_IS_WINDOWS = os.name == "nt"
+
+
 def _pull_file(http, root: Path, rel: str, conflict: bool = False) -> None:
+    if _IS_WINDOWS and "\\" in rel:
+        # Rels are POSIX-separated; a backslash means a filename literally
+        # containing one (legal on macOS/Linux). Windows would reinterpret it
+        # as a separator and write to the wrong nested path — skip instead.
+        raise ValueError(f"filename not representable on Windows: {rel!r}")
     resp = http.post("/api/sync/files/get", json={"rel": rel})
     resp.raise_for_status()
     data = resp.json()

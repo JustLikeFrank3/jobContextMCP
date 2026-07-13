@@ -391,7 +391,10 @@ def file_manifest(root: Path) -> dict[str, dict]:
             continue
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         stat = path.stat()
-        manifest[str(rel)] = {"size": stat.st_size, "mtime": stat.st_mtime, "sha256": digest}
+        # Manifest keys are the sync wire format: always POSIX-separated, or a
+        # Windows peer forks every key ("a\\b.md" vs "a/b.md") and re-transfers
+        # the whole workspace both ways on every pass.
+        manifest[rel.as_posix()] = {"size": stat.st_size, "mtime": stat.st_mtime, "sha256": digest}
     return manifest
 
 

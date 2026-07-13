@@ -300,6 +300,26 @@ def test_plan_respects_deletions_via_baseline():
     assert plan == {"pull": [], "push": [], "conflict": []}
 
 
+def test_file_manifest_keys_are_posix(tmp_path):
+    """Manifest keys are the sync wire format — POSIX-separated on every OS,
+    or a Windows peer forks each key and re-transfers the whole workspace."""
+    nested = tmp_path / "07-Job-Assessments" / "run_job_assessment"
+    nested.mkdir(parents=True)
+    (nested / "note.md").write_text("x")
+    manifest = sync.file_manifest(tmp_path)
+    assert list(manifest) == ["07-Job-Assessments/run_job_assessment/note.md"]
+
+
+def test_pull_file_rejects_backslash_rel_on_windows(tmp_path, monkeypatch):
+    """A rel with a literal backslash (legal filename on macOS/Linux) must be
+    skipped on Windows, not reinterpreted as a path separator."""
+    from lib import sync_client
+
+    monkeypatch.setattr(sync_client, "_IS_WINDOWS", True)
+    with pytest.raises(ValueError, match="not representable"):
+        sync_client._pull_file(None, tmp_path, r"weird\name.md")
+
+
 def test_file_manifest_excludes_machine_local(tmp_path):
     (tmp_path / "db").mkdir()
     (tmp_path / "db" / "jobcontextmcp.db").write_bytes(b"x")
