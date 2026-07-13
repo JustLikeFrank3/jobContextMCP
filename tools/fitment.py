@@ -4,6 +4,7 @@ import re
 
 from lib.io import _load_master_context
 from lib import config
+from lib.helpers import sanitize_filename
 from lib.openai_calls import create_chat_completion
 from tools.interviews import get_interview_context
 
@@ -214,12 +215,13 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
 
     If `source` is provided (e.g. 'Miguel Referral', 'AirBnb', 'Cold Apply'), the file is
     saved into a subfolder of that name under 07-Job-Assessments/ for organisation.
-    Filename defaults to {Company} - Fitment Assessment.md.
+    Filename defaults to {Company} - Fitment Assessment.md. Illegal filename
+    characters are replaced so saved files sync to Windows peers.
     Always use this tool to save assessments instead of creating files directly.
     """
     if not filename:
-        slug = company.strip().replace("/", "-")
-        filename = f"{slug} - Fitment Assessment.md"
+        filename = f"{company.strip()} - Fitment Assessment.md"
+    filename = sanitize_filename(filename)
     if not filename.endswith(".md"):
         filename += ".md"
 
@@ -228,15 +230,13 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     _assessments_folder = config.get_active_job_assessments_dir()
     folder = _assessments_folder
     if source:
-        # Sanitise source into a safe folder name
-        safe_source = source.strip().replace("/", "-").replace("\\", "-")
-        folder = folder / safe_source
+        folder = folder / sanitize_filename(source)
 
     target = folder / filename
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(cleaned, encoding="utf-8")
 
-    relative = target.relative_to(_assessments_folder)
+    relative = target.relative_to(_assessments_folder).as_posix()
     return f"\u2713 Saved job assessment: {relative}"
 
 
@@ -320,7 +320,7 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
         cost_note = f"  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}\n"
 
     if auto_save:
-        slug = f"{company} {role} - Fitment Assessment.md".replace("/", "-")
+        slug = f"{company} {role} - Fitment Assessment.md"
         save_result = save_job_assessment(company, content, slug, source="run_job_assessment")
     else:
         save_result = "(not saved — pass auto_save=True to persist)"

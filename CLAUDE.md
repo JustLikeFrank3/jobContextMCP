@@ -67,15 +67,24 @@ commits — never tag those) → desktop-release workflow → rolling
   AFTER signing; TAURI_SIGNING_* env-only.
 - Windows: sidecar is console-subsystem (stdout carries the port handshake) —
   spawn with `CREATE_NO_WINDOW`. Installer is unsigned → SmartScreen warning
-  (task: Azure Trusted Signing). Windows-illegal filename chars (`|` etc.)
-  from Mac-created files break sync file-pull (open task).
+  (task: Azure Trusted Signing). Filenames are sanitized at creation
+  (`lib.helpers.sanitize_filename`) and sync file transfers skip-and-report
+  per file (`last_summary.files.errors`) — but the cloud has no file-delete
+  propagation, so a bad-named file already in a partition must be renamed
+  there by hand (kubectl exec + mv). Sync manifest rels are POSIX
+  (`rel.as_posix()`) — `str(rel)` forked every key on Windows and
+  re-transferred the whole workspace both ways, littering the cloud with
+  flat literal-backslash files (2026-07-13 incident; peers on old builds
+  can re-push that junk until updated). Case-fold collisions (two cloud
+  files differing only in case) also wedge Windows into a re-pull loop —
+  resolve by renaming one at source.
 
-## Mobile specifics (mobile/, branch feat/mobile-app)
+## Mobile specifics (mobile/)
 
 - Expo SDK 57 / RN 0.86; `eas init/build` sometimes re-adds a duplicate
   ShareExtension block under `app.json` `extra.eas.build` — strip it.
   eas-cli must NOT be a project dep (`npx eas-cli`). ascAppId pinned in
-  eas.json. Build from feat/mobile-app so eas.json is correct.
+  eas.json. Mobile is merged to main; build from main.
 - Share capture: on-device page extraction (`src/pageExtract.ts`) — the phone
   reads pages that authwall datacenter IPs; server fallback in
   tools/job_scraper.py (jobs-guest fragment). LinkedIn dropped JSON-LD from

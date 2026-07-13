@@ -300,6 +300,26 @@ def test_plan_respects_deletions_via_baseline():
     assert plan == {"pull": [], "push": [], "conflict": []}
 
 
+def test_file_manifest_keys_are_posix(tmp_path):
+    """Manifest keys are the sync wire format — POSIX-separated on every OS,
+    or a Windows peer forks each key and re-transfers the whole workspace."""
+    nested = tmp_path / "07-Job-Assessments" / "run_job_assessment"
+    nested.mkdir(parents=True)
+    (nested / "note.md").write_text("x")
+    manifest = sync.file_manifest(tmp_path)
+    assert list(manifest) == ["07-Job-Assessments/run_job_assessment/note.md"]
+
+
+def test_pull_file_rejects_backslash_rel_on_windows(tmp_path, monkeypatch):
+    """A rel with a literal backslash (legal filename on macOS/Linux) must be
+    skipped on Windows, not reinterpreted as a path separator."""
+    from lib import sync_client
+
+    monkeypatch.setattr(sync_client, "_IS_WINDOWS", True)
+    with pytest.raises(ValueError, match="not representable"):
+        sync_client._pull_file(None, tmp_path, r"weird\name.md")
+
+
 def test_file_manifest_excludes_machine_local(tmp_path):
     (tmp_path / "db").mkdir()
     (tmp_path / "db" / "jobcontextmcp.db").write_bytes(b"x")
@@ -319,3 +339,260 @@ def test_sync_url_normalization():
     assert _normalize_url("http://127.0.0.1:8801") == "http://127.0.0.1:8801"
     assert _normalize_url("http://localhost:8801") == "http://localhost:8801"
     assert _normalize_url("  ") == ""
+
+
+# ── file sync execution: skip-and-report ──────────────────────────────────────
+
+class _FakeResp:
+    def __init__(self, payload, status_code=200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _FakeHttp:
+    """Stands in for the httpx client run_sync opens against the cloud."""
+
+    def __init__(
+        self,
+        remote_files: dict[str, bytes],
+        fail_put_rel: str = "",
+        cloud_contact: dict | None = None,
+        contact_404: bool = False,
+    ):
+        self.remote_files = remote_files
+        self.fail_put_rel = fail_put_rel
+        self.cloud_contact = dict(cloud_contact or {})
+        self.contact_404 = contact_404
+        self.contact_posts: list[dict] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, path, json=None):
+        import base64
+        import hashlib
+
+        if path == "/api/sync/changes":
+            return _FakeResp({"changes": [], "last_id": 0})
+        if path == "/api/sync/apply":
+            return _FakeResp({"applied": len(json["changes"])})
+        if path == "/api/sync/contact":
+            if self.contact_404:
+                return _FakeResp({"detail": "Not Found"}, status_code=404)
+            posted = dict(json.get("contact") or {})
+            self.contact_posts.append(posted)
+            from lib.sync import merge_contact
+
+            self.cloud_contact, filled = merge_contact(self.cloud_contact, posted)
+            return _FakeResp({"contact": self.cloud_contact, "filled": filled})
+        if path == "/api/sync/files/manifest":
+            manifest = {
+                rel: {"size": len(data), "mtime": 1.0, "sha256": hashlib.sha256(data).hexdigest()}
+                for rel, data in self.remote_files.items()
+            }
+            return _FakeResp({"manifest": manifest})
+        if path == "/api/sync/files/get":
+            data = self.remote_files[json["rel"]]
+            return _FakeResp({
+                "rel": json["rel"],
+                "mtime": 1.0,
+                "content_b64": base64.b64encode(data).decode("ascii"),
+            })
+        if path == "/api/sync/files/put":
+            if json["rel"] == self.fail_put_rel:
+                raise RuntimeError("upload rejected")
+            return _FakeResp({"status": "stored", "rel": json["rel"]})
+        raise AssertionError(f"unexpected POST {path}")
+
+
+def _wire_fake_sync(monkeypatch, root, http):
+    from lib import sync_client
+
+    monkeypatch.setattr(
+        sync_client, "sync_settings",
+        lambda: {"url": "https://cloud.test", "pat": "pat", "auto": True},
+    )
+    monkeypatch.setattr(sync_client, "_client", lambda url, pat: http)
+    monkeypatch.setattr(sync_client, "_local_root", lambda: root)
+    return sync_client
+
+
+def _stored_baseline():
+    rows = _rows("SELECT value FROM sync_meta WHERE key = 'file_sync_baseline'")
+    return json.loads(rows[0]["value"]) if rows else {}
+
+
+def test_run_sync_skips_unwritable_pull_and_reports(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        http = _FakeHttp({"good.md": b"good", "bad | name.md": b"bad"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        real_pull = sync_client._pull_file
+
+        def pull(http_, root_, rel, conflict=False):
+            if "|" in rel:  # deterministic stand-in for the Windows EINVAL
+                raise OSError(22, "Invalid argument", rel)
+            return real_pull(http_, root_, rel, conflict)
+
+        monkeypatch.setattr(sync_client, "_pull_file", pull)
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert (desktop.root / "good.md").read_bytes() == b"good"
+        assert summary["files"]["skipped"] == 1
+        [err] = summary["files"]["errors"]
+        assert err["op"] == "pull"
+        assert err["rel"] == "bad | name.md"
+        assert "Invalid argument" in err["error"]
+        # Skipped pull stays out of the baseline so the next pass retries it.
+        baseline = _stored_baseline()
+        assert "good.md" in baseline
+        assert "bad | name.md" not in baseline
+
+
+def test_run_sync_failed_push_keeps_rel_out_of_baseline(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        (desktop.root / "note.md").write_text("local work", encoding="utf-8")
+        http = _FakeHttp({}, fail_put_rel="note.md")
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert summary["files"]["skipped"] == 1
+        assert summary["files"]["errors"][0]["op"] == "push"
+        # note.md never reached the cloud: it must not enter the baseline,
+        # otherwise the next pass would misread the cloud copy as an update.
+        baseline = _stored_baseline()
+        assert "note.md" not in baseline
+        plan = sync.plan_file_sync(sync.file_manifest(desktop.root), {}, baseline)
+        assert "note.md" in plan["push"]
+
+
+# ── contact block exchange ─────────────────────────────────────────────────────
+
+def test_merge_contact_fill_empty_only():
+    base = {"name": "Frank", "email": "", "phone": "  ", "github": "gh"}
+    incoming = {"name": "Other", "email": "f@x.com", "phone": "555", "city": "Atlanta"}
+    merged, filled = sync.merge_contact(base, incoming)
+    assert merged == {
+        "name": "Frank",       # non-empty never overwritten
+        "email": "f@x.com",    # empty filled
+        "phone": "555",        # whitespace-only counts as empty
+        "github": "gh",        # keys missing from incoming survive
+        "city": "Atlanta",     # union of keys
+    }
+    assert filled == 3
+    assert sync.merge_contact({"name": "A"}, {"name": ""}) == ({"name": "A"}, 0)
+
+
+def _write_desktop_config(root, contact, monkeypatch):
+    config_path = root / "config.json"
+    config_path.write_text(
+        json.dumps({"contact": contact, "cloud_sync_pat": "keep-me"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JOBCONTEXT_CONFIG", str(config_path))
+    return config_path
+
+
+def test_run_sync_contact_pull_fills_local_config(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        config_path = _write_desktop_config(
+            desktop.root, {"name": "", "email": ""}, monkeypatch
+        )
+        monkeypatch.setattr(cfg, "_cfg", dict(cfg._cfg))  # runtime refresh, no leak
+        http = _FakeHttp({}, cloud_contact={"name": "Frank MacBride", "email": "f@x.com"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["contact"] == {"status": "ok", "filled_local": 2, "filled_cloud": 0}
+        saved = json.loads(config_path.read_text(encoding="utf-8"))
+        assert saved["contact"] == {"name": "Frank MacBride", "email": "f@x.com"}
+        assert saved["cloud_sync_pat"] == "keep-me"  # machine-local keys survive
+        assert cfg._cfg["contact"]["name"] == "Frank MacBride"  # live without restart
+
+
+def test_run_sync_contact_pushes_local_fields(replicas, monkeypatch):
+    desktop, _ = replicas
+    with desktop:
+        _write_desktop_config(desktop.root, {"name": "Frank", "email": ""}, monkeypatch)
+        http = _FakeHttp({}, cloud_contact={"name": "", "email": "f@x.com"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert http.contact_posts == [{"name": "Frank", "email": ""}]
+        assert http.cloud_contact["name"] == "Frank"
+        assert summary["contact"] == {"status": "ok", "filled_local": 1, "filled_cloud": 1}
+
+
+def test_run_sync_contact_404_is_nonfatal(replicas, monkeypatch):
+    """An older cloud without the endpoint must not break the pass."""
+    desktop, _ = replicas
+    with desktop:
+        _write_desktop_config(desktop.root, {"name": ""}, monkeypatch)
+        http = _FakeHttp({"doc.md": b"hello"}, contact_404=True)
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert summary["contact"] == {"status": "unsupported"}
+        assert (desktop.root / "doc.md").read_bytes() == b"hello"  # files still sync
+
+
+def test_sync_contact_endpoint_merges_and_persists(tmp_path, monkeypatch):
+    import asyncio
+
+    from transport.http.routes import sync as sync_routes
+
+    monkeypatch.setattr(sync_routes, "_user_root", lambda: tmp_path)
+    (tmp_path / "config.json").write_text(
+        json.dumps({"contact": {"name": "", "email": "cloud@x.com"}, "openai_api_key": "sk-keep"}),
+        encoding="utf-8",
+    )
+
+    out = asyncio.run(
+        sync_routes.sync_contact(
+            sync_routes.ContactExchange(contact={"name": "Frank", "email": "peer@x.com"}),
+            user=None,
+        )
+    )
+
+    assert out["filled"] == 1
+    assert out["contact"] == {"name": "Frank", "email": "cloud@x.com"}
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert saved["contact"] == {"name": "Frank", "email": "cloud@x.com"}
+    assert saved["openai_api_key"] == "sk-keep"  # other keys preserved
+
+
+def test_sync_contact_endpoint_tolerates_missing_config(tmp_path, monkeypatch):
+    import asyncio
+
+    from transport.http.routes import sync as sync_routes
+
+    monkeypatch.setattr(sync_routes, "_user_root", lambda: tmp_path)
+
+    out = asyncio.run(
+        sync_routes.sync_contact(
+            sync_routes.ContactExchange(contact={"name": "Frank"}), user=None
+        )
+    )
+
+    assert out == {"contact": {"name": "Frank"}, "filled": 1}
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert saved["contact"] == {"name": "Frank"}

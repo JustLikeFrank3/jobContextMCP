@@ -6,14 +6,18 @@ resolves to the owner's partition. One `run_sync()` pass:
 
   1. pull rows:  cloud journal since our cursor → apply locally
   2. push rows:  local journal since our cursor → cloud applies
+     (then the config.json contact block is exchanged fill-empty-only —
+     config itself is machine-local and never file-syncs)
   3. files:      manifest diff (lib.sync.plan_file_sync) → transfer both ways;
                  true conflicts keep the remote copy as a " (sync conflict…)"
                  sibling instead of overwriting local work
 
 Cursors and the file baseline live in the local sync_meta table, a summary
-of the last run in sync_meta['last_summary'] for the Settings UI. Sync is
-deliberately conservative: any transport error aborts the pass with the
-cursors untouched, so a retry just resumes.
+of the last run in sync_meta['last_summary'] for the Settings UI. Row sync
+is deliberately conservative: any transport error aborts the pass with the
+cursors untouched, so a retry just resumes. File transfers skip-and-report
+per file (summary['files']['errors']) so one bad file — e.g. a
+Windows-illegal filename created on another OS — can't wedge sync forever.
 """
 from __future__ import annotations
 
@@ -145,6 +149,10 @@ def run_sync() -> dict:
                     break
             summary["rows_pushed"] = pushed
 
+            # 2b. contact block (config.json is machine-local; exchange just
+            # the contact dict so a fresh peer doesn't generate blank headers)
+            summary["contact"] = _sync_contact(http)
+
             # 3. files
             local = file_manifest(root)
             resp = http.post("/api/sync/files/manifest", json={})
@@ -157,19 +165,55 @@ def run_sync() -> dict:
             baseline = json.loads(row[0]) if row else {}
             plan = plan_file_sync(local, remote, baseline)
 
+            file_errors: list[dict] = []
+            files_skipped = 0
+            failed_pushes: set[str] = set()
+
+            def _record_failure(op: str, rel: str, exc: Exception) -> None:
+                nonlocal files_skipped
+                files_skipped += 1
+                _LOG.warning("file sync %s failed for %r: %s", op, rel, exc)
+                if len(file_errors) < 20:
+                    file_errors.append({"op": op, "rel": rel, "error": str(exc)[:200]})
+
+            # Skip-and-report per file: one bad filename (e.g. Windows-illegal
+            # chars in a Mac-created name) must not wedge the whole pass.
             for rel in plan["pull"]:
-                _pull_file(http, root, rel)
+                try:
+                    _pull_file(http, root, rel)
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("pull", rel, exc)
             for rel in plan["push"]:
-                _push_file(http, root, rel, local[rel])
+                try:
+                    _push_file(http, root, rel, local[rel])
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("push", rel, exc)
+                    failed_pushes.add(rel)
             for rel in plan["conflict"]:
                 # Keep local work; land the cloud version alongside it.
-                _pull_file(http, root, rel, conflict=True)
+                try:
+                    _pull_file(http, root, rel, conflict=True)
+                except Exception as exc:  # noqa: BLE001
+                    _record_failure("conflict", rel, exc)
             summary["files"] = {k: len(v) for k, v in plan.items()}
+            if files_skipped:
+                summary["files"]["skipped"] = files_skipped
+                summary["files"]["errors"] = file_errors
 
             # New baseline = post-sync local state.
-            baseline = file_manifest(root)
+            new_baseline = file_manifest(root)
             # Conflict copies are local-only working files, not sync state.
-            baseline = {k: v for k, v in baseline.items() if CONFLICT_TAG not in k}
+            new_baseline = {k: v for k, v in new_baseline.items() if CONFLICT_TAG not in k}
+            # A failed push never reached the cloud: keep the last agreed
+            # baseline entry so the next pass retries the push instead of
+            # mistaking the cloud's stale copy for an update and pulling it
+            # over the local work.
+            for rel in failed_pushes:
+                if rel in baseline:
+                    new_baseline[rel] = baseline[rel]
+                else:
+                    new_baseline.pop(rel, None)
+            baseline = new_baseline
             with get_connection() as con:
                 con.execute(
                     "INSERT INTO sync_meta (key, value) VALUES (?, ?) "
@@ -205,12 +249,67 @@ def last_summary() -> "dict | None":
     return json.loads(row[0]) if row else None
 
 
+def _desktop_config_path() -> Path:
+    env_cfg = os.environ.get("JOBCONTEXT_CONFIG", "").strip()
+    if env_cfg:
+        return Path(env_cfg).expanduser()
+    from lib.app_dirs import desktop_data_dir
+
+    return desktop_data_dir() / "config.json"
+
+
+def _sync_contact(http) -> dict:
+    """Exchange the contact block with the cloud; fill-empty-only both ways.
+
+    Non-fatal by design: an older cloud without the endpoint (404) or any
+    other failure is reported in the summary and the pass continues.
+    """
+    from lib.config import update_runtime_config
+    from lib.sync import merge_contact
+
+    try:
+        config_path = _desktop_config_path()
+        try:
+            cfg = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cfg = {}
+        local_contact = cfg.get("contact", {}) or {}
+        resp = http.post("/api/sync/contact", json={"contact": local_contact})
+        if getattr(resp, "status_code", 200) == 404:
+            return {"status": "unsupported"}
+        resp.raise_for_status()
+        data = resp.json()
+        merged, filled_local = merge_contact(local_contact, data.get("contact", {}) or {})
+        if filled_local:
+            cfg["contact"] = merged
+            config_path.write_text(
+                json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            update_runtime_config({"contact": merged})
+        return {
+            "status": "ok",
+            "filled_local": filled_local,
+            "filled_cloud": data.get("filled", 0),
+        }
+    except Exception as exc:  # noqa: BLE001 — reported in the summary
+        _LOG.warning("contact sync failed: %s", exc)
+        return {"status": "error", "error": str(exc)[:200]}
+
+
 def _conflict_name(rel: str) -> str:
     p = Path(rel)
     return str(p.with_name(f"{p.stem}{CONFLICT_TAG}{p.suffix}"))
 
 
+_IS_WINDOWS = os.name == "nt"
+
+
 def _pull_file(http, root: Path, rel: str, conflict: bool = False) -> None:
+    if _IS_WINDOWS and "\\" in rel:
+        # Rels are POSIX-separated; a backslash means a filename literally
+        # containing one (legal on macOS/Linux). Windows would reinterpret it
+        # as a separator and write to the wrong nested path — skip instead.
+        raise ValueError(f"filename not representable on Windows: {rel!r}")
     resp = http.post("/api/sync/files/get", json={"rel": rel})
     resp.raise_for_status()
     data = resp.json()
