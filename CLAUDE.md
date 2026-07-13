@@ -71,7 +71,13 @@ commits — never tag those) → desktop-release workflow → rolling
   (`lib.helpers.sanitize_filename`) and sync file transfers skip-and-report
   per file (`last_summary.files.errors`) — but the cloud has no file-delete
   propagation, so a bad-named file already in a partition must be renamed
-  there by hand (kubectl exec + mv).
+  there by hand (kubectl exec + mv). Sync manifest rels are POSIX
+  (`rel.as_posix()`) — `str(rel)` forked every key on Windows and
+  re-transferred the whole workspace both ways, littering the cloud with
+  flat literal-backslash files (2026-07-13 incident; peers on old builds
+  can re-push that junk until updated). Case-fold collisions (two cloud
+  files differing only in case) also wedge Windows into a re-pull loop —
+  resolve by renaming one at source.
 
 ## Mobile specifics (mobile/)
 
