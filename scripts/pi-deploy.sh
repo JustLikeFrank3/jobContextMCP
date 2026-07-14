@@ -10,6 +10,9 @@
 #   ./scripts/pi-deploy.sh monitoring  deploy Prometheus+Grafana (k8s/monitoring/
 #                                      adapted: local-path storage, jcmcp-pi
 #                                      scrape ns, Grafana on LAN port 3000)
+#   ./scripts/pi-deploy.sh backup-setup  install scripts/pi-backup.sh on the Pi
+#                                        + nightly systemd timer (03:30) writing
+#                                        to the USB drive at /mnt/backup
 #
 # Assumes: SSH alias pi-node1 (direct link, 192.168.101.2) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
@@ -129,6 +132,21 @@ case "${1:-}" in
     ;;
   logs)
     pk logs -f deployment/jcmcp-pi
+    ;;
+  backup-setup)
+    scp -q "${ROOT}/scripts/pi-backup.sh" "${PI}:/tmp/jcmcp-backup.sh"
+    ssh "${PI}" 'set -e
+      sudo install -m 755 /tmp/jcmcp-backup.sh /usr/local/bin/jcmcp-backup.sh
+      rm /tmp/jcmcp-backup.sh
+      printf "[Unit]\nDescription=jcmcp data backup to USB drive\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/jcmcp-backup.sh\n" \
+        | sudo tee /etc/systemd/system/jcmcp-backup.service >/dev/null
+      printf "[Unit]\nDescription=Nightly jcmcp backup\n[Timer]\nOnCalendar=*-*-* 03:30:00\nPersistent=true\n[Install]\nWantedBy=timers.target\n" \
+        | sudo tee /etc/systemd/system/jcmcp-backup.timer >/dev/null
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now jcmcp-backup.timer
+      sudo systemctl list-timers jcmcp-backup.timer --no-pager | head -2'
+    echo "Running first backup now..."
+    ssh "${PI}" 'sudo /usr/local/bin/jcmcp-backup.sh'
     ;;
   *)
     sed -n '2,12p' "$0"
