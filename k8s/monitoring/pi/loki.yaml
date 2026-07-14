@@ -144,24 +144,24 @@ data:
     positions:
       filename: /run/promtail/positions.yaml
     scrape_configs:
+      # Static path glob instead of kubernetes_sd: single-node cluster, and
+      # the log path already encodes namespace/pod/container — no API
+      # dependency, no RBAC, nothing to go quietly wrong.
       - job_name: pods
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_node_name]
-            target_label: node
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            target_label: container
-          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
-            separator: /
-            target_label: __path__
-            replacement: /var/log/pods/*$1/*.log
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: pods
+              __path__: /var/log/pods/*/*/*.log
         pipeline_stages:
           - cri: {}
+          - regex:
+              source: filename
+              expression: "/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/.*"
+          - labels:
+              namespace:
+              pod:
+              container:
 ---
 apiVersion: apps/v1
 kind: DaemonSet
