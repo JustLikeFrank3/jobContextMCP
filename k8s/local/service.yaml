@@ -1,0 +1,16 @@
+# Type LoadBalancer so k3s's bundled ServiceLB (klipper) binds it on the
+# node; k3d's port mapping (8080:80@loadbalancer, set at cluster create)
+# then exposes it at http://localhost:8080 — no ingress needed locally.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jcmcp-local
+  namespace: jcmcp-local
+spec:
+  selector:
+    app: jcmcp-local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer

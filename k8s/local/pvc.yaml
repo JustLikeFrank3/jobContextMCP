@@ -1,0 +1,14 @@
+# Local k3d PVC — k3s's bundled local-path provisioner (hostPath-backed,
+# survives pod restarts; deleted with the cluster).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jcmcp-local-data
+  namespace: jcmcp-local
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
