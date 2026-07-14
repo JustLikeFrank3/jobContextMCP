@@ -150,14 +150,24 @@ case "${1:-}" in
       GPW=$(sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath="{.data.admin-password}" | base64 -d)
       G="http://admin:${GPW}@localhost:3000"
       for i in $(seq 1 30); do curl -sf "${G}/api/health" >/dev/null && break; sleep 2; done
-      OLD=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==\"jcmcp-wallboard\"), \"\"))")
-      [ -n "${OLD}" ] && curl -sf -X DELETE "${G}/api/playlists/${OLD}" >/dev/null
-      curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "{
+      BODY="{
         \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"jobcontext-overview\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2}
-        ]}" | python3 -c "import json,sys; print(\"playlist uid:\", json.load(sys.stdin)[\"uid\"])"'
+        ]}"
+      # Update in place when it exists — keeps the uid (and thus the TV kiosk
+      # URL baked into the Pi autostart) stable across re-applies.
+      OLD=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==\"jcmcp-wallboard\"), \"\"))")
+      if [ -n "${OLD}" ]; then
+        curl -sf -X PUT -H "Content-Type: application/json" "${G}/api/playlists/${OLD}" -d "${BODY}" >/dev/null && echo "playlist uid: ${OLD} (updated)"
+      else
+        curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "${BODY}" | python3 -c "import json,sys; print(\"playlist uid:\", json.load(sys.stdin)[\"uid\"], \"(created)\")"
+      fi'
+    # Anonymous read-only access so the TV kiosk needs no login (LAN-only).
+    ssh "${PI}" 'sudo k3s kubectl -n monitoring set env deploy/grafana \
+        GF_AUTH_ANONYMOUS_ENABLED=true GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer && \
+      sudo k3s kubectl -n monitoring rollout status deploy/grafana --timeout=180s'
     echo
     echo "Wallboard: http://192.168.68.51:3000/playlists (hit ▶ on jcmcp-wallboard)"
     echo "Kiosk URL: http://192.168.68.51:3000/playlists/play/<uid>?kiosk"
