@@ -16,7 +16,10 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 1b: frontend build (Vite → React SPA served under /app) ────────────
 # Debian-based (glibc) image avoids musl edge cases with esbuild/rollup native
 # binaries that can surface on Alpine.
-FROM node:24-slim AS frontend-builder
+# --platform=$BUILDPLATFORM: the SPA output is static and arch-independent,
+# so when cross-building (e.g. arm64 for the Pi) node runs natively instead
+# of under qemu emulation.
+FROM --platform=$BUILDPLATFORM node:24-slim AS frontend-builder
 
 WORKDIR /frontend
 
@@ -51,10 +54,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install tectonic (self-contained LaTeX engine, ~10MB vs ~400MB for texlive)
-RUN curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.16.9/tectonic-0.16.9-x86_64-unknown-linux-musl.tar.gz" \
-    | tar -xz -C /usr/local/bin \
-    && chmod +x /usr/local/bin/tectonic \
-    && tectonic --version
+# TARGETARCH (set by BuildKit) picks the right binary: amd64 → x86_64,
+# arm64 → aarch64.
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      arm64) tectonic_arch=aarch64 ;; \
+      *)     tectonic_arch=x86_64 ;; \
+    esac; \
+    curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.16.9/tectonic-0.16.9-${tectonic_arch}-unknown-linux-musl.tar.gz" \
+    | tar -xz -C /usr/local/bin; \
+    chmod +x /usr/local/bin/tectonic; \
+    tectonic --version
 
 # Fixed, user-agnostic cache location for tectonic's LaTeX support bundle.
 # Set before the warm-up below so both build-time and runtime use the same dir

@@ -86,3 +86,49 @@ overlay doesn't drift.
 - **Login loop** — check `SERVER_BASE_URL` matches the URL in your browser
   exactly (scheme, host, port); the cookie and redirect URI both derive from it.
 - **Data reset** — `down` + `up` wipes everything (PVC dies with the cluster).
+
+---
+
+# Pi cluster (k3s on Node1)
+
+The same app on real hardware: single-node k3s on the Raspberry Pi 4
+("Node1"), always on, serving the whole LAN at **http://192.168.68.51/**
+(SPA at `/app`, legacy dashboard at `/dashboard`).
+
+## Topology
+
+- Pi eth0 ↔ dev box `eno1` over a direct ethernet cable: `192.168.101.2` ↔
+  `192.168.101.1` (/30, sub-ms). Static IPs live in NetworkManager profiles
+  named `pi-direct` on both machines (on the Pi, plain netplan files get
+  wiped at boot by the NM-netplan backend — always configure via nmcli).
+- Pi wlan0 on the LAN: `192.168.68.51` (jittery wifi — fine for browsing,
+  not for image shipping).
+- SSH alias `pi-node1` (direct link, user fvm3) in `~/.ssh/config`.
+
+## Workflow
+
+```bash
+./scripts/pi-deploy.sh deploy      # buildx arm64 image → ship over direct link → apply
+./scripts/pi-deploy.sh apply       # manifests/secrets only
+./scripts/pi-deploy.sh status|logs
+./scripts/pi-deploy.sh kubeconfig  # → kubectl --kubeconfig ~/.kube/pi-node1.yaml
+```
+
+Secrets: `.env.pi` (copy `.env.pi.example`). Cross-builds need the one-time
+`docker run --privileged --rm tonistiigi/binfmt --install arm64`.
+
+## Pi-specific setup that already happened (for the record)
+
+- `cgroup_memory=1 cgroup_enable=memory` appended to
+  `/boot/firmware/cmdline.txt` (backup at `cmdline.txt.bak-preK3s`) — k3s
+  requires the memory cgroup, which Pi OS disables by default.
+- k3s installed with `--disable traefik --tls-san 192.168.101.2
+  --tls-san 192.168.68.51`.
+
+## Caveats
+
+- **Entra**: the localhost HTTPS exemption does NOT cover LAN IPs, so Entra
+  sign-in on the Pi requires TLS (self-signed or otherwise) first. Until
+  then use API-key auth (`PI_API_KEY`) or no-auth.
+- SD card is the bottleneck: image import and cold starts take a couple of
+  minutes; probes have generous initial delays.

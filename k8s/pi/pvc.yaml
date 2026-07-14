@@ -1,0 +1,13 @@
+# Pi k3s PVC — k3s local-path provisioner on the SD card.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jcmcp-pi-data
+  namespace: jcmcp-pi
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

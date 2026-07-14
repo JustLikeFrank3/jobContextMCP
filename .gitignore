@@ -9,6 +9,7 @@ config.*.json
 .env.*
 !.env.example
 !.env.local.example
+!.env.pi.example
 
 # SQLite database + WAL sidecars — local runtime data, never for version control
 *.db
