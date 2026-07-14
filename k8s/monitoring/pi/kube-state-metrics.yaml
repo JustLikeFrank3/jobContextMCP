@@ -54,6 +54,10 @@ spec:
       containers:
         - name: kube-state-metrics
           image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0
+          # Collect only what the Role above permits — the default set
+          # includes webhook configs etc., which just log 'forbidden' forever.
+          args:
+            - --resources=pods,nodes,namespaces,services,persistentvolumeclaims,deployments,daemonsets,replicasets,statefulsets,jobs,cronjobs
           ports:
             - containerPort: 8080
           resources:
