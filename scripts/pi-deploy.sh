@@ -144,22 +144,20 @@ case "${1:-}" in
     ssh "${PI}" 'sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
       sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana deploy/loki deploy/kube-state-metrics --timeout=300s'
     # Rotating kiosk playlist via the Grafana API (playlists are not
-    # file-provisionable). Idempotent on the playlist name.
+    # file-provisionable). Replace-on-apply so edits here take effect:
+    # app health <-> cluster health every 30s.
     ssh "${PI}" 'set -e
       GPW=$(sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath="{.data.admin-password}" | base64 -d)
       G="http://admin:${GPW}@localhost:3000"
       for i in $(seq 1 30); do curl -sf "${G}/api/health" >/dev/null && break; sleep 2; done
-      if ! curl -sf "${G}/api/playlists" | grep -q "jcmcp-wallboard"; then
-        curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "{
-          \"name\": \"jcmcp-wallboard\", \"interval\": \"45s\",
-          \"items\": [
-            {\"type\": \"dashboard_by_uid\", \"value\": \"jobcontext-overview\", \"order\": 1},
-            {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-k8s\", \"order\": 2},
-            {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-logs\", \"order\": 3},
-            {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-node\", \"order\": 4}
-          ]}" >/dev/null && echo "playlist created"
-      else echo "playlist exists"; fi
-      curl -sf "${G}/api/playlists" | python3 -c "import json,sys; [print(\"playlist uid:\", p[\"uid\"]) for p in json.load(sys.stdin)]"'
+      OLD=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==\"jcmcp-wallboard\"), \"\"))")
+      [ -n "${OLD}" ] && curl -sf -X DELETE "${G}/api/playlists/${OLD}" >/dev/null
+      curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "{
+        \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
+        \"items\": [
+          {\"type\": \"dashboard_by_uid\", \"value\": \"jobcontext-overview\", \"order\": 1},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2}
+        ]}" | python3 -c "import json,sys; print(\"playlist uid:\", json.load(sys.stdin)[\"uid\"])"'
     echo
     echo "Wallboard: http://192.168.68.51:3000/playlists (hit ▶ on jcmcp-wallboard)"
     echo "Kiosk URL: http://192.168.68.51:3000/playlists/play/<uid>?kiosk"
