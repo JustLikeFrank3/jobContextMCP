@@ -7,6 +7,9 @@
 #   ./scripts/pi-deploy.sh kubeconfig  fetch kubeconfig to ~/.kube/pi-node1.yaml
 #   ./scripts/pi-deploy.sh status    pod/service state
 #   ./scripts/pi-deploy.sh logs      follow app logs
+#   ./scripts/pi-deploy.sh monitoring  deploy Prometheus+Grafana (k8s/monitoring/
+#                                      adapted: local-path storage, jcmcp-pi
+#                                      scrape ns, Grafana on LAN port 3000)
 #
 # Assumes: SSH alias pi-node1 (direct link, 192.168.101.2) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
@@ -101,6 +104,28 @@ case "${1:-}" in
     ;;
   status)
     pk get pods,svc,pvc
+    ;;
+  monitoring)
+    ssh "${PI}" "sudo k3s kubectl create namespace monitoring --dry-run=client -o yaml | sudo k3s kubectl apply -f -"
+    # Grafana admin secret (out-of-band per grafana.yaml); create once, keep.
+    ssh "${PI}" "sudo k3s kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1 || \
+      sudo k3s kubectl -n monitoring create secret generic grafana-admin \
+        --from-literal=admin-user=admin \
+        --from-literal=admin-password=\"\$(openssl rand -base64 18)\""
+    # Reuse the AKS manifests verbatim except: Azure storage class → k3s
+    # local-path, and scrape the Pi's app namespace.
+    sed -e 's/managed-csi/local-path/' \
+        -e 's/names: \[jcmcp, jcmcp-qa\]/names: [jcmcp-pi]/' \
+        "${ROOT}/k8s/monitoring/prometheus.yaml" | ssh "${PI}" "sudo k3s kubectl apply -f -"
+    ssh "${PI}" "sudo k3s kubectl apply -f -" < "${ROOT}/k8s/monitoring/grafana-dashboards.yaml"
+    sed -e 's/managed-csi/local-path/' \
+        "${ROOT}/k8s/monitoring/grafana.yaml" | ssh "${PI}" "sudo k3s kubectl apply -f -"
+    # Expose Grafana on the LAN via ServiceLB (host port 3000).
+    ssh "${PI}" "sudo k3s kubectl -n monitoring patch svc grafana -p '{\"spec\":{\"type\":\"LoadBalancer\"}}'"
+    ssh "${PI}" "sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana --timeout=300s"
+    echo
+    echo "Grafana:    http://192.168.68.51:3000  (user: admin)"
+    echo "Password:   ssh ${PI} \"sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d\""
     ;;
   logs)
     pk logs -f deployment/jcmcp-pi
