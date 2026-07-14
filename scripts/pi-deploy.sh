@@ -16,6 +16,8 @@
 #   ./scripts/pi-deploy.sh wallboard   node-exporter + kube-state-metrics + Loki
 #                                      + kiosk dashboards + rotating playlist
 #                                      (requires `monitoring` deployed first)
+#   ./scripts/pi-deploy.sh kiosk-setup  chromium kiosk autostart on the Pi HDMI
+#                                       (waits for Grafana, survives reboots)
 #   ./scripts/pi-deploy.sh aks-feed    tunnel AKS Prometheus to the Pi: build a
 #                                      kubeconfig from the prom-reader SA
 #                                      (k8s/monitoring/aks-prom-reader.yaml,
@@ -216,6 +218,25 @@ KC
       sudo systemctl enable --now aks-prom-tunnel.service
       sleep 5
       curl -sf -o /dev/null -w "AKS Prometheus via tunnel: %{http_code}\n" "http://localhost:9091/api/v1/status/buildinfo"'
+    ;;
+  kiosk-setup)
+    # TV kiosk on the Pi's own HDMI: waits for Grafana (slow k3s cold start
+    # on the SD card) then runs chromium full-screen; fires via XDG autostart
+    # on the desktop auto-login. Verified to survive reboots unattended.
+    ssh "${PI}" 'sudo tee /usr/local/bin/wallboard-kiosk.sh >/dev/null << "EOF"
+#!/bin/bash
+URL="http://192.168.68.51:3000/playlists/play/afs4gyxml4uf4f?kiosk"
+for i in $(seq 1 60); do
+  curl -sf -o /dev/null --max-time 3 "$URL" && break
+  sleep 5
+done
+exec chromium --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL"
+EOF
+      sudo chmod +x /usr/local/bin/wallboard-kiosk.sh
+      mkdir -p ~/.config/autostart
+      printf "[Desktop Entry]\nType=Application\nName=Grafana Wallboard\nExec=/usr/local/bin/wallboard-kiosk.sh\n" > ~/.config/autostart/grafana.desktop
+      sudo raspi-config nonint do_blanking 1
+      echo "kiosk autostart installed (screen blanking off)"'
     ;;
   backup-setup)
     scp -q "${ROOT}/scripts/pi-backup.sh" "${PI}:/tmp/jcmcp-backup.sh"
