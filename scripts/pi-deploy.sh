@@ -230,7 +230,7 @@ for i in $(seq 1 60); do
   curl -sf -o /dev/null --max-time 3 "$URL" && break
   sleep 5
 done
-exec chromium --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL"
+exec chromium --password-store=basic --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL"
 EOF
       sudo chmod +x /usr/local/bin/wallboard-kiosk.sh
       mkdir -p ~/.config/autostart
