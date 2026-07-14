@@ -16,6 +16,12 @@
 #   ./scripts/pi-deploy.sh wallboard   node-exporter + kube-state-metrics + Loki
 #                                      + kiosk dashboards + rotating playlist
 #                                      (requires `monitoring` deployed first)
+#   ./scripts/pi-deploy.sh aks-feed    tunnel AKS Prometheus to the Pi: build a
+#                                      kubeconfig from the prom-reader SA
+#                                      (k8s/monitoring/aks-prom-reader.yaml,
+#                                      applied to AKS first), install the
+#                                      aks-prom-tunnel systemd service on the
+#                                      Pi (port-forward -> :9091)
 #
 # Assumes: SSH alias pi-node1 (direct link, 192.168.101.2) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
@@ -154,7 +160,8 @@ case "${1:-}" in
         \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"jobcontext-overview\", \"order\": 1},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2}
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3}
         ]}"
       # Update in place when it exists — keeps the uid (and thus the TV kiosk
       # URL baked into the Pi autostart) stable across re-applies.
@@ -174,6 +181,41 @@ case "${1:-}" in
     ;;
   logs)
     pk logs -f deployment/jcmcp-pi
+    ;;
+  aks-feed)
+    AKS_CTX=jcmcp-aks
+    SERVER=$(kubectl --context "${AKS_CTX}" config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+    CA=$(kubectl --context "${AKS_CTX}" -n monitoring get secret prom-reader-token -o jsonpath='{.data.ca\.crt}')
+    TOKEN=$(kubectl --context "${AKS_CTX}" -n monitoring get secret prom-reader-token -o jsonpath='{.data.token}' | base64 -d)
+    TMP_KC=$(mktemp)
+    cat > "${TMP_KC}" <<KC
+apiVersion: v1
+kind: Config
+clusters:
+  - name: aks
+    cluster:
+      server: ${SERVER}
+      certificate-authority-data: ${CA}
+users:
+  - name: prom-reader
+    user:
+      token: ${TOKEN}
+contexts:
+  - name: aks
+    context: {cluster: aks, user: prom-reader, namespace: monitoring}
+current-context: aks
+KC
+    scp -q "${TMP_KC}" "${PI}:/tmp/aks-prom.kubeconfig" && rm -f "${TMP_KC}"
+    ssh "${PI}" 'set -e
+      sudo mkdir -p /etc/jcmcp
+      sudo install -m 600 -o root -g root /tmp/aks-prom.kubeconfig /etc/jcmcp/aks-prom.kubeconfig
+      rm /tmp/aks-prom.kubeconfig
+      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.101.2\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
+        | sudo tee /etc/systemd/system/aks-prom-tunnel.service >/dev/null
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now aks-prom-tunnel.service
+      sleep 5
+      curl -sf -o /dev/null -w "AKS Prometheus via tunnel: %{http_code}\n" "http://localhost:9091/api/v1/status/buildinfo"'
     ;;
   backup-setup)
     scp -q "${ROOT}/scripts/pi-backup.sh" "${PI}:/tmp/jcmcp-backup.sh"

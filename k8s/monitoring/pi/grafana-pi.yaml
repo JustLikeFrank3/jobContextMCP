@@ -27,6 +27,13 @@ data:
         type: loki
         access: proxy
         url: http://loki.monitoring.svc:3100
+      # AKS Prometheus via the outbound tunnel held by aks-prom-tunnel.service
+      # on the Pi host (see pi-deploy.sh aks-feed) — reached at the node IP.
+      - name: Prometheus-AKS
+        uid: prometheus-aks
+        type: prometheus
+        access: proxy
+        url: http://192.168.101.2:9091
   dashboards.yaml: |
     apiVersion: 1
     providers:
@@ -104,5 +111,45 @@ data:
          "datasource": {"uid":"loki"},
          "options": {"showTime": true, "sortOrder": "Descending"},
          "targets": [{"expr": "{namespace=~\".+\"} |~ `(?i)(error|traceback|exception|failed)`"}]}
+      ]
+    }
+  kiosk-cloud.json: |
+    {
+      "uid": "kiosk-cloud", "title": "Cloud Health — jobcontext.ai (AKS)", "tags": ["kiosk"],
+      "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
+      "time": {"from": "now-3h", "to": "now"},
+      "panels": [
+        {"type": "stat", "title": "prod uptime", "gridPos": {"x":0,"y":0,"w":4,"h":5},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "process_uptime_seconds{namespace=\"jcmcp\"}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "stat", "title": "qa uptime", "gridPos": {"x":4,"y":0,"w":4,"h":5},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "process_uptime_seconds{namespace=\"jcmcp-qa\"}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "stat", "title": "5xx rate (prod)", "gridPos": {"x":8,"y":0,"w":4,"h":5},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)"}],
+         "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
+        {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":0,"w":6,"h":5},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
+        {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":18,"y":0,"w":6,"h":5},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
+        {"type": "timeseries", "title": "Request rate by route (prod)", "gridPos": {"x":0,"y":5,"w":12,"h":8},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\"}[5m])) by (route)", "legendFormat": "{{route}}"}],
+         "fieldConfig": {"defaults": {"unit": "reqps"}}},
+        {"type": "timeseries", "title": "Avg latency by route (prod)", "gridPos": {"x":12,"y":5,"w":12,"h":8},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "rate(http_request_seconds_sum{namespace=\"jcmcp\"}[5m]) / rate(http_request_seconds_count{namespace=\"jcmcp\"}[5m])", "legendFormat": "{{route}}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "timeseries", "title": "Work items by kind/status", "gridPos": {"x":0,"y":13,"w":12,"h":8},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(increase(work_items_total[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":12,"y":13,"w":12,"h":8},
+         "datasource": {"uid":"prometheus-aks"},
+         "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]}
       ]
     }
