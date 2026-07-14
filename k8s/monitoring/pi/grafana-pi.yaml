@@ -50,6 +50,43 @@ metadata:
   name: grafana-dashboard-pi
   namespace: monitoring
 data:
+  kiosk-app.json: |
+    {
+      "uid": "kiosk-app", "title": "Application Health — jcmcp (Pi)", "tags": ["kiosk"],
+      "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
+      "time": {"from": "now-3h", "to": "now"},
+      "panels": [
+        {"type": "timeseries", "title": "Request rate by route", "gridPos": {"x":0,"y":0,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(rate(http_requests_total[5m])) by (route)", "legendFormat": "{{route}}"}],
+         "fieldConfig": {"defaults": {"unit": "reqps"}}},
+        {"type": "timeseries", "title": "Avg latency by route", "gridPos": {"x":8,"y":0,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "rate(http_request_seconds_sum[5m]) / rate(http_request_seconds_count[5m])", "legendFormat": "{{route}}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "timeseries", "title": "5xx error rate", "gridPos": {"x":16,"y":0,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) or vector(0)"}],
+         "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
+        {"type": "timeseries", "title": "Work items (1h) by kind/status", "gridPos": {"x":0,"y":7,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(work_items_total[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
+        {"type": "timeseries", "title": "Avg work-item duration", "gridPos": {"x":8,"y":7,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "rate(work_item_seconds_sum[15m]) / rate(work_item_seconds_count[15m])", "legendFormat": "{{kind}}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "timeseries", "title": "LLM calls by model/outcome", "gridPos": {"x":16,"y":7,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(llm_calls_total[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":0,"y":14,"w":16,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
+        {"type": "stat", "title": "App uptime", "gridPos": {"x":16,"y":14,"w":8,"h":7},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "process_uptime_seconds"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}}
+      ]
+    }
   kiosk-cluster.json: |
     {
       "uid": "kiosk-cluster", "title": "Cluster Health — Node1", "tags": ["kiosk"],
@@ -87,27 +124,27 @@ data:
          "targets": [{"expr": "100*(1-node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/backup\"}/node_filesystem_size_bytes{mountpoint=~\"/|/mnt/backup\"})", "legendFormat": "{{mountpoint}}"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
-        {"type": "timeseries", "title": "CPU by pod", "gridPos": {"x":0,"y":6,"w":12,"h":7},
+        {"type": "timeseries", "title": "CPU by pod", "gridPos": {"x":0,"y":6,"w":12,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(pod)(rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[5m]))", "legendFormat": "{{pod}}"}],
          "fieldConfig": {"defaults": {"unit": "percentunit"}}},
-        {"type": "timeseries", "title": "Memory by pod", "gridPos": {"x":12,"y":6,"w":12,"h":7},
+        {"type": "timeseries", "title": "Memory by pod", "gridPos": {"x":12,"y":6,"w":12,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(pod)(container_memory_working_set_bytes{container!=\"\",pod!=\"\"})", "legendFormat": "{{pod}}"}],
          "fieldConfig": {"defaults": {"unit": "bytes"}}},
-        {"type": "timeseries", "title": "Network eth0/wlan0", "gridPos": {"x":0,"y":13,"w":12,"h":6},
+        {"type": "timeseries", "title": "Network eth0/wlan0", "gridPos": {"x":0,"y":12,"w":12,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [
            {"expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "rx {{device}}"},
            {"expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "tx {{device}}"}],
          "fieldConfig": {"defaults": {"unit": "Bps"}}},
-        {"type": "timeseries", "title": "Disk I/O (SD + USB)", "gridPos": {"x":12,"y":13,"w":12,"h":6},
+        {"type": "timeseries", "title": "Disk I/O (SD + USB)", "gridPos": {"x":12,"y":12,"w":12,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [
            {"expr": "rate(node_disk_written_bytes_total{device=~\"mmcblk0|sda\"}[5m])", "legendFormat": "write {{device}}"},
            {"expr": "rate(node_disk_read_bytes_total{device=~\"mmcblk0|sda\"}[5m])", "legendFormat": "read {{device}}"}],
          "fieldConfig": {"defaults": {"unit": "Bps"}}},
-        {"type": "logs", "title": "Errors — all namespaces", "gridPos": {"x":0,"y":19,"w":24,"h":8},
+        {"type": "logs", "title": "Errors — all namespaces", "gridPos": {"x":0,"y":17,"w":24,"h":7},
          "datasource": {"uid":"loki"},
          "options": {"showTime": true, "sortOrder": "Descending"},
          "targets": [{"expr": "{namespace=~\".+\"} |~ `(?i)(error|traceback|exception|failed)`"}]}

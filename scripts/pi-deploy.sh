@@ -161,7 +161,7 @@ case "${1:-}" in
       BODY="{
         \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
         \"items\": [
-          {\"type\": \"dashboard_by_uid\", \"value\": \"jobcontext-overview\", \"order\": 1},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-app\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3}
         ]}"
