@@ -391,6 +391,27 @@ class TestApiKeyAuthProvider:
         assert user is None
         reset_settings_cache()
 
+    def test_display_name_defaults_to_admin(self, monkeypatch):
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("API_KEY_USER_NAME", raising=False)
+        from transport.http.config import reset_settings_cache
+        reset_settings_cache()
+        user = self._provider().authenticate_request(None, None)
+        assert user.name == "Admin"
+        reset_settings_cache()
+
+    def test_display_name_configurable_but_id_stable(self, monkeypatch):
+        # id is load-bearing (data partitions to users/{id}) — only the
+        # greeting name may change with API_KEY_USER_NAME.
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.setenv("API_KEY_USER_NAME", "Frank")
+        from transport.http.config import reset_settings_cache
+        reset_settings_cache()
+        user = self._provider().authenticate_request(None, None)
+        assert user.name == "Frank"
+        assert user.id == "admin"
+        reset_settings_cache()
+
 
 # ===========================================================================
 # transport/http/security.py — get_auth_provider factory

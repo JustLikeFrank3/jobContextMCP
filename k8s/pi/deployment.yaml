@@ -75,6 +75,13 @@ spec:
                   name: jcmcp-pi-app-secrets
                   key: api_key
                   optional: true
+            # Display name for the API-key identity ("Admin" when unset).
+            - name: API_KEY_USER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: api_key_user_name
+                  optional: true
             - name: LLM_PROVIDER
               valueFrom:
                 secretKeyRef:
