@@ -1,7 +1,8 @@
 // Career Inbox — the home screen. One chronological feed of everything that
 // changed (derived server-side from the sync journal): open the app, know
 // instantly what happened since you last looked.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { fetchEvents, InboxEvent } from '../api'
 import { colors } from '../theme'
@@ -42,9 +43,12 @@ export default function Inbox() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch on every tab focus — see Today.tsx (stale pre-sign-in state).
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <View style={styles.root}>

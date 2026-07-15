@@ -1,6 +1,7 @@
 // Pipeline glance — the queue at phone altitude: score, status, summary.
 // Deep work (resumes, letters) stays on the desktop by design.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
@@ -33,9 +34,12 @@ export default function Pipeline() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch on every tab focus — see Today.tsx (stale pre-sign-in state).
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <View style={styles.root}>

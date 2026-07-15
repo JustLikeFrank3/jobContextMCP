@@ -1,6 +1,7 @@
 // Today — the 30-second glance: pipeline counts, today's move, priorities.
 // Reads the same /api/dashboard/home payload the desktop hero uses.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
@@ -28,9 +29,13 @@ export default function Today() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch on every tab focus — a screen mounted while signed out must not
+  // keep its stale "Not signed in" error after the user signs in via Settings.
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <ScrollView

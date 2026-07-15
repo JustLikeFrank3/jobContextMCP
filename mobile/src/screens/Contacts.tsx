@@ -1,6 +1,7 @@
 // Contacts — phones are communication devices. Tap a person: call, email,
 // LinkedIn, notes, follow-up state. Follow-up queue floats to the top.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
@@ -78,9 +79,12 @@ export default function Contacts() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch on every tab focus — see Today.tsx (stale pre-sign-in state).
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <ScrollView
