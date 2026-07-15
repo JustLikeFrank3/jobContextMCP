@@ -77,16 +77,16 @@ export async function signIn(baseUrl: string): Promise<boolean> {
   return true
 }
 
-/** Current bearer token, silently refreshed when near expiry. Null = signed out. */
-export async function getAccessToken(baseUrl: string): Promise<string | null> {
-  const [access, refresh, expiresAt] = await Promise.all([
-    SecureStore.getItemAsync(ACCESS_KEY),
-    SecureStore.getItemAsync(REFRESH_KEY),
-    SecureStore.getItemAsync(EXPIRES_KEY),
-  ])
-  if (!access) return null
-  if (Date.now() < Number(expiresAt || 0) - 60_000) return access
-  if (!refresh) return null
+// Refresh tokens rotate server-side (each is usable once). App start fires
+// several concurrent api() calls (push registration + the focused tab's own
+// fetch) that can all land near expiry at once — without single-flighting,
+// each one independently redeems the same refresh token, only the first
+// succeeds, and the rest get invalid_grant and report "signed out" (the
+// intermittent-logout bug). This cache makes every concurrent caller await
+// the one in-flight refresh instead of racing.
+let refreshInFlight: Promise<string | null> | null = null
+
+async function refreshAccessToken(baseUrl: string, refresh: string): Promise<string | null> {
   try {
     const clientId = await ensureClientId(baseUrl)
     const tokens = await AuthSession.refreshAsync(
@@ -98,6 +98,24 @@ export async function getAccessToken(baseUrl: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+/** Current bearer token, silently refreshed when near expiry. Null = signed out. */
+export async function getAccessToken(baseUrl: string): Promise<string | null> {
+  const [access, refresh, expiresAt] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_KEY),
+    SecureStore.getItemAsync(REFRESH_KEY),
+    SecureStore.getItemAsync(EXPIRES_KEY),
+  ])
+  if (!access) return null
+  if (Date.now() < Number(expiresAt || 0) - 60_000) return access
+  if (!refresh) return null
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken(baseUrl, refresh).finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
 }
 
 export async function signOut(): Promise<void> {
