@@ -77,6 +77,7 @@ apply_all() {
     printf 'entra_client_id=%s\n' "${PI_ENTRA_CLIENT_ID:-}"
     printf 'entra_client_secret=%s\n' "${PI_ENTRA_CLIENT_SECRET:-}"
     printf 'api_key=%s\n' "${PI_API_KEY:-}"
+    printf 'api_key_user_name=%s\n' "${PI_API_KEY_USER_NAME:-}"
     printf 'llm_provider=%s\n' "${PI_LLM_PROVIDER:-}"
     printf 'llm_api_key=%s\n' "${PI_LLM_API_KEY:-}"
     printf 'oura_client_id=%s\n' "${PI_OURA_CLIENT_ID:-}"

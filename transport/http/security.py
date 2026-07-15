@@ -26,7 +26,18 @@ class User:
     roles: tuple[str, ...] = ("admin",)
 
 
-_SYSTEM_USER = User(id="admin", name="Admin", roles=("admin",))
+def _system_user() -> User:
+    """The single identity behind API-key / no-auth mode.
+
+    The id is load-bearing — data partitions to users/{id} — so only the
+    display name is configurable (API_KEY_USER_NAME, e.g. self-hosted
+    single-user deployments that would rather not be greeted as "Admin").
+    """
+    return User(
+        id="admin",
+        name=os.environ.get("API_KEY_USER_NAME", "Admin"),
+        roles=("admin",),
+    )
 
 
 def _normalize_bearer(raw: str | None) -> str | None:
@@ -77,20 +88,20 @@ class ApiKeyAuthProvider(AuthProvider):
     def authenticate_request(self, authorization: str | None, session_token: str | None) -> User | None:
         settings = get_settings()
         if not settings.auth_enabled:
-            return _SYSTEM_USER
+            return _system_user()
 
         token = _normalize_bearer(authorization) or (session_token.strip() if session_token else None)
         if token and token == settings.api_key:
-            return _SYSTEM_USER
+            return _system_user()
         return None
 
     def authenticate_login(self, credential: str) -> tuple[User, str] | None:
         settings = get_settings()
         if not settings.auth_enabled:
-            return (_SYSTEM_USER, "")
+            return (_system_user(), "")
         if credential and credential.strip() == settings.api_key:
             # Session token is the same API key for the current provider.
-            return (_SYSTEM_USER, settings.api_key or "")
+            return (_system_user(), settings.api_key or "")
         return None
 
 
