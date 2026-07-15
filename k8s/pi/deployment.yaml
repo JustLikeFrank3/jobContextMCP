@@ -117,15 +117,24 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            # SD-card I/O makes cold starts slower than cloud/desktop.
+            # SD-card I/O makes cold starts slower than cloud/desktop, and
+            # doc generation (LLM + weasyprint + tectonic) can peg all four
+            # cores for minutes — the default 1s timeout / 3 failures had
+            # kubelet killing the pod mid-resume. Tolerate ~5 min of
+            # unresponsiveness before restarting (field incident, Jul 2026;
+            # real fix is doc generation through the control plane — P1).
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           volumeMounts:
             - name: data
               mountPath: /app/data
