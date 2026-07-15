@@ -285,9 +285,10 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
             allow_headers=["Authorization", "Content-Type"],
         )
 
-    if not settings.auth_enabled:
+    from transport.http.security import get_auth_provider
+    if not get_auth_provider().auth_enabled:
         _logger.warning(
-            "API_KEY is not set — HTTP transport is running WITHOUT authentication. "
+            "No authentication provider is active — HTTP transport is running WITHOUT authentication. "
             "Do not enable remote bind (ENABLE_REMOTE=true) in this state."
         )
 
