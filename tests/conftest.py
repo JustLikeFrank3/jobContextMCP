@@ -149,14 +149,17 @@ def http_client_noauth(monkeypatch, isolated_server):
     from fastapi.testclient import TestClient
     from transport.http.app import create_app
     from transport.http.config import reset_settings_cache
+    from transport.http.security import reset_auth_provider_cache
 
     monkeypatch.delenv("API_KEY", raising=False)
     monkeypatch.delenv("ENABLE_REMOTE", raising=False)
     reset_settings_cache()
+    reset_auth_provider_cache()
     app = create_app()
     with TestClient(app) as client:
         yield client
     reset_settings_cache()
+    reset_auth_provider_cache()
 
 
 @pytest.fixture()
@@ -165,14 +168,17 @@ def http_client_authed(monkeypatch, isolated_server):
     from fastapi.testclient import TestClient
     from transport.http.app import create_app
     from transport.http.config import reset_settings_cache
+    from transport.http.security import reset_auth_provider_cache
 
     monkeypatch.setenv("API_KEY", "test-key")
     monkeypatch.delenv("ENABLE_REMOTE", raising=False)
     reset_settings_cache()
+    reset_auth_provider_cache()
     app = create_app()
     with TestClient(app) as client:
         yield client
     reset_settings_cache()
+    reset_auth_provider_cache()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
