@@ -1,0 +1,16 @@
+# Type LoadBalancer → k3s ServiceLB binds host port 80 on the Pi's
+# addresses, so the app is directly at http://192.168.68.51/ on the LAN
+# (and http://192.168.101.2/ over the direct dev link). No ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jcmcp-pi
+  namespace: jcmcp-pi
+spec:
+  selector:
+    app: jcmcp-pi
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer

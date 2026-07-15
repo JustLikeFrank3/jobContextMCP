@@ -1,0 +1,143 @@
+# Local k3d overlay — mirrors k8s/qa/deployment.yaml minus the Azure glue:
+# no workload identity, no Blob seed initContainer, no sync sidecar.
+# Image is built locally and imported into the cluster by
+# scripts/local-cluster.sh (never pulled from ACR).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jcmcp-local
+  namespace: jcmcp-local
+  labels:
+    app: jcmcp-local
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jcmcp-local
+  template:
+    metadata:
+      labels:
+        app: jcmcp-local
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: jcmcp-local
+          image: jcmcp:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: START_MODE
+              value: "http"
+            - name: USE_SQLITE
+              value: "1"
+            - name: SQLITE_ONLY
+              value: "0"
+            - name: ENABLE_REMOTE
+              value: "true"
+            # Must match the k3d host port mapping (scripts/local-cluster.sh)
+            # and the redirect URI registered on the dev Entra app.
+            - name: SERVER_BASE_URL
+              value: "http://localhost:8080"
+            - name: DISABLE_REBINDING_CHECK
+              value: "true"
+            # Entra keys are optional locally: when absent the app falls back
+            # to ApiKeyAuthProvider (and with no API_KEY, auth is disabled) —
+            # the cluster works before the dev app registration exists.
+            - name: ENTRA_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: entra_tenant_id
+                  optional: true
+            - name: ENTRA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: entra_client_id
+                  optional: true
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: entra_client_secret
+                  optional: true
+            - name: ENTRA_OWNER_OID
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-local-config
+                  key: entra_owner_oid
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: api_key
+                  optional: true
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: llm_provider
+                  optional: true
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: llm_api_key
+                  optional: true
+            - name: OURA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: oura_client_id
+                  optional: true
+            - name: OURA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: oura_client_secret
+                  optional: true
+            - name: APP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: app_encryption_key
+                  optional: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jcmcp-local-data
+        - name: config
+          configMap:
+            name: jcmcp-local-config

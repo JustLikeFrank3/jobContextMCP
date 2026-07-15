@@ -8,6 +8,8 @@ config.*.json
 # Other env files (deploy/staging/prod) — all contain secrets
 .env.*
 !.env.example
+!.env.local.example
+!.env.pi.example
 
 # SQLite database + WAL sidecars — local runtime data, never for version control
 *.db

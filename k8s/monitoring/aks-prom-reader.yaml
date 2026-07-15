@@ -1,0 +1,46 @@
+# Applied to AKS (manually: kubectl --context jcmcp-aks apply -f).
+# Minimal identity the Pi wallboard uses to tunnel to AKS Prometheus:
+# port-forward only, monitoring namespace only. The long-lived token
+# (secret prom-reader-token) is copied once to the Pi
+# (/etc/jcmcp/aks-prom.kubeconfig) by scripts/pi-deploy.sh aks-feed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prom-reader
+  namespace: monitoring
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prom-reader-token
+  namespace: monitoring
+  annotations:
+    kubernetes.io/service-account.name: prom-reader
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prom-portforward
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: [services, pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/portforward]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prom-portforward
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prom-portforward
+subjects:
+  - kind: ServiceAccount
+    name: prom-reader
+    namespace: monitoring

@@ -1,0 +1,142 @@
+# Pi (k3s on Node1) overlay — same shape as k8s/local/deployment.yaml.
+# Image is cross-built for arm64 on the dev box and shipped over the direct
+# ethernet link by scripts/pi-deploy.sh (docker save | k3s ctr images import).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jcmcp-pi
+  namespace: jcmcp-pi
+  labels:
+    app: jcmcp-pi
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jcmcp-pi
+  template:
+    metadata:
+      labels:
+        app: jcmcp-pi
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: jcmcp-pi
+          image: jcmcp:pi
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: START_MODE
+              value: "http"
+            - name: USE_SQLITE
+              value: "1"
+            - name: SQLITE_ONLY
+              value: "0"
+            - name: ENABLE_REMOTE
+              value: "true"
+            # LAN address of the Pi (wlan0). NOTE: Entra's HTTPS-redirect
+            # exemption covers localhost only — Entra login against a LAN IP
+            # needs TLS first. Until then run API-key / no-auth.
+            - name: SERVER_BASE_URL
+              value: "http://192.168.68.51"
+            - name: DISABLE_REBINDING_CHECK
+              value: "true"
+            - name: ENTRA_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: entra_tenant_id
+                  optional: true
+            - name: ENTRA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: entra_client_id
+                  optional: true
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: entra_client_secret
+                  optional: true
+            - name: ENTRA_OWNER_OID
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-pi-config
+                  key: entra_owner_oid
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: api_key
+                  optional: true
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: llm_provider
+                  optional: true
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: llm_api_key
+                  optional: true
+            - name: OURA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: oura_client_id
+                  optional: true
+            - name: OURA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: oura_client_secret
+                  optional: true
+            - name: APP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: app_encryption_key
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              # Pi 4 has 4GB total; leave headroom for k3s itself.
+              cpu: "2000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            # SD-card I/O makes cold starts slower than cloud/desktop.
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jcmcp-pi-data
+        - name: config
+          configMap:
+            name: jcmcp-pi-config

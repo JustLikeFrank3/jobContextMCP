@@ -327,6 +327,71 @@ jobs:
             npm run build -- --bundles "$BUNDLES" "${EXTRA[@]}"
           fi
 
+      # linuxdeploy bundles the ENTIRE gtk3/webkit2gtk/glib/gstreamer/
+      # wayland-client stack from this job's ubuntu-22.04 image into the
+      # AppImage. Those are ABI-sensitive libraries tightly coupled to the
+      # HOST system (glib/gio module ABI, WebKitGTK↔JavaScriptCore version
+      # pairing, GDK's libepoxy EGL dispatch) — bundling stale copies causes
+      # silent breakage on newer host distros: gio module symbol mismatches
+      # (gvfs) and, critically, a fully black WebKitGTK webview, because
+      # GDK's bundled libepoxy/gtk-3/wayland-client mismatch the host's Mesa/
+      # compositor and eglGetDisplay fails, so nothing ever paints. Repro'd
+      # and fixed on Ubuntu 26.04 + AMD/Wayland (2026-07); confirmed via a
+      # standalone PyGObject/WebKit2 test that renders fine using only host
+      # libs. Delete the offending bundled copies and repack so the AppRun's
+      # LD_LIBRARY_PATH falls through to the host's matched, working versions.
+      - name: Strip stale bundled GTK/WebKit libs from AppImage (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGE=$(ls desktop/src-tauri/target/release/bundle/appimage/*.AppImage)
+          echo "fixing up: $APPIMAGE"
+          APPIMAGE_ABS="$(readlink -f "$APPIMAGE")"
+
+          curl -sSL -o /tmp/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+
+          WORKDIR=$(mktemp -d)
+          (
+            cd "$WORKDIR"
+            "$APPIMAGE_ABS" --appimage-extract >/dev/null
+            rm -f \
+              squashfs-root/usr/lib/libwayland-egl.so.1 \
+              squashfs-root/usr/lib/libglib-2.0.so* \
+              squashfs-root/usr/lib/libgio-2.0.so* \
+              squashfs-root/usr/lib/libgobject-2.0.so* \
+              squashfs-root/usr/lib/libgmodule-2.0.so* \
+              squashfs-root/usr/lib/libmount.so.1 \
+              squashfs-root/usr/lib/libblkid.so.1 \
+              squashfs-root/usr/lib/libselinux.so.1 \
+              squashfs-root/usr/lib/libpcre.so.3 \
+              squashfs-root/usr/lib/libpcre2-8.so.0 \
+              squashfs-root/usr/lib/libwebkit2gtk-4.1.so* \
+              squashfs-root/usr/lib/libjavascriptcoregtk-4.1.so* \
+              squashfs-root/usr/lib/libgst*.so* \
+              squashfs-root/usr/lib/libepoxy.so.0 \
+              squashfs-root/usr/lib/libgtk-3.so.0 \
+              squashfs-root/usr/lib/libgdk-3.so.0 \
+              squashfs-root/usr/lib/libwayland-client.so.0 \
+              squashfs-root/usr/lib/libwayland-cursor.so.0 \
+              squashfs-root/usr/lib/libwayland-server.so.0
+            APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 /tmp/appimagetool squashfs-root "$APPIMAGE_ABS" >/dev/null
+          )
+          rm -rf "$WORKDIR"
+
+          # The repack changes the AppImage's bytes, invalidating the updater
+          # .sig Tauri already produced for the pre-fix file — regenerate it
+          # against the fixed artifact.
+          SIG="${APPIMAGE}.sig"
+          if [ -f "$SIG" ] && [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            rm -f "$SIG"
+            (cd desktop && npx tauri signer sign "$GITHUB_WORKSPACE/$APPIMAGE")
+            test -s "$SIG"
+          fi
+          echo "fixed AppImage: $APPIMAGE"
+
       # Sign the FINAL .app — every Mach-O inside it, including the duplicate
       # Python binaries Tauri's resource copy materialized — then package the
       # dmg ourselves with Tauri's naming so the artifact glob and release
