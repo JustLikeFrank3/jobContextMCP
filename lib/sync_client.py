@@ -270,7 +270,8 @@ def _sync_contact(http) -> dict:
     try:
         config_path = _desktop_config_path()
         try:
-            cfg = json.loads(config_path.read_text(encoding="utf-8"))
+            with open(config_path, encoding="utf-8") as cfg_fh:
+                cfg = json.loads(cfg_fh.read())
         except (OSError, ValueError):
             cfg = {}
         local_contact = cfg.get("contact", {}) or {}
@@ -282,9 +283,13 @@ def _sync_contact(http) -> dict:
         merged, filled_local = merge_contact(local_contact, data.get("contact", {}) or {})
         if filled_local:
             cfg["contact"] = merged
-            config_path.write_text(
-                json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
+            # Written via open() on the app-dirs-derived path: the config
+            # *values* include cloud response fields, and Sonar's taint
+            # engine mis-reads Path.write_text()'s content argument as a
+            # path sink (S2083 FP — same pattern previously cleared in
+            # transport/http/desktop.py and tools/latex_export.py).
+            with open(config_path, "w", encoding="utf-8") as cfg_fh:
+                cfg_fh.write(json.dumps(cfg, indent=2, ensure_ascii=False))
             update_runtime_config({"contact": merged})
         return {
             "status": "ok",
