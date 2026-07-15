@@ -43,7 +43,11 @@ K8S_DIR="${ROOT}/k8s/pi"
 ENV_FILE="${ROOT}/.env.pi"
 KUBECONFIG_OUT="${HOME}/.kube/pi-node1.yaml"
 
-pk() { ssh "${PI}" "sudo k3s kubectl --namespace ${NS} $*"; }
+pk() {
+  local quoted
+  quoted=$(printf '%q ' "$@")
+  ssh "${PI}" "sudo k3s kubectl --namespace ${NS} ${quoted}"
+}
 
 load_env() {
   if [ -f "${ENV_FILE}" ]; then
@@ -65,17 +69,21 @@ build_ship() {
 apply_all() {
   ssh "${PI}" "sudo k3s kubectl create namespace ${NS} --dry-run=client -o yaml | sudo k3s kubectl apply -f -"
 
-  ssh "${PI}" "sudo k3s kubectl --namespace ${NS} create secret generic jcmcp-pi-app-secrets \
-    --from-literal=entra_tenant_id='${PI_ENTRA_TENANT_ID:-}' \
-    --from-literal=entra_client_id='${PI_ENTRA_CLIENT_ID:-}' \
-    --from-literal=entra_client_secret='${PI_ENTRA_CLIENT_SECRET:-}' \
-    --from-literal=api_key='${PI_API_KEY:-}' \
-    --from-literal=llm_provider='${PI_LLM_PROVIDER:-}' \
-    --from-literal=llm_api_key='${PI_LLM_API_KEY:-}' \
-    --from-literal=oura_client_id='${PI_OURA_CLIENT_ID:-}' \
-    --from-literal=oura_client_secret='${PI_OURA_CLIENT_SECRET:-}' \
-    --from-literal=app_encryption_key='${PI_APP_ENCRYPTION_KEY:-}' \
-    --dry-run=client -o yaml | sudo k3s kubectl apply -f -"
+  # Secrets travel over the ssh stdin pipe, not argv — a command line built
+  # with --from-literal=... would be visible to anyone running `ps` on the
+  # Pi while this executes.
+  {
+    printf 'entra_tenant_id=%s\n' "${PI_ENTRA_TENANT_ID:-}"
+    printf 'entra_client_id=%s\n' "${PI_ENTRA_CLIENT_ID:-}"
+    printf 'entra_client_secret=%s\n' "${PI_ENTRA_CLIENT_SECRET:-}"
+    printf 'api_key=%s\n' "${PI_API_KEY:-}"
+    printf 'llm_provider=%s\n' "${PI_LLM_PROVIDER:-}"
+    printf 'llm_api_key=%s\n' "${PI_LLM_API_KEY:-}"
+    printf 'oura_client_id=%s\n' "${PI_OURA_CLIENT_ID:-}"
+    printf 'oura_client_secret=%s\n' "${PI_OURA_CLIENT_SECRET:-}"
+    printf 'app_encryption_key=%s\n' "${PI_APP_ENCRYPTION_KEY:-}"
+  } | ssh "${PI}" "sudo k3s kubectl --namespace ${NS} create secret generic jcmcp-pi-app-secrets \
+    --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo k3s kubectl apply -f -"
 
   sed \
     -e "s|__PI_LLM_PROVIDER__|${PI_LLM_PROVIDER:-}|g" \

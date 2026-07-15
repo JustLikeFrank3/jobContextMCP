@@ -59,8 +59,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ARG TARGETARCH
 RUN set -eux; \
     case "${TARGETARCH}" in \
+      amd64) tectonic_arch=x86_64 ;; \
       arm64) tectonic_arch=aarch64 ;; \
-      *)     tectonic_arch=x86_64 ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.16.9/tectonic-0.16.9-${tectonic_arch}-unknown-linux-musl.tar.gz" \
     | tar -xz -C /usr/local/bin; \

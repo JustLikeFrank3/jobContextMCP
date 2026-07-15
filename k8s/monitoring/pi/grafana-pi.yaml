@@ -147,7 +147,7 @@ data:
         {"type": "logs", "title": "Errors — all namespaces", "gridPos": {"x":0,"y":20,"w":24,"h":7},
          "datasource": {"uid":"loki"},
          "options": {"showTime": true, "sortOrder": "Descending"},
-         "targets": [{"expr": "{namespace=~\".+\"} |~ `(?i)(error|traceback|exception|failed)` != `level=info` != `notifying scheduler`"}]}
+         "targets": [{"expr": "{namespace=~\".+\"} |~ \"(?i)(error|traceback|exception|failed)\" != \"level=info\" != \"notifying scheduler\""}]}
       ]
     }
   kiosk-cloud.json: |
