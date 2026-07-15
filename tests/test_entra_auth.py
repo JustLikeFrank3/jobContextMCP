@@ -276,6 +276,36 @@ class TestEntraAuthMiddleware:
 
 
 # ===========================================================================
+# transport/http/routes/health.py — auth_enabled reflects the active provider
+# ===========================================================================
+
+class TestHealthAuthEnabled:
+    def test_health_reports_auth_enabled_under_entra(self, monkeypatch, isolated_server):
+        """Entra deployments set ENTRA_* but no API_KEY; /health must still
+        report auth_enabled=true (regression: it read settings.auth_enabled,
+        which only reflects API_KEY)."""
+        from fastapi.testclient import TestClient
+        from transport.http.app import create_app
+        from transport.http.config import reset_settings_cache
+        from transport.http.security import reset_auth_provider_cache
+
+        monkeypatch.setenv("ENTRA_TENANT_ID", "tenant")
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "client")
+        monkeypatch.delenv("API_KEY", raising=False)
+        reset_settings_cache()
+        reset_auth_provider_cache()
+        try:
+            app = create_app()
+            with TestClient(app) as client:
+                r = client.get("/health")
+            assert r.status_code == 200
+            assert r.json()["auth_enabled"] is True
+        finally:
+            reset_settings_cache()
+            reset_auth_provider_cache()
+
+
+# ===========================================================================
 # transport/http/security.py — EntraAuthProvider
 # ===========================================================================
 
