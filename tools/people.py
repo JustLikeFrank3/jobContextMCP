@@ -12,6 +12,9 @@ Tools:
 from lib import config
 from lib.io import _load_json, _save_json, _now
 from tools.tone import log_tone_sample as _log_tone_sample
+from typing import Literal
+
+_VALID_STATUSES = ("none", "drafted", "sent", "responded")
 
 
 def _next_id(people: list[dict]) -> int:
@@ -33,7 +36,7 @@ def log_person(  # NOSONAR
     context: str,
     tags: list[str] | None = None,
     contact_info: str = "",
-    outreach_status: str = "none",
+    outreach_status: Literal["none", "drafted", "sent", "responded"] = "none",
     notes: str = "",
     sent_message: str = "",
 ) -> str:
@@ -60,7 +63,6 @@ def log_person(  # NOSONAR
     Returns:
         Confirmation string with the person's name and assigned ID.
     """
-    _VALID_STATUSES = ("none", "drafted", "sent", "responded")
     if outreach_status not in _VALID_STATUSES:
         return f"✗ Invalid outreach_status '{outreach_status}'. Must be one of: {', '.join(_VALID_STATUSES)}"
     tags = tags or []

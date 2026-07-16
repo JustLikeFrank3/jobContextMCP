@@ -22,9 +22,22 @@ def _next_id(posts: list[dict]) -> int:
     return max(p.get("id", 0) for p in posts) + 1
 
 
-def _find_post(posts: list[dict], post_id: int | None = None, source: str = "") -> dict | None:
+def _find_post(
+    posts: list[dict], post_id: int | None = None, url: str = "", source: str = ""
+) -> dict | None:
+    """Identity lookup for an existing post.
+
+    post_id and url are unambiguous identity; source is not (callers often
+    reuse the same value like 'linkedin' across many posts) so it is only
+    accepted here for update_post_metrics()'s documented "post_id or
+    source" contract — log_linkedin_post() never passes it, since matching
+    new/updated posts on source used to silently collide every call onto
+    whichever post happened to share it, overwriting it.
+    """
     if post_id is not None:
         return next((p for p in posts if p.get("id") == post_id), None)
+    if url:
+        return next((p for p in posts if p.get("url") == url), None)
     if source:
         sl = source.strip().lower()
         return next((p for p in posts if p.get("source", "").lower() == sl), None)
@@ -41,6 +54,7 @@ def log_linkedin_post(  # NOSONAR
     links: list[str] | None = None,
     title: str = "",
     auto_log_tone: bool = True,
+    post_id: int | None = None,
 ) -> str:
     """
     Add or update a LinkedIn post in the post database.
@@ -49,9 +63,17 @@ def log_linkedin_post(  # NOSONAR
     update_post_metrics(). Optionally ingests the post as a tone sample
     (default: True) so Frank's public voice calibrates future outreach drafts.
 
+    Identity: pass post_id (from get_linkedin_posts()'s #N) to update that
+    exact post, or an exact url match to update the post it belongs to.
+    Without either, this always creates a new post — source is a label, not
+    an id, and is never used to find an existing record. When updating,
+    text/context/title are fully replaced by whatever you pass (empty/omit
+    to keep the existing value); metrics are untouched here and only ever
+    change via update_post_metrics().
+
     Args:
         text:           Full post text.
-        source:         Unique slug label (e.g. 'linkedin_post_mcp_v4').
+        source:         Descriptive label (e.g. 'linkedin'). Not a unique id.
         context:        What the post is about / why it matters.
         posted_date:    ISO date string (YYYY-MM-DD). Defaults to today.
         url:            LinkedIn post URL or short link.
@@ -59,6 +81,8 @@ def log_linkedin_post(  # NOSONAR
         links:          List of external URLs included in the post.
         title:          Short human-readable title for the post.
         auto_log_tone:  If True, also ingest post text as a tone sample.
+        post_id:        Numeric id (from get_linkedin_posts()) to update an
+                         existing post instead of creating a new one.
 
     Returns:
         Confirmation string with post ID.
@@ -68,7 +92,10 @@ def log_linkedin_post(  # NOSONAR
     data = _load_json(config.LINKEDIN_POSTS_FILE, {"posts": []})
     posts = data.setdefault("posts", [])
 
-    existing = _find_post(posts, source=source)
+    if post_id is not None and _find_post(posts, post_id=post_id) is None:
+        return f"✗ No post found with id={post_id}. Omit post_id to create a new post."
+
+    existing = _find_post(posts, post_id=post_id, url=url)
     if existing:
         existing["text"] = text or existing.get("text", "")
         existing["context"] = context or existing.get("context", "")
@@ -177,6 +204,9 @@ def update_post_metrics(
         return f"✗ No post found with {ident}."
 
     m = post.setdefault("metrics", {})
+    if not isinstance(m, dict):
+        m = {}
+        post["metrics"] = m
     updates = {
         "impressions": impressions,
         "members_reached": members_reached,
@@ -194,7 +224,12 @@ def update_post_metrics(
     m["last_checked"] = _now()[:10]
 
     if audience_highlights:
-        post["audience_highlights"] = {**post.get("audience_highlights", {}), **audience_highlights}
+        if not isinstance(audience_highlights, dict):
+            return f"✗ audience_highlights must be a dict, got {type(audience_highlights).__name__}."
+        existing_ah = post.get("audience_highlights")
+        if not isinstance(existing_ah, dict):
+            existing_ah = {}
+        post["audience_highlights"] = {**existing_ah, **audience_highlights}
 
     _save_json(config.LINKEDIN_POSTS_FILE, data)
 

@@ -223,6 +223,8 @@ log_mental_health_checkin = health.log_mental_health_checkin
 get_mental_health_log = health.get_mental_health_log
 
 log_personal_story = context.log_personal_story
+update_personal_story = context.update_personal_story
+delete_personal_story = context.delete_personal_story
 get_personal_context = context.get_personal_context
 
 log_tone_sample = tone.log_tone_sample
