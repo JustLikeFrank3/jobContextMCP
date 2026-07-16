@@ -1,7 +1,8 @@
 // Networking — the relationship surface. Filter by where the conversation
 // stands (needs reply / awaiting reply / drafted), search everything, act
 // with one tap: call, email, LinkedIn. Follow-ups float to the top.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
@@ -90,9 +91,12 @@ export default function Networking() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch on every tab focus — see Today.tsx (stale pre-sign-in state).
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <ScrollView

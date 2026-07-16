@@ -18,6 +18,23 @@ const SCOPES = [
   'offline_access',
 ]
 
+// Screens mount once and cache their fetch result, so sign-in/sign-out has to
+// be observable: Settings flips the switch, every other tab needs to hear it.
+type AuthListener = (signedIn: boolean) => void
+const authListeners = new Set<AuthListener>()
+
+/** Subscribe to sign-in/sign-out transitions. Returns an unsubscribe fn. */
+export function onAuthChange(listener: AuthListener): () => void {
+  authListeners.add(listener)
+  return () => {
+    authListeners.delete(listener)
+  }
+}
+
+function notifyAuthChange(signedIn: boolean): void {
+  authListeners.forEach((l) => l(signedIn))
+}
+
 export const redirectUri = AuthSession.makeRedirectUri({ scheme: 'jobcontext', path: 'auth' })
 
 function discovery(baseUrl: string): AuthSession.DiscoveryDocument {
@@ -74,6 +91,7 @@ export async function signIn(baseUrl: string): Promise<boolean> {
     discovery(baseUrl),
   )
   await storeTokens(tokens)
+  notifyAuthChange(true)
   return true
 }
 
@@ -86,7 +104,11 @@ export async function signIn(baseUrl: string): Promise<boolean> {
 // the one in-flight refresh instead of racing.
 let refreshInFlight: Promise<string | null> | null = null
 
-async function refreshAccessToken(baseUrl: string, refresh: string): Promise<string | null> {
+async function refreshAccessToken(
+  baseUrl: string,
+  refresh: string,
+  staleAccess: string,
+): Promise<string | null> {
   try {
     const clientId = await ensureClientId(baseUrl)
     const tokens = await AuthSession.refreshAsync(
@@ -95,8 +117,20 @@ async function refreshAccessToken(baseUrl: string, refresh: string): Promise<str
     )
     await storeTokens(tokens)
     return tokens.accessToken
-  } catch {
-    return null
+  } catch (e: any) {
+    // expo-auth-session surfaces OAuth errors as TokenError with a .code.
+    // invalid_grant = the rotating refresh token is spent or revoked — that
+    // IS a sign-out, so clear the keychain and tell the UI (otherwise
+    // Settings keeps claiming "signed in" while every call fails). Anything
+    // else — offline at cold launch, 5xx, timeout — is transient: keep the
+    // stored tokens and hand back the stale access token so the caller gets
+    // an honest network/401 error instead of a false "Not signed in".
+    const code = e?.code ?? e?.params?.error
+    if (code === 'invalid_grant' || code === 'invalid_client' || code === 'unauthorized_client') {
+      await signOut()
+      return null
+    }
+    return staleAccess
   }
 }
 
@@ -111,7 +145,7 @@ export async function getAccessToken(baseUrl: string): Promise<string | null> {
   if (Date.now() < Number(expiresAt || 0) - 60_000) return access
   if (!refresh) return null
   if (!refreshInFlight) {
-    refreshInFlight = refreshAccessToken(baseUrl, refresh).finally(() => {
+    refreshInFlight = refreshAccessToken(baseUrl, refresh, access).finally(() => {
       refreshInFlight = null
     })
   }
@@ -124,6 +158,7 @@ export async function signOut(): Promise<void> {
     SecureStore.deleteItemAsync(REFRESH_KEY),
     SecureStore.deleteItemAsync(EXPIRES_KEY),
   ])
+  notifyAuthChange(false)
 }
 
 export async function isSignedIn(): Promise<boolean> {
