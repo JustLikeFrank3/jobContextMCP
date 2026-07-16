@@ -3,17 +3,23 @@
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
+import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
-import { Alert, Text } from 'react-native'
+import { ActivityIndicator, Pressable, Text } from 'react-native'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShareIntent } from 'expo-share-intent'
 import Inbox from './screens/Inbox'
 import Today from './screens/Today'
 import Pipeline from './screens/Pipeline'
-import Contacts from './screens/Contacts'
+import Networking from './screens/Networking'
 import Settings from './screens/Settings'
 import { captureUrl } from './api'
+import { extractJobPage } from './pageExtract'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
+import { setCaptureStatus, useCaptureStatus } from './captureStatus'
+
+SplashScreen.preventAutoHideAsync().catch(() => {})
 
 const Tab = createBottomTabNavigator()
 
@@ -39,13 +45,59 @@ function useIncomingShares() {
       ''
     resetShareIntent()
     if (!url) {
-      Alert.alert('Nothing to capture', 'Share a job posting link.')
+      setCaptureStatus({ kind: 'error', text: 'Nothing to capture — share a job posting link.' })
       return
     }
-    captureUrl(url)
-      .then((r) => Alert.alert('Saved', r.detail))
-      .catch((e) => Alert.alert('Capture failed', e.message))
+    setCaptureStatus({ kind: 'busy', text: 'Saving…' })
+    // Read the page here first: the phone's residential IP gets real content
+    // where LinkedIn authwalls our cloud. Server falls back if this yields ''.
+    extractJobPage(url)
+      .then((text) => captureUrl(url, text))
+      .then((r) => setCaptureStatus({ kind: 'ok', text: `${r.detail} You can keep browsing — a notification arrives with the score.` }, 6000))
+      .catch((e) => setCaptureStatus({ kind: 'error', text: e.message }))
   }, [hasShareIntent])
+}
+
+function CaptureBanner() {
+  const status = useCaptureStatus()
+  const insets = useSafeAreaInsets()
+  if (!status) return null
+  const bg = status.kind === 'error' ? '#3a1b1e' : status.kind === 'ok' ? '#12321f' : colors.surfaceRaised
+  const fg = status.kind === 'error' ? colors.danger : status.kind === 'ok' ? colors.green : colors.cyanSoft
+  const icon = status.kind === 'error' ? '✕' : status.kind === 'ok' ? '✓' : null
+  return (
+    <Pressable
+      onPress={() => setCaptureStatus(null)}
+      style={{
+        position: 'absolute',
+        top: insets.top + 8,
+        left: 12,
+        right: 12,
+        zIndex: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: bg,
+        borderColor: colors.border,
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        shadowColor: '#000',
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
+      }}
+    >
+      {icon ? (
+        <Text style={{ color: fg, fontSize: 15, fontWeight: '700' }}>{icon}</Text>
+      ) : (
+        <ActivityIndicator size="small" color={fg} />
+      )}
+      <Text style={{ color: fg, fontSize: 13, lineHeight: 18, flex: 1 }}>{status.text}</Text>
+    </Pressable>
+  )
 }
 
 export default function App() {
@@ -53,10 +105,15 @@ export default function App() {
   useEffect(() => {
     ensurePushRegistration()
   }, [])
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {})
+  }, [])
 
   return (
-    <NavigationContainer theme={theme}>
-      <StatusBar style="light" />
+    <SafeAreaProvider>
+      <NavigationContainer theme={theme}>
+        <StatusBar style="light" />
+        <CaptureBanner />
       <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
@@ -82,8 +139,8 @@ export default function App() {
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>▥</Text> }}
         />
         <Tab.Screen
-          name="Contacts"
-          component={Contacts}
+          name="Networking"
+          component={Networking}
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>☎</Text> }}
         />
         <Tab.Screen
@@ -92,6 +149,7 @@ export default function App() {
           options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>⚙</Text> }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </SafeAreaProvider>
   )
 }

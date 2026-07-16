@@ -47,14 +47,17 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-asset",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0b1117",
+          "image": "./assets/icon.png",
+          "imageWidth": 160
+        }
+      ]
     ],
     "icon": "./assets/icon.png",
-    "splash": {
-      "backgroundColor": "#0b1117",
-      "image": "./assets/icon.png",
-      "resizeMode": "contain"
-    },
     "extra": {
       "eas": {
         "projectId": "d0996a26-fa80-45fc-9de7-b43cfe095ebc"
