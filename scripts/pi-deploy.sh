@@ -231,15 +231,42 @@ KC
   kiosk-setup)
     # TV kiosk on the Pi's own HDMI: waits for Grafana (slow k3s cold start
     # on the SD card) then runs chromium full-screen; fires via XDG autostart
-    # on the desktop auto-login. Verified to survive reboots unattended.
+    # on the desktop auto-login. Self-healing: the wait loop never gives up
+    # (a bounded 60-try/5min cap left chromium showing a permanent
+    # ERR_CONNECTION_TIMED_OUT blank-white page if Grafana wasn't up yet —
+    # e.g. wlan0 DHCP handing out a different lease than the hardcoded IP
+    # after a reboot, 2026-07-15 incident), and a watchdog keeps checking
+    # the URL after launch, relaunching chromium if it goes unreachable for
+    # ~90s so later network blips don't strand a dead page either.
     ssh "${PI}" 'sudo tee /usr/local/bin/wallboard-kiosk.sh >/dev/null << "EOF"
 #!/bin/bash
 URL="http://192.168.68.51:3000/playlists/play/afs4gyxml4uf4f?kiosk"
-for i in $(seq 1 60); do
-  curl -sf -o /dev/null --max-time 3 "$URL" && break
-  sleep 5
+
+wait_for_url() {
+  until curl -sf -o /dev/null --max-time 3 "$URL"; do
+    sleep 5
+  done
+}
+
+while true; do
+  wait_for_url
+  chromium --password-store=basic --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL" &
+  CHROME_PID=$!
+  fails=0
+  while kill -0 "$CHROME_PID" 2>/dev/null; do
+    sleep 30
+    if curl -sf -o /dev/null --max-time 5 "$URL"; then
+      fails=0
+    else
+      fails=$((fails + 1))
+    fi
+    if [ "$fails" -ge 3 ]; then
+      kill "$CHROME_PID" 2>/dev/null
+      wait "$CHROME_PID" 2>/dev/null
+      break
+    fi
+  done
 done
-exec chromium --password-store=basic --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL"
 EOF
       sudo chmod +x /usr/local/bin/wallboard-kiosk.sh
       mkdir -p ~/.config/autostart
