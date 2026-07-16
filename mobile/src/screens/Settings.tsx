@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { DEFAULT_URL, fetchEvents, getConfig, setConfig } from '../api'
-import { isSignedIn, signIn, signOut } from '../auth'
+import { isSignedIn, onAuthChange, signIn, signOut } from '../auth'
 import { ensurePushRegistration } from '../push'
 import { colors } from '../theme'
 
@@ -20,6 +20,9 @@ export default function Settings() {
       setHasPat(Boolean(c.pat))
     })
     isSignedIn().then(setSignedIn)
+    // Track auth transitions from elsewhere — e.g. a dead refresh token
+    // clearing the session — so this screen never claims a stale "signed in".
+    return onAuthChange(setSignedIn)
   }, [])
 
   async function microsoftSignIn() {
