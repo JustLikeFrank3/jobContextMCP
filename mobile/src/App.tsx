@@ -3,6 +3,7 @@
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
+import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
 import { Alert, Text } from 'react-native'
 import { useShareIntent } from 'expo-share-intent'
@@ -14,6 +15,8 @@ import Settings from './screens/Settings'
 import { captureUrl } from './api'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
+
+SplashScreen.preventAutoHideAsync().catch(() => {})
 
 const Tab = createBottomTabNavigator()
 
@@ -52,6 +55,9 @@ export default function App() {
   useIncomingShares()
   useEffect(() => {
     ensurePushRegistration()
+  }, [])
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {})
   }, [])
 
   return (

@@ -1,6 +1,7 @@
 // Today — the 30-second glance: pipeline counts, today's move, priorities.
 // Reads the same /api/dashboard/home payload the desktop hero uses.
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
 import { colors } from '../theme'
@@ -28,9 +29,14 @@ export default function Today() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refetch every time this tab gains focus (not just on first mount) —
+  // otherwise signing in on the Settings tab never reaches an already-
+  // mounted Today tab until the whole app restarts.
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   return (
     <ScrollView
