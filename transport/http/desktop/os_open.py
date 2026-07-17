@@ -31,7 +31,7 @@ def _open_with_os(target: str) -> None:
     if sys.platform == "darwin":
         subprocess.Popen(["open", target])  # NOSONAR — list form (no shell); target is either a resolved workspace path (containment-checked) or an http(s) URL (scheme-validated); taint from HTTP request is broken by caller validation
     elif os.name == "nt":
-        os.startfile(target)  # noqa: S606 — the whole point; validated upstream
+        os.startfile(target)  # noqa: S606  # lgtm[py/path-injection] — target is a resolved workspace path (containment-checked above); validated upstream
     else:
         subprocess.Popen(["xdg-open", target])  # NOSONAR — list form (no shell); target is either a resolved workspace path (containment-checked) or an http(s) URL (scheme-validated); taint from HTTP request is broken by caller validation
 
@@ -64,10 +64,10 @@ async def open_file(request: OpenFileRequest) -> dict:
     if folder is None or not folder.exists():
         raise HTTPException(status_code=404, detail=f"Unknown folder: {folder_key}")
     root = folder.resolve()
-    target = (folder / unquote(quoted_name)).resolve()
+    target = (folder / unquote(quoted_name)).resolve()  # lgtm[py/path-injection] — containment check below prevents traversal; target is confirmed within root before any filesystem access
     if root != target.parent and root not in target.parents:
         raise HTTPException(status_code=404, detail="Invalid file path")
-    if not target.is_file():
+    if not target.is_file():  # lgtm[py/path-injection] — target has passed the containment check above
         raise HTTPException(status_code=404, detail="File not found")
 
     # Markdown is writer-friendly, not reader-friendly: render assessments /

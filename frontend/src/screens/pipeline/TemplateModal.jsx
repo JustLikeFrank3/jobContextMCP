@@ -22,9 +22,12 @@ export default function TemplateModal({ job, resumeTemplates, clTemplates, style
   const tpl = isResume ? rTpl : cTpl
   const sty = isResume ? rSty : cSty
   const templates = isResume ? rTemplates : cTemplates
+  // Restrict tpl/sty to safe alphanumeric-and-hyphen slugs before embedding in URL paths.
+  const safeTpl = tpl.replace(/[^a-z0-9-]/gi, '')
+  const safeSty = sty.replace(/[^a-z0-9-]/gi, '')
   const previewUrl = isResume
-    ? `/dashboard/pipeline/preview-template/${tpl}/${sty}`
-    : `/dashboard/pipeline/preview-cl/${tpl}/${sty}`
+    ? `/dashboard/pipeline/preview-template/${safeTpl}/${safeSty}`
+    : `/dashboard/pipeline/preview-cl/${safeTpl}/${safeSty}`
 
   async function save() {
     setSaving(true); setErr(''); setSavedMsg('')
