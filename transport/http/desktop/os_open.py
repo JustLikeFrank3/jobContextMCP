@@ -29,11 +29,11 @@ def _open_with_os(target: str) -> None:
         target = f"./{target}"
 
     if sys.platform == "darwin":
-        subprocess.Popen(["open", target])
+        subprocess.Popen(["open", target])  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
     elif os.name == "nt":
-        os.startfile(target)  # noqa: S606 — the whole point; validated upstream
+        os.startfile(target)  # noqa: S606 — target is a resolved workspace path (containment-checked + basename-sanitized); validated upstream
     else:
-        subprocess.Popen(["xdg-open", target])
+        subprocess.Popen(["xdg-open", target])  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
 
 
 class OpenFileRequest(BaseModel):
@@ -63,8 +63,15 @@ async def open_file(request: OpenFileRequest) -> dict:
     folder = _folder_path(folder_key)
     if folder is None or not folder.exists():
         raise HTTPException(status_code=404, detail=f"Unknown folder: {folder_key}")
+
+    # os.path.basename strips any directory component from the user-supplied
+    # filename, eliminating path-traversal sequences before the path is built.
+    safe_name = os.path.basename(unquote(quoted_name))
+    if not safe_name:
+        raise HTTPException(status_code=422, detail="Not a workspace file link.")
+
     root = folder.resolve()
-    target = (folder / unquote(quoted_name)).resolve()
+    target = (folder / safe_name).resolve()
     if root != target.parent and root not in target.parents:
         raise HTTPException(status_code=404, detail="Invalid file path")
     if not target.is_file():
@@ -97,11 +104,14 @@ class OpenUrlRequest(BaseModel):
 @router.post("/desktop/open-url")
 async def open_url(request: OpenUrlRequest) -> dict:
     """Open an http(s) URL in the system browser."""
+    import webbrowser
     from urllib.parse import urlsplit
 
     url = request.url.strip()
     scheme = urlsplit(url).scheme.lower()
     if scheme not in ("http", "https"):
         raise HTTPException(status_code=422, detail="Only http(s) links can be opened.")
-    _open_with_os(url)
+    # webbrowser.open is the stdlib-recommended way to launch a URL in the
+    # default browser; it does not involve shell execution or file-path sinks.
+    await asyncio.to_thread(webbrowser.open, url)
     return {"status": "opened"}

@@ -687,10 +687,10 @@ def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_d
 
 
 def test_open_url_http_only(desktop_client, monkeypatch):
-    import transport.http.desktop.os_open as desktop_mod
+    import webbrowser
 
     opened = {}
-    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
+    monkeypatch.setattr(webbrowser, "open", lambda t: opened.setdefault("t", t))
     resp = desktop_client.post("/desktop/open-url", json={"url": "https://www.linkedin.com/posts/x"})
     assert resp.status_code == 200
     assert opened["t"].startswith("https://")
@@ -736,7 +736,8 @@ class TestOpenWithOsArgumentInjection:
 
     def test_url_target_is_never_dash_prefixed(self, monkeypatch):
         """A validated http(s) URL can never start with '-', so the guard
-        must be a no-op for the open-url call site."""
+        must be a no-op for the open-url call site (now handled by
+        webbrowser.open, not _open_with_os)."""
         import subprocess
 
         import transport.http.desktop.os_open as desktop_mod
@@ -774,3 +775,127 @@ def test_open_file_renders_markdown_to_pdf(desktop_client, desktop_data_dir_env,
     # Cache is outside the sync root's synced set.
     from lib.sync import _file_synced
     assert _file_synced(Path("cache/md-pdf/x.pdf")) is False
+
+
+# ── cloud sync routes ─────────────────────────────────────────────────────────
+
+def test_sync_status_returns_sync_info(desktop_client, desktop_config, monkeypatch):
+    """GET /desktop/sync returns configured state and last summary."""
+    import lib.sync_client as sync_client_mod
+
+    monkeypatch.setattr(sync_client_mod, "sync_settings", lambda: {"url": "https://cloud.example.com", "auto": True, "pat": "tok"})
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(sync_client_mod, "last_summary", lambda: {"ok": True})
+
+    resp = desktop_client.get("/desktop/sync")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is True
+    assert body["url"] == "https://cloud.example.com"
+    assert body["auto"] is True
+    assert body["has_pat"] is True
+    assert body["last"] == {"ok": True}
+
+
+def test_sync_status_unconfigured(desktop_client, desktop_config, monkeypatch):
+    """GET /desktop/sync with no settings returns has_pat=False."""
+    import lib.sync_client as sync_client_mod
+
+    monkeypatch.setattr(sync_client_mod, "sync_settings", lambda: {"url": "", "auto": False, "pat": ""})
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: False)
+    monkeypatch.setattr(sync_client_mod, "last_summary", lambda: None)
+
+    resp = desktop_client.get("/desktop/sync")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is False
+    assert body["has_pat"] is False
+    assert body["last"] is None
+
+
+def test_sync_config_saves_url_and_pat(desktop_client, desktop_config, monkeypatch):
+    """POST /desktop/sync/config persists url, pat, and auto flag."""
+    import lib.config as config_mod
+    import lib.sync_client as sync_client_mod
+
+    updates_received = {}
+
+    def fake_update(u):
+        updates_received.update(u)
+
+    monkeypatch.setattr(config_mod, "update_runtime_config", fake_update)
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: True)
+
+    resp = desktop_client.post(
+        "/desktop/sync/config",
+        json={"url": "https://cloud.example.com", "pat": "mytoken", "auto": True},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "saved"
+    assert body["configured"] is True
+
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert stored["cloud_sync_url"] == "https://cloud.example.com"
+    assert stored["cloud_sync_pat"] == "mytoken"
+    assert stored["cloud_sync_auto"] is True
+    assert updates_received["cloud_sync_auto"] is True
+
+
+def test_sync_config_clear_removes_credentials(desktop_client, desktop_config, monkeypatch):
+    """POST /desktop/sync/config with clear=True removes stored url and pat."""
+    import lib.config as config_mod
+    import lib.sync_client as sync_client_mod
+
+    # Pre-populate config with credentials.
+    desktop_config.write_text(
+        json.dumps({"cloud_sync_url": "https://old.example.com", "cloud_sync_pat": "oldtoken"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_mod, "update_runtime_config", lambda u: None)
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: False)
+
+    resp = desktop_client.post("/desktop/sync/config", json={"clear": True})
+    assert resp.status_code == 200
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert "cloud_sync_url" not in stored
+    assert "cloud_sync_pat" not in stored
+
+
+def test_sync_config_auto_false(desktop_client, desktop_config, monkeypatch):
+    """POST /desktop/sync/config with auto=False persists the flag."""
+    import lib.config as config_mod
+    import lib.sync_client as sync_client_mod
+
+    monkeypatch.setattr(config_mod, "update_runtime_config", lambda u: None)
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: False)
+
+    resp = desktop_client.post("/desktop/sync/config", json={"auto": False})
+    assert resp.status_code == 200
+    stored = json.loads(desktop_config.read_text(encoding="utf-8"))
+    assert stored["cloud_sync_auto"] is False
+
+
+def test_sync_run_triggers_sync(desktop_client, monkeypatch):
+    """POST /desktop/sync/run calls run_sync when configured."""
+    import lib.sync_client as sync_client_mod
+
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(sync_client_mod, "run_sync", lambda: {"pushed": 3, "pulled": 1, "errors": 0})
+
+    resp = desktop_client.post("/desktop/sync/run")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pushed"] == 3
+    assert body["pulled"] == 1
+
+
+def test_sync_run_409_when_not_configured(desktop_client, monkeypatch):
+    """POST /desktop/sync/run returns 409 when sync isn't configured."""
+    import lib.sync_client as sync_client_mod
+
+    monkeypatch.setattr(sync_client_mod, "is_configured", lambda: False)
+
+    resp = desktop_client.post("/desktop/sync/run")
+    assert resp.status_code == 409
+    assert "API key" in resp.json()["detail"]
