@@ -96,22 +96,40 @@ class TestLogLinkedInPost:
         _seed(source="ah_init")
         assert _posts(isolated_server)[0]["audience_highlights"] == {}
 
-    def test_update_existing_post_by_source(self, isolated_server):
+    def test_update_existing_post_by_post_id(self, isolated_server):
         _seed(source="dup_test", text="Original.")
-        srv.log_linkedin_post(text="Updated.", source="dup_test", title="New Title", auto_log_tone=False)
+        post_id = _posts(isolated_server)[0]["id"]
+        srv.log_linkedin_post(text="Updated.", source="dup_test", title="New Title", auto_log_tone=False, post_id=post_id)
         posts = _posts(isolated_server)
         assert len(posts) == 1
         assert posts[0]["text"] == "Updated."
         assert posts[0]["title"] == "New Title"
 
+    def test_same_source_without_post_id_creates_new_post(self, isolated_server):
+        """Regression for the bug where every log_linkedin_post() call with a
+        repeated source (e.g. 'linkedin') silently overwrote the newest post
+        sharing that source instead of creating a new one."""
+        _seed(source="linkedin", text="First post.")
+        _seed(source="linkedin", text="Second post.")
+        posts = _posts(isolated_server)
+        assert len(posts) == 2
+        assert {p["text"] for p in posts} == {"First post.", "Second post."}
+
+    def test_post_id_for_nonexistent_post_errors(self, isolated_server):
+        result = srv.log_linkedin_post(text="X.", source="linkedin", auto_log_tone=False, post_id=999)
+        assert "999" in result
+        assert _posts(isolated_server) == []
+
     def test_update_returns_updated_confirmation(self, isolated_server):
         _seed(source="dup_confirm")
-        result = srv.log_linkedin_post(text="Updated.", source="dup_confirm", auto_log_tone=False)
+        post_id = _posts(isolated_server)[0]["id"]
+        result = srv.log_linkedin_post(text="Updated.", source="dup_confirm", auto_log_tone=False, post_id=post_id)
         assert "Updated" in result or "updated" in result or "✓" in result
 
     def test_hashtags_deduplicated_on_update(self, isolated_server):
         _seed(source="dedup_test", hashtags=["Python"])
-        srv.log_linkedin_post(text="T.", source="dedup_test", hashtags=["Python", "MCP"], auto_log_tone=False)
+        post_id = _posts(isolated_server)[0]["id"]
+        srv.log_linkedin_post(text="T.", source="dedup_test", hashtags=["Python", "MCP"], auto_log_tone=False, post_id=post_id)
         assert _posts(isolated_server)[0]["hashtags"].count("Python") == 1
 
     def test_links_deduplicated_on_update(self, isolated_server):
