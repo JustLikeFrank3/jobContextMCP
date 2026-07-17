@@ -29,11 +29,11 @@ def _open_with_os(target: str) -> None:
         target = f"./{target}"
 
     if sys.platform == "darwin":
-        subprocess.Popen(["open", target])
+        subprocess.Popen(["open", target])  # NOSONAR — list form (no shell); target is either a resolved workspace path (containment-checked) or an http(s) URL (scheme-validated); taint from HTTP request is broken by caller validation
     elif os.name == "nt":
         os.startfile(target)  # noqa: S606 — the whole point; validated upstream
     else:
-        subprocess.Popen(["xdg-open", target])
+        subprocess.Popen(["xdg-open", target])  # NOSONAR — list form (no shell); target is either a resolved workspace path (containment-checked) or an http(s) URL (scheme-validated); taint from HTTP request is broken by caller validation
 
 
 class OpenFileRequest(BaseModel):
