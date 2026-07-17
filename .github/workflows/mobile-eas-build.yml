@@ -65,7 +65,7 @@ jobs:
             --non-interactive
 
       - name: Submit to TestFlight
-        if: ${{ inputs.submit == 'true' }}
+        if: ${{ inputs.submit }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
