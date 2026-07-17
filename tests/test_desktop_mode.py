@@ -687,10 +687,10 @@ def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_d
 
 
 def test_open_url_http_only(desktop_client, monkeypatch):
-    import transport.http.desktop.os_open as desktop_mod
+    import webbrowser
 
     opened = {}
-    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
+    monkeypatch.setattr(webbrowser, "open", lambda t: opened.setdefault("t", t))
     resp = desktop_client.post("/desktop/open-url", json={"url": "https://www.linkedin.com/posts/x"})
     assert resp.status_code == 200
     assert opened["t"].startswith("https://")
@@ -736,7 +736,8 @@ class TestOpenWithOsArgumentInjection:
 
     def test_url_target_is_never_dash_prefixed(self, monkeypatch):
         """A validated http(s) URL can never start with '-', so the guard
-        must be a no-op for the open-url call site."""
+        must be a no-op for the open-url call site (now handled by
+        webbrowser.open, not _open_with_os)."""
         import subprocess
 
         import transport.http.desktop.os_open as desktop_mod
