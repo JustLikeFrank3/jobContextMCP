@@ -21,6 +21,13 @@ router = APIRouter(tags=["desktop"])
 def _open_with_os(target: str) -> None:
     import subprocess
 
+    # A target starting with '-' could be misread as a CLI flag by the OS
+    # opener (argument injection) rather than a file/URL — a real path is
+    # never affected by this (absolute paths start with '/', URLs must have
+    # a valid scheme), so the prefix is a no-op except for that edge case.
+    if target.startswith("-"):
+        target = f"./{target}"
+
     if sys.platform == "darwin":
         subprocess.Popen(["open", target])
     elif os.name == "nt":
