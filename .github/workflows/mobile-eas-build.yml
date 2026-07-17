@@ -1,0 +1,76 @@
+name: Mobile EAS Build
+
+# Manual dispatch only — mobile ships on its own cadence, not on every push
+# to main (deploy.yml's paths-ignore already excludes mobile/** anyway).
+# Runs the actual native build on Expo's own cloud build infra via eas-cli;
+# this workflow just triggers/monitors it, it does not compile anything
+# itself. Submitting to TestFlight is opt-in and only valid for the
+# production profile on iOS — everything else is build-only by design
+# (a bad dev/preview build shouldn't ever reach App Store Connect).
+#
+# Requires an EXPO_TOKEN repo secret (an Expo access token, not a password
+# see https://expo.dev/accounts/[account]/settings/access-tokens) and, for
+# iOS builds/submits, Apple credentials already stored in EAS's own
+# credential service (`npx eas-cli credentials` from a local machine) —
+# this workflow supplies no Apple secrets itself.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        type: choice
+        options: [development, preview, production]
+        default: development
+      platform:
+        description: "Target platform"
+        type: choice
+        options: [ios, android, all]
+        default: ios
+      submit:
+        description: "Submit the build to TestFlight afterward (production + ios only)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: mobile-eas-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: eas build (${{ inputs.profile }} / ${{ inputs.platform }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: EAS build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli build \
+            --platform "${{ inputs.platform }}" \
+            --profile "${{ inputs.profile }}" \
+            --non-interactive
+
+      - name: Submit to TestFlight
+        if: ${{ inputs.submit == 'true' }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ "${{ inputs.profile }}" != "production" ] || { [ "${{ inputs.platform }}" != "ios" ] && [ "${{ inputs.platform }}" != "all" ]; }; then
+            echo "::error::submit=true requires profile=production and platform=ios (or all) — refusing to submit a non-production/non-iOS build to TestFlight."
+            exit 1
+          fi
+          npx eas-cli submit --platform ios --latest --non-interactive
