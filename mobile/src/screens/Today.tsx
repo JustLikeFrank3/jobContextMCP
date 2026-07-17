@@ -80,8 +80,9 @@ export default function Today() {
     }
   }, [])
 
-  // Refetch on every tab focus — a screen mounted while signed out must not
-  // keep its stale "Not signed in" error after the user signs in via Settings.
+  // Refetch on every tab focus — a screen mounted before the API key was
+  // set must not keep its stale "Not connected" error after the user adds
+  // one via Settings.
   useFocusEffect(
     useCallback(() => {
       load()
