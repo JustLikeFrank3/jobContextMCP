@@ -634,7 +634,7 @@ def test_import_workspace_allows_colons_and_backslashes_on_posix(desktop_client,
 
 
 def test_import_workspace_rejects_colons_on_windows(desktop_client, desktop_data_dir_env, monkeypatch):
-    import transport.http.desktop as desktop_mod
+    import transport.http.desktop.import_workspace as desktop_mod
 
     monkeypatch.setattr(desktop_mod, "_IS_WINDOWS", True)
     for evil in ("db:alt.db", "a\\b.txt"):
@@ -649,7 +649,7 @@ def test_import_workspace_rejects_colons_on_windows(desktop_client, desktop_data
 # ── native open (files + URLs) ────────────────────────────────────────────────
 
 def test_open_file_opens_workspace_file(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
-    import transport.http.desktop as desktop_mod
+    import transport.http.desktop.os_open as desktop_mod
     from transport.http.routes.dashboard import materials
 
     folder = tmp_path / "cls"
@@ -668,7 +668,7 @@ def test_open_file_opens_workspace_file(desktop_client, desktop_data_dir_env, mo
 
 
 def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
-    import transport.http.desktop as desktop_mod
+    import transport.http.desktop.os_open as desktop_mod
     from transport.http.routes.dashboard import materials
 
     folder = tmp_path / "cls"
@@ -687,7 +687,7 @@ def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_d
 
 
 def test_open_url_http_only(desktop_client, monkeypatch):
-    import transport.http.desktop as desktop_mod
+    import transport.http.desktop.os_open as desktop_mod
 
     opened = {}
     monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
@@ -701,7 +701,7 @@ def test_open_url_http_only(desktop_client, monkeypatch):
 
 
 def test_open_file_renders_markdown_to_pdf(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
-    import transport.http.desktop as desktop_mod
+    import transport.http.desktop.os_open as desktop_mod
     from transport.http.routes.dashboard import materials
 
     folder = tmp_path / "assessments"
