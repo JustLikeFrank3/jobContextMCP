@@ -700,6 +700,57 @@ def test_open_url_http_only(desktop_client, monkeypatch):
         assert resp.status_code == 422, bad
 
 
+class TestOpenWithOsArgumentInjection:
+    """A target string starting with '-' could be misread as a CLI flag by
+    the OS opener rather than a file/URL (argument injection) — regression
+    for the Sonar S6350 hotspot on the subprocess.Popen(["open"/"xdg-open",
+    target]) calls."""
+
+    def test_dash_prefixed_target_gets_relative_prefix(self, monkeypatch):
+        import subprocess
+
+        import transport.http.desktop as desktop_mod
+
+        monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
+        monkeypatch.setattr(desktop_mod.os, "name", "posix")
+        calls = []
+        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+
+        desktop_mod._open_with_os("--dangerous-flag")
+
+        assert calls == [["xdg-open", "./--dangerous-flag"]]
+
+    def test_normal_target_is_untouched(self, monkeypatch):
+        import subprocess
+
+        import transport.http.desktop as desktop_mod
+
+        monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
+        monkeypatch.setattr(desktop_mod.os, "name", "posix")
+        calls = []
+        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+
+        desktop_mod._open_with_os("/workspace/resumes/resume.pdf")
+
+        assert calls == [["xdg-open", "/workspace/resumes/resume.pdf"]]
+
+    def test_url_target_is_never_dash_prefixed(self, monkeypatch):
+        """A validated http(s) URL can never start with '-', so the guard
+        must be a no-op for the open-url call site."""
+        import subprocess
+
+        import transport.http.desktop as desktop_mod
+
+        monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
+        monkeypatch.setattr(desktop_mod.os, "name", "posix")
+        calls = []
+        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+
+        desktop_mod._open_with_os("https://example.com/job/123")
+
+        assert calls == [["xdg-open", "https://example.com/job/123"]]
+
+
 def test_open_file_renders_markdown_to_pdf(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
     import transport.http.desktop as desktop_mod
     from transport.http.routes.dashboard import materials
