@@ -22,7 +22,9 @@ actions' parameters. These functions are dispatch-only — no human call sites.
 from __future__ import annotations
 
 import inspect
-from typing import Literal
+import json
+import types
+from typing import Literal, get_args, get_origin, Union
 
 from tools import (
     compensation,
@@ -129,6 +131,8 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     },
     "stories": {
         "log": (context.log_personal_story, "Log a personal story/anecdote."),
+        "update": (context.update_personal_story, "Correct a story in place (fix a wrong fact)."),
+        "delete": (context.delete_personal_story, "Delete a story (e.g. a duplicate)."),
         "ingest": (ingest.ingest_anecdote, "Ingest an anecdote (story + optional tone sample)."),
         "personal_context": (context.get_personal_context, "Retrieve personal context by tag/person."),
         "star_context": (star.get_star_story_context, "STAR stories for a company/role."),
@@ -171,13 +175,26 @@ DOMAINS: dict[str, dict[str, tuple]] = {
 }
 
 
+def _literal_choices(annotation) -> list | None:
+    """Return a Literal type's allowed values, unwrapping an `X | None`."""
+    target = _unwrap_optional(annotation)
+    if get_origin(target) is Literal:
+        return list(get_args(target))
+    return None
+
+
+def _param_label(p: inspect.Parameter) -> str:
+    choices = _literal_choices(p.annotation)
+    return f"{p.name} (one of: {', '.join(map(str, choices))})" if choices else p.name
+
+
 def _actions_doc(domain: str) -> str:
     """Generate per-action parameter docs from the real target signatures."""
     lines = ["", "Actions:"]
     for action, (fn, summary) in DOMAINS[domain].items():
         sig = inspect.signature(fn)
-        required = [p.name for p in sig.parameters.values() if p.default is inspect.Parameter.empty]
-        optional = [p.name for p in sig.parameters.values() if p.default is not inspect.Parameter.empty]
+        required = [_param_label(p) for p in sig.parameters.values() if p.default is inspect.Parameter.empty]
+        optional = [_param_label(p) for p in sig.parameters.values() if p.default is not inspect.Parameter.empty]
         parts = [f"  {action} — {summary}"]
         if required:
             parts.append(f" Requires: {', '.join(required)}.")
@@ -187,8 +204,57 @@ def _actions_doc(domain: str) -> str:
     return "\n".join(lines)
 
 
+def _unwrap_optional(annotation):
+    """Strip an ``X | None`` union down to X; pass through anything else.
+
+    ``X | None`` (PEP 604) and ``typing.Union[X, None]`` are two different
+    origins at runtime (``types.UnionType`` vs ``typing.Union``) — every
+    real target function in this codebase uses the former, so both must be
+    checked or this silently never unwraps anything.
+    """
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        args = [a for a in get_args(annotation) if a is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
+
+
+def _coerce_param(name: str, value, annotation):
+    """Bridge the facade's simple-typed (str) schema to a real function's
+    richer type (int/list/dict) — facades intentionally expose plain
+    strings (see module docstring) since not every MCP client renders
+    nested array/object schemas well; something has to turn the string
+    back into what the target function actually wants.
+
+    Raises ValueError with a caller-facing message on bad input instead of
+    letting a raw TypeError (e.g. "'str' object is not a mapping") or a
+    silent str/int mismatch (matches nothing, no error) leak through.
+    """
+    if not isinstance(value, str):
+        return value
+    target = _unwrap_optional(annotation)
+    if target is int:
+        try:
+            return int(value.strip().lstrip("#"))
+        except ValueError:
+            raise ValueError(f"{name} must be a number, got {value!r}.") from None
+    if get_origin(target) is list:
+        return [v.strip() for v in value.split(",") if v.strip()]
+    if target is dict:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            raise ValueError(f"{name} must be a JSON object, got {value!r}.") from None
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{name} must be a JSON object, got {value!r}.")
+        return parsed
+    return value
+
+
 def _run(domain: str, action: str, params: dict) -> str:
-    """Dispatch a domain call: validate the action, pass only provided params."""
+    """Dispatch a domain call: validate the action, coerce facade-simple
+    values to each param's real type, pass only provided params."""
     actions = DOMAINS[domain]
     spec = actions.get(action)
     if spec is None:
@@ -198,10 +264,14 @@ def _run(domain: str, action: str, params: dict) -> str:
         )
     fn = spec[0]
     sig = inspect.signature(fn)
-    provided = {
-        k: v for k, v in params.items()
-        if k != "action" and v is not None and k in sig.parameters
-    }
+    provided = {}
+    for k, v in params.items():
+        if k == "action" or v is None or k not in sig.parameters:
+            continue
+        try:
+            provided[k] = _coerce_param(k, v, sig.parameters[k].annotation)
+        except ValueError as e:
+            return f"✗ {domain}.{action}: {e}"
     missing = [
         p.name for p in sig.parameters.values()
         if p.default is inspect.Parameter.empty and p.name not in provided
@@ -361,7 +431,8 @@ def people_tool(
 
 
 def stories(
-    action: Literal["log", "ingest", "personal_context", "star_context", "star_all", "tone_log", "tone_profile", "tone_scan"],
+    action: Literal["log", "update", "delete", "ingest", "personal_context", "star_context", "star_all", "tone_log", "tone_profile", "tone_scan"],
+    story_id: str | None = None,
     story: str | None = None,
     tags: str | None = None,
     people: str | None = None,
