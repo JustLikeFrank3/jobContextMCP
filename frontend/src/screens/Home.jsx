@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Icon } from '../design-system'
 import { apiFetch } from '../auth/api.js'
 import useDesktopMode from '../shell/useDesktopMode.js'
 
 /* HomeScreen — re-skinned to the desktop design handoff's HOME page:
    mono date eyebrow + greeting, a 4-tile stat row, then a 1.35fr/1fr grid
    (cyan-tinted priorities card + daily-digest list on the left, readiness
-   card + "today's move" nudge on the right), then the workspace nav cards.
+   card + "today's move" nudge on the right). Workspace nav cards were
+   dropped once the sidebar landed — navigation lives in the shell now.
 
    Data: fetched from GET /api/dashboard/home (see transport/http/routes/
    dashboard/api.py). Until that responds it renders MOCK so the screen is
@@ -44,17 +44,6 @@ const MONO_EYEBROW_CYAN = {
   color: 'var(--cyan-300)',
 }
 
-const DEFAULT_CARDS = [
-  { key: 'pipeline', title: 'Pipeline', desc: 'Share-sheet intake, assessment, resume selection, cover letter, and apply queue' },
-  { key: 'job-hunt', title: 'Job Hunt', desc: 'Applications, Kanban board, status breakdown' },
-  { key: 'materials', title: 'Materials', desc: 'Resumes, cover letters, PDFs, and untracked files' },
-  { key: 'rejections', title: 'Rejections', desc: 'Funnel analysis, patterns, company breakdown' },
-  { key: 'posts', title: 'Posts', desc: 'LinkedIn pipeline: draft → written → approved → posted' },
-  { key: 'people', title: 'Outreach', desc: 'Contacts, follow-up queue, warm vs cold' },
-  { key: 'health', title: 'Wellbeing', desc: 'Mood & energy log, trend sparklines' },
-  { key: 'interviews', title: 'Interviews', desc: 'Upcoming schedule, debrief log, verbatim quotes' },
-]
-
 const MOCK = {
   welcomeName: 'there',
   welcomeIsDefault: false,
@@ -71,7 +60,6 @@ const MOCK = {
     date: '',
     items: [],
   },
-  cards: DEFAULT_CARDS,
 }
 
 function prefersReducedMotion() {
@@ -433,7 +421,6 @@ export default function Home() {
   const [data, setData] = useState(MOCK)
   const [hasOura, setHasOura] = useState(false)
   const [ouraConnected, setOuraConnected] = useState(false)
-  const [hover, setHover] = useState(null)
   const animate = useRef(!prefersReducedMotion()).current
 
   useEffect(() => {
@@ -453,7 +440,6 @@ export default function Home() {
     }
   }, [])
 
-  const cards = (data.cards || DEFAULT_CARDS).filter((c) => c.key !== 'digest')
   const readinessOn = hasOura && data.oura
 
   return (
@@ -582,47 +568,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* workspace nav cards */}
-      <div style={{ marginTop: 26 }}>
-        <div style={MONO_EYEBROW}>Workspace</div>
-        <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))', gap: 14 }}>
-          {cards.map((c) => {
-            const on = hover === c.key
-            return (
-              <a
-                key={c.key}
-                href={`/app/${c.key === 'home' ? '' : c.key}`}
-                onClick={(e) => {
-                  e.preventDefault()
-                  navigate(c.key === 'home' ? '/' : `/${c.key}`)
-                }}
-                onMouseEnter={() => setHover(c.key)}
-                onMouseLeave={() => setHover(null)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 7,
-                  textDecoration: 'none',
-                  background: on ? 'rgba(255,255,255,.07)' : CARD_BG,
-                  border: `1px solid ${on ? 'color-mix(in srgb, var(--cyan-500) 50%, transparent)' : 'rgba(255,255,255,.07)'}`,
-                  borderRadius: 16,
-                  padding: '18px 20px',
-                  boxShadow: on ? 'var(--glow-primary)' : 'none',
-                  transition: 'border-color var(--dur-base), background var(--dur-base), box-shadow var(--dur-base), transform var(--dur-base)',
-                  transform: on ? 'translateY(-2px)' : 'none',
-                }}
-              >
-                <div style={{ color: 'var(--cyan-400)', height: 24 }}>
-                  <Icon name={c.key} size={24} />
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 15.5, color: 'var(--text)' }}>{c.title}</div>
-                <div style={{ color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.45 }}>{c.desc}</div>
-                <div style={{ color: 'var(--cyan-400)', fontSize: 12.5, fontWeight: 600, marginTop: 4 }}>Open {'→'}</div>
-              </a>
-            )
-          })}
-        </div>
-      </div>
     </div>
   )
 }
