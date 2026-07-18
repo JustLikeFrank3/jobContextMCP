@@ -1,14 +1,16 @@
-// Brand palette — mirrors the dashboard SPA's dark theme.
+// Brand palette — aligned with the design-handoff navy/cyan tokens
+// (see src/ui/tokens.ts for the full design system). Kept for the legacy
+// screens (Inbox/Activity, Settings) so they blend with the new tab shell.
 export const colors = {
-  bg: '#0b1117',
-  surface: '#111a24',
-  surfaceRaised: '#16222f',
-  border: '#223049',
-  text: '#e6edf3',
-  muted: '#8b949e',
-  faint: '#5c6873',
+  bg: '#0A0F1C',
+  surface: 'rgba(255,255,255,.04)',
+  surfaceRaised: 'rgba(255,255,255,.07)',
+  border: 'rgba(255,255,255,.09)',
+  text: '#F0F5FF',
+  muted: '#8A99B5',
+  faint: '#6B7A96',
   cyan: '#00b5c8',
-  cyanSoft: '#66d5e0',
-  green: '#3fb950',
-  danger: '#f85149',
+  cyanSoft: '#6FE0EE',
+  green: '#6FD3A0',
+  danger: '#E39393',
 }
