@@ -1,35 +1,48 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Icon } from '../design-system'
 import { apiFetch } from '../auth/api.js'
 import useDesktopMode from '../shell/useDesktopMode.js'
 
-/* HomeScreen — the Oura-readiness redesign. Converted from the design
-   handoff's home.jsx IIFE to ESM.
+/* HomeScreen — re-skinned to the desktop design handoff's HOME page:
+   mono date eyebrow + greeting, a 4-tile stat row, then a 1.35fr/1fr grid
+   (cyan-tinted priorities card + daily-digest list on the left, readiness
+   card + "today's move" nudge on the right). Workspace nav cards were
+   dropped once the sidebar landed — navigation lives in the shell now.
 
    Data: fetched from GET /api/dashboard/home (see transport/http/routes/
    dashboard/api.py). Until that responds it renders MOCK so the screen is
    never blank. The API shape mirrors MOCK exactly.
 
    Behavior:
-   - Oura toggle: when off (or no ring connected), the readiness panel becomes
-     a Daily Digest in the same slot. hasOura is seeded from whether the API
-     returned an oura payload — a null payload shows the digest, never a
-     zeroed-out ring.
-   - Animated gauge + bars on mount (skipped under prefers-reduced-motion). */
+   - Oura toggle: when off (or no ring connected), the readiness card shows
+     a note instead of the gauge. hasOura is seeded from whether the API
+     returned an oura payload — a null payload never shows a zeroed ring.
+   - The daily digest is always visible (left column) so enabling Oura
+     augments the page rather than replacing the digest.
+   - Animated gauge + bars on mount (skipped under prefers-reduced-motion).
+   - The page title/subtitle come from DashboardShell — this screen renders
+     content only. */
 
 const ACCENT = 'var(--cyan-500)'
 
-const DEFAULT_CARDS = [
-  { key: 'pipeline', title: 'Pipeline', desc: 'Share-sheet intake, assessment, resume selection, cover letter, and apply queue' },
-  { key: 'job-hunt', title: 'Job Hunt', desc: 'Applications, Kanban board, status breakdown' },
-  { key: 'materials', title: 'Materials', desc: 'Resumes, cover letters, PDFs, and untracked files' },
-  { key: 'rejections', title: 'Rejections', desc: 'Funnel analysis, patterns, company breakdown' },
-  { key: 'posts', title: 'Posts', desc: 'LinkedIn pipeline: draft \u2192 written \u2192 approved \u2192 posted' },
-  { key: 'people', title: 'Outreach', desc: 'Contacts, follow-up queue, warm vs cold' },
-  { key: 'health', title: 'Wellbeing', desc: 'Mood & energy log, trend sparklines' },
-  { key: 'interviews', title: 'Interviews', desc: 'Upcoming schedule, debrief log, verbatim quotes' },
-]
+/* Handoff card recipe: rgba(255,255,255,.04) fill, .07 border, 14-18 radius */
+const CARD_BG = 'rgba(255,255,255,.04)'
+const CARD_BORDER = '1px solid rgba(255,255,255,.07)'
+
+/* Mono uppercase section eyebrow (JetBrains Mono per the handoff) */
+const MONO_EYEBROW = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '1.2px',
+  textTransform: 'uppercase',
+  color: '#7C8AA6',
+}
+const MONO_EYEBROW_CYAN = {
+  ...MONO_EYEBROW,
+  letterSpacing: '1.5px',
+  color: 'var(--cyan-300)',
+}
 
 const MOCK = {
   welcomeName: 'there',
@@ -47,14 +60,6 @@ const MOCK = {
     date: '',
     items: [],
   },
-  cards: DEFAULT_CARDS,
-}
-
-const EYEBROW = {
-  font: 'var(--fw-semibold) var(--fs-2xs)/1.2 var(--font-sans)',
-  textTransform: 'uppercase',
-  letterSpacing: 'var(--ls-eyebrow)',
-  color: 'var(--muted)',
 }
 
 function prefersReducedMotion() {
@@ -65,8 +70,22 @@ function prefersReducedMotion() {
   )
 }
 
+function dateEyebrow() {
+  const d = new Date()
+  const wd = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  const mo = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  return `${wd} · ${mo} ${d.getDate()}`
+}
+
+function timeGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
 /* ---------- pieces ---------- */
-function Gauge({ score, accent, size = 184, animate = true }) {
+function Gauge({ score, accent, size = 168, animate = true }) {
   const R = 78
   const C = 2 * Math.PI * R
   const [off, setOff] = useState(animate ? C : C * (1 - score / 100))
@@ -116,26 +135,26 @@ function Gauge({ score, accent, size = 184, animate = true }) {
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: size > 170 ? '2.7rem' : '2.3rem',
+            fontSize: size > 160 ? '2.5rem' : '2.2rem',
             lineHeight: 1,
-            color: 'var(--text-strong)',
+            color: 'var(--text)',
           }}
         >
           {score}
         </div>
-        <div style={{ ...EYEBROW, marginTop: 5 }}>Score</div>
+        <div style={{ ...MONO_EYEBROW, fontSize: 9.5, marginTop: 5 }}>Score</div>
       </div>
     </div>
   )
 }
 
-function Bars({ bars, accent, animate, smallLabel }) {
+function Bars({ bars, accent, animate }) {
   const [on, setOn] = useState(!animate)
   useEffect(() => {
     if (animate) requestAnimationFrame(() => requestAnimationFrame(() => setOn(true)))
   }, [animate])
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 10 }}>
       {bars.map((b, i) => {
         const green = b.tone === 'green'
         const col = green ? 'var(--green-500)' : accent
@@ -149,10 +168,8 @@ function Bars({ bars, accent, animate, smallLabel }) {
                 marginBottom: 6,
               }}
             >
-              <span style={{ fontSize: smallLabel ? '0.82rem' : '0.85rem', color: 'var(--muted)' }}>
-                {b.label}
-              </span>
-              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: col }}>
+              <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{b.label}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12.5, color: col }}>
                 {b.val}
                 {b.unit}
               </span>
@@ -219,126 +236,116 @@ function Toggle({ on, onClick, accent, disabled = false }) {
   )
 }
 
-function Digest({ digest, compact, withNote }) {
-  const items = digest?.items || []
-  return (
-    <div>
-      {digest?.date && (
-        <div style={{ marginTop: 8, color: 'var(--muted)', fontSize: compact ? '0.82rem' : '0.85rem' }}>
-          {digest.date}
-        </div>
-      )}
-      <div style={{ marginTop: compact ? 10 : 12 }}>
-        {items.length === 0 && (
-          <div style={{ color: 'var(--faint)', fontSize: '0.85rem', padding: '8px 0' }}>
-            Nothing pressing right now. Apply to 2 or 3 new roles today.
-          </div>
-        )}
-        {items.map((d, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              padding: (compact ? 11 : 13) + 'px 0',
-              borderTop: '1px solid var(--border-soft)',
-            }}
-          >
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                fontSize: compact ? '0.88rem' : '0.9rem',
-                color: 'var(--text)',
-              }}
-            >
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: d.color, flexShrink: 0 }} />
-              {d.label}
-            </span>
-            <span style={{ fontWeight: 700, fontSize: compact ? '0.9rem' : '0.92rem', color: d.color, whiteSpace: 'nowrap' }}>
-              {d.value}
-            </span>
-          </div>
-        ))}
-      </div>
-      {withNote && (
-        <div style={{ marginTop: 16, fontSize: '0.8rem', color: 'var(--faint)', lineHeight: 1.5 }}>
-          No Oura ring connected. Showing your daily digest. Connect a ring in Settings to see readiness.
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PanelHead({ hasOura, setHasOura, ouraConnected, accent }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-      <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>{hasOura ? 'Oura \u00b7 Readiness' : 'Daily Digest'}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: '0.66rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {ouraConnected ? 'Oura ring' : 'Not connected'}
-        </span>
-        <Toggle on={hasOura} onClick={() => setHasOura((v) => !v)} accent={accent} disabled={!ouraConnected} />
-      </div>
-    </div>
-  )
-}
-
-function Overdue({ n }) {
+function StatTile({ value, label, tint = false, valueColor }) {
   return (
     <div
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        background: 'var(--tint-danger)',
-        color: 'var(--danger-soft)',
-        border: '1px solid color-mix(in srgb,var(--danger) 35%,transparent)',
-        borderRadius: 999,
-        padding: '6px 13px',
-        fontSize: '0.8rem',
-        fontWeight: 600,
+        flex: '1 1 150px',
+        padding: 18,
+        borderRadius: 16,
+        background: tint ? 'rgba(0,181,200,.1)' : CARD_BG,
+        border: tint ? '1px solid rgba(0,181,200,.24)' : CARD_BORDER,
       }}
     >
-      <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--danger)' }} />
-      {n} overdue
-    </div>
-  )
-}
-
-function BigNum({ value, label }) {
-  return (
-    <div>
-      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '2.4rem', lineHeight: 1, color: 'var(--text-strong)' }}>
+      <div
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 30,
+          fontWeight: 700,
+          lineHeight: 1.1,
+          color: valueColor || (tint ? 'var(--cyan-300)' : 'var(--text)'),
+        }}
+      >
         {value}
       </div>
-      <div style={{ ...EYEBROW, marginTop: 6 }}>{label}</div>
+      <div style={{ fontSize: 12, color: tint ? '#8AB6C4' : 'var(--muted)', marginTop: 3 }}>{label}</div>
     </div>
   )
 }
 
-function Priorities({ priorities }) {
-  if (!priorities || priorities.length === 0) {
+/* Digest rows styled like the handoff's FOLLOW-UPS DUE list — one card per
+   item with a colored dot + label and a mono status chip on the right. */
+function Digest({ digest }) {
+  const items = digest?.items || []
+  if (items.length === 0) {
     return (
-      <div style={{ marginTop: 12, color: 'var(--faint)', fontSize: '0.9rem' }}>
-        No priority actions queued.
+      <div
+        style={{
+          borderRadius: 14,
+          padding: '14px 16px',
+          background: CARD_BG,
+          border: CARD_BORDER,
+          color: 'var(--faint)',
+          fontSize: 13,
+        }}
+      >
+        Nothing pressing right now. Apply to 2 or 3 new roles today.
       </div>
     )
   }
-  return priorities.map((p) => (
-    <div key={p.n} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginTop: 12 }}>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.map((d, i) => {
+        const col = d.color || 'var(--cyan-300)'
+        return (
+          <div
+            key={i}
+            style={{
+              borderRadius: 14,
+              padding: '14px 16px',
+              background: CARD_BG,
+              border: CARD_BORDER,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text)' }}>
+              <span style={{ width: 7, height: 7, borderRadius: 999, background: col, flexShrink: 0 }} />
+              {d.label}
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '.5px',
+                color: col,
+                background: `color-mix(in srgb, ${col} 14%, transparent)`,
+                padding: '4px 9px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {d.value}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* Numbered checkbox rows per the handoff's priorities card — the first
+   (current) item gets the cyan box. */
+function Priorities({ priorities }) {
+  if (!priorities || priorities.length === 0) {
+    return <div style={{ color: 'var(--faint)', fontSize: 13.5 }}>No priority actions queued.</div>
+  }
+  return priorities.map((p, i) => (
+    <div key={p.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <span
         style={{
-          width: 21,
-          height: 21,
-          borderRadius: 999,
-          background: 'var(--tint-primary)',
-          color: 'var(--cyan-300)',
+          width: 18,
+          height: 18,
+          borderRadius: 6,
+          border: `2px solid ${i === 0 ? 'var(--cyan-500)' : 'rgba(215,227,248,.35)'}`,
+          color: i === 0 ? 'var(--cyan-300)' : 'var(--faint)',
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.7rem',
+          fontSize: 9,
           fontWeight: 700,
           display: 'flex',
           alignItems: 'center',
@@ -349,82 +356,59 @@ function Priorities({ priorities }) {
       >
         {p.n}
       </span>
-      <span style={{ fontSize: '0.92rem', color: 'var(--text)', lineHeight: 1.4 }}>{p.text}</span>
+      <span style={{ fontSize: 14.5, color: '#E8EFFB', lineHeight: 1.4 }}>{p.text}</span>
     </div>
   ))
 }
 
-/* ---------- hero ---------- */
-function ReadinessOrDigest({ data, hasOura, setHasOura, ouraConnected, accent, animate, size, compact }) {
+function ReadinessCard({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
   const showReadiness = hasOura && data.oura
   return (
-    <>
-      <PanelHead hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} />
-      {showReadiness ? (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: compact ? 14 : 16 }}>
-            <Gauge score={data.oura.score} accent={accent} size={size} animate={animate} />
-          </div>
-          <div style={{ textAlign: 'center', marginTop: compact ? 8 : 10, fontWeight: 600, fontSize: compact ? '0.95rem' : '0.98rem', color: accent }}>
-            {data.oura.label}
-          </div>
-          <Bars bars={data.oura.bars} accent={accent} animate={animate} smallLabel={compact} />
-          {/* Readiness never hides the digest — both are useful at once. Stack the
-             digest below the ring so enabling Oura augments the panel, not replaces it. */}
-          <div style={{ marginTop: compact ? 18 : 22, paddingTop: compact ? 16 : 18, borderTop: '1px solid var(--border-soft)' }}>
-            <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Daily Digest</div>
-            <Digest digest={data.digest} compact />
-          </div>
-        </>
-      ) : (
-        <Digest digest={data.digest} compact={compact} withNote={!compact} />
-      )}
-    </>
-  )
-}
-
-function SplitHero({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-xl)',
-        overflow: 'hidden',
-        boxShadow: 'var(--shadow-md)',
-        marginBottom: 34,
-      }}
-    >
-      <div style={{ height: 3, background: 'linear-gradient(90deg,var(--cyan-500) 0%,color-mix(in srgb,var(--cyan-500) 30%,transparent) 55%,transparent 100%)' }} />
-      <div className="hero-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-        <div style={{ padding: '26px 30px' }}>
-          <ReadinessOrDigest data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={accent} animate={animate} size={184} />
-        </div>
-        <div className="hero-split-right" style={{ padding: '26px 30px', borderLeft: '1px solid var(--border-soft)' }}>
-          <div style={{ ...EYEBROW, color: 'var(--cyan-300)' }}>Pipeline {'\u00b7'} Today</div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 30, marginTop: 14 }}>
-            <BigNum value={data.today.active} label="Active" />
-            <BigNum value={data.today.inflight} label="In-flight" />
-            {data.today.overdue > 0 && <div style={{ marginLeft: 'auto' }}><Overdue n={data.today.overdue} /></div>}
-          </div>
-          <div style={{ ...EYEBROW, marginTop: 24 }}>Priority actions</div>
-          <div style={{ marginTop: 10 }}><Priorities priorities={data.today.priorities} /></div>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div style={MONO_EYEBROW_CYAN}>{showReadiness ? 'Oura · Readiness' : 'Readiness'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9.5,
+              fontWeight: 600,
+              color: 'var(--faint)',
+              textTransform: 'uppercase',
+              letterSpacing: '.8px',
+            }}
+          >
+            {ouraConnected ? 'Oura ring' : 'Not connected'}
+          </span>
+          <Toggle on={hasOura} onClick={() => setHasOura((v) => !v)} accent={accent} disabled={!ouraConnected} />
         </div>
       </div>
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '15px 30px',
-          borderTop: '1px solid var(--border-soft)',
-          background: 'color-mix(in srgb,var(--cyan-500) 5%,var(--surface))',
+          marginTop: 10,
+          borderRadius: 16,
+          padding: 18,
+          background: 'rgba(255,255,255,.045)',
+          border: '1px solid rgba(255,255,255,.08)',
         }}
       >
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--green-500)', flexShrink: 0 }} />
-        <span style={{ ...EYEBROW, color: 'var(--green-300)', flexShrink: 0 }}>Today&rsquo;s move</span>
-        <span style={{ color: 'var(--text-soft)', fontSize: '0.9rem', lineHeight: 1.4 }}>{data.today.move}</span>
-        <span style={{ marginLeft: 'auto', color: 'var(--cyan-400)', fontSize: '1.1rem', flexShrink: 0 }}>{'\u2192'}</span>
+        {showReadiness ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
+              <Gauge score={data.oura.score} accent={accent} animate={animate} />
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10, fontWeight: 600, fontSize: 14.5, color: accent }}>
+              {data.oura.label}
+            </div>
+            <Bars bars={data.oura.bars} accent={accent} animate={animate} />
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--faint)', lineHeight: 1.5 }}>
+            {ouraConnected
+              ? 'Readiness hidden — flip the toggle to bring it back.'
+              : 'No Oura ring connected. Connect a ring in Settings to see readiness.'}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -437,7 +421,6 @@ export default function Home() {
   const [data, setData] = useState(MOCK)
   const [hasOura, setHasOura] = useState(false)
   const [ouraConnected, setOuraConnected] = useState(false)
-  const [hover, setHover] = useState(null)
   const animate = useRef(!prefersReducedMotion()).current
 
   useEffect(() => {
@@ -457,89 +440,134 @@ export default function Home() {
     }
   }, [])
 
-  const cards = (data.cards || DEFAULT_CARDS).filter((c) => c.key !== 'digest')
+  const readinessOn = hasOura && data.oura
 
   return (
     <div>
+      {/* greeting — the 28px page title lives in DashboardShell; this is the
+          handoff's mono date eyebrow + a smaller greeting line */}
+      <div style={{ ...MONO_EYEBROW_CYAN, letterSpacing: '1px', fontSize: 13, fontWeight: 500 }}>
+        {dateEyebrow()}
+      </div>
       <div
         style={{
-          textAlign: 'center',
           fontFamily: 'var(--font-display)',
-          fontSize: '1.55rem',
-          fontWeight: 600,
-          color: 'var(--text-strong)',
-          margin: '2px 0 18px',
+          fontSize: 20,
+          fontWeight: 700,
+          letterSpacing: '-0.4px',
+          color: 'var(--text)',
+          marginTop: 4,
         }}
       >
-        {data.welcomeIsDefault ? 'Welcome.' : `Welcome back, ${data.welcomeName}.`}
+        {data.welcomeIsDefault ? timeGreeting() : `${timeGreeting()}, ${data.welcomeName}`}
       </div>
 
       {data.welcomeIsDefault && isDesktop && (
-        <div style={{ textAlign: 'center', margin: '-8px 0 18px' }}>
-          <button
-            onClick={() =>
-              navigate('/chat', {
-                state: {
-                  seed:
-                    "I'm new here — check my workspace and walk me through setting it up.",
-                },
-              })
-            }
-            style={{
-              background: 'var(--surface-raised)',
-              border: '1px solid color-mix(in srgb, var(--cyan-500) 50%, transparent)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--cyan-300)',
-              padding: '8px 16px',
-              fontSize: 'var(--fs-sm)',
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-            }}
-          >
-            Set up your workspace with the assistant {'→'}
-          </button>
-        </div>
+        <button
+          onClick={() =>
+            navigate('/chat', {
+              state: {
+                seed:
+                  "I'm new here — check my workspace and walk me through setting it up.",
+              },
+            })
+          }
+          style={{
+            marginTop: 14,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            color: '#04222A',
+            background: 'var(--cyan-500)',
+            border: 'none',
+            padding: '9px 16px',
+            borderRadius: 10,
+            boxShadow: '0 4px 14px rgba(0,181,200,.25)',
+            cursor: 'pointer',
+          }}
+        >
+          Set up your workspace with the assistant {'→'}
+        </button>
       )}
 
-      <SplitHero data={data} hasOura={hasOura} setHasOura={setHasOura} ouraConnected={ouraConnected} accent={ACCENT} animate={animate} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))', gap: 14 }}>
-        {cards.map((c) => {
-          const on = hover === c.key
-          return (
-            <a
-              key={c.key}
-              href={`/app/${c.key === 'home' ? '' : c.key}`}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate(c.key === 'home' ? '/' : `/${c.key}`)
-              }}
-              onMouseEnter={() => setHover(c.key)}
-              onMouseLeave={() => setHover(null)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 7,
-                textDecoration: 'none',
-                background: on ? 'var(--surface-raised)' : 'var(--surface)',
-                border: `1px solid ${on ? 'color-mix(in srgb, var(--cyan-500) 50%, transparent)' : 'var(--border)'}`,
-                borderRadius: 'var(--radius-xl)',
-                padding: '20px 22px',
-                boxShadow: on ? 'var(--glow-primary)' : 'none',
-                transition: 'border-color var(--dur-base), background var(--dur-base), box-shadow var(--dur-base), transform var(--dur-base)',
-                transform: on ? 'translateY(-2px)' : 'none',
-              }}
-            >
-              <div style={{ color: 'var(--cyan-400)', height: 24 }}>
-                <Icon name={c.key} size={24} />
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 'var(--fs-h3)', color: 'var(--text-strong)' }}>{c.title}</div>
-              <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.45 }}>{c.desc}</div>
-              <div style={{ color: 'var(--cyan-400)', fontSize: 'var(--fs-sm)', fontWeight: 600, marginTop: 4 }}>Open {'\u2192'}</div>
-            </a>
-          )
-        })}
+      {/* stat tile row */}
+      <div style={{ marginTop: 22, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <StatTile value={data.today.active} label="Active apps" />
+        <StatTile value={data.today.inflight} label="In-flight" />
+        <StatTile value={readinessOn ? data.oura.score : '—'} label="Readiness" tint={Boolean(readinessOn)} valueColor={readinessOn ? undefined : 'var(--faint)'} />
+        <StatTile value={data.today.overdue} label="Overdue follow-ups" valueColor={data.today.overdue > 0 ? '#E0B77A' : 'var(--text)'} />
       </div>
+
+      {/* two-column grid (collapses via .hero-split-grid at <=720px) */}
+      <div
+        className="hero-split-grid"
+        style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 18, alignItems: 'start' }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* cyan-tinted priorities card */}
+          <div
+            style={{
+              borderRadius: 18,
+              padding: 20,
+              background: 'linear-gradient(150deg, rgba(0,181,200,.15), rgba(0,181,200,.04))',
+              border: '1px solid rgba(0,181,200,.26)',
+            }}
+          >
+            <div style={MONO_EYEBROW_CYAN}>Today&rsquo;s priorities</div>
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Priorities priorities={data.today.priorities} />
+            </div>
+          </div>
+
+          {/* daily digest list */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+              <div style={MONO_EYEBROW}>Daily digest</div>
+              {data.digest.date && (
+                <div style={{ ...MONO_EYEBROW, textTransform: 'none', letterSpacing: '.5px', fontWeight: 500, color: 'var(--faint)' }}>
+                  {data.digest.date}
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <Digest digest={data.digest} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <ReadinessCard
+            data={data}
+            hasOura={hasOura}
+            setHasOura={setHasOura}
+            ouraConnected={ouraConnected}
+            accent={ACCENT}
+            animate={animate}
+          />
+
+          {/* today's move — the handoff's nudge card */}
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 18,
+              background: 'rgba(0,181,200,.06)',
+              border: '1px solid rgba(0,181,200,.16)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#6FD3A0', flexShrink: 0 }} />
+              <span style={{ ...MONO_EYEBROW, color: '#6FD3A0' }}>Today&rsquo;s move</span>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.4 }}>
+              {data.today.move}
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   )
 }

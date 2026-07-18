@@ -1,7 +1,50 @@
-import { Panel } from '../../design-system'
-import { Badge, statusTone, EYEBROW, fmtDate } from '../_shared.jsx'
+import { EYEBROW, fmtDate } from '../_shared.jsx'
+
+/* Pipeline row — one job, styled per the desktop design handoff's 5-column
+   table (COMPANY with 34px initial tile / ROLE / STAGE chip / FIT / NEXT
+   STEP), followed by the full detail + action area the design omits: every
+   assessment detail, action button, and AI-editor entry point is preserved. */
 
 const CLOSED = new Set(['added', 'applied', 'dismissed'])
+
+/* Shared column template so the header row in Pipeline.jsx lines up. */
+export const ROW_GRID = 'minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, 1.4fr)'
+
+/* Real queue statuses mapped onto the handoff's stage palette by progress:
+   applied = furthest along (OFFER green), added = ready to go out (ONSITE
+   cyan), evaluated = mid-funnel (SCREEN amber), pending = neutral
+   (APPLIED/INTERESTED grey), dismissed = closed (danger red). */
+const STAGE = {
+  applied: { c: '#6FD3A0', bg: 'rgba(111,211,160,.14)' },
+  added: { c: '#6FE0EE', bg: 'rgba(0,181,200,.14)' },
+  evaluated: { c: '#E0B77A', bg: 'rgba(224,183,122,.14)' },
+  pending: { c: '#9BB0D0', bg: 'rgba(255,255,255,.06)' },
+  dismissed: { c: '#E39393', bg: 'rgba(227,147,147,.12)' },
+}
+
+/* fitment_score is a free string ("7/10", "85"). Normalize to a 0–100 pct
+   for the handoff's score coloring; display the raw value untouched. */
+function scoreInfo(raw) {
+  const text = String(raw || '').trim()
+  if (!text) return null
+  const m = text.match(/(\d+(?:\.\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?))?/)
+  if (!m) return { text, color: '#9BB0D0' }
+  const num = Number.parseFloat(m[1])
+  const den = m[2] ? Number.parseFloat(m[2]) : (num <= 10 ? 10 : 100)
+  const pct = den > 0 ? (num / den) * 100 : num
+  const color = pct >= 85 ? '#6FE0EE' : pct >= 78 ? '#E0EAF7' : '#9BB0D0'
+  return { text, color }
+}
+
+function nextStep(job) {
+  switch (job.status) {
+    case 'evaluated': return 'Queue apply or generate materials'
+    case 'added': return 'Generate materials & apply'
+    case 'applied': return 'Awaiting reply'
+    case 'dismissed': return 'Closed'
+    default: return 'Run assessment'
+  }
+}
 
 /* compact action button with default / primary / danger tones */
 function ActionBtn({ onClick, disabled, tone = 'default', title, children }) {
@@ -50,27 +93,51 @@ export default function JobCard({ job, busy, isOwner, onAction, onOpenEditor }) 
   const canApply = job.status === 'evaluated'
   const appliedDone = job.status === 'applied' || job.status === 'dismissed'
   const evalLabel = job.assessed ? 'Re-run Assessment' : 'Run Assessment'
+  const stage = STAGE[job.status] || STAGE.pending
+  const score = scoreInfo(job.fitment_score)
+  const initial = (job.company || '').trim().charAt(0).toUpperCase() || '?'
 
   return (
-    <Panel pad="14px 16px">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-base)' }}>
-            {job.company || 'Unknown company'} {job.role ? `— ${job.role}` : ''}
+    <div style={{ borderTop: '1px solid rgba(255,255,255,.05)', padding: '14px 20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: ROW_GRID, gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+          <div
+            style={{
+              width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,.06)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 'var(--fw-bold)', color: '#C9D6EC', flexShrink: 0,
+            }}
+          >
+            {initial}
           </div>
-          <div style={{ color: 'var(--faint)', fontSize: 'var(--fs-xs)', marginTop: 3 }}>
-            #{job.id} {'·'} {job.source || 'n/a'}{job.added_date ? ` · ${fmtDate(job.added_date)}` : ''}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 'var(--fw-semibold)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {job.company || 'Unknown company'}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              #{job.id} {'·'} {job.source || 'n/a'}{job.added_date ? ` · ${fmtDate(job.added_date)}` : ''}
+            </div>
           </div>
         </div>
-        <Badge tone={statusTone(job.status)}>{job.status || 'pending'}</Badge>
+        <div style={{ fontSize: 13.5, color: 'var(--muted)', minWidth: 0 }}>{job.role || '—'}</div>
+        <div>
+          <span
+            style={{
+              fontSize: 10, fontWeight: 'var(--fw-semibold)', color: stage.c, background: stage.bg,
+              padding: '4px 9px', borderRadius: 8, fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase', whiteSpace: 'nowrap',
+            }}
+          >
+            {job.status || 'pending'}
+          </span>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 'var(--fw-bold)', fontFamily: 'var(--font-mono)', color: score ? score.color : 'var(--faint)' }}>
+          {score ? score.text : '—'}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--muted)' }}>{nextStep(job)}</div>
       </div>
 
       {job.assessment_summary && <Detail label="Assessment">{job.assessment_summary}</Detail>}
-      {job.fitment_score && (
-        <Detail label="Fitment">
-          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan-300)' }}>{job.fitment_score}</span>
-        </Detail>
-      )}
       {job.decision_notes && <Detail label="Notes">{job.decision_notes}</Detail>}
       {job.resume_template && (
         <Detail label="Resume template">{job.resume_template} / {job.resume_style || 'navy'}</Detail>
@@ -116,6 +183,6 @@ export default function JobCard({ job, busy, isOwner, onAction, onOpenEditor }) 
         <ActionBtn disabled={busy} onClick={() => onOpenEditor(job, 'edit-cl')}>Edit Cover Letter</ActionBtn>
         <ActionBtn disabled={busy} onClick={() => onOpenEditor(job, 'templates')}>Templates</ActionBtn>
       </div>
-    </Panel>
+    </div>
   )
 }

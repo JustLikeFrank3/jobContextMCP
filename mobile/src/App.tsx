@@ -1,23 +1,43 @@
 // jobContext mobile — capture reality, glance at state. Deep work lives on
 // the desktop; this app is the share sheet, the inbox, and the notification.
+//
+// UI per the design handoff: 6 tabs (Home, Pipeline, Interviews, People,
+// Posts, Wellbeing) on a navy-ink theme with cyan active states, plus an
+// animated splash while the app boots. The previous Inbox and Settings
+// screens stay mounted as chromeless routes (reached from Home) so the
+// activity feed and the sign-in flow keep working unchanged.
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, Text } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShareIntent } from 'expo-share-intent'
-import Inbox from './screens/Inbox'
-import Today from './screens/Today'
+import Home from './screens/Home'
 import Pipeline from './screens/Pipeline'
-import Networking from './screens/Networking'
+import Interviews from './screens/Interviews'
+import People from './screens/People'
+import Posts from './screens/Posts'
+import Wellbeing from './screens/Wellbeing'
+import Inbox from './screens/Inbox'
 import Settings from './screens/Settings'
 import { captureUrl } from './api'
+import { isSignedIn } from './auth'
 import { extractJobPage } from './pageExtract'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
 import { setCaptureStatus, useCaptureStatus } from './captureStatus'
+import {
+  HomeIcon,
+  InterviewsIcon,
+  PeopleIcon,
+  PipelineIcon,
+  PostsIcon,
+  WellbeingIcon,
+} from './ui/icons'
+import Splash from './ui/Splash'
+import { t } from './ui/tokens'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
@@ -27,13 +47,17 @@ const theme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: colors.bg,
-    card: colors.surface,
-    border: colors.border,
-    text: colors.text,
-    primary: colors.cyan,
+    background: t.bg,
+    card: t.bg,
+    border: t.hairline,
+    text: t.text,
+    primary: t.cyan,
   },
 }
+
+// Keep the animated splash up until auth state has resolved AND the intro
+// timeline has had time to play (bar fill ends ~3.65s into the sequence).
+const SPLASH_MIN_MS = 3400
 
 function useIncomingShares() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent()
@@ -102,11 +126,18 @@ function CaptureBanner() {
 
 export default function App() {
   useIncomingShares()
+  const [booted, setBooted] = useState(false)
+
   useEffect(() => {
     ensurePushRegistration()
   }, [])
   useEffect(() => {
+    // Our animated splash takes over from the native launch screen.
     SplashScreen.hideAsync().catch(() => {})
+    Promise.all([
+      isSignedIn().catch(() => false),
+      new Promise((resolve) => setTimeout(resolve, SPLASH_MIN_MS)),
+    ]).then(() => setBooted(true))
   }, [])
 
   return (
@@ -114,42 +145,77 @@ export default function App() {
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
         <CaptureBanner />
-      <Tab.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
-          headerTitleStyle: { color: colors.text },
-          tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-          tabBarActiveTintColor: colors.cyan,
-          tabBarInactiveTintColor: colors.faint,
-        }}
-      >
-        <Tab.Screen
-          name="Today"
-          component={Today}
-          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>☀</Text> }}
-        />
-        <Tab.Screen
-          name="Inbox"
-          component={Inbox}
-          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>▤</Text> }}
-        />
-        <Tab.Screen
-          name="Pipeline"
-          component={Pipeline}
-          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>▥</Text> }}
-        />
-        <Tab.Screen
-          name="Networking"
-          component={Networking}
-          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>☎</Text> }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={Settings}
-          options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>⚙</Text> }}
-        />
-      </Tab.Navigator>
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: {
+              backgroundColor: t.tabBg,
+              borderTopColor: t.hairline,
+              borderTopWidth: 1,
+            },
+            tabBarActiveTintColor: t.cyan,
+            tabBarInactiveTintColor: t.tabInactive,
+            tabBarLabelStyle: { fontSize: 9.5, fontWeight: '500' },
+          }}
+        >
+          <Tab.Screen
+            name="Home"
+            component={Home}
+            options={{ tabBarIcon: ({ color }) => <HomeIcon color={color} /> }}
+          />
+          <Tab.Screen
+            name="Pipeline"
+            component={Pipeline}
+            options={{ tabBarIcon: ({ color }) => <PipelineIcon color={color} /> }}
+          />
+          <Tab.Screen
+            name="Interviews"
+            component={Interviews}
+            options={{ tabBarIcon: ({ color }) => <InterviewsIcon color={color} /> }}
+          />
+          <Tab.Screen
+            name="People"
+            component={People}
+            options={{ tabBarIcon: ({ color }) => <PeopleIcon color={color} /> }}
+          />
+          <Tab.Screen
+            name="Posts"
+            component={Posts}
+            options={{ tabBarIcon: ({ color }) => <PostsIcon color={color} /> }}
+          />
+          <Tab.Screen
+            name="Wellbeing"
+            component={Wellbeing}
+            options={{ tabBarIcon: ({ color }) => <WellbeingIcon color={color} /> }}
+          />
+          {/* Chromeless routes — no tab-bar item; reached from Home. */}
+          <Tab.Screen
+            name="Activity"
+            component={Inbox}
+            options={{
+              tabBarItemStyle: { display: 'none' },
+              headerShown: true,
+              headerTitle: 'Activity',
+              headerStyle: { backgroundColor: t.bg },
+              headerTitleStyle: { color: t.text },
+              headerTintColor: t.cyan,
+            }}
+          />
+          <Tab.Screen
+            name="Settings"
+            component={Settings}
+            options={{
+              tabBarItemStyle: { display: 'none' },
+              headerShown: true,
+              headerTitle: 'Settings',
+              headerStyle: { backgroundColor: t.bg },
+              headerTitleStyle: { color: t.text },
+              headerTintColor: t.cyan,
+            }}
+          />
+        </Tab.Navigator>
       </NavigationContainer>
+      {!booted && <Splash />}
     </SafeAreaProvider>
   )
 }

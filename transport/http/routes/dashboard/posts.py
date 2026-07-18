@@ -1,8 +1,14 @@
-"""LinkedIn Posts pipeline dashboard — GET /dashboard/posts and /dashboard/posts/data."""
+"""LinkedIn Posts pipeline dashboard.
+
+GET  /dashboard/posts, /dashboard/posts/data
+POST /dashboard/posts/import  — LinkedIn CSV import (rows parsed client-side)
+POST /dashboard/posts/metrics — the Posts screen's Update-metrics sheet
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from lib import config
 from lib.io import _load_json
@@ -31,6 +37,8 @@ def _posts_payload() -> dict:
 
     enriched = [
         {
+            "id": p.get("id"),
+            "text": p.get("text", ""),
             "source": p.get("source", ""),
             "title": p.get("title", ""),
             "posted_date": p.get("posted_date", ""),
@@ -55,6 +63,88 @@ def _posts_payload() -> dict:
 @router.get("/posts/data")
 async def posts_data() -> JSONResponse:
     return JSONResponse(_posts_payload())
+
+
+class ImportPost(BaseModel):
+    text: str
+    title: str = ""
+    posted_date: str = ""
+    url: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    impressions: int | None = None
+    reactions: int | None = None
+    comments: int | None = None
+
+
+class ImportRequest(BaseModel):
+    posts: list[ImportPost]
+    source: str = "linkedin_csv_import"
+
+
+@router.post("/posts/import")
+async def posts_import(request: ImportRequest) -> dict:
+    """Persist client-parsed LinkedIn CSV rows via the posts tools.
+
+    Each row goes through log_linkedin_post (which also ingests the text as
+    a tone sample) and, when the CSV carried engagement columns, through
+    update_post_metrics. This is the real integration point behind the
+    desktop import flow's step 3.
+    """
+    from tools.posts import log_linkedin_post, update_post_metrics
+
+    rows = [p for p in request.posts if p.text.strip()]
+    if not rows:
+        raise HTTPException(status_code=422, detail="No rows with post text to import.")
+
+    logged = 0
+    with_metrics = 0
+    for post in rows:
+        log_linkedin_post(
+            text=post.text.strip(),
+            source=request.source,
+            posted_date=post.posted_date.strip(),
+            url=post.url.strip(),
+            hashtags=[h.lstrip("#") for h in post.hashtags if h.strip("#")],
+            title=post.title.strip() or post.text.strip().replace("\n", " ")[:80],
+        )
+        logged += 1
+        if any(v is not None for v in (post.impressions, post.reactions, post.comments)):
+            # log_linkedin_post always creates a new record here (no post_id /
+            # url match), so the newest id in the store is the row just logged.
+            data = _load_json(config.LINKEDIN_POSTS_FILE, {"posts": []})
+            new_id = max((p.get("id") or 0) for p in data.get("posts", [{}]))
+            update_post_metrics(
+                post_id=new_id,
+                impressions=post.impressions,
+                reactions=post.reactions,
+                comments=post.comments,
+            )
+            with_metrics += 1
+
+    return {"status": "imported", "logged": logged, "with_metrics": with_metrics}
+
+
+class MetricsRequest(BaseModel):
+    post_id: int
+    impressions: int | None = None
+    reactions: int | None = None
+    comments: int | None = None
+
+
+@router.post("/posts/metrics")
+async def posts_metrics(request: MetricsRequest) -> dict:
+    """Update engagement numbers on one post (the Posts screen's Update sheet)."""
+    from tools.posts import update_post_metrics
+
+    result = update_post_metrics(
+        post_id=request.post_id,
+        impressions=request.impressions,
+        reactions=request.reactions,
+        comments=request.comments,
+    )
+    if result.startswith("✗"):
+        raise HTTPException(status_code=404, detail=result)
+    return {"status": "saved", "detail": result}
 
 
 @router.get("/posts")
