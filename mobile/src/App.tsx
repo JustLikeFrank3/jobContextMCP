@@ -5,7 +5,7 @@
 // Posts, Wellbeing) on a navy-ink theme with cyan active states, plus an
 // animated splash while the app boots. The previous Inbox and Settings
 // screens stay mounted as chromeless routes (reached from Home) so the
-// activity feed and the sign-in flow keep working unchanged.
+// activity feed and the API-key connect flow keep working unchanged.
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
@@ -22,8 +22,7 @@ import Posts from './screens/Posts'
 import Wellbeing from './screens/Wellbeing'
 import Inbox from './screens/Inbox'
 import Settings from './screens/Settings'
-import { captureUrl } from './api'
-import { isSignedIn } from './auth'
+import { captureUrl, isConnected } from './api'
 import { extractJobPage } from './pageExtract'
 import { ensurePushRegistration } from './push'
 import { colors } from './theme'
@@ -135,7 +134,7 @@ export default function App() {
     // Our animated splash takes over from the native launch screen.
     SplashScreen.hideAsync().catch(() => {})
     Promise.all([
-      isSignedIn().catch(() => false),
+      isConnected().catch(() => false),
       new Promise((resolve) => setTimeout(resolve, SPLASH_MIN_MS)),
     ]).then(() => setBooted(true))
   }, [])
