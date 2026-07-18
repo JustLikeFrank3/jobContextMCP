@@ -24,6 +24,11 @@ export async function clearPat(): Promise<void> {
   await SecureStore.deleteItemAsync(PAT_KEY)
 }
 
+export async function isConnected(): Promise<boolean> {
+  const { pat } = await getConfig()
+  return Boolean(pat)
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const { url, pat } = await getConfig()
   if (!pat) throw new Error('Not connected — add your API key in Settings.')
