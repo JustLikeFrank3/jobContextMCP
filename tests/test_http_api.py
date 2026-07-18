@@ -267,6 +267,56 @@ class TestDashboardEndpoints:
         assert "total_reactions" in body
         assert "posts" in body
 
+    def test_posts_import_persists_rows_and_metrics(self, http_client_noauth):
+        r = http_client_noauth.post("/dashboard/posts/import", json={
+            "posts": [
+                {"text": "Shipped v1.2 of my job-search memory tool. #buildinpublic",
+                 "posted_date": "2026-07-01", "hashtags": ["buildinpublic"]},
+                {"text": "Interview prep is just context assembly.",
+                 "impressions": 1200, "reactions": 40, "comments": 7},
+                {"text": "   "},  # blank text rows are skipped
+            ],
+        })
+        assert r.status_code == 200
+        body = r.json()
+        assert body["logged"] == 2
+        assert body["with_metrics"] == 1
+
+        data = http_client_noauth.get("/dashboard/posts/data").json()
+        assert data["total"] >= 2
+        by_text = {p["text"]: p for p in data["posts"]}
+        metric_post = by_text["Interview prep is just context assembly."]
+        assert metric_post["impressions"] == 1200
+        assert metric_post["reactions"] == 40
+        assert metric_post["comments"] == 7
+        tagged = by_text["Shipped v1.2 of my job-search memory tool. #buildinpublic"]
+        assert tagged["hashtags"] == ["buildinpublic"]
+        assert tagged["posted_date"] == "2026-07-01"
+
+    def test_posts_import_rejects_empty(self, http_client_noauth):
+        r = http_client_noauth.post("/dashboard/posts/import", json={"posts": [{"text": " "}]})
+        assert r.status_code == 422
+
+    def test_posts_metrics_updates_one_post(self, http_client_noauth):
+        http_client_noauth.post("/dashboard/posts/import", json={
+            "posts": [{"text": "Metrics target post"}],
+        })
+        data = http_client_noauth.get("/dashboard/posts/data").json()
+        target = next(p for p in data["posts"] if p["text"] == "Metrics target post")
+
+        r = http_client_noauth.post("/dashboard/posts/metrics", json={
+            "post_id": target["id"], "impressions": 900, "reactions": 31, "comments": 4,
+        })
+        assert r.status_code == 200
+
+        refreshed = http_client_noauth.get("/dashboard/posts/data").json()
+        updated = next(p for p in refreshed["posts"] if p["id"] == target["id"])
+        assert (updated["impressions"], updated["reactions"], updated["comments"]) == (900, 31, 4)
+
+    def test_posts_metrics_unknown_id_404(self, http_client_noauth):
+        r = http_client_noauth.post("/dashboard/posts/metrics", json={"post_id": 99999, "impressions": 1})
+        assert r.status_code == 404
+
     def test_people_dashboard_page_renders(self, http_client_noauth):
         r = http_client_noauth.get("/dashboard/people")
         assert r.status_code == 200

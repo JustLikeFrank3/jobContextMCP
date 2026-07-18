@@ -3,53 +3,130 @@
 <head>
   <meta charset="UTF-8" />
   <title>jobContext</title>
+  <!-- Fonts are best-effort: the desktop app may boot offline, so every
+       font-family below carries a system fallback and nothing waits on the
+       network. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
     html, body {
       height: 100%;
       margin: 0;
-      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #0b1220;
-      color: #e6edf5;
+      font-family: 'Space Grotesk', -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(165deg, #0A0F1C 0%, #0B1220 100%);
+      color: #F0F5FF;
+      overflow: hidden;
     }
-    .wrap {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 18px;
+    @keyframes jc-discIn { 0% { opacity: 0; transform: scale(.5); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes jc-ringDraw { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }
+    @keyframes jc-popIn { 0% { opacity: 0; transform: scale(.5); } 70% { opacity: 1; transform: scale(1.12); } 100% { transform: scale(1); } }
+    @keyframes jc-riseIn { 0% { opacity: 0; transform: translateY(18px); filter: blur(8px); } 100% { opacity: 1; transform: translateY(0); filter: blur(0); } }
+    @keyframes jc-fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes jc-glowIn { 0% { opacity: 0; transform: scale(.7); } 100% { opacity: .6; transform: scale(1); } }
+    @keyframes jc-glowPulse { 0%, 100% { opacity: .3; transform: scale(1); } 50% { opacity: .65; transform: scale(1.14); } }
+    @keyframes jc-sheen { 0% { background-position: 130% 0; } 100% { background-position: -30% 0; } }
+    @keyframes jc-barFill { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+    @keyframes jc-blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+    .stage {
+      position: relative; height: 100%; width: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    .mark {
-      width: 72px;
-      height: 72px;
-      border-radius: 18px;
-      background: #00B5C8; /* Miami Blue */
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 34px;
-      font-weight: 700;
-      color: #06222a;
-      letter-spacing: -1px;
+    .badge-wrap {
+      position: relative; width: 128px; height: 128px;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 40px;
     }
-    .spinner {
-      width: 26px;
-      height: 26px;
-      border: 3px solid rgba(0, 181, 200, 0.25);
-      border-top-color: #00B5C8;
-      border-radius: 50%;
-      animation: spin 0.9s linear infinite;
+    .badge-glow {
+      position: absolute; width: 200px; height: 200px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,181,200,.45) 0%, rgba(0,181,200,0) 68%);
+      filter: blur(6px);
+      animation: jc-glowIn .9s ease .1s both;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #status { font-size: 14px; opacity: 0.75; max-width: 520px; text-align: center; padding: 0 24px; }
+    .badge-glow-pulse {
+      position: absolute; width: 210px; height: 210px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,181,200,.4) 0%, rgba(0,181,200,0) 66%);
+      animation: jc-glowPulse 3.6s ease-in-out 2.6s infinite;
+    }
+    .badge-svg { position: relative; filter: drop-shadow(0 0 22px rgba(0,181,200,.5)); }
+    .disc { transform-box: fill-box; transform-origin: center; animation: jc-discIn .6s cubic-bezier(.34,1.56,.64,1) .15s both; }
+    .ring { stroke-dasharray: 1; animation: jc-ringDraw 1s ease .45s both; }
+    .ring-inner { animation: jc-fadeIn .6s ease 1.15s both; }
+    .glyph-c { stroke-dasharray: 1; animation: jc-ringDraw .8s ease .95s both; }
+    .glyph-j-dot { transform-box: fill-box; transform-origin: center; animation: jc-popIn .5s cubic-bezier(.34,1.56,.64,1) 1.25s both; }
+    .glyph-j-stem { transform-box: fill-box; transform-origin: center; animation: jc-popIn .5s cubic-bezier(.34,1.56,.64,1) 1.35s both; }
+
+    .wordmark { display: flex; align-items: baseline; gap: 1px; animation: jc-riseIn .7s cubic-bezier(.2,.7,.2,1) 1.5s both; }
+    .wordmark span {
+      font-size: 44px; font-weight: 700; letter-spacing: -1.6px;
+      background-size: 260% 100%;
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .word-job {
+      background-image: linear-gradient(100deg, #FFFFFF 30%, #DFF4FF 50%, #FFFFFF 70%);
+      animation: jc-sheen 1.2s ease 1.75s both;
+    }
+    .word-context {
+      background-image: linear-gradient(100deg, #00B5C8 30%, #8FF0FB 50%, #00B5C8 70%);
+      animation: jc-sheen 1.2s ease 1.9s both;
+    }
+    .tagline {
+      margin-top: 14px; font-size: 15px; font-weight: 500;
+      color: #D7E3F8; opacity: .82; letter-spacing: .1px;
+      animation: jc-riseIn .7s cubic-bezier(.2,.7,.2,1) 1.95s both;
+    }
+    .progress {
+      position: absolute; bottom: 84px; left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      animation: jc-fadeIn .6s ease 1.5s both;
+    }
+    #status {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; font-weight: 500; letter-spacing: 3px; text-transform: uppercase;
+      color: #6FE0EE; animation: jc-blink 1.8s ease-in-out 1.7s infinite;
+      max-width: 520px; text-align: center; padding: 0 24px;
+    }
+    .bar-track {
+      width: 196px; height: 4px; border-radius: 999px;
+      background: rgba(215,227,248,.12); overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; width: 100%; border-radius: 999px; transform-origin: left;
+      background: linear-gradient(90deg, #00B5C8, #6FE0EE);
+      box-shadow: 0 0 12px rgba(0,181,200,.75);
+      animation: jc-barFill 2.1s cubic-bezier(.45,.05,.2,1) 1.55s both;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="mark">jC</div>
-    <div class="spinner"></div>
-    <div id="status">Starting jobContext…</div>
+  <div class="stage">
+    <div class="badge-wrap">
+      <div class="badge-glow"></div>
+      <div class="badge-glow-pulse"></div>
+      <svg class="badge-svg" width="128" height="128" viewBox="0 0 320 320" aria-hidden="true">
+        <circle class="disc" cx="160" cy="160" r="153" fill="#0A0F1C"></circle>
+        <circle class="ring" cx="160" cy="160" r="153" fill="none" stroke="#00B5C8" stroke-width="10" pathLength="1"></circle>
+        <circle class="ring-inner" cx="160" cy="160" r="139" fill="none" stroke="#00B5C8" stroke-width="2" stroke-opacity=".35"></circle>
+        <g transform="translate(-12 0)">
+          <path class="glyph-c" d="M234 118 A 56 56 0 1 0 234 202" fill="none" stroke="#00B5C8" stroke-width="32" stroke-linecap="round" pathLength="1"></path>
+          <circle class="glyph-j-dot" cx="100" cy="112" r="19" fill="#FFFFFF"></circle>
+          <path class="glyph-j-stem" d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"></path>
+        </g>
+      </svg>
+    </div>
+
+    <div class="wordmark">
+      <span class="word-job">job</span><span class="word-context">Context</span>
+    </div>
+    <div class="tagline">The memory layer for your career.</div>
+
+    <div class="progress">
+      <!-- The shell writes startup failures into #status (main.rs) — keep the id. -->
+      <div id="status">restoring your context</div>
+      <div class="bar-track"><div class="bar-fill"></div></div>
+    </div>
   </div>
 </body>
 </html>

@@ -1,48 +1,49 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Logo, NavTabs, Button, Icon } from '../design-system'
 import useDesktopMode from './useDesktopMode.js'
+import Sidebar from './Sidebar.jsx'
+import { ToolbarSlotContext } from './toolbarSlot.jsx'
 
-/* DashboardShell — app chrome: header (logo + title + settings gear + sign
-   out) and the tab bar. Converted from the design handoff's shell.jsx IIFE to
-   ESM and wired to react-router so each tab is a real URL.
+/* DashboardShell — app chrome per the desktop design handoff: a 236px
+   sidebar (WORKSPACE nav + TOOLS + pinned Settings + status card) beside a
+   scrollable main column with a sticky toolbar (breadcrumb left, per-screen
+   slot right — screens project actions/steps via useToolbarSlot). The page
+   title renders at the top of the content column, design-style.
 
-   Deltas from the original kit shell (per handoff):
-   - Digest tab removed (its content now lives on Home as the Oura fallback)
-   - Settings reached via the header button (no nav tab)
-   - API Keys kept as its own tab
-*/
+   Narrow viewports (<880px) fall back to the previous header + NavTabs
+   layout via the .jc-* classes in global.css — the sidebar design targets
+   desktop-width windows. */
 
-const TABS = [
+const PRIMARY_NAV = [
   { label: 'Home', key: 'home' },
   { label: 'Pipeline', key: 'pipeline' },
+  { label: 'Interviews', key: 'interviews' },
+  { label: 'People', key: 'people' },
+  { label: 'Posts', key: 'posts' },
+  { label: 'Wellbeing', key: 'health' },
+]
+
+const SECONDARY_NAV = [
   { label: 'Job Hunt', key: 'job-hunt' },
   { label: 'Materials', key: 'materials' },
   { label: 'Rejections', key: 'rejections' },
-  { label: 'Posts', key: 'posts' },
-  { label: 'Outreach', key: 'people' },
-  { label: 'Wellbeing', key: 'health' },
-  { label: 'Interviews', key: 'interviews' },
   { label: 'API Keys', key: 'api-keys' },
 ]
 
-// Desktop-only tabs (useDesktopMode probe) — hosted deployments never show
-// them. Chat is spliced in before API Keys; Settings becomes a nav tab
-// because the desktop header drops the top-right buttons (Sign out and
-// "Why use jobContext?" make no sense against a local single-user server).
-const CHAT_TAB = { label: 'Chat', key: 'chat' }
-const SETTINGS_TAB = { label: 'Settings', key: 'settings' }
+const CHAT_ITEM = { label: 'Chat', key: 'chat' }
 
 const PAGE_META = {
-  home: ['', 'Your career command center'],
+  home: ['Home', 'Your career command center'],
   pipeline: [
     'Pipeline',
-    'Share-sheet intake \u2192 assessment \u2192 resume \u2192 cover letter \u2192 queue apply',
+    'Share-sheet intake → assessment → resume → cover letter → queue apply',
   ],
   'job-hunt': ['Job Hunt Tracker', 'Applications & Kanban board'],
   materials: ['Materials', 'Resumes, cover letters, PDFs, and untracked files'],
   rejections: ['Rejections', 'Funnel analysis & patterns'],
-  posts: ['Posts', 'LinkedIn pipeline: draft \u2192 written \u2192 approved \u2192 posted'],
-  people: ['Outreach', 'Contacts, follow-up queue, warm vs cold'],
+  posts: ['Posts', 'LinkedIn pipeline: draft → written → approved → posted'],
+  people: ['People', 'Contacts, follow-up queue, warm vs cold'],
   health: ['Wellbeing', 'Mood & energy log, trend sparklines'],
   interviews: ['Interviews', 'Upcoming schedule, debrief log, verbatim quotes'],
   chat: ['Chat', 'Ask about your job search — answers come from your local data'],
@@ -50,11 +51,23 @@ const PAGE_META = {
   'api-keys': ['API Keys', 'Personal access tokens for MCP clients'],
 }
 
-// Map a tab key to its client route and back.
 const keyToPath = (key) => (key === 'home' ? '/' : `/${key}`)
 const pathToKey = (pathname) => {
   const seg = pathname.replace(/^\/+/, '').split('/')[0]
   return seg || 'home'
+}
+
+// Single source of truth for the narrow/wide split so only ONE layout (and
+// one <Outlet/>) mounts — rendering both would double-mount every screen.
+function useNarrowViewport() {
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 880px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 880px)')
+    const onChange = (e) => setNarrow(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return narrow
 }
 
 // Sign out is a server-side POST /logout (clears the cookie + redirects).
@@ -70,86 +83,104 @@ export default function DashboardShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const isDesktop = useDesktopMode()
-  const tabs = isDesktop
-    ? [...TABS.slice(0, -1), CHAT_TAB, TABS[TABS.length - 1], SETTINGS_TAB]
-    : TABS
+  const narrow = useNarrowViewport()
+  const [slotNode, setSlotNode] = useState(null)
+
+  const secondary = isDesktop ? [...SECONDARY_NAV.slice(0, 3), CHAT_ITEM, SECONDARY_NAV[3]] : SECONDARY_NAV
+  const allItems = [...PRIMARY_NAV, ...secondary, { label: 'Settings', key: 'settings' }]
   const tab = pathToKey(location.pathname)
-  const [title, subtitle] = PAGE_META[tab] || [
-    tabs.find((t) => t.key === tab)?.label || '',
-    '',
-  ]
+  const [title, subtitle] = PAGE_META[tab] || [allItems.find((t) => t.key === tab)?.label || '', '']
+  const go = (key) => navigate(keyToPath(key))
+
+  if (narrow) {
+    return (
+      <ToolbarSlotContext.Provider value={{ node: slotNode, setNode: setSlotNode }}>
+        <div className="jc-narrow">
+          <header
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              gap: 16, marginBottom: 18, flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+              <Logo size={36} markOnly />
+              <div>
+                <h1 style={{ margin: 0, font: 'var(--text-page-title)', color: 'var(--text-strong)' }}>
+                  {title || <Logo size={26} wordmarkOnly />}
+                </h1>
+                {subtitle && (
+                  <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginTop: 4 }}>{subtitle}</div>
+                )}
+              </div>
+            </div>
+            {!isDesktop && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+                  <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+                    <Icon name="settings" size={15} />
+                  </span>
+                  Settings
+                </Button>
+                <Button variant="ghost" size="sm" onClick={signOut}>Sign out</Button>
+              </div>
+            )}
+          </header>
+          <div style={{ marginBottom: 12 }}>
+            <NavTabs items={allItems} active={tab} onSelect={go} />
+          </div>
+          {slotNode && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>{slotNode}</div>
+          )}
+          <Outlet />
+        </div>
+      </ToolbarSlotContext.Provider>
+    )
+  }
 
   return (
-    <div
-      style={{
-        maxWidth: 'var(--wrap-max)',
-        margin: '0 auto',
-        padding: 'var(--page-pad)',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          marginBottom: 18,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-          <Logo size={36} markOnly />
-          <div>
-            <h1 style={{ margin: 0, font: 'var(--text-page-title)', color: 'var(--text-strong)' }}>
+    <ToolbarSlotContext.Provider value={{ node: slotNode, setNode: setSlotNode }}>
+      <div className="jc-shell">
+        <Sidebar
+          primary={PRIMARY_NAV}
+          secondary={secondary}
+          active={tab}
+          onSelect={go}
+          isDesktop={isDesktop}
+          onSignOut={signOut}
+        />
+
+        <div className="jc-main jc-scroll">
+          <div className="jc-toolbar">
+            <div style={{ fontSize: 13, color: '#7C8AA6', fontWeight: 'var(--fw-medium)' }}>{title}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {slotNode}
+              {!isDesktop && !slotNode && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
+                >
+                  Why use jobContext?
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="jc-page">
+            <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 'var(--fw-bold)', letterSpacing: '-0.6px', color: 'var(--text)' }}>
               {title || <Logo size={26} wordmarkOnly />}
             </h1>
             {subtitle && (
-              <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginTop: 4 }}>
-                {subtitle}
-              </div>
+              <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', marginTop: 4, marginBottom: 4 }}>{subtitle}</div>
             )}
+            <div style={{ marginTop: 18 }}>
+              <Outlet />
+            </div>
           </div>
         </div>
-        {!isDesktop && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open('/why', '_blank', 'noopener,noreferrer')}
-            >
-              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-                <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.5}>
-                  <circle cx="10" cy="10" r="7.5" />
-                  <path d="M10 9v4.5" strokeLinecap="round" />
-                  <circle cx="10" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
-                </svg>
-              </span>
-              Why use jobContext?
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
-              <span style={{ display: 'inline-flex', color: 'var(--muted)' }}>
-                <Icon name="settings" size={15} />
-              </span>
-              Settings
-            </Button>
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              Sign out
-            </Button>
-          </div>
-        )}
-      </header>
-
-      <div style={{ marginBottom: 22 }}>
-        <NavTabs
-          items={tabs}
-          active={tab}
-          onSelect={(key) => navigate(keyToPath(key))}
-        />
       </div>
-
-      <Outlet />
-    </div>
+    </ToolbarSlotContext.Provider>
   )
 }
 
-export { TABS, PAGE_META }
+export { PRIMARY_NAV, SECONDARY_NAV, PAGE_META }

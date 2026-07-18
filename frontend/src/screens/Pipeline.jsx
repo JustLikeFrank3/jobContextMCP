@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Panel, Button } from '../design-system'
 import { apiFetch, apiPost } from '../auth/api.js'
-import { Screen, StatGrid, Stat, EmptyState, EYEBROW } from './_shared.jsx'
+import { Screen, EmptyState, EYEBROW } from './_shared.jsx'
+import { useToolbarSlot } from '../shell/toolbarSlot.jsx'
 import { actionError } from './pipeline/shared.jsx'
-import JobCard from './pipeline/JobCard.jsx'
+import JobCard, { ROW_GRID } from './pipeline/JobCard.jsx'
 import AddJobModal from './pipeline/AddJobModal.jsx'
 import EditResumeModal from './pipeline/EditResumeModal.jsx'
 import EditCoverLetterModal from './pipeline/EditCoverLetterModal.jsx'
@@ -18,17 +19,46 @@ import TemplateModal from './pipeline/TemplateModal.jsx'
    plus a search filter and the Add Job intake modal. The AI editor flows now
    live here too, in React: Edit Resume, Edit Cover Letter (draft → review →
    accept/discard), and the visual Template chooser with a live preview.
-   The card and modals live in ./pipeline/. */
+   The card and modals live in ./pipeline/.
+
+   Skin follows the desktop design handoff's PIPELINE page: "N active ·
+   M applied" count line, segmented All/Active/Applied chips, and a
+   5-column table (COMPANY / ROLE / STAGE / FIT / NEXT STEP) with mono
+   headers — each row expands below its table line into the full detail +
+   action area, so no functionality from the card era is lost. */
 
 function personaOption(o) {
   if (typeof o === 'string') return { value: o, label: o }
   return { value: o.id || o.name || '', label: o.label || o.name || o.id || '' }
 }
 
+/* Statuses still moving through the funnel (design chips: All / Active / Applied). */
+const ACTIVE_STATUSES = new Set(['pending', 'evaluated', 'added'])
+
+/* Segmented chip per the handoff: cyan fill + deep-cyan ink when active. */
+function Chip({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        appearance: 'none', cursor: 'pointer', border: 'none',
+        fontSize: 12.5, fontWeight: 'var(--fw-semibold)', fontFamily: 'var(--font-sans)',
+        color: active ? '#04222A' : 'var(--muted)',
+        background: active ? 'var(--cyan-500)' : 'rgba(255,255,255,.05)',
+        padding: '7px 15px', borderRadius: 'var(--radius-pill)', whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function Pipeline() {
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const [busy, setBusy] = useState(null)
   const [filter, setFilter] = useState('')
+  const [stageFilter, setStageFilter] = useState('all')
   const [persona, setPersona] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [editor, setEditor] = useState(null) // { type: 'edit-resume'|'edit-cl'|'templates', job }
@@ -44,6 +74,13 @@ export default function Pipeline() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // "+ Add Job" is the page's primary action — projected into the shell's
+  // sticky toolbar per the desktop design's content-toolbar spec.
+  useToolbarSlot(
+    <Button size="sm" onClick={() => setAddOpen(true)}>{'＋'} Add Job</Button>,
+    [],
+  )
 
   const data = state.data
   const jobs = data?.jobs || []
@@ -89,11 +126,15 @@ export default function Pipeline() {
   }
 
   const q = filter.trim().toLowerCase()
-  const shown = q
-    ? jobs.filter((j) => [j.company, j.role, j.status, j.source, j.decision_notes].join(' ').toLowerCase().includes(q))
-    : jobs
+  const stageMatch = (j) =>
+    stageFilter === 'all' ||
+    (stageFilter === 'active' ? ACTIVE_STATUSES.has(j.status) : j.status === 'applied')
+  const shown = jobs.filter((j) =>
+    stageMatch(j) &&
+    (!q || [j.company, j.role, j.status, j.source, j.decision_notes].join(' ').toLowerCase().includes(q)))
 
   const countBy = (s) => jobs.filter((j) => j.status === s).length
+  const activeCount = jobs.filter((j) => ACTIVE_STATUSES.has(j.status)).length
 
   const fieldStyle = {
     flex: 1, minWidth: 220, maxWidth: 420, boxSizing: 'border-box',
@@ -104,13 +145,18 @@ export default function Pipeline() {
 
   return (
     <Screen loading={state.loading} error={state.error} empty={false}>
-      <StatGrid>
-        <Stat label="Queue total" value={data?.total ?? 0} tone="accent" />
-        <Stat label="Pending" value={countBy('pending')} tone="warn" />
-        <Stat label="Evaluated" value={countBy('evaluated')} />
-        <Stat label="Added" value={countBy('added')} tone="green" />
-        <Stat label="Applied" value={countBy('applied')} tone="green" />
-      </StatGrid>
+      <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 14 }}>
+        {activeCount} active {'·'} {countBy('applied')} applied
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <Chip active={stageFilter === 'all'} onClick={() => setStageFilter('all')}>All</Chip>
+        <Chip active={stageFilter === 'active'} onClick={() => setStageFilter('active')}>Active</Chip>
+        <Chip active={stageFilter === 'applied'} onClick={() => setStageFilter('applied')}>Applied</Chip>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontFamily: 'var(--font-mono)', fontWeight: 'var(--fw-semibold)', letterSpacing: '0.5px', color: 'var(--faint)', textTransform: 'uppercase' }}>
+          {`${data?.total ?? 0} total · ${countBy('pending')} pending · ${countBy('evaluated')} evaluated · ${countBy('added')} added · ${countBy('applied')} applied`}
+        </span>
+      </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
         <input
@@ -133,7 +179,6 @@ export default function Pipeline() {
             </select>
           </label>
         )}
-        <Button size="sm" onClick={() => setAddOpen(true)}>{'＋'} Add Job</Button>
       </div>
 
       {busy && (
@@ -152,7 +197,20 @@ export default function Pipeline() {
           hint={jobs.length === 0 ? 'Use Add Job, or share a posting from your phone.' : undefined}
         />
       ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ borderRadius: 16, border: '1px solid var(--border)', overflow: 'hidden', background: 'var(--surface)' }}>
+          <div
+            style={{
+              display: 'grid', gridTemplateColumns: ROW_GRID, gap: 10, padding: '12px 20px',
+              background: 'rgba(255,255,255,.04)', fontSize: 10.5, fontWeight: 'var(--fw-semibold)',
+              letterSpacing: '0.5px', color: 'var(--faint)', fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <div>COMPANY</div>
+            <div>ROLE</div>
+            <div>STAGE</div>
+            <div style={{ textAlign: 'center' }}>FIT</div>
+            <div>NEXT STEP</div>
+          </div>
           {shown.map((job) => (
             <JobCard
               key={job.id}
