@@ -90,8 +90,16 @@ commits — never tag those) → desktop-release workflow → rolling
   tools/job_scraper.py (jobs-guest fragment). LinkedIn dropped JSON-LD from
   many job pages; the parser reads top-card markup. Raw linkedin.com URLs
   can still extract empty on-device (WebView escalation is the next step).
-- Auth: Entra via the cloud's own OAuth proxy (dynamic client registration,
-  PKCE); refresh is single-flight (rotating refresh tokens).
+- Auth: API key only (personal access token from the dashboard's API Keys
+  tab, pasted into Settings, stored in the device keychain) — no Entra
+  OAuth sign-in on mobile. Removed 2026-07-17: a static PAT has no
+  inactivity expiry and no refresh-token rotation to go stale while the
+  app sits unopened, which is the common case for a personal app; the
+  Entra flow's rotating refresh tokens produced exactly that failure. The
+  cloud's OAuth proxy (dynamic client registration, PKCE) stays in place
+  for other MCP clients (Claude.ai, Cursor, VS Code) — only the mobile
+  app's auth path changed.
+
 
 ## Where the history lives
 

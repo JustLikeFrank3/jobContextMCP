@@ -1,7 +1,7 @@
 // Thin client for the jobContext cloud API. Auth is a personal access token
-// (cloud dashboard → API Keys) stored in the device keychain.
+// (cloud dashboard → API Keys tab) stored in the device keychain — no OAuth
+// dance, no refresh tokens to go stale while the app sits unopened.
 import * as SecureStore from 'expo-secure-store'
-import { getAccessToken } from './auth'
 
 const URL_KEY = 'jc_base_url'
 const PAT_KEY = 'jc_pat'
@@ -20,11 +20,14 @@ export async function setConfig(url: string, pat: string): Promise<void> {
   if (pat.trim()) await SecureStore.setItemAsync(PAT_KEY, pat.trim())
 }
 
+export async function clearPat(): Promise<void> {
+  await SecureStore.deleteItemAsync(PAT_KEY)
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const { url, pat } = await getConfig()
-  // Entra sign-in first (silently refreshed); PAT is the advanced fallback.
-  const bearer = (await getAccessToken(url)) || pat
-  if (!bearer) throw new Error('Not signed in — use Settings.')
+  if (!pat) throw new Error('Not connected — add your API key in Settings.')
+  const bearer = pat
   // Time-bound every call: an unbounded fetch leaves UI states (e.g. the
   // capture banner's "Saving…") hanging forever on a bad connection.
   const ctrl = new AbortController()

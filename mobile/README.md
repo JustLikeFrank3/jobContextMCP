@@ -35,9 +35,9 @@ npx eas-cli build --profile preview --platform android   # installable APK link 
 npx eas-cli build --platform ios && npx eas-cli submit -p ios  # TestFlight
 ```
 
-Sign in with Microsoft inside the app (Settings tab) — it self-registers
-against the cloud's OAuth proxy; the API-key field under "Advanced" is a
-fallback.
+Add your API key inside the app (Settings tab) — create it from the dashboard's
+API Keys tab first, then paste it in. No sign-in flow: a static key has no
+inactivity expiry to trip over while the app sits unopened.
 
 ## Next (P2/P3)
 Pipeline glance + contact cards, voice debrief (on-device transcription →

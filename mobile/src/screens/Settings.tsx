@@ -1,8 +1,10 @@
 // Settings: cloud URL + personal access token (device keychain) and push.
+// API key only — no Entra/OAuth sign-in. A static PAT has no inactivity
+// expiry and no refresh-token rotation to go stale while the app sits
+// unopened for a while, which is the common case for a personal app.
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { DEFAULT_URL, fetchEvents, getConfig, setConfig } from '../api'
-import { isSignedIn, onAuthChange, signIn, signOut } from '../auth'
+import { DEFAULT_URL, clearPat, fetchEvents, getConfig, setConfig } from '../api'
 import { ensurePushRegistration } from '../push'
 import { colors } from '../theme'
 
@@ -10,7 +12,6 @@ export default function Settings() {
   const [url, setUrl] = useState('')
   const [pat, setPat] = useState('')
   const [hasPat, setHasPat] = useState(false)
-  const [signedIn, setSignedIn] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -19,34 +20,13 @@ export default function Settings() {
       setUrl(c.url)
       setHasPat(Boolean(c.pat))
     })
-    isSignedIn().then(setSignedIn)
-    // Track auth transitions from elsewhere — e.g. a dead refresh token
-    // clearing the session — so this screen never claims a stale "signed in".
-    return onAuthChange(setSignedIn)
   }, [])
 
-  async function microsoftSignIn() {
-    setBusy(true)
-    try {
-      const ok = await signIn(url || DEFAULT_URL)
-      if (!ok) throw new Error('Sign-in was cancelled.')
-      await fetchEvents()
-      await ensurePushRegistration()
-      setSignedIn(true)
-      Alert.alert('Signed in', 'Inbox and notifications are live.')
-    } catch (e: any) {
-      Alert.alert('Sign-in failed', e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function microsoftSignOut() {
-    await signOut()
-    setSignedIn(false)
-  }
-
   async function save() {
+    if (!pat.trim()) {
+      Alert.alert('API key required', "Paste the key from your dashboard's API Keys tab first.")
+      return
+    }
     setBusy(true)
     try {
       await setConfig(url || DEFAULT_URL, pat)
@@ -54,7 +34,7 @@ export default function Settings() {
       await ensurePushRegistration()
       setPat('')
       setHasPat(true)
-      Alert.alert('Connected', 'Signed in — inbox and notifications are live.')
+      Alert.alert('Connected', 'Inbox and notifications are live.')
     } catch (e: any) {
       Alert.alert('Could not connect', e.message)
     } finally {
@@ -62,33 +42,18 @@ export default function Settings() {
     }
   }
 
+  async function disconnect() {
+    await clearPat()
+    setHasPat(false)
+  }
+
   return (
     <View style={styles.root}>
-      {signedIn ? (
-        <Pressable style={[styles.button, styles.ghost]} onPress={microsoftSignOut}>
-          <Text style={styles.ghostText}>Signed in with Microsoft — sign out</Text>
-        </Pressable>
-      ) : (
-        <Pressable style={[styles.button, busy && { opacity: 0.6 }]} onPress={microsoftSignIn} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? 'Signing in…' : 'Sign in with Microsoft'}</Text>
-        </Pressable>
-      )}
-      <Pressable onPress={() => setShowAdvanced((v) => !v)}>
-        <Text style={styles.advancedToggle}>{showAdvanced ? 'Hide advanced' : 'Advanced: API key'}</Text>
-      </Pressable>
-      {showAdvanced && (
-        <>
-      <Text style={styles.label}>Cloud URL</Text>
-      <TextInput
-        style={styles.input}
-        value={url}
-        onChangeText={setUrl}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder={DEFAULT_URL}
-        placeholderTextColor={colors.faint}
-      />
-      <Text style={styles.label}>API key</Text>
+      <Text style={styles.hint}>
+        Create a personal access token in your dashboard's Settings → API Keys tab, then
+        paste it below to connect this app.
+      </Text>
+      <Text style={styles.label}>API key {hasPat ? '— connected' : ''}</Text>
       <TextInput
         style={styles.input}
         value={pat}
@@ -99,8 +64,28 @@ export default function Settings() {
         placeholderTextColor={colors.faint}
       />
       <Pressable style={[styles.button, busy && { opacity: 0.6 }]} onPress={save} disabled={busy}>
-        <Text style={styles.buttonText}>{busy ? 'Connecting…' : 'Save & connect'}</Text>
+        <Text style={styles.buttonText}>{busy ? 'Connecting…' : hasPat ? 'Update key' : 'Connect'}</Text>
       </Pressable>
+      {hasPat && (
+        <Pressable style={[styles.button, styles.ghost]} onPress={disconnect}>
+          <Text style={styles.ghostText}>Disconnect</Text>
+        </Pressable>
+      )}
+      <Pressable onPress={() => setShowAdvanced((v) => !v)}>
+        <Text style={styles.advancedToggle}>{showAdvanced ? 'Hide advanced' : 'Advanced: cloud URL'}</Text>
+      </Pressable>
+      {showAdvanced && (
+        <>
+          <Text style={styles.label}>Cloud URL</Text>
+          <TextInput
+            style={styles.input}
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={DEFAULT_URL}
+            placeholderTextColor={colors.faint}
+          />
         </>
       )}
       <Text style={styles.hint}>
