@@ -34,9 +34,11 @@ def test_action_count_covers_legacy_surface():
     # 86 actions ≙ the 87 legacy tools minus get_session_context's dual role
     # (session startup is folded into insights.session_context). Bumped from
     # 85/84 when stories gained update/delete (a wrong fact could only be
-    # superseded by a second entry before, never corrected in place).
+    # superseded by a second entry before, never corrected in place); bumped
+    # again when materials gained update_master_resume (stale metrics could
+    # only be read, never fixed, from MCP clients).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 87, f"action count changed: {total} — update this pin deliberately"
+    assert total == 88, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():
@@ -146,9 +148,9 @@ def test_chat_allowlist_matches_domain_names():
     assert set(CHAT_TOOL_ALLOWLIST) == set(FACADES)
 
 
-@pytest.mark.parametrize("flag,expected", [("", 11), ("1", 87)])
+@pytest.mark.parametrize("flag,expected", [("", 11), ("1", 88)])
 def test_server_surface_size(flag, expected, tmp_path):
-    """server.py registers 11 consolidated tools by default, 87 legacy ones
+    """server.py registers 11 consolidated tools by default, 88 legacy ones
     behind JOBCONTEXT_LEGACY_TOOLS=1.
 
     Runs in a subprocess: re-importing server inside the test process would
@@ -299,6 +301,65 @@ class TestStoriesUpdateDelete:
     def test_update_unknown_id_returns_clean_error(self, isolated_server):
         out = FACADES["stories"](action="update", story_id="999", story="X.")
         assert "999" in out and "✗" in out
+
+
+class TestMasterResumeUpdate:
+    """Stale-metrics bug: the master resume was readable but not editable from
+    MCP clients, so drifted numbers (test counts, coverage, clone counts)
+    could never be corrected in chat."""
+
+    def test_update_replaces_exact_match_in_place(self, isolated_server):
+        import server as srv
+
+        srv.MASTER_RESUME.write_text(
+            "PROJECTS\njobContextMCP — 312 tests, 84% coverage\n", encoding="utf-8"
+        )
+        out = FACADES["materials"](
+            action="update_master_resume",
+            old_text="312 tests, 84% coverage",
+            new_text="405 tests, 87% coverage",
+        )
+        assert "✓" in out
+        content = srv.MASTER_RESUME.read_text(encoding="utf-8")
+        assert "405 tests, 87% coverage" in content
+        assert "312 tests" not in content
+
+    def test_not_found_returns_clean_error_and_leaves_file_untouched(self, isolated_server):
+        import server as srv
+
+        before = srv.MASTER_RESUME.read_text(encoding="utf-8")
+        out = FACADES["materials"](
+            action="update_master_resume", old_text="no such text", new_text="x"
+        )
+        assert "✗" in out and "not found" in out
+        assert srv.MASTER_RESUME.read_text(encoding="utf-8") == before
+
+    def test_ambiguous_match_reports_occurrence_count(self, isolated_server):
+        import server as srv
+
+        srv.MASTER_RESUME.write_text("95% SLA\nother line\n95% SLA\n", encoding="utf-8")
+        out = FACADES["materials"](
+            action="update_master_resume", old_text="95% SLA", new_text="98% SLA"
+        )
+        assert "✗" in out and "2 times" in out
+        assert "98% SLA" not in srv.MASTER_RESUME.read_text(encoding="utf-8")
+
+    def test_snippet_from_appended_reference_section_names_the_real_file(self, isolated_server, tmp_path):
+        """read_master_resume appends ACHIEVEMENTS from a separate reference
+        file — an edit targeting that text must say where it actually lives."""
+        from lib import config as cfg
+
+        ref_dir = cfg.get_active_reference_materials_dir()
+        ref_dir.mkdir(parents=True, exist_ok=True)
+        (ref_dir / "achievements.txt").write_text(
+            "Quarterly award for platform work.", encoding="utf-8"
+        )
+        out = FACADES["materials"](
+            action="update_master_resume",
+            old_text="Quarterly award for platform work.",
+            new_text="x",
+        )
+        assert "✗" in out and "achievements.txt" in out
 
 
 def test_outreach_status_enum_choices_surfaced_in_generated_docs():
