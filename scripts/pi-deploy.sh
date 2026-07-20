@@ -179,7 +179,8 @@ case "${1:-}" in
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-app\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3}
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-provenance\", \"order\": 4}
         ]}"
       # Update in place when it exists — keeps the uid (and thus the TV kiosk
       # URL baked into the Pi autostart) stable across re-applies.
