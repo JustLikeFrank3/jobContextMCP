@@ -310,3 +310,34 @@ class TestResumeGraphReactsToVerdict:
         )
         assert out["needs_revision"] is False
         assert out["review_feedback"] == []
+
+
+class TestDurableMetrics:
+    def test_gauges_from_db(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+
+        db = tmp_path / "prov.db"
+        for verdict, violations in [("passed", []), ("passed", []), ("failed", ["47%", "2M"])]:
+            record_run(
+                kind="resume", company="X", role="Y", job_description="jd",
+                chunk_texts=[], claims=["1%"], violations=violations,
+                verdict=verdict, revisions=0, db_path=db,
+            )
+        out = render_durable_metrics(db_path=db)
+        assert 'provenance_runs_total{verdict="passed",kind="resume"} 2' in out
+        assert 'provenance_runs_total{verdict="failed",kind="resume"} 1' in out
+        assert 'provenance_violations_recorded_total{kind="resume"} 2' in out
+
+    def test_empty_db_renders_nothing(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+        from lib.db import get_connection
+
+        db = tmp_path / "empty.db"
+        with get_connection(path=db):
+            pass  # create schema only
+        assert render_durable_metrics(db_path=db) == ""
+
+    def test_never_raises(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+
+        assert render_durable_metrics(db_path=tmp_path) == ""  # dir, not a db

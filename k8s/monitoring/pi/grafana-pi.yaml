@@ -225,7 +225,7 @@ data:
         },
         {
           "type": "stat",
-          "title": "Checks (24h)",
+          "title": "Checks (total)",
           "gridPos": {
             "x": 0,
             "y": 3,
@@ -237,13 +237,13 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(increase(provenance_checks_total[24h])) or vector(0)"
+              "expr": "sum(provenance_runs_total) or vector(0)"
             }
           ]
         },
         {
           "type": "stat",
-          "title": "Pass rate (24h)",
+          "title": "Pass rate",
           "gridPos": {
             "x": 4,
             "y": 3,
@@ -255,7 +255,7 @@ data:
           },
           "targets": [
             {
-              "expr": "100 * sum(increase(provenance_checks_total{verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total[24h])), 1)"
+              "expr": "100 * sum(provenance_runs_total{verdict=\"passed\"}) / clamp_min(sum(provenance_runs_total), 1)"
             }
           ],
           "fieldConfig": {
@@ -284,7 +284,7 @@ data:
         },
         {
           "type": "stat",
-          "title": "Violations caught (24h)",
+          "title": "Violations caught",
           "gridPos": {
             "x": 8,
             "y": 3,
@@ -296,7 +296,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(increase(provenance_violations_total[24h])) or vector(0)"
+              "expr": "sum(provenance_violations_recorded_total) or vector(0)"
             }
           ],
           "fieldConfig": {

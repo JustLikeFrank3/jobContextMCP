@@ -317,8 +317,12 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/metrics", include_in_schema=False)
     async def _metrics() -> PlainTextResponse:
         from lib import metrics
+        from lib.provenance import render_durable_metrics
 
-        return PlainTextResponse(metrics.render_prometheus(), media_type="text/plain; version=0.0.4")
+        # In-process counters + durable DB-backed provenance gauges (the
+        # counters die with the process; the gauges survive restarts).
+        payload = metrics.render_prometheus() + render_durable_metrics()
+        return PlainTextResponse(payload, media_type="text/plain; version=0.0.4")
 
     @app.get("/", include_in_schema=False)
     async def _root_landing() -> HTMLResponse:

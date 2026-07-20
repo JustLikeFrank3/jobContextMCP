@@ -156,3 +156,44 @@ def record_run(
             inc("provenance_violations_total", amount=len(violations), kind=kind)
     except Exception:  # noqa: BLE001 — logging must never break generation
         pass
+
+
+def render_durable_metrics(db_path=None) -> str:
+    """Prometheus gauge lines computed from the generation_provenance table.
+
+    The in-process counters (provenance_checks_total) die with the serving
+    process — pod restarts zeroed the wallboard's provenance stats while the
+    durable truth sat in sqlite. Appended to /metrics so dashboards read
+    all-time history. On multi-tenant cloud /metrics has no user context, so
+    this reads the default (root) DB and may legitimately return nothing —
+    per-tenant rows live in partition DBs; the in-process counters still
+    cover live activity there.
+
+    Never raises; returns "" on any failure.
+    """
+    try:
+        from lib.db import get_connection
+
+        with get_connection(path=db_path) as conn:
+            rows = conn.execute(
+                """SELECT verdict, kind, COUNT(*),
+                          COALESCE(SUM(json_array_length(violations)), 0)
+                   FROM generation_provenance GROUP BY verdict, kind"""
+            ).fetchall()
+        if not rows:
+            return ""
+        lines = ["# TYPE provenance_runs_total gauge"]
+        viols: dict[str, int] = {}
+        for verdict, kind, count, viol_count in rows:
+            lines.append(
+                f'provenance_runs_total{{verdict="{verdict}",kind="{kind}"}} {count}'
+            )
+            viols[kind] = viols.get(kind, 0) + int(viol_count or 0)
+        lines.append("# TYPE provenance_violations_recorded_total gauge")
+        for kind, n in sorted(viols.items()):
+            lines.append(
+                f'provenance_violations_recorded_total{{kind="{kind}"}} {n}'
+            )
+        return "\n".join(lines) + "\n"
+    except Exception:  # noqa: BLE001 — metrics must never break the endpoint
+        return ""
