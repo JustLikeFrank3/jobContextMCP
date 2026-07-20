@@ -249,6 +249,10 @@ KC
     # ~90s so later network blips don't strand a dead page either.
     ssh "${PI}" 'sudo tee /usr/local/bin/wallboard-kiosk.sh >/dev/null << "EOF"
 #!/bin/bash
+# Single-instance guard: relaunching without killing the old wrapper bred
+# 4 loops x 68 chromium processes and starved the Pi (2026-07-20 incident).
+exec 9>/run/user/1000/wallboard-kiosk.lock
+flock -n 9 || { echo "wallboard-kiosk already running"; exit 0; }
 URL="http://192.168.68.51:3000/playlists/play/afs4gyxml4uf4f?kiosk"
 
 wait_for_url() {
