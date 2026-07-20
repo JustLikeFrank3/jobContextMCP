@@ -98,6 +98,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     },
     "materials": {
         "read_master_resume": (resume.read_master_resume, "Read the master resume."),
+        "update_master_resume": (resume.update_master_resume, "Edit the master resume in place (exact-match find/replace)."),
         "read_resume": (resume.read_existing_resume, "Read an existing resume file."),
         "read_reference": (resume.read_reference_file, "Read a reference-materials file."),
         "read_latex_asset": (read_latex_asset, "Read a LaTeX template/section asset."),
@@ -356,13 +357,15 @@ def documents(
 
 
 def materials(
-    action: Literal["read_master_resume", "read_resume", "read_reference", "read_latex_asset", "list", "search", "reindex", "reindex_stories"],
+    action: Literal["read_master_resume", "update_master_resume", "read_resume", "read_reference", "read_latex_asset", "list", "search", "reindex", "reindex_stories"],
     filename: str | None = None,
     company: str | None = None,
     query: str | None = None,
     category: str | None = None,
+    old_text: str | None = None,
+    new_text: str | None = None,
 ) -> str:
-    """Read and search your existing materials: master resume, saved resumes/letters, reference files, LaTeX assets, and the semantic index."""
+    """Read, search, and maintain your existing materials: master resume (read and in-place edit), saved resumes/letters, reference files, LaTeX assets, and the semantic index."""
     return _run("materials", action, locals())
 
 

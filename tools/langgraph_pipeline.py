@@ -74,12 +74,14 @@ class ResumeAgentState(TypedDict):
     role: str
     job_description: str
     retrieved_context: str      # set by retrieve_node: RAG hits relevant to this JD
+    retrieved_hits: list        # set by retrieve_node: structured hits (text/source/score)
     tone_profile: str           # set by load_context_node
     star_stories: str           # set by load_context_node: relevant STAR stories
     draft: str                  # set by draft_node, updated by revise_node
     review_notes: str           # set by review_node: issues or "APPROVED"
     revision_count: int         # incremented by revise_node, guards the loop
     approved: bool              # set True by review_node when draft is clean
+    provenance_violations: list  # set by validate_provenance_node: unsourced claims
 
 
 # ── NODES ──────────────────────────────────────────────────────────────────────
@@ -124,16 +126,28 @@ def retrieve_node(state: ResumeAgentState) -> dict:
     """
     from lib.rag import search, format_results
 
-    # Query 1: JD-driven — surfaces what the role actually asks for
-    jd_query = state["job_description"][:800]
-    hits_jd = search(jd_query, n_results=5)
+    # RAG is emphasis guidance, not the source of truth (that's the master
+    # resume, always in the draft prompt). Degrade to no-retrieval rather
+    # than failing the whole pipeline when embeddings are unavailable —
+    # e.g. an Anthropic-only BYOK deployment (no OpenAI embeddings key) or
+    # a partition with no built index.
+    try:
+        # Query 1: JD-driven — surfaces what the role actually asks for
+        jd_query = state["job_description"][:800]
+        hits_jd = search(jd_query, n_results=5)
 
-    # Query 2: AI/agent-focused — ensures jobContextMCP content is represented
-    ai_query = (
-        "RAG pipeline LLM production agentic AI MCP agent architecture "
-        "memory context management embeddings retrieval OpenAI"
-    )
-    hits_ai = search(ai_query, n_results=4)
+        # Query 2: AI/agent-focused — ensures jobContextMCP content is represented
+        ai_query = (
+            "RAG pipeline LLM production agentic AI MCP agent architecture "
+            "memory context management embeddings retrieval OpenAI"
+        )
+        hits_ai = search(ai_query, n_results=4)
+    except Exception as exc:  # noqa: BLE001 — degrade, don't die
+        import logging
+        logging.getLogger(__name__).warning(
+            "RAG retrieval unavailable (%s) — drafting without emphasis hints", exc
+        )
+        return {"retrieved_context": "", "retrieved_hits": []}
 
     # Deduplicate by chunk text, JD hits take priority (inserted first)
     seen: dict[str, dict] = {}
@@ -141,7 +155,13 @@ def retrieve_node(state: ResumeAgentState) -> dict:
         if hit["text"] not in seen:
             seen[hit["text"]] = hit
 
-    return {"retrieved_context": format_results(list(seen.values()), "RETRIEVED EXPERIENCE")}
+    hits = list(seen.values())
+    return {
+        "retrieved_context": format_results(hits, "RETRIEVED EXPERIENCE"),
+        # Structured hits kept alongside the formatted blob so downstream
+        # nodes (the provenance gate) can reference sources individually.
+        "retrieved_hits": hits,
+    }
 
 
 def draft_node(state: ResumeAgentState) -> dict:
@@ -177,6 +197,28 @@ def draft_node(state: ResumeAgentState) -> dict:
     )
 
     return {"draft": (response.choices[0].message.content or "").strip()}
+
+
+def validate_provenance_node(state: ResumeAgentState) -> dict:
+    """Deterministic truth gate: every numeric claim in the draft must exist
+    in this run's source material. No LLM — regex extraction + normalized
+    set membership (lib/provenance.py).
+
+    Runs after every draft AND every revision, so a revise pass can't
+    introduce a fresh fabrication that slips through. Violations feed the
+    revise prompt via state and force the revise route even when the LLM
+    reviewer approves — the reviewer checks quality; this checks truth.
+    """
+    from lib.provenance import check_claims
+
+    sources = [
+        _read(config.get_active_master_resume_path()),
+        state.get("star_stories", ""),
+        state.get("job_description", ""),
+        *[h.get("text", "") for h in state.get("retrieved_hits", [])],
+    ]
+    violations = check_claims(state["draft"], sources)
+    return {"provenance_violations": violations}
 
 
 def review_node(state: ResumeAgentState) -> dict:
@@ -248,6 +290,8 @@ def revise_node(state: ResumeAgentState) -> dict:
         REVIEWER FEEDBACK:
         {state['review_notes']}
 
+        {_provenance_feedback(state)}
+
         CURRENT DRAFT:
         {state['draft']}
 
@@ -288,13 +332,57 @@ def revise_node(state: ResumeAgentState) -> dict:
 # receives the current state and returns the NAME of the next node as a string.
 # No LLM involved — deterministic routing based on state values.
 
+def _provenance_feedback(state: ResumeAgentState) -> str:
+    """Render provenance violations as a prompt section for revise_node."""
+    violations = state.get("provenance_violations") or []
+    if not violations:
+        return ""
+    listed = "\n".join(f"  - {v}" for v in violations)
+    return (
+        "PROVENANCE VIOLATIONS (these numbers appear in NO source material — "
+        "each one MUST be removed or replaced with a claim that exists in the "
+        "master resume or STAR stories; do not reword them into surviving):\n"
+        + listed
+    )
+
+
 def route_after_review(state: ResumeAgentState) -> str:
     """Route to 'revise' if issues were found and we haven't hit the limit.
-    Route to 'finalize' if approved or we've already revised twice.
+    Route to 'finalize' if clean or we've already revised twice.
+
+    'Clean' means BOTH gates pass: the LLM reviewer approved (quality) and
+    the provenance check found no unsourced claims (truth). An approved
+    draft with fabricated numbers still routes to revise — that's the
+    entire point of the gate.
     """
-    if state["approved"] or state["revision_count"] >= 2:
+    clean = state["approved"] and not state.get("provenance_violations")
+    if clean or state["revision_count"] >= 2:
         return "finalize"
     return "revise"
+
+
+def finalize_node(state: ResumeAgentState) -> dict:
+    """Persist the run's provenance record. The draft is already final.
+
+    verdict: 'passed' (gate clean), or 'failed' (violations survived the
+    revision budget — surfaced in the output header so a human sees it
+    before the document ships anywhere).
+    """
+    from lib.provenance import extract_claims, record_run
+
+    violations = state.get("provenance_violations") or []
+    record_run(
+        kind="resume",
+        company=state["company"],
+        role=state["role"],
+        job_description=state["job_description"],
+        chunk_texts=[h.get("text", "") for h in state.get("retrieved_hits", [])],
+        claims=extract_claims(state["draft"]),
+        violations=violations,
+        verdict="failed" if violations else "passed",
+        revisions=state["revision_count"],
+    )
+    return {}
 
 
 # ── GRAPH ASSEMBLY ─────────────────────────────────────────────────────────────
@@ -316,17 +404,21 @@ def _build_graph():
     graph.add_node("load_context", load_context_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("draft", draft_node)
+    graph.add_node("validate_provenance", validate_provenance_node)
     graph.add_node("review", review_node)
     graph.add_node("revise", revise_node)
-    graph.add_node("finalize", lambda state: {})  # passthrough — draft is already final
+    graph.add_node("finalize", finalize_node)
 
     # Set the entry point
     graph.set_entry_point("load_context")
 
-    # Direct edges — always run the next node
+    # Direct edges — always run the next node. Every path to review goes
+    # through the provenance gate, so no draft (initial or revised) reaches
+    # routing without a truth check.
     graph.add_edge("load_context", "retrieve")
     graph.add_edge("retrieve", "draft")
-    graph.add_edge("draft", "review")
+    graph.add_edge("draft", "validate_provenance")
+    graph.add_edge("validate_provenance", "review")
 
     # Conditional edge after review:
     #   route_after_review(state) returns "revise" or "finalize"
@@ -340,8 +432,8 @@ def _build_graph():
         },
     )
 
-    # Revise loops back to review for a second pass
-    graph.add_edge("revise", "review")
+    # Revise loops back through the gate for a fresh truth check
+    graph.add_edge("revise", "validate_provenance")
     graph.add_edge("finalize", END)
 
     return graph.compile()
@@ -372,12 +464,14 @@ def generate_resume_agent(company: str, role: str, job_description: str) -> str:
         "role": role,
         "job_description": job_description,
         "retrieved_context": "",
+        "retrieved_hits": [],
         "tone_profile": "",
         "star_stories": "",
         "draft": "",
         "review_notes": "",
         "revision_count": 0,
         "approved": False,
+        "provenance_violations": [],
     }
 
     final_state = app.invoke(initial_state)
@@ -385,10 +479,19 @@ def generate_resume_agent(company: str, role: str, job_description: str) -> str:
     revisions = final_state["revision_count"]
     review = final_state["review_notes"]
     review_summary = review[:80] + "..." if len(review) > 80 else review
+    violations = final_state.get("provenance_violations") or []
+    provenance_line = (
+        "  Provenance: PASSED — every numeric claim traces to source material"
+        if not violations
+        else "  Provenance: FAILED — unsourced claims survived revision: "
+        + ", ".join(violations[:5])
+    )
 
     header = "\n".join([
         f"LangGraph pipeline complete — {revisions} revision(s)",
-        f"  load_context → retrieve (RAG) → draft → {'revise → ' * revisions}finalize",
+        f"  load_context → retrieve (RAG) → draft → validate_provenance → "
+        f"{'revise → ' * revisions}finalize",
+        provenance_line,
         f"  Final review: {review_summary}",
         "",
     ])

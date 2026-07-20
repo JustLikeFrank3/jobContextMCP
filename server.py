@@ -199,6 +199,7 @@ get_job_hunt_status = job_hunt.get_job_hunt_status
 update_application = job_hunt.update_application
 
 read_master_resume = resume.read_master_resume
+update_master_resume = resume.update_master_resume
 list_existing_materials = resume.list_existing_materials
 read_existing_resume = resume.read_existing_resume
 read_reference_file = resume.read_reference_file
@@ -309,8 +310,10 @@ ResumeAgentState = langgraph_pipeline.ResumeAgentState
 load_context_node = langgraph_pipeline.load_context_node
 retrieve_node = langgraph_pipeline.retrieve_node
 draft_node = langgraph_pipeline.draft_node
+validate_provenance_node = langgraph_pipeline.validate_provenance_node
 review_node = langgraph_pipeline.review_node
 revise_node = langgraph_pipeline.revise_node
+finalize_node = langgraph_pipeline.finalize_node
 route_after_review = langgraph_pipeline.route_after_review
 generate_resume_agent = langgraph_pipeline.generate_resume_agent
 

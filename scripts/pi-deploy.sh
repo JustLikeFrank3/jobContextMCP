@@ -61,6 +61,13 @@ load_env() {
 }
 
 build_ship() {
+  # Fail loudly up front if the daemon is gone (Docker Desktop idles out) —
+  # a dead daemon otherwise surfaces as a confusing mid-deploy error while
+  # the Pi keeps serving the previous image.
+  docker info >/dev/null 2>&1 || {
+    echo "ERROR: Docker daemon unreachable — start it (systemctl --user start docker-desktop) and retry." >&2
+    exit 1
+  }
   docker buildx build --platform linux/arm64 -t "${IMAGE}" --load "${ROOT}"
   echo "Shipping image to the Pi over the direct link..."
   docker save "${IMAGE}" | ssh "${PI}" "sudo k3s ctr images import -"
@@ -158,7 +165,8 @@ case "${1:-}" in
     # (idempotent: patch is a no-op when the volume already exists).
     ssh "${PI}" 'sudo k3s kubectl -n monitoring get deploy grafana -o json | grep -q grafana-dashboard-pi || \
       sudo k3s kubectl -n monitoring patch deploy grafana --type=strategic -p "{\"spec\":{\"template\":{\"spec\":{\"volumes\":[{\"name\":\"dashboards-pi\",\"configMap\":{\"name\":\"grafana-dashboard-pi\"}}],\"containers\":[{\"name\":\"grafana\",\"volumeMounts\":[{\"name\":\"dashboards-pi\",\"mountPath\":\"/var/lib/grafana/dashboards/pi\"}]}]}}}}"'
-    ssh "${PI}" 'sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
+    ssh "${PI}" 'sudo k3s kubectl -n monitoring set resources deploy/grafana --limits=cpu=1500m,memory=512Mi >/dev/null && \
+      sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
       sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana deploy/loki deploy/kube-state-metrics --timeout=300s'
     # Rotating kiosk playlist via the Grafana API (playlists are not
     # file-provisionable). Replace-on-apply so edits here take effect:
@@ -168,11 +176,12 @@ case "${1:-}" in
       G="http://admin:${GPW}@localhost:3000"
       for i in $(seq 1 30); do curl -sf "${G}/api/health" >/dev/null && break; sleep 2; done
       BODY="{
-        \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
+        \"name\": \"jcmcp-wallboard\", \"interval\": \"60s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-app\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3}
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-provenance\", \"order\": 4}
         ]}"
       # Update in place when it exists — keeps the uid (and thus the TV kiosk
       # URL baked into the Pi autostart) stable across re-applies.
@@ -240,6 +249,10 @@ KC
     # ~90s so later network blips don't strand a dead page either.
     ssh "${PI}" 'sudo tee /usr/local/bin/wallboard-kiosk.sh >/dev/null << "EOF"
 #!/bin/bash
+# Single-instance guard: relaunching without killing the old wrapper bred
+# 4 loops x 68 chromium processes and starved the Pi (2026-07-20 incident).
+exec 9>/run/user/1000/wallboard-kiosk.lock
+flock -n 9 || { echo "wallboard-kiosk already running"; exit 0; }
 URL="http://192.168.68.51:3000/playlists/play/afs4gyxml4uf4f?kiosk"
 
 wait_for_url() {
@@ -255,6 +268,9 @@ while true; do
   fails=0
   while kill -0 "$CHROME_PID" 2>/dev/null; do
     sleep 30
+    # Cursor auto-hide: re-park the pointer offscreen (wlroots virtual
+    # pointer via wlrctl); a bumped mouse gets ~30s of fame, then hides.
+    wlrctl pointer move 9999 9999 2>/dev/null
     if curl -sf -o /dev/null --max-time 5 "$URL"; then
       fails=0
     else

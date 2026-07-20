@@ -52,38 +52,39 @@ metadata:
 data:
   kiosk-app.json: |
     {
-      "uid": "kiosk-app", "title": "Application Health — jcmcp (Pi)", "tags": ["kiosk"],
+      "uid": "kiosk-app", "title": "Application Health — jobContext (Pi)", "tags": ["kiosk"],
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "timeseries", "title": "Request rate by route", "gridPos": {"x":0,"y":0,"w":8,"h":9},
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \ud83d\udcf1 APPLICATION \u2014 jobContext on the Pi"}},
+        {"type": "timeseries", "title": "Request rate by route", "gridPos": {"x":0,"y":3,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(rate(http_requests_total[5m])) by (route)", "legendFormat": "{{route}}"}],
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp-pi\"}[5m])) by (route)", "legendFormat": "{{route}}"}],
          "fieldConfig": {"defaults": {"unit": "reqps"}}},
-        {"type": "timeseries", "title": "Avg latency by route", "gridPos": {"x":8,"y":0,"w":8,"h":9},
+        {"type": "timeseries", "title": "Avg latency by route", "gridPos": {"x":8,"y":3,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "rate(http_request_seconds_sum[5m]) / rate(http_request_seconds_count[5m])", "legendFormat": "{{route}}"}],
+         "targets": [{"expr": "rate(http_request_seconds_sum{namespace=\"jcmcp-pi\"}[5m]) / rate(http_request_seconds_count{namespace=\"jcmcp-pi\"}[5m])", "legendFormat": "{{route}}"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "5xx error rate", "gridPos": {"x":16,"y":0,"w":8,"h":9},
+        {"type": "timeseries", "title": "5xx error rate", "gridPos": {"x":16,"y":3,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) or vector(0)"}],
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp-pi\",status=~\"5..\"}[5m])) or vector(0)"}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
-        {"type": "timeseries", "title": "Work items (1h) by kind/status", "gridPos": {"x":0,"y":9,"w":8,"h":9},
+        {"type": "timeseries", "title": "Work items (1h) by kind/status", "gridPos": {"x":0,"y":11,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(work_items_total[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
-        {"type": "timeseries", "title": "Avg work-item duration", "gridPos": {"x":8,"y":9,"w":8,"h":9},
+         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp-pi\"}[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
+        {"type": "timeseries", "title": "Avg work-item duration", "gridPos": {"x":8,"y":11,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "rate(work_item_seconds_sum[15m]) / rate(work_item_seconds_count[15m])", "legendFormat": "{{kind}}"}],
+         "targets": [{"expr": "rate(work_item_seconds_sum{namespace=\"jcmcp-pi\"}[15m]) / rate(work_item_seconds_count{namespace=\"jcmcp-pi\"}[15m])", "legendFormat": "{{kind}}"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "LLM calls by model/outcome", "gridPos": {"x":16,"y":9,"w":8,"h":9},
+        {"type": "timeseries", "title": "LLM calls by model/outcome", "gridPos": {"x":16,"y":11,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_calls_total[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
-        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":0,"y":18,"w":16,"h":9},
+         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp-pi\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":0,"y":19,"w":16,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
-        {"type": "stat", "title": "App uptime", "gridPos": {"x":16,"y":18,"w":8,"h":9},
+         "targets": [{"expr": "sum(increase(llm_tokens_total{namespace=\"jcmcp-pi\"}[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
+        {"type": "stat", "title": "App uptime", "gridPos": {"x":16,"y":19,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "process_uptime_seconds"}],
+         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp-pi\"})"}],
          "fieldConfig": {"defaults": {"unit": "s"}}}
       ]
     }
@@ -93,52 +94,53 @@ data:
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "stat", "title": "Pods running", "gridPos": {"x":0,"y":0,"w":3,"h":7},
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \ud83d\udda5\ufe0f CLUSTER \u2014 Node1 k3s: pods & hardware"}},
+        {"type": "stat", "title": "Pods running", "gridPos": {"x":0,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(kube_pod_status_phase{phase=\"Running\"})"}]},
-        {"type": "stat", "title": "Pods down", "gridPos": {"x":3,"y":0,"w":3,"h":7},
+        {"type": "stat", "title": "Pods down", "gridPos": {"x":3,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\"}) or vector(0)"}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":1}]}}}},
-        {"type": "stat", "title": "Restarts (24h)", "gridPos": {"x":6,"y":0,"w":3,"h":7},
+        {"type": "stat", "title": "Restarts (24h)", "gridPos": {"x":6,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total[24h])) or vector(0)"}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":1},{"color":"red","value":5}]}}}},
-        {"type": "gauge", "title": "CPU temp", "gridPos": {"x":9,"y":0,"w":4,"h":7},
+        {"type": "gauge", "title": "CPU temp", "gridPos": {"x":9,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "avg(node_thermal_zone_temp)"}],
          "fieldConfig": {"defaults": {"unit": "celsius", "min": 20, "max": 90,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":65},{"color":"red","value":80}]}}}},
-        {"type": "gauge", "title": "CPU", "gridPos": {"x":13,"y":0,"w":4,"h":7},
+        {"type": "gauge", "title": "CPU", "gridPos": {"x":13,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "100*(1-avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":70},{"color":"red","value":90}]}}}},
-        {"type": "gauge", "title": "RAM", "gridPos": {"x":17,"y":0,"w":4,"h":7},
+        {"type": "gauge", "title": "RAM", "gridPos": {"x":17,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "100*(1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
-        {"type": "bargauge", "title": "Disk", "gridPos": {"x":21,"y":0,"w":3,"h":7},
+        {"type": "bargauge", "title": "Disk", "gridPos": {"x":21,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "100*(1-node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/backup\"}/node_filesystem_size_bytes{mountpoint=~\"/|/mnt/backup\"})", "legendFormat": "{{mountpoint}}"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
-        {"type": "timeseries", "title": "CPU by pod", "gridPos": {"x":0,"y":7,"w":12,"h":7},
+        {"type": "timeseries", "title": "CPU by pod", "gridPos": {"x":0,"y":9,"w":12,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(pod)(rate(container_cpu_usage_seconds_total{container!=\"\",pod!=\"\"}[5m]))", "legendFormat": "{{pod}}"}],
          "fieldConfig": {"defaults": {"unit": "percentunit"}}},
-        {"type": "timeseries", "title": "Memory by pod", "gridPos": {"x":12,"y":7,"w":12,"h":7},
+        {"type": "timeseries", "title": "Memory by pod", "gridPos": {"x":12,"y":9,"w":12,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(pod)(container_memory_working_set_bytes{container!=\"\",pod!=\"\"})", "legendFormat": "{{pod}}"}],
          "fieldConfig": {"defaults": {"unit": "bytes"}}},
-        {"type": "timeseries", "title": "Network eth0/wlan0", "gridPos": {"x":0,"y":14,"w":12,"h":6},
+        {"type": "timeseries", "title": "Network eth0/wlan0", "gridPos": {"x":0,"y":15,"w":12,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [
            {"expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "rx {{device}}"},
            {"expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "tx {{device}}"}],
          "fieldConfig": {"defaults": {"unit": "Bps"}}},
-        {"type": "timeseries", "title": "Disk I/O (SD + USB)", "gridPos": {"x":12,"y":14,"w":12,"h":6},
+        {"type": "timeseries", "title": "Disk I/O (SD + USB)", "gridPos": {"x":12,"y":15,"w":12,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [
            {"expr": "rate(node_disk_written_bytes_total{device=~\"mmcblk0|sda\"}[5m])", "legendFormat": "write {{device}}"},
@@ -156,37 +158,380 @@ data:
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "stat", "title": "prod uptime", "gridPos": {"x":0,"y":0,"w":4,"h":6},
-         "datasource": {"uid":"prometheus-aks"},
-         "targets": [{"expr": "process_uptime_seconds{namespace=\"jcmcp\"}"}],
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \u2601\ufe0f PRODUCTION \u2014 jobcontext.ai on AKS"}},
+        {"type": "stat", "title": "prod uptime", "gridPos": {"x":0,"y":3,"w":4,"h":5},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp\"})"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "stat", "title": "qa uptime", "gridPos": {"x":4,"y":0,"w":4,"h":6},
-         "datasource": {"uid":"prometheus-aks"},
-         "targets": [{"expr": "process_uptime_seconds{namespace=\"jcmcp-qa\"}"}],
+        {"type": "stat", "title": "qa uptime", "gridPos": {"x":4,"y":3,"w":4,"h":5},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp-qa\"})"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "stat", "title": "5xx rate (prod)", "gridPos": {"x":8,"y":0,"w":4,"h":6},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "stat", "title": "5xx rate (prod)", "gridPos": {"x":8,"y":3,"w":4,"h":5},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)"}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
-        {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":0,"w":6,"h":6},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":3,"w":6,"h":5},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
-        {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":18,"y":0,"w":6,"h":6},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":18,"y":3,"w":6,"h":5},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
-        {"type": "timeseries", "title": "Request rate by route (prod)", "gridPos": {"x":0,"y":6,"w":12,"h":10},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "timeseries", "title": "Request rate by route (prod)", "gridPos": {"x":0,"y":8,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\"}[5m])) by (route)", "legendFormat": "{{route}}"}],
          "fieldConfig": {"defaults": {"unit": "reqps"}}},
-        {"type": "timeseries", "title": "Avg latency by route (prod)", "gridPos": {"x":12,"y":6,"w":12,"h":10},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "timeseries", "title": "Avg latency by route (prod)", "gridPos": {"x":12,"y":8,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "rate(http_request_seconds_sum{namespace=\"jcmcp\"}[5m]) / rate(http_request_seconds_count{namespace=\"jcmcp\"}[5m])", "legendFormat": "{{route}}"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "Work items by kind/status", "gridPos": {"x":0,"y":16,"w":12,"h":11},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "timeseries", "title": "Work items by kind/status", "gridPos": {"x":0,"y":17,"w":12,"h":10},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(work_items_total[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
-        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":12,"y":16,"w":12,"h":11},
-         "datasource": {"uid":"prometheus-aks"},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":12,"y":17,"w":12,"h":10},
+         "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]}
+      ]
+    }
+  kiosk-provenance.json: |
+    {
+      "uid": "kiosk-provenance",
+      "title": "Provenance — Generation Truth Gate",
+      "tags": [
+        "kiosk"
+      ],
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "text",
+          "title": "",
+          "transparent": true,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 3
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "# 🔎 PROVENANCE — generation truth gate · Node1 hardware"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Checks (24h)",
+          "gridPos": {
+            "x": 0,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(provenance_checks_total[24h])) or vector(0)"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Pass rate (24h)",
+          "gridPos": {
+            "x": 4,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "100 * sum(increase(provenance_checks_total{verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total[24h])), 1)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 80
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Violations caught (24h)",
+          "gridPos": {
+            "x": 8,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(provenance_violations_total[24h])) or vector(0)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "CPU temp",
+          "gridPos": {
+            "x": 12,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "avg(node_thermal_zone_temp)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "min": 20,
+              "max": 90,
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 65
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "CPU",
+          "gridPos": {
+            "x": 16,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "100*(1-avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "RAM",
+          "gridPos": {
+            "x": 20,
+            "y": 3,
+            "w": 4,
+            "h": 6
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "100*(1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 75
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Gate checks by verdict",
+          "gridPos": {
+            "x": 0,
+            "y": 9,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by(verdict)(increase(provenance_checks_total[1h]))",
+              "legendFormat": "{{verdict}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Violations over time",
+          "gridPos": {
+            "x": 12,
+            "y": 9,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(provenance_violations_total[1h])) or vector(0)",
+              "legendFormat": "violations/h"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Network eth0/wlan0",
+          "gridPos": {
+            "x": 0,
+            "y": 18,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[5m])",
+              "legendFormat": "rx {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[5m])",
+              "legendFormat": "tx {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Disk I/O (SD + USB)",
+          "gridPos": {
+            "x": 12,
+            "y": 18,
+            "w": 12,
+            "h": 9
+          },
+          "datasource": {
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "rate(node_disk_written_bytes_total{device=~\"mmcblk0|sda\"}[5m])",
+              "legendFormat": "write {{device}}"
+            },
+            {
+              "expr": "rate(node_disk_read_bytes_total{device=~\"mmcblk0|sda\"}[5m])",
+              "legendFormat": "read {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            }
+          }
+        }
       ]
     }

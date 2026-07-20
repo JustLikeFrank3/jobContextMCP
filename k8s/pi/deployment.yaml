@@ -133,7 +133,11 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
-            failureThreshold: 10
+            # ~15 min: generation (LLM + revise loops + rate-limit waits)
+            # can starve /health for the whole run on 4 cores. Papering over
+            # the P1 (generation blocks serving) until the control-plane
+            # migration; without this, kubelet kills the pod mid-document.
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health
