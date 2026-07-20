@@ -264,6 +264,9 @@ while true; do
   fails=0
   while kill -0 "$CHROME_PID" 2>/dev/null; do
     sleep 30
+    # Cursor auto-hide: re-park the pointer offscreen (wlroots virtual
+    # pointer via wlrctl); a bumped mouse gets ~30s of fame, then hides.
+    wlrctl pointer move 9999 9999 2>/dev/null
     if curl -sf -o /dev/null --max-time 5 "$URL"; then
       fails=0
     else
