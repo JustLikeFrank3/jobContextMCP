@@ -46,6 +46,72 @@ def read_master_resume() -> str:
     return _load_master_context()
 
 
+def update_master_resume(old_text: str, new_text: str) -> str:
+    """
+    Edit the master source resume in place — replace one exact occurrence of
+    old_text with new_text. Use this to keep the master resume current, e.g.
+    refreshing a metric that has drifted (test counts, coverage numbers,
+    clone/view counts).
+
+    old_text must match the file exactly (including whitespace and line
+    breaks) and appear exactly once — include enough surrounding text to make
+    the match unique. Read the master resume first to copy the exact text.
+
+    Args:
+        old_text: Exact text currently in the master resume to replace.
+        new_text: Replacement text.
+
+    Returns:
+        Confirmation with the replaced text, or an actionable error.
+    """
+    master_path = config.get_active_master_resume_path()
+    if not master_path.exists():
+        return (
+            f"✗ Master resume not found: {master_path.name}. "
+            "Run workspace check to diagnose."
+        )
+    if not old_text:
+        return "✗ old_text is required — pass the exact current text to replace."
+
+    content = master_path.read_text(encoding="utf-8")
+    count = content.count(old_text)
+
+    if count == 0:
+        # read_master_resume() appends ACHIEVEMENTS / PEER FEEDBACK sections
+        # from separate reference files — a snippet copied from those sections
+        # will never match the master resume file itself.
+        for label, ref_name in (
+            ("ACHIEVEMENTS", config.get_config_value("achievements_path", "")
+             or config.get_config_value("gm_awards_path", "Achievements.txt")),
+            ("PEER FEEDBACK", config.get_config_value("feedback_received_path", "Feedback_Received.txt")),
+        ):
+            ref_path = config.get_active_reference_materials_dir() / str(ref_name).split("/")[-1]
+            if ref_path.exists() and old_text in ref_path.read_text(encoding="utf-8"):
+                return (
+                    f"✗ old_text not found in the master resume — it is in the {label} "
+                    f"section, which read_master_resume appends from the separate reference "
+                    f"file {ref_path.name}. That file can't be edited with this action."
+                )
+        return (
+            "✗ old_text not found in the master resume. It must match exactly, "
+            "including whitespace and line breaks — read the master resume and "
+            "copy the text verbatim."
+        )
+    if count > 1:
+        return (
+            f"✗ old_text appears {count} times in the master resume — include "
+            "more surrounding text so the match is unique."
+        )
+
+    master_path.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
+    return (
+        f"✓ Master resume updated ({master_path.name}):\n"
+        f"  - {old_text}\n"
+        f"  + {new_text}\n"
+        "If you rely on semantic search, run materials reindex to refresh the index."
+    )
+
+
 def list_existing_materials(company: str = "") -> str:
     """List all existing resume and cover letter files. Optionally filter by company name to see materials for a specific target company."""
     optimized_dir = config.get_active_optimized_resumes_dir()
@@ -199,6 +265,7 @@ def resume_diff(file_a: str, file_b: str) -> str:
 
 def register(mcp) -> None:
     mcp.tool()(read_master_resume)
+    mcp.tool()(update_master_resume)
     mcp.tool()(list_existing_materials)
     mcp.tool()(read_existing_resume)
     mcp.tool()(read_reference_file)
