@@ -197,6 +197,23 @@ _MIGRATIONS = [
         tool_name    TEXT,
         created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
     )""",
+    # v7 — generation provenance (lib/provenance.py): one row per pipeline
+    # run recording which numeric claims the draft made, which source chunks
+    # fed it, and whether the deterministic gate passed. The gate's verdict
+    # trail — a rejected-then-regenerated document shows its own history.
+    """CREATE TABLE IF NOT EXISTS generation_provenance (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts           TEXT    NOT NULL,
+        kind         TEXT    NOT NULL,
+        company      TEXT    NOT NULL DEFAULT '',
+        role         TEXT    NOT NULL DEFAULT '',
+        jd_hash      TEXT    NOT NULL DEFAULT '',
+        chunk_hashes TEXT    NOT NULL DEFAULT '[]',
+        claims       TEXT    NOT NULL DEFAULT '[]',
+        violations   TEXT    NOT NULL DEFAULT '[]',
+        verdict      TEXT    NOT NULL,
+        revisions    INTEGER NOT NULL DEFAULT 0
+    )""",
 ]
 
 
