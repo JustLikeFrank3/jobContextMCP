@@ -61,6 +61,13 @@ load_env() {
 }
 
 build_ship() {
+  # Fail loudly up front if the daemon is gone (Docker Desktop idles out) —
+  # a dead daemon otherwise surfaces as a confusing mid-deploy error while
+  # the Pi keeps serving the previous image.
+  docker info >/dev/null 2>&1 || {
+    echo "ERROR: Docker daemon unreachable — start it (systemctl --user start docker-desktop) and retry." >&2
+    exit 1
+  }
   docker buildx build --platform linux/arm64 -t "${IMAGE}" --load "${ROOT}"
   echo "Shipping image to the Pi over the direct link..."
   docker save "${IMAGE}" | ssh "${PI}" "sudo k3s ctr images import -"
