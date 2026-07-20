@@ -52,11 +52,11 @@ metadata:
 data:
   kiosk-app.json: |
     {
-      "uid": "kiosk-app", "title": "Application Health — jcmcp (Pi)", "tags": ["kiosk"],
+      "uid": "kiosk-app", "title": "Application Health — jobContext (Pi)", "tags": ["kiosk"],
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \ud83d\udcf1 APPLICATION \u2014 jcmcp on the Pi"}},
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \ud83d\udcf1 APPLICATION \u2014 jobContext on the Pi"}},
         {"type": "timeseries", "title": "Request rate by route", "gridPos": {"x":0,"y":3,"w":8,"h":8},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(rate(http_requests_total[5m])) by (route)", "legendFormat": "{{route}}"}],

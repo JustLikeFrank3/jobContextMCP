@@ -165,7 +165,8 @@ case "${1:-}" in
     # (idempotent: patch is a no-op when the volume already exists).
     ssh "${PI}" 'sudo k3s kubectl -n monitoring get deploy grafana -o json | grep -q grafana-dashboard-pi || \
       sudo k3s kubectl -n monitoring patch deploy grafana --type=strategic -p "{\"spec\":{\"template\":{\"spec\":{\"volumes\":[{\"name\":\"dashboards-pi\",\"configMap\":{\"name\":\"grafana-dashboard-pi\"}}],\"containers\":[{\"name\":\"grafana\",\"volumeMounts\":[{\"name\":\"dashboards-pi\",\"mountPath\":\"/var/lib/grafana/dashboards/pi\"}]}]}}}}"'
-    ssh "${PI}" 'sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
+    ssh "${PI}" 'sudo k3s kubectl -n monitoring set resources deploy/grafana --limits=cpu=1500m,memory=512Mi >/dev/null && \
+      sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
       sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana deploy/loki deploy/kube-state-metrics --timeout=300s'
     # Rotating kiosk playlist via the Grafana API (playlists are not
     # file-provisionable). Replace-on-apply so edits here take effect:
@@ -175,7 +176,7 @@ case "${1:-}" in
       G="http://admin:${GPW}@localhost:3000"
       for i in $(seq 1 30); do curl -sf "${G}/api/health" >/dev/null && break; sleep 2; done
       BODY="{
-        \"name\": \"jcmcp-wallboard\", \"interval\": \"30s\",
+        \"name\": \"jcmcp-wallboard\", \"interval\": \"60s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-app\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
