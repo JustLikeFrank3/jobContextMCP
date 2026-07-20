@@ -69,6 +69,21 @@ data:
       - job_name: kube-state-metrics
         static_configs:
           - targets: [kube-state-metrics.monitoring.svc:8080]
+      # Federate the cloud app series from AKS Prometheus via the local
+      # tunnel (aks-prom-tunnel on the host). ONE request per interval —
+      # kubectl port-forward wedges under concurrent connections, so the
+      # wallboard's Cloud page reads these locally instead of querying
+      # through the tunnel at render time (which never finished a first
+      # render). namespace labels (jcmcp/jcmcp-qa) disambiguate from the
+      # Pi's own jcmcp-pi series.
+      - job_name: aks-federate
+        honor_labels: true
+        metrics_path: /federate
+        params:
+          "match[]":
+            - '{namespace=~"jcmcp|jcmcp-qa"}'
+        static_configs:
+          - targets: ["192.168.101.2:9091"]
       - job_name: cadvisor
         kubernetes_sd_configs:
           - role: node
