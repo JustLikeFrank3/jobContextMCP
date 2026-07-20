@@ -1159,6 +1159,48 @@ def _expand_cover_letter_if_short(
 
 # ── PUBLIC TOOLS ───────────────────────────────────────────────────────────────
 
+def _provenance_note(
+    kind: str,
+    company: str,
+    role: str,
+    job_description: str,
+    content: str,
+    source_text: str,
+) -> str:
+    """Run the deterministic truth gate over a single-shot generation.
+
+    Single-shot paths have no revise loop, so the gate observes and reports
+    rather than blocks: the verdict is recorded (generation_provenance) and
+    surfaced in the confirmation string — the ⚠ marker is picked up by
+    ResumeService.notes. Sources = the full prompt (master context, tone,
+    stories, JD): a numeric claim absent from everything the model was shown
+    is fabricated by definition.
+    """
+    try:
+        from lib.provenance import check_claims, extract_claims, record_run
+
+        violations = check_claims(content, [source_text])
+        record_run(
+            kind=kind,
+            company=company,
+            role=role,
+            job_description=job_description,
+            chunk_texts=[],
+            claims=extract_claims(content),
+            violations=violations,
+            verdict="failed" if violations else "passed",
+            revisions=0,
+        )
+        if violations:
+            return (
+                "⚠ Provenance: unsourced claims — verify before sending: "
+                + ", ".join(violations[:6])
+            )
+        return "✓ Provenance: all numeric claims trace to source material"
+    except Exception as exc:  # noqa: BLE001 — the gate must never break generation
+        return f"⚠ Provenance check skipped: {exc}"
+
+
 def generate_resume(
     company: str,
     role: str,
@@ -1225,11 +1267,16 @@ def generate_resume(
         est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
+    prov_note = _provenance_note(
+        "resume", company, role, job_description, content, user_msg
+    )
+
     return "\n".join([
         f"✓ Resume generated for {role} @ {company}",
         f"  model:  {_model()}{cost_note}",
         f"  {save_result}",
         f"  {pdf_result}",
+        f"  {prov_note}",
     ])
 
 
@@ -1314,12 +1361,17 @@ def generate_cover_letter(
         est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
+    prov_note = _provenance_note(
+        "cover_letter", company, role, job_description, content, user_msg
+    )
+
     return "\n".join([
         f"✓ Cover letter generated for {role} @ {company}",
         f"  export pipeline: {export_pipeline}",
         f"  model:  {_model()}{cost_note}",
         f"  {save_result}",
         f"  {pdf_result}",
+        f"  {prov_note}",
     ])
 
 

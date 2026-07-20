@@ -238,3 +238,75 @@ class TestRetrieveDegradation:
         monkeypatch.setattr(rag, "search", boom)
         out = lp.retrieve_node({"job_description": "any JD"})
         assert out == {"retrieved_context": "", "retrieved_hits": []}
+
+
+# ===========================================================================
+# Single-shot paths (tools/generate.py) + second graph (workflows/langgraph)
+# ===========================================================================
+
+class TestSingleShotGate:
+    def test_note_passes_and_records(self, monkeypatch):
+        from tools import generate as gen
+
+        recorded = {}
+        monkeypatch.setattr(
+            "lib.provenance.record_run", lambda **kw: recorded.update(kw)
+        )
+        note = gen._provenance_note(
+            "resume", "Initech", "SWE", "jd text",
+            content="Cut latency 34%.", source_text="latency fell 34% in prod",
+        )
+        assert note.startswith("✓ Provenance")
+        assert recorded["verdict"] == "passed"
+        assert recorded["kind"] == "resume"
+
+    def test_note_flags_fabrication_and_records_failure(self, monkeypatch):
+        from tools import generate as gen
+
+        recorded = {}
+        monkeypatch.setattr(
+            "lib.provenance.record_run", lambda **kw: recorded.update(kw)
+        )
+        note = gen._provenance_note(
+            "cover_letter", "Initech", "SWE", "jd",
+            content="Grew revenue 47% to $9M.", source_text="no numbers here",
+        )
+        assert note.startswith("⚠ Provenance: unsourced claims")
+        assert "47%" in note and "$9M" in note
+        assert recorded["verdict"] == "failed"
+        assert recorded["violations"] == ["47%", "$9M"]
+
+    def test_note_never_raises(self, monkeypatch):
+        from tools import generate as gen
+
+        def boom(**kw):
+            raise RuntimeError("db on fire")
+
+        monkeypatch.setattr("lib.provenance.record_run", boom)
+        # record_run itself swallows, but simulate an unexpected error path
+        monkeypatch.setattr("lib.provenance.check_claims", boom)
+        note = gen._provenance_note("resume", "", "", "", "x", "y")
+        assert note.startswith("⚠ Provenance check skipped")
+
+
+class TestResumeGraphReactsToVerdict:
+    def _review(self, draft, revisions=0):
+        from workflows.langgraph.resume_graph import _node_review
+
+        return _node_review({
+            "draft": draft, "revisions": revisions, "max_revisions": 1,
+        })
+
+    def test_provenance_warning_triggers_revision(self):
+        out = self._review(
+            "✓ Resume generated for X @ Y\n  ⚠ Provenance: unsourced claims — verify before sending: 47%"
+        )
+        assert out["needs_revision"] is True
+        assert any("Provenance gate" in f for f in out["review_feedback"])
+
+    def test_clean_verdict_passes_review(self):
+        out = self._review(
+            "✓ Resume generated for X @ Y\n  ✓ Provenance: all numeric claims trace to source material"
+        )
+        assert out["needs_revision"] is False
+        assert out["review_feedback"] == []

@@ -118,6 +118,15 @@ def _node_review(state: ResumeGraphState) -> dict:
     # When the LLM path runs, errors are surfaced inline with leading markers.
     if draft.startswith("✗"):
         feedback.append("LLM call returned an error marker.")
+    # The provenance gate runs inside tools.generate (this graph's draft node
+    # delegates to it); an unsourced-claims verdict rides back in the
+    # confirmation string. Treat it as a review failure so the revise loop
+    # gets one shot at a clean regeneration.
+    if "⚠ Provenance: unsourced claims" in draft:
+        feedback.append(
+            "Provenance gate found unsourced numeric claims — regenerate "
+            "using only facts from the master resume."
+        )
 
     revisions = state.get("revisions", 0)
     max_rev = state.get("max_revisions", MAX_REVISIONS)
