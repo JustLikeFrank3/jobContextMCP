@@ -222,3 +222,19 @@ class TestBoundaryAwareContainment:
 
     def test_currency_prefix_still_backs_bare_number(self):
         assert check_claims("delivered 500k in savings", ["a $500k program"]) == []
+
+
+class TestRetrieveDegradation:
+    def test_retrieve_node_degrades_without_embeddings(self, monkeypatch):
+        """Anthropic-only deployments have no OpenAI embeddings key — the
+        pipeline must draft without emphasis hints, not die (field incident:
+        Pi, Jul 2026)."""
+        import lib.rag as rag
+        from tools import langgraph_pipeline as lp
+
+        def boom(*a, **k):
+            raise ValueError("openai_api_key not set in config.json.")
+
+        monkeypatch.setattr(rag, "search", boom)
+        out = lp.retrieve_node({"job_description": "any JD"})
+        assert out == {"retrieved_context": "", "retrieved_hits": []}

@@ -126,16 +126,28 @@ def retrieve_node(state: ResumeAgentState) -> dict:
     """
     from lib.rag import search, format_results
 
-    # Query 1: JD-driven — surfaces what the role actually asks for
-    jd_query = state["job_description"][:800]
-    hits_jd = search(jd_query, n_results=5)
+    # RAG is emphasis guidance, not the source of truth (that's the master
+    # resume, always in the draft prompt). Degrade to no-retrieval rather
+    # than failing the whole pipeline when embeddings are unavailable —
+    # e.g. an Anthropic-only BYOK deployment (no OpenAI embeddings key) or
+    # a partition with no built index.
+    try:
+        # Query 1: JD-driven — surfaces what the role actually asks for
+        jd_query = state["job_description"][:800]
+        hits_jd = search(jd_query, n_results=5)
 
-    # Query 2: AI/agent-focused — ensures jobContextMCP content is represented
-    ai_query = (
-        "RAG pipeline LLM production agentic AI MCP agent architecture "
-        "memory context management embeddings retrieval OpenAI"
-    )
-    hits_ai = search(ai_query, n_results=4)
+        # Query 2: AI/agent-focused — ensures jobContextMCP content is represented
+        ai_query = (
+            "RAG pipeline LLM production agentic AI MCP agent architecture "
+            "memory context management embeddings retrieval OpenAI"
+        )
+        hits_ai = search(ai_query, n_results=4)
+    except Exception as exc:  # noqa: BLE001 — degrade, don't die
+        import logging
+        logging.getLogger(__name__).warning(
+            "RAG retrieval unavailable (%s) — drafting without emphasis hints", exc
+        )
+        return {"retrieved_context": "", "retrieved_hits": []}
 
     # Deduplicate by chunk text, JD hits take priority (inserted first)
     seen: dict[str, dict] = {}
