@@ -123,6 +123,6 @@ LABEL org.opencontainers.image.description="AI-powered job search context MCP se
 LABEL org.opencontainers.image.url="https://github.com/JustLikeFrank3/jobContextMCP"
 LABEL org.opencontainers.image.source="https://github.com/JustLikeFrank3/jobContextMCP"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.version="0.6.0"
+LABEL org.opencontainers.image.version="1.3.0"
 
 ENTRYPOINT ["scripts/docker-entrypoint.sh"]

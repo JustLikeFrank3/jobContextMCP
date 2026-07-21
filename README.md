@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version 1.2.0"/>
+  <img src="https://img.shields.io/badge/version-1.3.0-blue" alt="Version 1.3.0"/>
   <img src="https://img.shields.io/badge/tests-1488%20passing-brightgreen" alt="1488 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2085%20actions-informational" alt="11 domain tools, 85 actions"/>
@@ -165,6 +165,8 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
 | Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
 | Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, Entra-authenticated dashboard routes, LangGraph workflow streaming |
+| Provenance & trust | Deterministic truth gate on every generation path — numeric claims must trace to source material or the pipeline routes back to revision (reviewer approval alone is not enough); per-run audit records (`generation_provenance`), audited master-resume edits (`master_resume_edits`), durable gate metrics on `/metrics` for dashboards |
+| Self-hosting | Disposable local k3d cluster and a documented single-node k3s deployment (proven on a Raspberry Pi 4, 4GB): arm64 image cross-builds, nightly SQLite-safe backups, Prometheus/Grafana/Loki wallboard with a rotating kiosk, and prod-metrics federation over a scoped outbound tunnel |
 
 ---
 
@@ -397,6 +399,14 @@ sequenceDiagram
 | `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
 | `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
 | `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
+
+---
+
+## v1.3 — The provenance release: truth-checked generation, audited edits, self-hosted Kubernetes
+
+v1.3 answers a question every LLM-generated document should face: *can each claim be traced to a source?* A deterministic provenance gate now sits in every generation path — numeric claims (percentages, dollar amounts, magnitudes, years) must exist in the run's source material or the pipeline routes back for revision, with the LLM reviewer's approval explicitly insufficient on its own. Every run writes an audit record; edits to the master resume itself (the gate's ground truth) are audited too, closing the loop where an agent could otherwise legalize a fabricated claim by first writing it into the source. Gate verdicts and pass rates are exported as restart-durable metrics for dashboards.
+
+The release also makes the product genuinely self-hostable: the Docker image now cross-builds for arm64 (a hardcoded x86_64 LaTeX binary had silently blocked Apple Silicon and Raspberry Pi), and the repo ships two new deployment targets — a disposable local k3d cluster for pre-deploy testing, and a documented single-node k3s deployment proven on a Raspberry Pi 4 with nightly backups, a Prometheus/Grafana/Loki wallboard, and production-metrics federation over a scoped outbound tunnel. Full details in the CHANGELOG.
 
 ---
 
