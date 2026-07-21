@@ -1,18 +1,20 @@
+import { useState } from 'react'
 import { Panel } from '../design-system'
 import { useApi, Screen, fmtDate } from './_shared.jsx'
+import { apiPost } from '../auth/api.js'
 
 /* Wellbeing — mood and energy check-ins, per the desktop design handoff.
    Data: GET /dashboard/health/data (_health_payload), plus the existing
    GET /api/dashboard/home payload for the Oura readiness card (same source
-   Home.jsx already uses — no new endpoints).
+   Home.jsx already uses).
 
-   Layout follows the handoff's WELLBEING page: a two-column grid with an
-   energy check-in card (5 emoji tiles) and a 7-DAY MOOD bar chart on the
-   left; the Oura readiness card and RECENT CHECK-INS rows on the right.
+   Layout: a two-column grid with the check-in form (mood tiles, energy
+   slider, notes, productive toggle) and a 7-DAY MOOD bar chart on the left;
+   the Oura readiness card and RECENT CHECK-INS rows on the right.
 
-   There is no check-in write path in the web UI (check-ins arrive via the
-   MCP tools / mobile), so the energy card is read-only and reflects the
-   latest logged check-in instead of inventing an endpoint. */
+   The form POSTs /dashboard/health/checkin, which delegates to the same
+   log_mental_health_checkin tool the MCP and mobile clients use — all three
+   surfaces write identical entries to the tenant's own partition. */
 
 const SCALE = 10 // mood/energy are logged 1–10
 const CYAN_DIM = 'color-mix(in srgb, var(--cyan-500) 35%, transparent)'
@@ -58,36 +60,113 @@ function dayLetter(iso) {
   return Number.isNaN(d.getTime()) ? '·' : 'SMTWTFS'[d.getDay()]
 }
 
-/* Energy check-in card — 5 emoji tiles; the tile matching the latest logged
-   energy is highlighted. Read-only: the web UI has no check-in write path. */
-function EnergyCheckin({ latest }) {
-  const sel = bucket(latest?.energy)
+/* Check-in form — pick a mood tile, set energy on the slider, add optional
+   notes, flag a productive day, submit. POSTs to /dashboard/health/checkin
+   and calls onSaved() so the page reloads its data. */
+function CheckinForm({ onSaved }) {
+  const [moodIdx, setMoodIdx] = useState(2) // default Steady
+  const [energy, setEnergy] = useState(5)
+  const [notes, setNotes] = useState('')
+  const [productive, setProductive] = useState(false)
+  const [status, setStatus] = useState({ busy: false, error: null })
+
+  async function submit() {
+    setStatus({ busy: true, error: null })
+    try {
+      await apiPost('/dashboard/health/checkin', {
+        mood: MOODS[moodIdx].word.toLowerCase(),
+        energy,
+        notes: notes.trim(),
+        productive,
+      })
+      setNotes('')
+      setProductive(false)
+      setStatus({ busy: false, error: null })
+      onSaved?.()
+    } catch (err) {
+      setStatus({ busy: false, error: err?.body?.detail || 'Could not save check-in.' })
+    }
+  }
+
   return (
     <Panel pad="20px" radius="18px">
       <div style={{ fontSize: 14, fontWeight: 'var(--fw-semibold)', color: 'var(--text-soft)' }}>
-        {'How’s your energy today?'}
+        {'How are you today?'}
       </div>
-      <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
+
+      <div style={{ ...MONO_LABEL, letterSpacing: '0.8px', marginTop: 16 }}>Mood</div>
+      <div style={{ marginTop: 8, display: 'flex', gap: 10 }}>
         {MOODS.map((m, i) => (
-          <div
+          <button
             key={m.word}
-            title={`${m.word}${i === sel ? ' · latest check-in' : ''}`}
+            type="button"
+            onClick={() => setMoodIdx(i)}
+            aria-pressed={i === moodIdx}
+            title={m.word}
             style={{
-              flex: 1, height: 58, borderRadius: 13, fontSize: 22,
+              flex: 1, height: 58, borderRadius: 13, fontSize: 22, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: i === sel ? 'color-mix(in srgb, var(--cyan-500) 18%, transparent)' : 'rgba(255,255,255,.05)',
-              border: i === sel ? '1.5px solid var(--cyan-500)' : '1.5px solid transparent',
+              background: i === moodIdx ? 'color-mix(in srgb, var(--cyan-500) 18%, transparent)' : 'rgba(255,255,255,.05)',
+              border: i === moodIdx ? '1.5px solid var(--cyan-500)' : '1.5px solid transparent',
             }}
           >
             {m.emoji}
-          </div>
+          </button>
         ))}
       </div>
-      <div style={{ ...MONO_LABEL, letterSpacing: '0.8px', marginTop: 12 }}>
-        {latest
-          ? `Latest check-in · ${monoDate(latest.date)} · energy ${latest.energy ?? '—'}/${SCALE}`
-          : 'No check-ins yet · log one from chat or mobile'}
+
+      <div style={{ ...MONO_LABEL, letterSpacing: '0.8px', marginTop: 18 }}>
+        {`Energy · ${energy}/${SCALE}`}
       </div>
+      <input
+        type="range" min="1" max={SCALE} step="1" value={energy}
+        onChange={(e) => setEnergy(Number(e.target.value))}
+        aria-label="Energy level"
+        style={{ width: '100%', marginTop: 10, accentColor: 'var(--cyan-500)' }}
+      />
+
+      <div style={{ ...MONO_LABEL, letterSpacing: '0.8px', marginTop: 18 }}>Notes</div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="What’s on your mind today? (optional)"
+        maxLength={2000}
+        rows={3}
+        style={{
+          width: '100%', marginTop: 8, resize: 'vertical', boxSizing: 'border-box',
+          background: 'rgba(255,255,255,.05)', color: 'var(--text)',
+          border: '1.5px solid var(--border-soft)', borderRadius: 12,
+          padding: '10px 12px', fontSize: 13.5, lineHeight: 1.5,
+          fontFamily: 'var(--font-sans)',
+        }}
+      />
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14, cursor: 'pointer', fontSize: 13.5, color: 'var(--text-soft)' }}>
+        <input
+          type="checkbox" checked={productive}
+          onChange={(e) => setProductive(e.target.checked)}
+          style={{ width: 16, height: 16, accentColor: 'var(--cyan-500)' }}
+        />
+        {'Productive day'}
+      </label>
+
+      <button
+        type="button"
+        onClick={submit}
+        disabled={status.busy}
+        style={{
+          width: '100%', marginTop: 16, height: 42, borderRadius: 12, border: 'none',
+          cursor: status.busy ? 'default' : 'pointer',
+          background: 'var(--cyan-500)', color: '#04141a',
+          fontSize: 14, fontWeight: 'var(--fw-semibold)',
+          opacity: status.busy ? 0.6 : 1,
+        }}
+      >
+        {status.busy ? 'Saving…' : 'Check in'}
+      </button>
+      {status.error && (
+        <div style={{ color: 'var(--warn)', fontSize: 12.5, marginTop: 10 }}>{status.error}</div>
+      )}
     </Panel>
   )
 }
@@ -180,21 +259,18 @@ function CheckinRow({ entry }) {
 }
 
 export default function Health() {
-  const { data, loading, error } = useApi('/dashboard/health/data')
+  const { data, loading, error, reload } = useApi('/dashboard/health/data')
   const home = useApi('/api/dashboard/home') // readiness only; failures just hide the card
   const recent = data?.recent || []
   const oura = home.data?.oura || null
 
+  // The check-in form is always shown (it's how the first entry gets made),
+  // so this screen never hits the empty state — only loading/error gate it.
   return (
-    <Screen
-      loading={loading}
-      error={error}
-      empty={!loading && !error && (data?.total_entries ?? 0) === 0}
-      emptyLabel="No check-ins logged yet."
-    >
+    <Screen loading={loading} error={error}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <EnergyCheckin latest={recent[0]} />
+          <CheckinForm onSaved={reload} />
           <MoodChart entries={recent} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -202,14 +278,16 @@ export default function Health() {
           <div style={{ ...MONO_LABEL, letterSpacing: '0.8px' }}>
             {`${data?.total_entries ?? 0} check-ins · avg mood ${data?.avg_mood ?? '—'}/${SCALE} · avg energy ${data?.avg_energy ?? '—'}/${SCALE}`}
           </div>
-          <div>
-            <div style={MONO_LABEL}>Recent check-ins</div>
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {recent.map((e, i) => (
-                <CheckinRow key={`${e.date}-${i}`} entry={e} />
-              ))}
+          {recent.length > 0 && (
+            <div>
+              <div style={MONO_LABEL}>Recent check-ins</div>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {recent.map((e, i) => (
+                  <CheckinRow key={`${e.date}-${i}`} entry={e} />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </Screen>

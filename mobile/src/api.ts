@@ -81,3 +81,11 @@ export const captureUrl = (url: string, text = '') =>
   })
 export const registerPush = (token: string, platform: string) =>
   api('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform }) })
+
+export const logCheckin = (body: {
+  mood: string
+  energy: number
+  notes: string
+  productive: boolean
+}) =>
+  api('/dashboard/health/checkin', { method: 'POST', body: JSON.stringify(body) })

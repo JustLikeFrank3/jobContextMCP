@@ -3,12 +3,11 @@
 //   GET /dashboard/health/data              check-ins (mood label, energy 1-10)
 //   GET /api/dashboard/oura/history?days=14 readiness (optional — card omitted
 //                                           when no ring data exists)
-// The design's emoji check-in row is a desktop/MCP write path
-// (log_mental_health_checkin); mobile is read-only here, so that slot is
-// omitted rather than faked.
-import { useCallback } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
-import { api } from '../api'
+// The check-in form POSTs /dashboard/health/checkin (the same tool the web
+// and MCP clients use), so all three surfaces write identical entries.
+import { useCallback, useState } from 'react'
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { api, logCheckin } from '../api'
 import {
   Card,
   EmptyState,
@@ -38,6 +37,93 @@ function dayLetter(dateStr: string): string {
   if (!m) return ''
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
   return ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]
+}
+
+const MOODS = [
+  { emoji: '😔', word: 'low' },
+  { emoji: '😕', word: 'drained' },
+  { emoji: '🙂', word: 'steady' },
+  { emoji: '😀', word: 'good' },
+  { emoji: '🤩', word: 'great' },
+]
+
+// Check-in form — mood tiles, energy pills (1-10), notes, productive toggle.
+// POSTs the same endpoint as web/MCP, then calls onSaved() to refresh.
+function CheckinForm({ onSaved }: { onSaved: () => void }) {
+  const [moodIdx, setMoodIdx] = useState(2)
+  const [energy, setEnergy] = useState(5)
+  const [notes, setNotes] = useState('')
+  const [productive, setProductive] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit() {
+    setBusy(true)
+    setErr(null)
+    try {
+      await logCheckin({ mood: MOODS[moodIdx].word, energy, notes: notes.trim(), productive })
+      setNotes('')
+      setProductive(false)
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not save check-in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card style={styles.form}>
+      <Text style={styles.formTitle}>How are you today?</Text>
+
+      <Text style={styles.fieldLabel}>MOOD</Text>
+      <View style={styles.moodRow}>
+        {MOODS.map((m, i) => (
+          <Pressable
+            key={m.word}
+            onPress={() => setMoodIdx(i)}
+            style={[styles.moodTile, i === moodIdx && styles.moodTileOn]}
+          >
+            <Text style={styles.moodEmoji}>{m.emoji}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.fieldLabel}>{`ENERGY · ${energy}/10`}</Text>
+      <View style={styles.pillRow}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+          <Pressable
+            key={n}
+            onPress={() => setEnergy(n)}
+            style={[styles.pill, n <= energy && styles.pillOn]}
+          >
+            <Text style={[styles.pillText, n <= energy && styles.pillTextOn]}>{n}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.fieldLabel}>NOTES</Text>
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="What’s on your mind today? (optional)"
+        placeholderTextColor={t.faint}
+        multiline
+        maxLength={2000}
+        style={styles.notesInput}
+      />
+
+      <View style={styles.toggleRow}>
+        <Text style={styles.toggleLabel}>Productive day</Text>
+        <Switch value={productive} onValueChange={setProductive} trackColor={{ true: t.cyan }} />
+      </View>
+
+      <Pressable onPress={submit} disabled={busy} style={[styles.submit, busy && styles.submitBusy]}>
+        <Text style={styles.submitText}>{busy ? 'Saving…' : 'Check in'}</Text>
+      </Pressable>
+      {err ? <Text style={styles.formErr}>{err}</Text> : null}
+    </Card>
+  )
 }
 
 export default function Wellbeing() {
@@ -73,6 +159,8 @@ export default function Wellbeing() {
 
       {data ? (
         <>
+          <CheckinForm onSaved={refresh} />
+
           {data.readiness ? (
             <Card tint="high" style={styles.readinessCard}>
               <Text style={styles.readinessScore}>{data.readiness.readiness}</Text>
@@ -107,7 +195,7 @@ export default function Wellbeing() {
 
           <SectionLabel>Recent check-ins</SectionLabel>
           {data.health.recent.length === 0 ? (
-            <EmptyState message="No check-ins yet — log one from your desktop (or the MCP tools) and trends appear here." />
+            <EmptyState message="No check-ins yet — use the form above and your trends appear here." />
           ) : (
             data.health.recent.slice(0, 10).map((e, i) => (
               <Card key={e.date + i} style={styles.entryCard}>
@@ -139,6 +227,38 @@ export default function Wellbeing() {
 }
 
 const styles = StyleSheet.create({
+  form: { borderRadius: 18, padding: 17, marginTop: 18 },
+  formTitle: { fontSize: 14, fontWeight: '600', color: t.textSoft },
+  fieldLabel: { fontSize: 10.5, color: t.muted2, fontFamily: fonts.mono, letterSpacing: 1, marginTop: 16 },
+  moodRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  moodTile: {
+    flex: 1, height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,.05)', borderWidth: 1.5, borderColor: 'transparent',
+  },
+  moodTileOn: { backgroundColor: 'rgba(0,181,200,.18)', borderColor: t.cyan },
+  moodEmoji: { fontSize: 22 },
+  pillRow: { flexDirection: 'row', gap: 5, marginTop: 8 },
+  pill: {
+    flex: 1, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,.05)',
+  },
+  pillOn: { backgroundColor: 'rgba(0,181,200,.30)' },
+  pillText: { fontSize: 11, color: t.muted2, fontFamily: fonts.mono },
+  pillTextOn: { color: t.textBright, fontWeight: '600' },
+  notesInput: {
+    marginTop: 8, minHeight: 64, borderRadius: 12, padding: 11, fontSize: 13.5, lineHeight: 19,
+    color: t.text, backgroundColor: 'rgba(255,255,255,.05)', borderWidth: 1.5, borderColor: t.hairline,
+    textAlignVertical: 'top',
+  },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
+  toggleLabel: { fontSize: 13.5, color: t.textSoft },
+  submit: {
+    marginTop: 16, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: t.cyan,
+  },
+  submitBusy: { opacity: 0.6 },
+  submitText: { fontSize: 14, fontWeight: '600', color: '#04141a' },
+  formErr: { color: t.red, fontSize: 12.5, marginTop: 10 },
   readinessCard: {
     borderRadius: 18,
     padding: 17,

@@ -1,8 +1,10 @@
-"""Wellbeing dashboard — GET /dashboard/health and /dashboard/health/data."""
+"""Wellbeing dashboard — GET /dashboard/health and /dashboard/health/data,
+POST /dashboard/health/checkin (the web check-in write path)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from lib import config
 from lib.io import _load_json
@@ -10,6 +12,18 @@ from transport.http.auth import require_api_key
 from .shared import html_page
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
+
+
+class CheckinRequest(BaseModel):
+    """A wellbeing check-in submitted from the dashboard. Writes to the
+    authenticated tenant's own partition (the router's require_api_key
+    dependency plus per-request contextvars routing resolve HEALTH_LOG_FILE
+    to users/{oid}/)."""
+
+    mood: str = Field(min_length=1, max_length=40)
+    energy: int = Field(ge=1, le=10)
+    notes: str = Field(default="", max_length=2000)
+    productive: bool = False
 
 
 def _health_payload() -> dict:
@@ -41,6 +55,25 @@ def _health_payload() -> dict:
 @router.get("/health/data")
 async def health_data() -> JSONResponse:
     return JSONResponse(_health_payload())
+
+
+@router.post("/health/checkin")
+async def health_checkin(req: CheckinRequest) -> JSONResponse:
+    """Log a check-in, then return the refreshed payload so the SPA can
+    re-render without a second round-trip. Delegates to the same tool
+    (log_mental_health_checkin) the MCP and mobile clients use, so all
+    three surfaces write identical entries."""
+    from tools.health import log_mental_health_checkin
+
+    confirmation = log_mental_health_checkin(
+        mood=req.mood.strip().lower(),
+        energy=req.energy,
+        notes=req.notes.strip(),
+        productive=req.productive,
+    )
+    payload = _health_payload()
+    payload["confirmation"] = confirmation
+    return JSONResponse(payload)
 
 
 @router.get("/health")
