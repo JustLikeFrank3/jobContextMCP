@@ -41,9 +41,16 @@ from .home import (
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard-api"])
 
 
+# Auth identities that carry no real display name: the cloud PAT/api-key
+# request (identified by OID, name "api-key") and the desktop / default
+# API-key synthetic user (name "Admin"). Greeting any of these literally is
+# wrong — fall back to the tenant's own profile name instead.
+_PLACEHOLDER_NAMES = ("api-key", "admin", "")
+
+
 def _first_name(user: User) -> str:
     raw = (user.name or "").strip()
-    if raw.lower() in ("api-key", ""):
+    if raw.lower() in _PLACEHOLDER_NAMES:
         return "there"
     return raw.split()[0]
 
@@ -51,26 +58,86 @@ def _first_name(user: User) -> str:
 def _welcome(user: User) -> "tuple[str, bool]":
     """(greeting name, is_default) for the Home header.
 
-    Desktop has no identity provider — its synthetic auth user is "Admin" —
-    so greet with the contact name from config.json instead. That block is
-    exactly what setup_workspace fills in, so the placeholder (and the
-    onboarding CTA the frontend hangs off is_default) disappears once the
-    user finishes setup.
+    A real name from the identity provider (Entra JWT) wins. When the auth
+    identity carries no usable name — desktop's synthetic "Admin", or a
+    cloud PAT/api-key request (mobile), which knows the OID but not the
+    display name — fall back to the tenant's contact name from config.json,
+    the block setup_workspace fills in. Only when nothing is known do we
+    show the placeholder + onboarding CTA (is_default=True).
     """
     from lib.app_dirs import is_desktop_mode
 
-    if is_desktop_mode():
-        try:
-            from lib.config import get_contact_info
-
-            contact = (get_contact_info().get("name") or "").strip()
-        except Exception:  # noqa: BLE001 — greeting must never break Home
-            contact = ""
-        if contact:
-            return contact.split()[0], False
-        return "user", True
     name = _first_name(user)
-    return name, name == "there"
+    if name != "there":
+        return name, False
+
+    try:
+        from lib.config import get_contact_info
+
+        contact = (get_contact_info().get("name") or "").strip()
+    except Exception:  # noqa: BLE001 — greeting must never break Home
+        contact = ""
+    if contact:
+        return contact.split()[0], False
+
+    return ("user" if is_desktop_mode() else "there"), True
+
+
+def _backfill_contact_name(user: User) -> None:
+    """Self-heal the greeting for PAT/mobile clients.
+
+    A PAT request (mobile) knows the OID but carries no display name, so the
+    Home greeting falls back to the tenant's contact name — which is blank
+    until the user finishes setup. When a request DOES carry a real name
+    (an Entra-authenticated web session), persist it into the tenant's
+    config once, so later nameless PAT requests can greet by name too. The
+    write lands in the same partition config setup_workspace uses and syncs
+    to the user's other devices. Idempotent (skips once a name exists) and
+    never raises — a greeting must never break Home.
+    """
+    raw = (user.name or "").strip()
+    if raw.lower() in _PLACEHOLDER_NAMES:
+        return
+    try:
+        from lib.config import get_contact_info, update_runtime_config
+
+        if (get_contact_info().get("name") or "").strip():
+            return
+
+        import json
+        import os
+        import sys
+        from pathlib import Path
+
+        from lib.user_context import get_data_folder_override
+
+        override = get_data_folder_override()
+        if override is not None:
+            config_path = Path(override) / "config.json"
+        elif os.environ.get("JOBCONTEXT_CONFIG", "").strip():
+            config_path = Path(os.environ["JOBCONTEXT_CONFIG"].strip())
+        elif getattr(sys, "frozen", False):
+            from lib.app_dirs import desktop_data_dir
+
+            config_path = desktop_data_dir() / "config.json"
+        else:
+            return  # no resolvable per-tenant config to write
+
+        cfg: dict = {}
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        contact = cfg.get("contact") or {}
+        if (contact.get("name") or "").strip():
+            return
+        contact["name"] = raw
+        cfg["contact"] = contact
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(cfg, indent=2, ensure_ascii=False))
+        update_runtime_config({"contact": contact})
+    except Exception:  # noqa: BLE001 — greeting must never break Home
+        pass
 
 
 def _oura_payload(oura: "dict | None") -> "dict | None":
@@ -229,6 +296,7 @@ async def dashboard_home_data(
         for i, p in enumerate(snap.get("priorities", []))
     ]
 
+    _backfill_contact_name(user)
     welcome_name, welcome_is_default = _welcome(user)
     payload = {
         "welcomeName": welcome_name,
