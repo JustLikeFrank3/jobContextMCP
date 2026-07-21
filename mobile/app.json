@@ -2,6 +2,7 @@
   "expo": {
     "name": "jobContext",
     "slug": "jobcontext",
+    "owner": "justlikefrank",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "jobcontext",
