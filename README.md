@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-blue" alt="Version 1.3.0"/>
+  <img src="https://img.shields.io/badge/version-1.3.1-blue" alt="Version 1.3.1"/>
   <img src="https://img.shields.io/badge/tests-1488%20passing-brightgreen" alt="1488 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2085%20actions-informational" alt="11 domain tools, 85 actions"/>
