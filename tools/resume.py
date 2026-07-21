@@ -104,6 +104,10 @@ def update_master_resume(old_text: str, new_text: str) -> str:
         )
 
     master_path.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
+    # Audit trail: the provenance gate validates claims against this file —
+    # edits to the source of truth must be visible (lib/provenance, v8).
+    from lib.provenance import record_master_edit
+    record_master_edit(old_text, new_text)
     return (
         f"✓ Master resume updated ({master_path.name}):\n"
         f"  - {old_text}\n"

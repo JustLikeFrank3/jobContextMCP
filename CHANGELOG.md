@@ -6,6 +6,37 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.3.0] - 2026-07-21
+
+The provenance release: generated documents are now truth-checked, deterministically, on every generation path — plus two new deployment targets (local k3d and a self-hosted Raspberry Pi k3s cluster with a Grafana wallboard), a Docker fix that unblocks native ARM builds, and a master-resume edit tool with a full audit trail. 1488 passing tests.
+
+### Features
+
+- **Provenance gate** (`lib/provenance.py`) -- a deterministic validation node in the LangGraph resume pipeline: every numeric claim in a draft (percentages, currency, magnitudes, multipliers, years) must exist in the run's source material (master resume, STAR stories, retrieved chunks, JD) or a conditional edge routes back to revision — LLM reviewer approval alone is no longer sufficient. Regex extraction + boundary-aware normalized matching ('2M' inside '$1.2M' does not count as sourced); no LLM cost. Runs after the initial draft AND every revision.
+- **Gate coverage on all generation paths** -- single-shot `generate_resume` / `generate_cover_letter` (the dashboard path) run the gate post-generation and surface the verdict in the confirmation string (`⚠` flows into `ResumeService.notes`); the `workflows/langgraph` resume graph treats an unsourced-claims verdict as a review failure and gets one clean-regeneration attempt.
+- **Provenance audit trail** -- every run writes a `generation_provenance` row (migration v7): claims, violations, source-chunk hashes, verdict, revision count. A rejected-then-regenerated document shows its own history. First production run: initial draft rejected, two revisions, converged with every claim traced.
+- **Master resume edit tool with audit** -- `materials(action="update_master_resume")` edits the master source resume in place (exact-match find/replace, uniqueness-guarded). Because the gate validates claims *against* the master resume, every edit writes a `master_resume_edits` audit row (migration v8: timestamp, requesting OID, old/new text) so the source of truth cannot drift invisibly.
+- **Durable provenance metrics** -- `/metrics` appends gauges computed from the audit tables at scrape time (`provenance_runs_total{verdict,kind}`, `provenance_violations_recorded_total`, `master_resume_edits_total`), so dashboards show all-time gate history that survives pod restarts.
+- **Configurable API-key identity name** -- `API_KEY_USER_NAME` sets the greeting name in API-key / no-auth mode (default remains "Admin"); the partition id stays `admin`.
+- **RAG degradation instead of failure** -- the agent pipeline's retrieve node drafts without emphasis hints (with a logged warning) when embeddings are unavailable (e.g. Anthropic-only BYOK deployments — Anthropic has no embeddings API), instead of failing the whole generation.
+
+### Bug fixes
+
+- **arm64 image builds were impossible** -- the Dockerfile hardcoded an x86_64 tectonic (LaTeX) binary; now selected by `TARGETARCH` with an explicit failure on unknown architectures. Anyone running the image on Apple Silicon had been silently on emulation. The Vite stage also builds on `$BUILDPLATFORM` so cross-builds run node natively.
+- **`/health` reported `auth_enabled: false` on Entra deployments** -- the health payload asked the API-key settings instead of the active auth provider; it now reflects real enforcement.
+- **Sonar S2083 false positive** in `lib/sync_client.py` contact persistence -- same `open()` idiom previously cleared in `transport/http/desktop.py`; no behavior change.
+- **Pi/constrained-hardware probe kills** -- document generation can starve `/health` for the full run in the single-process architecture; the Pi overlay's liveness probe now tolerates ~15 min (the real fix — generation through the control plane — remains the documented P1).
+
+### Infrastructure
+
+- **Local k3d cluster** (`k8s/local/`, `scripts/local-cluster.sh`) -- disposable single-command Kubernetes cluster running the real image and manifests, for catching works-locally-breaks-deployed bugs before a qa push. Link-local Entra support documented (localhost redirect-URI exemption).
+- **Self-hosted Pi deployment** (`k8s/pi/`, `scripts/pi-deploy.sh`) -- single-node k3s on a Raspberry Pi 4: arm64 cross-build shipped over a direct ethernet link (`docker save | k3s ctr images import`), ServiceLB exposure, secrets over stdin, nightly SQLite-safe USB backups with 7-day retention (`scripts/pi-backup.sh` + systemd timer), and a reboot-proof chromium kiosk (single-instance flock, Grafana-wait wrapper, cursor auto-hide).
+- **Pi monitoring & wallboard** (`k8s/monitoring/pi/`) -- extends the dashboards-as-code stack with node-exporter (CPU temp), kube-state-metrics (RBAC-scoped), Loki + promtail logs (static path-glob tailing), and a four-page 1080p kiosk playlist: Application / Cluster / Production / Provenance, each with banner labels.
+- **AKS metrics on the wallboard without exposing prod** (`k8s/monitoring/aks-prom-reader.yaml`) -- a port-forward-only ServiceAccount feeds an outbound tunnel on the Pi (systemd, loopback + direct-link binding only); the Pi's Prometheus federates the cloud app series locally so dashboard renders never touch the tunnel (kubectl port-forward wedges under concurrent connections).
+- **Version reconciliation** -- `lib/version.py` and the Docker image label now match the changelog lineage (1.3.0); previously three schemes disagreed (0.7.0-dev / 0.6.0 / 1.2.0).
+
+---
+
 ## [1.2.0] - 2026-07-02
 
 React single-page dashboard, Oura Ring integration, encryption of per-user OAuth tokens at rest, a hosted QA environment, a full brand refresh, and a multi-tenant data-isolation fix. 1227 passing tests.

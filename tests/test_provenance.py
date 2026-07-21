@@ -310,3 +310,88 @@ class TestResumeGraphReactsToVerdict:
         )
         assert out["needs_revision"] is False
         assert out["review_feedback"] == []
+
+
+class TestDurableMetrics:
+    def test_gauges_from_db(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+
+        db = tmp_path / "prov.db"
+        for verdict, violations in [("passed", []), ("passed", []), ("failed", ["47%", "2M"])]:
+            record_run(
+                kind="resume", company="X", role="Y", job_description="jd",
+                chunk_texts=[], claims=["1%"], violations=violations,
+                verdict=verdict, revisions=0, db_path=db,
+            )
+        out = render_durable_metrics(db_path=db)
+        assert 'provenance_runs_total{verdict="passed",kind="resume"} 2' in out
+        assert 'provenance_runs_total{verdict="failed",kind="resume"} 1' in out
+        assert 'provenance_violations_recorded_total{kind="resume"} 2' in out
+
+    def test_empty_db_renders_nothing(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+        from lib.db import get_connection
+
+        db = tmp_path / "empty.db"
+        with get_connection(path=db):
+            pass  # create schema only
+        assert render_durable_metrics(db_path=db) == ""
+
+    def test_never_raises(self, tmp_path):
+        from lib.provenance import render_durable_metrics
+
+        assert render_durable_metrics(db_path=tmp_path) == ""  # dir, not a db
+
+
+class TestMasterEditAudit:
+    def test_edit_recorded(self, tmp_path):
+        from lib.provenance import record_master_edit
+        import sqlite3
+
+        db = tmp_path / "audit.db"
+        record_master_edit("931 passing tests", "1484 passing tests", db_path=db)
+        rows = sqlite3.connect(db).execute(
+            "SELECT oid, old_text, new_text FROM master_resume_edits"
+        ).fetchall()
+        assert rows == [("", "931 passing tests", "1484 passing tests")]
+
+    def test_never_raises(self, tmp_path):
+        from lib.provenance import record_master_edit
+
+        record_master_edit("a", "b", db_path=tmp_path)  # dir, not a db
+
+    def test_update_master_resume_writes_audit_row(self, monkeypatch, tmp_path):
+        import sqlite3
+        from tools import resume as resume_mod
+        import lib.provenance as prov
+
+        master = tmp_path / "master.txt"
+        master.write_text("I maintain 931 passing tests today.", encoding="utf-8")
+        monkeypatch.setattr(
+            resume_mod.config, "get_active_master_resume_path", lambda: master,
+            raising=False,
+        )
+        db = tmp_path / "audit.db"
+        real = prov.record_master_edit
+        monkeypatch.setattr(
+            prov, "record_master_edit",
+            lambda old, new, db_path=None: real(old, new, db_path=db),
+        )
+        out = resume_mod.update_master_resume("931 passing tests", "1484 passing tests")
+        assert out.startswith("✓")
+        assert "1484 passing tests" in master.read_text(encoding="utf-8")
+        n = sqlite3.connect(db).execute(
+            "SELECT COUNT(*) FROM master_resume_edits"
+        ).fetchone()[0]
+        assert n == 1
+
+    def test_edit_gauge_rendered(self, tmp_path):
+        from lib.provenance import record_master_edit, record_run, render_durable_metrics
+
+        db = tmp_path / "m.db"
+        record_run(kind="resume", company="X", role="Y", job_description="j",
+                   chunk_texts=[], claims=[], violations=[], verdict="passed",
+                   revisions=0, db_path=db)
+        record_master_edit("a", "b", db_path=db)
+        out = render_durable_metrics(db_path=db)
+        assert "master_resume_edits_total 1" in out

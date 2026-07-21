@@ -156,3 +156,82 @@ def record_run(
             inc("provenance_violations_total", amount=len(violations), kind=kind)
     except Exception:  # noqa: BLE001 — logging must never break generation
         pass
+
+
+def render_durable_metrics(db_path=None) -> str:
+    """Prometheus gauge lines computed from the generation_provenance table.
+
+    The in-process counters (provenance_checks_total) die with the serving
+    process — pod restarts zeroed the wallboard's provenance stats while the
+    durable truth sat in sqlite. Appended to /metrics so dashboards read
+    all-time history. On multi-tenant cloud /metrics has no user context, so
+    this reads the default (root) DB and may legitimately return nothing —
+    per-tenant rows live in partition DBs; the in-process counters still
+    cover live activity there.
+
+    Never raises; returns "" on any failure.
+    """
+    try:
+        from lib.db import get_connection
+
+        with get_connection(path=db_path) as conn:
+            rows = conn.execute(
+                """SELECT verdict, kind, COUNT(*),
+                          COALESCE(SUM(json_array_length(violations)), 0)
+                   FROM generation_provenance GROUP BY verdict, kind"""
+            ).fetchall()
+        if not rows:
+            return ""
+        lines = ["# TYPE provenance_runs_total gauge"]
+        viols: dict[str, int] = {}
+        for verdict, kind, count, viol_count in rows:
+            lines.append(
+                f'provenance_runs_total{{verdict="{verdict}",kind="{kind}"}} {count}'
+            )
+            viols[kind] = viols.get(kind, 0) + int(viol_count or 0)
+        lines.append("# TYPE provenance_violations_recorded_total gauge")
+        for kind, n in sorted(viols.items()):
+            lines.append(
+                f'provenance_violations_recorded_total{{kind="{kind}"}} {n}'
+            )
+        try:
+            from lib.db import get_connection as _gc
+            with _gc(path=db_path) as c2:
+                row = c2.execute(
+                    "SELECT COUNT(*) FROM master_resume_edits"
+                ).fetchone()
+            lines.append("# TYPE master_resume_edits_total gauge")
+            lines.append(f"master_resume_edits_total {int(row[0])}")
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n".join(lines) + "\n"
+    except Exception:  # noqa: BLE001 — metrics must never break the endpoint
+        return ""
+
+
+def record_master_edit(old_text: str, new_text: str, db_path=None) -> None:
+    """Audit one in-place master resume edit (master_resume_edits, v8).
+
+    The gate checks generated claims against the master resume; this table
+    makes edits to that source of truth visible instead of silent. Captures
+    the requesting user's oid when request context exists. Never raises.
+    """
+    try:
+        from lib.db import get_connection
+
+        oid = ""
+        try:
+            from lib.user_context import get_current_user_oid
+
+            oid = get_current_user_oid() or ""
+        except Exception:  # noqa: BLE001 — context is optional (stdio/desktop)
+            pass
+        with get_connection(path=db_path) as conn:
+            conn.execute(
+                "INSERT INTO master_resume_edits (ts, oid, old_text, new_text) "
+                "VALUES (?, ?, ?, ?)",
+                (datetime.now(timezone.utc).isoformat(), oid, old_text, new_text),
+            )
+        inc("master_resume_edits_total")
+    except Exception:  # noqa: BLE001 — auditing must never break the edit
+        pass

@@ -171,12 +171,17 @@ data:
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)"}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
-        {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":3,"w":6,"h":5},
+        {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
-        {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":18,"y":3,"w":6,"h":5},
+        {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":16,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
+        {"type": "stat", "title": "Gate pass rate (24h, prod)", "gridPos": {"x":20,"y":3,"w":4,"h":5},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "100 * sum(increase(provenance_checks_total{namespace=\"jcmcp\",verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total{namespace=\"jcmcp\"}[24h])), 1)"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"text","value":null},{"color":"red","value":1},{"color":"orange","value":80},{"color":"green","value":99}]}}}},
         {"type": "timeseries", "title": "Request rate by route (prod)", "gridPos": {"x":0,"y":8,"w":12,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\"}[5m])) by (route)", "legendFormat": "{{route}}"}],
@@ -185,12 +190,15 @@ data:
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "rate(http_request_seconds_sum{namespace=\"jcmcp\"}[5m]) / rate(http_request_seconds_count{namespace=\"jcmcp\"}[5m])", "legendFormat": "{{route}}"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "Work items by kind/status", "gridPos": {"x":0,"y":17,"w":12,"h":10},
+        {"type": "timeseries", "title": "Work items by kind/status", "gridPos": {"x":0,"y":17,"w":8,"h":10},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(work_items_total[1h])) by (kind, status)", "legendFormat": "{{kind}}/{{status}}"}]},
-        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":12,"y":17,"w":12,"h":10},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":8,"y":17,"w":8,"h":10},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]}
+         "targets": [{"expr": "sum(increase(llm_tokens_total[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
+        {"type": "timeseries", "title": "Provenance gate verdicts (prod)", "gridPos": {"x":16,"y":17,"w":8,"h":10},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum by(verdict)(increase(provenance_checks_total{namespace=~\"jcmcp|jcmcp-qa\"}[1h]))", "legendFormat": "{{verdict}}"}]}
       ]
     }
   kiosk-provenance.json: |
@@ -225,7 +233,7 @@ data:
         },
         {
           "type": "stat",
-          "title": "Checks (24h)",
+          "title": "Checks (total)",
           "gridPos": {
             "x": 0,
             "y": 3,
@@ -237,13 +245,13 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(increase(provenance_checks_total[24h])) or vector(0)"
+              "expr": "sum(provenance_runs_total) or vector(0)"
             }
           ]
         },
         {
           "type": "stat",
-          "title": "Pass rate (24h)",
+          "title": "Pass rate",
           "gridPos": {
             "x": 4,
             "y": 3,
@@ -255,7 +263,7 @@ data:
           },
           "targets": [
             {
-              "expr": "100 * sum(increase(provenance_checks_total{verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total[24h])), 1)"
+              "expr": "100 * sum(provenance_runs_total{verdict=\"passed\"}) / clamp_min(sum(provenance_runs_total), 1)"
             }
           ],
           "fieldConfig": {
@@ -284,7 +292,7 @@ data:
         },
         {
           "type": "stat",
-          "title": "Violations caught (24h)",
+          "title": "Violations caught",
           "gridPos": {
             "x": 8,
             "y": 3,
@@ -296,7 +304,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(increase(provenance_violations_total[24h])) or vector(0)"
+              "expr": "sum(provenance_violations_recorded_total) or vector(0)"
             }
           ],
           "fieldConfig": {
