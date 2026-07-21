@@ -214,6 +214,18 @@ _MIGRATIONS = [
         verdict      TEXT    NOT NULL,
         revisions    INTEGER NOT NULL DEFAULT 0
     )""",
+    # v8 — master resume edit audit (lib/provenance.record_master_edit): the
+    # provenance gate validates generated claims AGAINST the master resume,
+    # and update_master_resume lets MCP clients edit it — an agent could
+    # otherwise legalize a fabricated claim by first writing it into the
+    # source of truth, invisibly. Every in-place edit leaves a row.
+    """CREATE TABLE IF NOT EXISTS master_resume_edits (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts        TEXT    NOT NULL,
+        oid       TEXT    NOT NULL DEFAULT '',
+        old_text  TEXT    NOT NULL,
+        new_text  TEXT    NOT NULL
+    )""",
 ]
 
 
