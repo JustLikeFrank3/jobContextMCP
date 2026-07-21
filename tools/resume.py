@@ -65,6 +65,18 @@ def update_master_resume(old_text: str, new_text: str) -> str:
         Confirmation with the replaced text, or an actionable error.
     """
     master_path = config.get_active_master_resume_path()
+    # Real guard, not scanner appeasement: the fallback filename component is
+    # a tenant-writable config value (master_resume_path), so canonicalize
+    # and refuse to touch anything outside the active workspace — the
+    # partition-escape class (PR #90 post-mortem). Also the S2083-recognized
+    # sanitizer pattern (canonicalize + containment check).
+    workspace_root = config.get_active_workspace_folder().resolve()
+    master_path = master_path.resolve()
+    if not master_path.is_relative_to(workspace_root):
+        return (
+            "✗ Master resume path resolves outside the active workspace — "
+            "refusing to edit. Check master_resume_path in config."
+        )
     if not master_path.exists():
         return (
             f"✗ Master resume not found: {master_path.name}. "

@@ -371,6 +371,10 @@ class TestMasterEditAudit:
             resume_mod.config, "get_active_master_resume_path", lambda: master,
             raising=False,
         )
+        monkeypatch.setattr(
+            resume_mod.config, "get_active_workspace_folder", lambda: tmp_path,
+            raising=False,
+        )
         db = tmp_path / "audit.db"
         real = prov.record_master_edit
         monkeypatch.setattr(
@@ -395,3 +399,26 @@ class TestMasterEditAudit:
         record_master_edit("a", "b", db_path=db)
         out = render_durable_metrics(db_path=db)
         assert "master_resume_edits_total 1" in out
+
+
+    def test_edit_refused_outside_workspace(self, monkeypatch, tmp_path):
+        """Partition-escape guard: a master_resume_path resolving outside the
+        active workspace (tenant-writable config value) must be refused."""
+        from tools import resume as resume_mod
+
+        outside = tmp_path / "outside" / "master.txt"
+        outside.parent.mkdir()
+        outside.write_text("secret 42%", encoding="utf-8")
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        monkeypatch.setattr(
+            resume_mod.config, "get_active_master_resume_path", lambda: outside,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            resume_mod.config, "get_active_workspace_folder", lambda: workspace,
+            raising=False,
+        )
+        out = resume_mod.update_master_resume("42%", "43%")
+        assert out.startswith("✗") and "outside the active workspace" in out
+        assert outside.read_text(encoding="utf-8") == "secret 42%"
