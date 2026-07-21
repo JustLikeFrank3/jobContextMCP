@@ -7,6 +7,12 @@
     "scheme": "jobcontext",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0b1117",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d0996a26-fa80-45fc-9de7-b43cfe095ebc"
+    },
     "ios": {
       "bundleIdentifier": "app.jobcontext.mobile",
       "supportsTablet": true,
