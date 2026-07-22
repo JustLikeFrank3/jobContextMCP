@@ -172,10 +172,36 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   )
 }
 
-export function EmptyState({ message }: { message: string }) {
+/** Empty states recommend an action instead of announcing absence: an
+ *  upbeat headline, optional "great time to:" suggestions, and a button. */
+export function EmptyState({
+  message,
+  suggestions,
+  actionLabel,
+  onAction,
+}: {
+  message: string
+  suggestions?: string[]
+  actionLabel?: string
+  onAction?: () => void
+}) {
   return (
     <View style={styles.centerBox}>
       <Text style={styles.centerText}>{message}</Text>
+      {suggestions?.length ? (
+        <View style={styles.emptySuggestions}>
+          {suggestions.map((s) => (
+            <Text key={s} style={styles.emptySuggestion}>
+              •  {s}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {actionLabel && onAction ? (
+        <Pressable onPress={onAction} style={styles.retry}>
+          <Text style={styles.retryText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -202,6 +228,8 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700' },
   statLabel: { fontSize: 10.5, marginTop: 2 },
   centerBox: { alignItems: 'center', paddingVertical: 48, gap: 10 },
+  emptySuggestions: { gap: 5, alignItems: 'flex-start' },
+  emptySuggestion: { color: t.textSecondary, fontSize: 12.5, lineHeight: 18 },
   centerText: { color: t.muted, fontSize: 13, textAlign: 'center', lineHeight: 19, paddingHorizontal: 24 },
   errorText: { color: t.red, fontSize: 13, textAlign: 'center', lineHeight: 19, paddingHorizontal: 24 },
   retry: {

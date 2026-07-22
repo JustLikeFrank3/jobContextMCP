@@ -1,13 +1,15 @@
-// jobContext mobile — capture reality, glance at state. Deep work lives on
-// the desktop; this app is the share sheet, the inbox, and the notification.
+// jobContext mobile — capture reality, glance at state, and now explore
+// what was captured. Deep work (generation, editing) stays on the desktop.
 //
-// UI per the design handoff: 6 tabs (Home, Pipeline, Interviews, People,
-// Posts, Wellbeing) on a navy-ink theme with cyan active states, plus an
-// animated splash while the app boots. The previous Inbox and Settings
-// screens stay mounted as chromeless routes (reached from Home) so the
-// activity feed and the API-key connect flow keep working unchanged.
+// Navigation is a root native stack over the 6-tab bar: tabs glance, and
+// every card pushes a detail page (jobs, interviews, people, companies,
+// posts, check-ins) so cards are never dead ends. Global search and the
+// activity/timeline feed live on the stack too. The previous Inbox and
+// Settings screens keep working unchanged as stack routes reached from
+// Home.
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { useEffect, useState } from 'react'
@@ -22,6 +24,14 @@ import Posts from './screens/Posts'
 import Wellbeing from './screens/Wellbeing'
 import Inbox from './screens/Inbox'
 import Settings from './screens/Settings'
+import Search from './screens/Search'
+import Timeline from './screens/Timeline'
+import JobDetail from './screens/detail/JobDetail'
+import InterviewDetail from './screens/detail/InterviewDetail'
+import PersonDetail from './screens/detail/PersonDetail'
+import CompanyDetail from './screens/detail/CompanyDetail'
+import PostDetail from './screens/detail/PostDetail'
+import CheckinDetail from './screens/detail/CheckinDetail'
 import { captureUrl, isConnected } from './api'
 import { extractJobPage } from './pageExtract'
 import { ensurePushRegistration } from './push'
@@ -41,6 +51,7 @@ import { t } from './ui/tokens'
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
 const Tab = createBottomTabNavigator()
+const Stack = createNativeStackNavigator()
 
 const theme = {
   ...DarkTheme,
@@ -123,6 +134,64 @@ function CaptureBanner() {
   )
 }
 
+function Tabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: t.tabBg,
+          borderTopColor: t.hairline,
+          borderTopWidth: 1,
+        },
+        tabBarActiveTintColor: t.cyan,
+        tabBarInactiveTintColor: t.tabInactive,
+        tabBarLabelStyle: { fontSize: 9.5, fontWeight: '500' },
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={Home}
+        options={{ tabBarIcon: ({ color }) => <HomeIcon color={color} /> }}
+      />
+      <Tab.Screen
+        name="Pipeline"
+        component={Pipeline}
+        options={{ tabBarIcon: ({ color }) => <PipelineIcon color={color} /> }}
+      />
+      <Tab.Screen
+        name="Interviews"
+        component={Interviews}
+        options={{ tabBarIcon: ({ color }) => <InterviewsIcon color={color} /> }}
+      />
+      <Tab.Screen
+        name="People"
+        component={People}
+        options={{ tabBarIcon: ({ color }) => <PeopleIcon color={color} /> }}
+      />
+      <Tab.Screen
+        name="Posts"
+        component={Posts}
+        options={{ tabBarIcon: ({ color }) => <PostsIcon color={color} /> }}
+      />
+      <Tab.Screen
+        name="Wellbeing"
+        component={Wellbeing}
+        options={{ tabBarIcon: ({ color }) => <WellbeingIcon color={color} /> }}
+      />
+    </Tab.Navigator>
+  )
+}
+
+// Native-stack header styling for the routes that keep a system header.
+const headered = (title: string) => ({
+  headerShown: true,
+  headerTitle: title,
+  headerStyle: { backgroundColor: t.bg },
+  headerTitleStyle: { color: t.text },
+  headerTintColor: t.cyan,
+})
+
 export default function App() {
   useIncomingShares()
   const [booted, setBooted] = useState(false)
@@ -144,75 +213,26 @@ export default function App() {
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
         <CaptureBanner />
-        <Tab.Navigator
+        <Stack.Navigator
           screenOptions={{
             headerShown: false,
-            tabBarStyle: {
-              backgroundColor: t.tabBg,
-              borderTopColor: t.hairline,
-              borderTopWidth: 1,
-            },
-            tabBarActiveTintColor: t.cyan,
-            tabBarInactiveTintColor: t.tabInactive,
-            tabBarLabelStyle: { fontSize: 9.5, fontWeight: '500' },
+            animation: 'slide_from_right',
+            contentStyle: { backgroundColor: t.bg },
           }}
         >
-          <Tab.Screen
-            name="Home"
-            component={Home}
-            options={{ tabBarIcon: ({ color }) => <HomeIcon color={color} /> }}
-          />
-          <Tab.Screen
-            name="Pipeline"
-            component={Pipeline}
-            options={{ tabBarIcon: ({ color }) => <PipelineIcon color={color} /> }}
-          />
-          <Tab.Screen
-            name="Interviews"
-            component={Interviews}
-            options={{ tabBarIcon: ({ color }) => <InterviewsIcon color={color} /> }}
-          />
-          <Tab.Screen
-            name="People"
-            component={People}
-            options={{ tabBarIcon: ({ color }) => <PeopleIcon color={color} /> }}
-          />
-          <Tab.Screen
-            name="Posts"
-            component={Posts}
-            options={{ tabBarIcon: ({ color }) => <PostsIcon color={color} /> }}
-          />
-          <Tab.Screen
-            name="Wellbeing"
-            component={Wellbeing}
-            options={{ tabBarIcon: ({ color }) => <WellbeingIcon color={color} /> }}
-          />
-          {/* Chromeless routes — no tab-bar item; reached from Home. */}
-          <Tab.Screen
-            name="Activity"
-            component={Inbox}
-            options={{
-              tabBarItemStyle: { display: 'none' },
-              headerShown: true,
-              headerTitle: 'Activity',
-              headerStyle: { backgroundColor: t.bg },
-              headerTitleStyle: { color: t.text },
-              headerTintColor: t.cyan,
-            }}
-          />
-          <Tab.Screen
-            name="Settings"
-            component={Settings}
-            options={{
-              tabBarItemStyle: { display: 'none' },
-              headerShown: true,
-              headerTitle: 'Settings',
-              headerStyle: { backgroundColor: t.bg },
-              headerTitleStyle: { color: t.text },
-              headerTintColor: t.cyan,
-            }}
-          />
-        </Tab.Navigator>
+          <Stack.Screen name="Tabs" component={Tabs} />
+          {/* Detail pages draw their own chrome (back + share). */}
+          <Stack.Screen name="JobDetail" component={JobDetail} />
+          <Stack.Screen name="InterviewDetail" component={InterviewDetail} />
+          <Stack.Screen name="PersonDetail" component={PersonDetail} />
+          <Stack.Screen name="CompanyDetail" component={CompanyDetail} />
+          <Stack.Screen name="PostDetail" component={PostDetail} />
+          <Stack.Screen name="CheckinDetail" component={CheckinDetail} />
+          <Stack.Screen name="Search" component={Search} options={{ animation: 'fade_from_bottom' }} />
+          <Stack.Screen name="Timeline" component={Timeline} options={headered('Timeline')} />
+          <Stack.Screen name="Activity" component={Inbox} options={headered('Activity')} />
+          <Stack.Screen name="Settings" component={Settings} options={headered('Settings')} />
+        </Stack.Navigator>
       </NavigationContainer>
       {!booted && <Splash />}
     </SafeAreaProvider>
