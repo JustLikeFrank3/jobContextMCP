@@ -107,10 +107,20 @@ export default function Home() {
               : ''}
           </Text>
         </View>
-        <Pressable style={styles.avatar} onPress={() => nav.navigate('Settings')}>
-          <Text style={styles.avatarText}>{(data?.home.welcomeName || '·')[0].toUpperCase()}</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable style={styles.searchBtn} onPress={() => nav.navigate('Search')} hitSlop={6}>
+            <Text style={styles.searchIcon}>⌕</Text>
+          </Pressable>
+          <Pressable style={styles.avatar} onPress={() => nav.navigate('Settings')}>
+            <Text style={styles.avatarText}>{(data?.home.welcomeName || '·')[0].toUpperCase()}</Text>
+          </Pressable>
+        </View>
       </View>
+
+      {/* Global search — one box over jobs, people, companies, everything */}
+      <Pressable onPress={() => nav.navigate('Search')} style={styles.searchPill}>
+        <Text style={styles.searchPillText}>⌕  Search jobs, people, companies…</Text>
+      </Pressable>
 
       {loading && !data ? <LoadingState /> : null}
       {error && !data ? <ErrorState message={error} onRetry={refresh} /> : null}
@@ -143,15 +153,17 @@ export default function Home() {
                 {data.followups.map((p) => {
                   const chip = followupChip(p.outreach_status)
                   return (
-                    <Card key={p.id} style={styles.followRow}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.followName}>{p.company || p.name}</Text>
-                        <Text style={styles.followSub} numberOfLines={1}>
-                          {p.company ? p.name : p.outreach_status || ''}
-                        </Text>
-                      </View>
-                      <StatusChip {...chip} />
-                    </Card>
+                    <Pressable key={p.id} onPress={() => nav.navigate('PersonDetail', { person: p })}>
+                      <Card style={styles.followRow}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.followName}>{p.company || p.name}</Text>
+                          <Text style={styles.followSub} numberOfLines={1}>
+                            {p.company ? p.name : p.outreach_status || ''}
+                          </Text>
+                        </View>
+                        <StatusChip {...chip} />
+                      </Card>
+                    </Pressable>
                   )
                 })}
               </View>
@@ -162,20 +174,24 @@ export default function Home() {
           {data.nextInterview && (
             <>
               <SectionLabel>Next interview</SectionLabel>
-              <Card raised style={{ marginTop: 4 }}>
-                <View style={styles.ivTop}>
-                  <Text style={styles.ivTitle} numberOfLines={1}>
-                    {[data.nextInterview.company, data.nextInterview.role]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
-                  <Text style={styles.ivCountdown}>{countdownChip(data.nextInterview.interview_date)}</Text>
-                </View>
-                <Text style={styles.ivMeta}>{interviewTimeLine(data.nextInterview)}</Text>
-                <Pressable onPress={() => nav.navigate('Interviews')}>
-                  <Text style={styles.ivLink}>View in Interviews →</Text>
-                </Pressable>
-              </Card>
+              <Pressable
+                onPress={() =>
+                  nav.navigate('InterviewDetail', { interview: { ...data.nextInterview, upcoming: true } })
+                }
+              >
+                <Card raised style={{ marginTop: 4 }}>
+                  <View style={styles.ivTop}>
+                    <Text style={styles.ivTitle} numberOfLines={1}>
+                      {[data.nextInterview.company, data.nextInterview.role]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                    <Text style={styles.ivCountdown}>{countdownChip(data.nextInterview.interview_date)}</Text>
+                  </View>
+                  <Text style={styles.ivMeta}>{interviewTimeLine(data.nextInterview)}</Text>
+                  <Text style={styles.ivLink}>Open interview →</Text>
+                </Card>
+              </Pressable>
             </>
           )}
 
@@ -187,9 +203,15 @@ export default function Home() {
             </Card>
           ) : null}
 
-          {/* Recent activity → Inbox feed (kept from the previous app) */}
-          <Pressable onPress={() => nav.navigate('Activity')}>
+          {/* Feeds: everything chronological, and the raw sync journal */}
+          <Pressable onPress={() => nav.navigate('Timeline')}>
             <Card style={styles.activityRow}>
+              <Text style={styles.activityText}>Timeline — your whole search, in order</Text>
+              <Text style={styles.activityArrow}>→</Text>
+            </Card>
+          </Pressable>
+          <Pressable onPress={() => nav.navigate('Activity')}>
+            <Card style={{ ...styles.activityRow, marginTop: 8 }}>
               <Text style={styles.activityText}>Recent activity</Text>
               <Text style={styles.activityArrow}>→</Text>
             </Card>
@@ -215,6 +237,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { fontWeight: '700', color: t.cyanBright },
+  searchBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: t.chipBg,
+    borderWidth: 1,
+    borderColor: t.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchIcon: { color: t.textSecondary, fontSize: 19, lineHeight: 22 },
+  searchPill: {
+    marginTop: 14,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: t.chipBg,
+    borderWidth: 1,
+    borderColor: t.cardBorder,
+  },
+  searchPillText: { color: t.faint, fontSize: 13.5 },
   prioLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, color: t.cyanBright, fontFamily: fonts.mono },
   prioRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   checkbox: { width: 18, height: 18, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(215,227,248,.35)' },
