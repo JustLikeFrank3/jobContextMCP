@@ -4,9 +4,11 @@
 // (call / email / LinkedIn) are carried over from the previous Networking
 // screen so no functionality is lost.
 // Data: GET /dashboard/people/data → { people[], follow_up_queue[], recent[] }.
+import { useNavigation } from '@react-navigation/native'
 import { useCallback, useMemo, useState } from 'react'
 import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
+import { PressableScale } from '../ui/detail'
 import {
   Card,
   Chip,
@@ -76,13 +78,14 @@ function extractActions(p: Person) {
   return { email, phone, linkedin }
 }
 
-function PersonCard({ p, index }: { p: Person; index: number }) {
+function PersonCard({ p, index, onOpen }: { p: Person; index: number; onOpen: () => void }) {
   const chip = STATUS_CHIP[(p.outreach_status || 'none').toLowerCase()] || STATUS_CHIP.none
   const { email, phone, linkedin } = extractActions(p)
   const open = (url: string) => Linking.openURL(url).catch(() => {})
   const history = p.context || p.notes || ''
   return (
-    <Card style={styles.personCard}>
+    <PressableScale onPress={onOpen}>
+      <Card style={styles.personCard}>
       <View style={styles.personTop}>
         <View style={[styles.avatar, { backgroundColor: avatarPalette[index % avatarPalette.length] }]}>
           <Text style={styles.avatarText}>{initials(p.name)}</Text>
@@ -132,11 +135,13 @@ function PersonCard({ p, index }: { p: Person; index: number }) {
           )}
         </View>
       )}
-    </Card>
+      </Card>
+    </PressableScale>
   )
 }
 
 export default function People() {
+  const nav = useNavigation<any>()
   const [filter, setFilter] = useState<FilterKey>('all')
   const [query, setQuery] = useState('')
   const load = useCallback(() => api<Payload>('/dashboard/people/data'), [])
@@ -178,12 +183,20 @@ export default function People() {
       {data && shown.length === 0 ? (
         <EmptyState
           message={query ? `No matches for “${query}”.` : 'Nobody in this state right now.'}
+          suggestions={query ? undefined : ['Add contacts from the desktop', 'Search everything instead']}
+          actionLabel={query ? undefined : 'Search everything'}
+          onAction={query ? undefined : () => nav.navigate('Search')}
         />
       ) : null}
 
       <View style={{ marginTop: 6 }}>
         {shown.map((p, i) => (
-          <PersonCard key={p.id ?? `${p.name}${i}`} p={p} index={i} />
+          <PersonCard
+            key={p.id ?? `${p.name}${i}`}
+            p={p}
+            index={i}
+            onOpen={() => nav.navigate('PersonDetail', { person: p })}
+          />
         ))}
       </View>
     </Screen>

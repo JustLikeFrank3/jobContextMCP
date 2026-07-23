@@ -5,9 +5,11 @@
 //                                           when no ring data exists)
 // The check-in form POSTs /dashboard/health/checkin (the same tool the web
 // and MCP clients use), so all three surfaces write identical entries.
+import { useNavigation } from '@react-navigation/native'
 import { useCallback, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { api, logCheckin } from '../api'
+import { PressableScale } from '../ui/detail'
 import {
   Card,
   EmptyState,
@@ -127,6 +129,7 @@ function CheckinForm({ onSaved }: { onSaved: () => void }) {
 }
 
 export default function Wellbeing() {
+  const nav = useNavigation<any>()
   const load = useCallback(async (): Promise<Bundle> => {
     const health = await api<HealthPayload>('/dashboard/health/data')
     // Readiness is a bonus — older servers / no ring just omit the card.
@@ -198,26 +201,28 @@ export default function Wellbeing() {
             <EmptyState message="No check-ins yet — use the form above and your trends appear here." />
           ) : (
             data.health.recent.slice(0, 10).map((e, i) => (
-              <Card key={e.date + i} style={styles.entryCard}>
-                <View style={styles.entryTop}>
-                  <Text style={styles.entryMood}>{e.mood || '—'}</Text>
-                  <Text style={styles.entryDate}>{e.date?.slice(0, 10)}</Text>
-                </View>
-                {typeof e.energy === 'number' ? (
-                  <View style={styles.meterRow}>
-                    <Text style={styles.meterLabel}>ENERGY</Text>
-                    <View style={styles.meterTrack}>
-                      <View style={[styles.meterFill, { width: `${Math.min(e.energy, 10) * 10}%` }]} />
-                    </View>
-                    <Text style={styles.meterVal}>{e.energy}/10</Text>
+              <PressableScale key={e.date + i} onPress={() => nav.navigate('CheckinDetail', { entry: e })}>
+                <Card style={styles.entryCard}>
+                  <View style={styles.entryTop}>
+                    <Text style={styles.entryMood}>{e.mood || '—'}</Text>
+                    <Text style={styles.entryDate}>{e.date?.slice(0, 10)}</Text>
                   </View>
-                ) : null}
-                {e.notes ? (
-                  <Text style={styles.entryNotes} numberOfLines={2}>
-                    {e.notes}
-                  </Text>
-                ) : null}
-              </Card>
+                  {typeof e.energy === 'number' ? (
+                    <View style={styles.meterRow}>
+                      <Text style={styles.meterLabel}>ENERGY</Text>
+                      <View style={styles.meterTrack}>
+                        <View style={[styles.meterFill, { width: `${Math.min(e.energy, 10) * 10}%` }]} />
+                      </View>
+                      <Text style={styles.meterVal}>{e.energy}/10</Text>
+                    </View>
+                  ) : null}
+                  {e.notes ? (
+                    <Text style={styles.entryNotes} numberOfLines={2}>
+                      {e.notes}
+                    </Text>
+                  ) : null}
+                </Card>
+              </PressableScale>
             ))
           )}
         </>

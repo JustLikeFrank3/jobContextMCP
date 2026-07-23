@@ -5,9 +5,11 @@
 // payload, so upcoming cards show a debrief-pending dot instead; recent rows
 // surface the debrief signal that does exist (self_rating / what_landed /
 // verbatim_quotes).
+import { useNavigation } from '@react-navigation/native'
 import { useCallback } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
+import { PressableScale } from '../ui/detail'
 import {
   Card,
   EmptyState,
@@ -56,8 +58,11 @@ function debriefLine(iv: Interview): string {
 }
 
 export default function Interviews() {
+  const nav = useNavigation<any>()
   const load = useCallback(() => api<Payload>('/dashboard/interviews/data'), [])
   const { data, loading, refreshing, error, refresh } = useDashData(load)
+  const open = (iv: Interview, upcoming: boolean) =>
+    nav.navigate('InterviewDetail', { interview: { ...iv, upcoming } })
 
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
@@ -70,30 +75,37 @@ export default function Interviews() {
         <>
           <SectionLabel style={{ marginTop: 20 } as any}>Upcoming</SectionLabel>
           {data.upcoming.length === 0 ? (
-            <EmptyState message="Nothing scheduled. Log the next one from your desktop and it shows up here." />
+            <EmptyState
+              message="You're interview-free."
+              suggestions={['Practice STAR stories', 'Reach out to a recruiter', 'Review your pipeline']}
+              actionLabel="Review pipeline"
+              onAction={() => nav.navigate('Pipeline')}
+            />
           ) : (
             data.upcoming.map((iv, i) => (
-              <Card key={iv.id ?? i} tint={i === 0 ? 'low' : undefined} raised={i !== 0} style={i === 0 ? styles.firstCard : undefined}>
-                <View style={styles.topRow}>
-                  <Text style={styles.title} numberOfLines={1}>
-                    {[iv.company, iv.role].filter(Boolean).join(' · ')}
-                  </Text>
-                  <Text style={[styles.countdown, { color: i === 0 ? t.cyanBright : t.textSecondary }]}>
-                    {countdownChip(iv.interview_date)}
-                  </Text>
-                </View>
-                <Text style={styles.meta}>{interviewTimeLine(iv)}</Text>
-                {iv.interviewer ? (
-                  <Text style={styles.interviewer} numberOfLines={1}>
-                    with {iv.interviewer}
-                    {iv.interviewer_role ? ` · ${iv.interviewer_role}` : ''}
-                  </Text>
-                ) : null}
-                <View style={styles.statusRow}>
-                  <View style={[styles.dot, { backgroundColor: t.amber }]} />
-                  <Text style={[styles.statusText, { color: t.amber }]}>Debrief pending</Text>
-                </View>
-              </Card>
+              <PressableScale key={iv.id ?? i} onPress={() => open(iv, true)}>
+                <Card tint={i === 0 ? 'low' : undefined} raised={i !== 0} style={i === 0 ? styles.firstCard : undefined}>
+                  <View style={styles.topRow}>
+                    <Text style={styles.title} numberOfLines={1}>
+                      {[iv.company, iv.role].filter(Boolean).join(' · ')}
+                    </Text>
+                    <Text style={[styles.countdown, { color: i === 0 ? t.cyanBright : t.textSecondary }]}>
+                      {countdownChip(iv.interview_date)}
+                    </Text>
+                  </View>
+                  <Text style={styles.meta}>{interviewTimeLine(iv)}</Text>
+                  {iv.interviewer ? (
+                    <Text style={styles.interviewer} numberOfLines={1}>
+                      with {iv.interviewer}
+                      {iv.interviewer_role ? ` · ${iv.interviewer_role}` : ''}
+                    </Text>
+                  ) : null}
+                  <View style={styles.statusRow}>
+                    <View style={[styles.dot, { backgroundColor: t.amber }]} />
+                    <Text style={[styles.statusText, { color: t.amber }]}>Debrief pending</Text>
+                  </View>
+                </Card>
+              </PressableScale>
             ))
           )}
 
@@ -102,17 +114,19 @@ export default function Interviews() {
             <EmptyState message="No debriefs logged yet." />
           ) : (
             data.recent.map((iv, i) => (
-              <Card key={iv.id ?? `r${i}`} style={styles.debriefRow}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.debriefTitle} numberOfLines={1}>
-                    {[iv.company, (iv.interview_type || '').replace(/_/g, ' ')].filter(Boolean).join(' · ')}
-                  </Text>
-                  <Text style={styles.debriefSub} numberOfLines={1}>
-                    {debriefLine(iv)}
-                  </Text>
-                </View>
-                <Text style={styles.debriefDate}>{monoDate(iv.interview_date)}</Text>
-              </Card>
+              <PressableScale key={iv.id ?? `r${i}`} onPress={() => open(iv, false)}>
+                <Card style={styles.debriefRow}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.debriefTitle} numberOfLines={1}>
+                      {[iv.company, (iv.interview_type || '').replace(/_/g, ' ')].filter(Boolean).join(' · ')}
+                    </Text>
+                    <Text style={styles.debriefSub} numberOfLines={1}>
+                      {debriefLine(iv)}
+                    </Text>
+                  </View>
+                  <Text style={styles.debriefDate}>{monoDate(iv.interview_date)}</Text>
+                </Card>
+              </PressableScale>
             ))
           )}
         </>
