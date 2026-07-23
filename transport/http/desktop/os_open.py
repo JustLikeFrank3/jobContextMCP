@@ -18,6 +18,26 @@ from pydantic import BaseModel
 router = APIRouter(tags=["desktop"])
 
 
+def _child_env() -> dict:
+    """Environment for OS-opener children, scrubbed of PyInstaller leakage.
+
+    The frozen sidecar exports LD_LIBRARY_PATH pointing at its bundled
+    private libraries. xdg-open — and the viewer it launches — inherits it
+    and can crash on startup against mismatched system libs, so the Popen
+    "succeeds" while nothing ever appears (the Linux desktop dead-click).
+    PyInstaller preserves the pre-freeze value in <VAR>_ORIG: restore that,
+    or drop the variable entirely. In dev the vars are absent — no-op.
+    """
+    env = dict(os.environ)
+    for var in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+        orig = env.get(f"{var}_ORIG")
+        if orig:
+            env[var] = orig
+        else:
+            env.pop(var, None)
+    return env
+
+
 def _open_with_os(target: str) -> None:
     import subprocess
 
@@ -29,11 +49,11 @@ def _open_with_os(target: str) -> None:
         target = f"./{target}"
 
     if sys.platform == "darwin":
-        subprocess.Popen(["open", target])  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
+        subprocess.Popen(["open", target], env=_child_env())  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
     elif os.name == "nt":
         os.startfile(target)  # noqa: S606 — target is a resolved workspace path (containment-checked + basename-sanitized); validated upstream
     else:
-        subprocess.Popen(["xdg-open", target])  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
+        subprocess.Popen(["xdg-open", target], env=_child_env())  # NOSONAR — list form (no shell); target is a resolved workspace path (containment-checked by open_file, basename-sanitized); taint from HTTP request is broken by os.path.basename sanitization in caller
 
 
 class OpenFileRequest(BaseModel):
@@ -90,11 +110,23 @@ async def open_file(request: OpenFileRequest) -> dict:
             )
         except Exception:  # noqa: BLE001 — fall back to the raw file
             pdf = target
-        _open_with_os(str(pdf))
+        _launch(str(pdf))
         return {"status": "opened", "name": target.name, "rendered": str(pdf) != str(target)}
 
-    _open_with_os(str(target))
+    _launch(str(target))
     return {"status": "opened", "name": target.name}
+
+
+def _launch(target: str) -> None:
+    """_open_with_os with a missing-opener guard surfaced as a real error
+    instead of a 500 traceback — the SPA shows the detail inline."""
+    try:
+        _open_with_os(target)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail="No system opener found (is xdg-open installed?).",
+        ) from None
 
 
 class OpenUrlRequest(BaseModel):
@@ -103,15 +135,18 @@ class OpenUrlRequest(BaseModel):
 
 @router.post("/desktop/open-url")
 async def open_url(request: OpenUrlRequest) -> dict:
-    """Open an http(s) URL in the system browser."""
-    import webbrowser
+    """Open an http(s) URL in the default browser.
+
+    Routed through the same launcher as files (not stdlib webbrowser): on
+    Linux webbrowser.open also spawns xdg-open, inheriting the frozen
+    sidecar's poisoned LD_LIBRARY_PATH — the same silent dead-click the
+    file path had. One launcher, one env scrub.
+    """
     from urllib.parse import urlsplit
 
     url = request.url.strip()
     scheme = urlsplit(url).scheme.lower()
     if scheme not in ("http", "https"):
         raise HTTPException(status_code=422, detail="Only http(s) links can be opened.")
-    # webbrowser.open is the stdlib-recommended way to launch a URL in the
-    # default browser; it does not involve shell execution or file-path sinks.
-    await asyncio.to_thread(webbrowser.open, url)
+    await asyncio.to_thread(_launch, url)
     return {"status": "opened"}

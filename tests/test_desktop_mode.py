@@ -687,10 +687,10 @@ def test_open_file_rejects_traversal_and_foreign_hrefs(desktop_client, desktop_d
 
 
 def test_open_url_http_only(desktop_client, monkeypatch):
-    import webbrowser
+    import transport.http.desktop.os_open as desktop_mod
 
     opened = {}
-    monkeypatch.setattr(webbrowser, "open", lambda t: opened.setdefault("t", t))
+    monkeypatch.setattr(desktop_mod, "_open_with_os", lambda t: opened.setdefault("t", t))
     resp = desktop_client.post("/desktop/open-url", json={"url": "https://www.linkedin.com/posts/x"})
     assert resp.status_code == 200
     assert opened["t"].startswith("https://")
@@ -714,7 +714,7 @@ class TestOpenWithOsArgumentInjection:
         monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
         monkeypatch.setattr(desktop_mod.os, "name", "posix")
         calls = []
-        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+        monkeypatch.setattr(subprocess, "Popen", lambda args, env=None: calls.append(args))
 
         desktop_mod._open_with_os("--dangerous-flag")
 
@@ -728,7 +728,7 @@ class TestOpenWithOsArgumentInjection:
         monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
         monkeypatch.setattr(desktop_mod.os, "name", "posix")
         calls = []
-        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+        monkeypatch.setattr(subprocess, "Popen", lambda args, env=None: calls.append(args))
 
         desktop_mod._open_with_os("/workspace/resumes/resume.pdf")
 
@@ -736,8 +736,8 @@ class TestOpenWithOsArgumentInjection:
 
     def test_url_target_is_never_dash_prefixed(self, monkeypatch):
         """A validated http(s) URL can never start with '-', so the guard
-        must be a no-op for the open-url call site (now handled by
-        webbrowser.open, not _open_with_os)."""
+        must be a no-op for the open-url call site (routed through
+        _open_with_os so URLs get the same scrubbed child env as files)."""
         import subprocess
 
         import transport.http.desktop.os_open as desktop_mod
@@ -745,11 +745,72 @@ class TestOpenWithOsArgumentInjection:
         monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
         monkeypatch.setattr(desktop_mod.os, "name", "posix")
         calls = []
-        monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(args))
+        monkeypatch.setattr(subprocess, "Popen", lambda args, env=None: calls.append(args))
 
         desktop_mod._open_with_os("https://example.com/job/123")
 
         assert calls == [["xdg-open", "https://example.com/job/123"]]
+
+
+class TestOpenerChildEnv:
+    """The frozen sidecar's LD_LIBRARY_PATH (PyInstaller's private libs)
+    must never leak into xdg-open's children — it crashes the launched
+    viewer against mismatched system libs, so the open 'succeeds' while
+    nothing appears (the Linux desktop dead-click)."""
+
+    def test_pyinstaller_lib_path_is_restored_to_orig(self, monkeypatch):
+        import transport.http.desktop.os_open as desktop_mod
+
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEIxyz/lib")
+        monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", "/usr/local/lib")
+        env = desktop_mod._child_env()
+        assert env["LD_LIBRARY_PATH"] == "/usr/local/lib"
+
+    def test_pyinstaller_lib_path_is_dropped_without_orig(self, monkeypatch):
+        import transport.http.desktop.os_open as desktop_mod
+
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEIxyz/lib")
+        monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+        env = desktop_mod._child_env()
+        assert "LD_LIBRARY_PATH" not in env
+
+    def test_popen_receives_scrubbed_env(self, monkeypatch):
+        import subprocess
+
+        import transport.http.desktop.os_open as desktop_mod
+
+        monkeypatch.setattr(desktop_mod.sys, "platform", "linux")
+        monkeypatch.setattr(desktop_mod.os, "name", "posix")
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEIxyz/lib")
+        monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+        seen = {}
+        monkeypatch.setattr(
+            subprocess, "Popen", lambda args, env=None: seen.update(args=args, env=env)
+        )
+
+        desktop_mod._open_with_os("/workspace/resumes/resume.pdf")
+
+        assert seen["env"] is not None
+        assert "LD_LIBRARY_PATH" not in seen["env"]
+
+    def test_missing_opener_becomes_500_detail(self, desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):
+        import transport.http.desktop.os_open as desktop_mod
+        from transport.http.routes.dashboard import materials
+
+        folder = tmp_path / "cls"
+        folder.mkdir()
+        (folder / "r.pdf").write_bytes(b"pdf")
+        monkeypatch.setattr(materials, "_folder_path", lambda key: folder if key == "cover_letters" else None)
+
+        def boom(_t):
+            raise FileNotFoundError("xdg-open")
+
+        monkeypatch.setattr(desktop_mod, "_open_with_os", boom)
+        resp = desktop_client.post(
+            "/desktop/open-file", json={"href": "/dashboard/materials/file/cover_letters/r.pdf"}
+        )
+        assert resp.status_code == 500
+        assert "opener" in resp.json()["detail"]
 
 
 def test_open_file_renders_markdown_to_pdf(desktop_client, desktop_data_dir_env, monkeypatch, tmp_path):

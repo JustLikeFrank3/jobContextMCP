@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, EmptyState, EYEBROW,
 } from './_shared.jsx'
@@ -25,6 +25,29 @@ const FOLDER_ORDER = [
   'optimized_resumes', 'cover_letters', 'resume_pdfs',
   'cover_letter_pdfs', 'job_assessments', 'interview_prep',
 ]
+
+/* Per-folder accent for the header dot — the grid reads as six equal gray
+   boxes otherwise. */
+const FOLDER_ACCENT = {
+  optimized_resumes: 'var(--cyan-300)',
+  cover_letters: '#C7A9E8',
+  resume_pdfs: 'var(--green-300)',
+  cover_letter_pdfs: 'var(--warn)',
+  job_assessments: '#E39393',
+  interview_prep: '#8AB6C4',
+}
+
+/* File-type chip colors — pdf warm, text cyan, markdown violet, docs/images green. */
+const EXT_COLOR = {
+  pdf: 'var(--warn)',
+  md: '#C7A9E8',
+  markdown: '#C7A9E8',
+  txt: 'var(--cyan-300)',
+  docx: 'var(--green-300)',
+  png: 'var(--green-300)',
+  jpg: 'var(--green-300)',
+  jpeg: 'var(--green-300)',
+}
 
 const PREVIEWABLE = new Set(['pdf', 'txt', 'md', 'png', 'jpg', 'jpeg', 'gif', 'svg'])
 
@@ -102,42 +125,77 @@ function openPreview(file) {
 
 function FileButton({ file }) {
   const ext = extOf(file) || 'file'
+  const extColor = EXT_COLOR[ext] || 'var(--cyan-300)'
   // Desktop: the webview can't open popup previews or downloads — the
   // backend opens the file in its OS-default app instead (view/print/save).
   const isDesktop = useDesktopMode()
+  // idle | busy | error — the native open has no visible in-app response,
+  // so the row itself must confirm the click (or surface the failure;
+  // window.alert doesn't reliably render in the Tauri webview).
+  const [state, setState] = useState('idle')
+  const resetTimer = useRef(null)
+  const open = async () => {
+    if (!isDesktop) {
+      openPreview(file)
+      return
+    }
+    if (state === 'busy') return
+    clearTimeout(resetTimer.current)
+    setState('busy')
+    const ok = await openFileNative(file.href, { notify: false })
+    setState(ok ? 'idle' : 'error')
+    if (!ok) resetTimer.current = setTimeout(() => setState('idle'), 4000)
+  }
   return (
     <button
       type="button"
-      onClick={() => (isDesktop ? openFileNative(file.href) : openPreview(file))}
-      title={`Preview ${file.name}`}
+      onClick={open}
+      title={isDesktop ? `Open ${file.name}` : `Preview ${file.name}`}
       style={{
         appearance: 'none', cursor: 'pointer', textAlign: 'left', width: '100%',
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 9px', borderRadius: 'var(--radius-sm)',
         background: 'transparent', border: '1px solid transparent',
         color: 'var(--text-soft)', fontSize: 'var(--fs-sm)',
+        opacity: state === 'busy' ? 0.6 : 1,
+        transition: 'background .12s ease, border-color .12s ease',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-sunken)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--surface-sunken)'
+        e.currentTarget.style.borderColor = 'var(--border-soft)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.borderColor = 'transparent'
+      }}
     >
       <span
         style={{
           flexShrink: 0, fontSize: 'var(--fs-2xs)', fontWeight: 'var(--fw-bold)',
           textTransform: 'uppercase', letterSpacing: '0.3px',
           padding: '2px 6px', borderRadius: 4,
-          background: 'var(--surface-chip)', color: 'var(--cyan-300)',
+          background: `color-mix(in srgb, ${extColor} 13%, transparent)`,
+          color: extColor,
         }}
       >
         {ext}
       </span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {file.name}
       </span>
+      {state === 'busy' && (
+        <span style={{ flexShrink: 0, fontSize: 'var(--fs-2xs)', color: 'var(--muted)' }}>Opening…</span>
+      )}
+      {state === 'error' && (
+        <span style={{ flexShrink: 0, fontSize: 'var(--fs-2xs)', color: 'var(--warn)' }}>
+          Couldn&rsquo;t open
+        </span>
+      )}
     </button>
   )
 }
 
-function FolderBox({ label, folder }) {
+function FolderBox({ label, folder, accent }) {
   const files = folder.files || []
   return (
     <Panel pad="0" style={{ display: 'flex', flexDirection: 'column', height: 300, overflow: 'hidden' }}>
@@ -147,15 +205,18 @@ function FolderBox({ label, folder }) {
           padding: '12px 14px', borderBottom: '1px solid var(--border-soft)', flexShrink: 0,
         }}
       >
-        <span style={{ color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-sm)' }}>
-          {label}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: accent, flexShrink: 0 }} />
+          <span style={{ color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-sm)' }}>
+            {label}
+          </span>
         </span>
         <Badge tone="muted">{folder.count}</Badge>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px', display: 'grid', gap: 2, alignContent: 'start' }}>
         {files.length > 0
           ? files.map((f) => <FileButton key={f.name} file={f} />)
-          : <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-xs)', padding: '8px 6px' }}>Empty.</div>}
+          : <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-xs)', padding: '8px 6px' }}>Nothing generated here yet.</div>}
       </div>
     </Panel>
   )
@@ -234,7 +295,12 @@ export default function Materials() {
       <div style={{ ...EYEBROW, margin: '4px 2px 12px' }}>Folders {'\u2014'} click a file to preview &amp; print</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
         {FOLDER_ORDER.filter((k) => folders[k]).map((key) => (
-          <FolderBox key={key} label={FOLDER_LABEL[key] || key} folder={folders[key]} />
+          <FolderBox
+            key={key}
+            label={FOLDER_LABEL[key] || key}
+            folder={folders[key]}
+            accent={FOLDER_ACCENT[key] || 'var(--cyan-300)'}
+          />
         ))}
       </div>
 
