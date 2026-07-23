@@ -6,39 +6,36 @@ import { Panel } from '../design-system'
 import useDesktopMode from '../shell/useDesktopMode.js'
 import { openFileNative } from '../shell/nativeOpen.js'
 
-/* Materials — generated resumes, cover letters, PDFs, and prep docs.
-   Data: GET /dashboard/materials/data (_materials_payload).
+/* Materials — the four folders that get opened in practice: assessments,
+   interview prep, and the shippable PDFs (resumes + cover letters). The
+   TXT intermediates (optimized_resumes / cover_letters sources) stay in
+   the workspace and payload but are not surfaced — they're generation
+   inputs, not deliverables. Data: GET /dashboard/materials/data.
 
-   Layout: stat strip → "recent" strip (the 6 newest files across every
-   folder — the file you just generated is almost always the one you want)
-   → one global filter over all folders → accent-tinted folder cards with
-   per-row ages → the untracked-resumes audit.
+   No mtime-based "recent" strip or ages: sync rewrites file mtimes on
+   transfer, so after any sync everything looks minutes old — showing that
+   is worse than showing nothing (2026-07-23 cloud screenshot).
 
    Clicking a file opens a preview window (hosted) or the OS-default app
    (desktop — the webview can't do popups/downloads). Failures render
    inline on the row; window.alert is unreliable in the Tauri webview. */
 
 const FOLDER_LABEL = {
-  optimized_resumes: 'Optimized resumes',
-  cover_letters: 'Cover letters',
-  resume_pdfs: 'Resume PDFs',
-  cover_letter_pdfs: 'Cover letter PDFs',
   job_assessments: 'Job assessments',
   interview_prep: 'Interview prep',
+  resume_pdfs: 'Resume PDFs',
+  cover_letter_pdfs: 'Cover letter PDFs',
 }
 const FOLDER_ORDER = [
-  'optimized_resumes', 'cover_letters', 'resume_pdfs',
-  'cover_letter_pdfs', 'job_assessments', 'interview_prep',
+  'job_assessments', 'interview_prep', 'resume_pdfs', 'cover_letter_pdfs',
 ]
 
-/* Per-folder accent — the grid reads as six equal gray boxes otherwise. */
+/* Per-folder accent — the grid reads as equal gray boxes otherwise. */
 const FOLDER_ACCENT = {
-  optimized_resumes: 'var(--cyan-300)',
-  cover_letters: '#C7A9E8',
-  resume_pdfs: 'var(--green-300)',
-  cover_letter_pdfs: 'var(--warn)',
   job_assessments: '#E39393',
   interview_prep: '#8AB6C4',
+  resume_pdfs: 'var(--green-300)',
+  cover_letter_pdfs: 'var(--warn)',
 }
 
 /* File-type chip colors — pdf warm, text cyan, markdown violet, docs/images green. */
@@ -57,16 +54,6 @@ const PREVIEWABLE = new Set(['pdf', 'txt', 'md', 'png', 'jpg', 'jpeg', 'gif', 's
 
 function extOf(file) {
   return (file.ext || '').replace('.', '').toLowerCase()
-}
-
-function relTime(epochSec) {
-  if (!epochSec) return ''
-  const mins = Math.max(0, Math.round((Date.now() / 1000 - epochSec) / 60))
-  if (mins < 60) return `${mins}m`
-  if (mins < 60 * 24) return `${Math.round(mins / 60)}h`
-  const days = Math.round(mins / 60 / 24)
-  if (days < 30) return `${days}d`
-  return new Date(epochSec * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function escapeHtml(s) {
@@ -221,72 +208,6 @@ function FileRow({ file }) {
         {file.name}
       </span>
       <OpenState state={state} />
-      {state === 'idle' && file.mtime ? (
-        <span
-          style={{
-            flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-2xs)',
-            color: 'var(--faint)',
-          }}
-        >
-          {relTime(file.mtime)}
-        </span>
-      ) : null}
-    </button>
-  )
-}
-
-/* "Recent" strip card — the newest files across every folder, one glance. */
-function RecentCard({ entry }) {
-  const { file, folderKey } = entry
-  const ext = extOf(file) || 'file'
-  const accent = FOLDER_ACCENT[folderKey] || 'var(--cyan-300)'
-  const { open, state, isDesktop } = useOpenFile(file)
-  return (
-    <button
-      type="button"
-      onClick={open}
-      title={isDesktop ? `Open ${file.name}` : `Preview ${file.name}`}
-      style={{
-        appearance: 'none', cursor: 'pointer', textAlign: 'left',
-        flex: '1 1 210px', maxWidth: 320, minWidth: 0,
-        display: 'flex', flexDirection: 'column', gap: 7,
-        padding: '12px 14px', borderRadius: 'var(--radius-md)',
-        background: `linear-gradient(150deg, color-mix(in srgb, ${accent} 9%, transparent), rgba(255,255,255,.03))`,
-        border: `1px solid color-mix(in srgb, ${accent} 22%, transparent)`,
-        color: 'var(--text-soft)',
-        opacity: state === 'busy' ? 0.6 : 1,
-        transition: 'transform .12s ease, border-color .12s ease',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-1px)'
-        e.currentTarget.style.borderColor = `color-mix(in srgb, ${accent} 45%, transparent)`
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'none'
-        e.currentTarget.style.borderColor = `color-mix(in srgb, ${accent} 22%, transparent)`
-      }}
-    >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-        <ExtChip ext={ext} />
-        <span style={{ flex: 1 }} />
-        <OpenState state={state} />
-        {state === 'idle' && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-2xs)', color: 'var(--faint)' }}>
-            {relTime(file.mtime)}
-          </span>
-        )}
-      </span>
-      <span
-        style={{
-          fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--text)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
-        }}
-      >
-        {file.name}
-      </span>
-      <span style={{ fontSize: 'var(--fs-2xs)', color: accent }}>
-        {FOLDER_LABEL[folderKey] || folderKey}
-      </span>
     </button>
   )
 }
@@ -299,9 +220,8 @@ function FolderBox({ folderKey, folder, query }) {
     ? all.filter((f) => f.name.toLowerCase().includes(query))
     : all
   if (query && files.length === 0) return null
-  const newest = all[0]?.mtime
   return (
-    <Panel pad="0" style={{ display: 'flex', flexDirection: 'column', height: 300, overflow: 'hidden' }}>
+    <Panel pad="0" style={{ display: 'flex', flexDirection: 'column', height: 340, overflow: 'hidden' }}>
       <div
         style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -310,21 +230,13 @@ function FolderBox({ folderKey, folder, query }) {
           borderBottom: `1px solid color-mix(in srgb, ${accent} 18%, var(--border-soft))`,
         }}
       >
-        <span style={{ minWidth: 0 }}>
-          <span
-            style={{
-              display: 'block', color: 'var(--text-strong)',
-              fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-sm)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}
-          >
-            {label}
-          </span>
-          {newest ? (
-            <span style={{ fontSize: 'var(--fs-2xs)', color: 'var(--muted)' }}>
-              updated {relTime(newest)} ago
-            </span>
-          ) : null}
+        <span
+          style={{
+            color: 'var(--text-strong)', fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-sm)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+          }}
+        >
+          {label}
         </span>
         <Badge tone="muted">{query ? `${files.length}/${folder.count}` : folder.count}</Badge>
       </div>
@@ -387,18 +299,11 @@ export default function Materials() {
   const { data, loading, error } = useApi('/dashboard/materials/data')
   const [query, setQuery] = useState('')
   const folders = useMemo(() => data?.folders || {}, [data])
-  const totalFiles = Object.values(folders).reduce((n, f) => n + (f.count || 0), 0)
+  // Count only the folders this page shows — the TXT intermediates still
+  // exist in the payload but aren't part of this page's story.
+  const totalFiles = FOLDER_ORDER.reduce((n, k) => n + (folders[k]?.count || 0), 0)
   const untracked = data?.untracked_resume_files || []
   const q = query.trim().toLowerCase()
-
-  // Six newest files across all folders — server pre-sorts each folder by
-  // mtime desc, so a merge of the heads is cheap.
-  const recent = useMemo(() => {
-    const entries = FOLDER_ORDER.flatMap((key) =>
-      (folders[key]?.files || []).slice(0, 6).map((file) => ({ file, folderKey: key })),
-    ).filter((e) => e.file.mtime)
-    return entries.sort((a, b) => b.file.mtime - a.file.mtime).slice(0, 6)
-  }, [folders])
 
   return (
     <Screen
@@ -409,10 +314,10 @@ export default function Materials() {
       emptyHint="Resumes and cover letters you generate will appear here."
     >
       <StatGrid>
-        <Stat label="Resumes" value={data?.optimized_resumes ?? 0} tone="accent" />
-        <Stat label="Cover letters" value={data?.cover_letters ?? 0} />
-        <Stat label="PDFs" value={(data?.resume_pdfs ?? 0) + (data?.cover_letter_pdfs ?? 0)} tone="green" />
-        <Stat label="Tracked apps" value={data?.tracked_applications ?? 0} tone="muted" />
+        <Stat label="Job assessments" value={folders.job_assessments?.count ?? 0} tone="accent" />
+        <Stat label="Interview prep" value={folders.interview_prep?.count ?? 0} />
+        <Stat label="Resume PDFs" value={data?.resume_pdfs ?? 0} tone="green" />
+        <Stat label="Cover letter PDFs" value={data?.cover_letter_pdfs ?? 0} />
         <Stat
           label="Untracked"
           value={data?.gap ?? 0}
@@ -420,17 +325,6 @@ export default function Materials() {
           sub={data?.gap ? 'resumes with no application' : 'all tracked'}
         />
       </StatGrid>
-
-      {recent.length > 0 && !q && (
-        <>
-          <div style={{ ...EYEBROW, margin: '4px 2px 10px' }}>Recent {'—'} fresh off the press</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
-            {recent.map((e) => (
-              <RecentCard key={`${e.folderKey}/${e.file.name}`} entry={e} />
-            ))}
-          </div>
-        </>
-      )}
 
       <div
         style={{
