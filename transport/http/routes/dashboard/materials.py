@@ -47,6 +47,9 @@ def _scan_folders() -> dict:
                         "name": f.name,
                         "ext": f.suffix.lower(),
                         "href": f"/dashboard/materials/file/{key}/{quote(f.name, safe='')}",
+                        # Epoch seconds; the SPA renders relative ages and a
+                        # cross-folder "recent" strip from this.
+                        "mtime": int(f.stat().st_mtime),
                     }
                     for f in files
                 ],
