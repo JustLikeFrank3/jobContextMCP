@@ -167,6 +167,7 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
         "ok": result.success,
         "content": result.content,
         "notes": result.notes,
+        "provenance": result.provenance,
         "selected_resume": selected,
     })
 
@@ -203,6 +204,7 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
         "ok": result.success,
         "content": result.content,
         "notes": result.notes,
+        "provenance": result.provenance,
         "selected_resume": selected,
     })
 

@@ -81,6 +81,47 @@ class TestCheckClaims:
 
 
 # ===========================================================================
+# format_provenance_line — the one-line verdict shared by every surface
+# ===========================================================================
+
+class TestFormatProvenanceLine:
+    def test_pass_line_counts_claims(self):
+        from lib.provenance import format_provenance_line
+
+        line = format_provenance_line(["34%", "$1.2M", "3x"], [])
+        assert line == "Provenance: ✓ PASS — 3 claims traced to source, 0 unsourced"
+
+    def test_fail_line_names_violations_quoted(self):
+        from lib.provenance import format_provenance_line
+
+        line = format_provenance_line(["47%", "$9M"], ["47%", "$9M"])
+        assert line == 'Provenance: ⚠ 2 unsourced — "47%", "$9M"'
+
+    def test_violation_with_quote_char_stays_one_line(self):
+        from lib.provenance import format_provenance_line
+
+        line = format_provenance_line([], ['5"'])
+        assert "\n" not in line
+        assert '5"' in line
+        assert line.startswith("Provenance: ⚠ 1 unsourced")
+
+    def test_more_than_six_violations_truncate_with_ellipsis(self):
+        from lib.provenance import format_provenance_line
+
+        vs = [f"{i}%" for i in range(1, 9)]
+        line = format_provenance_line(vs, vs)
+        assert line.startswith("Provenance: ⚠ 8 unsourced")
+        assert "…" in line
+        assert "\n" not in line
+
+    def test_pass_line_with_zero_claims(self):
+        from lib.provenance import format_provenance_line
+
+        line = format_provenance_line([], [])
+        assert line == "Provenance: ✓ PASS — 0 claims traced to source, 0 unsourced"
+
+
+# ===========================================================================
 # record_run — persistence (isolated sqlite via explicit path)
 # ===========================================================================
 
@@ -256,9 +297,10 @@ class TestSingleShotGate:
             "resume", "Initech", "SWE", "jd text",
             content="Cut latency 34%.", source_text="latency fell 34% in prod",
         )
-        assert note.startswith("✓ Provenance")
+        assert note == "Provenance: ✓ PASS — 1 claims traced to source, 0 unsourced"
         assert recorded["verdict"] == "passed"
         assert recorded["kind"] == "resume"
+        assert recorded["claims"] == ["34%"]
 
     def test_note_flags_fabrication_and_records_failure(self, monkeypatch):
         from tools import generate as gen
@@ -271,8 +313,8 @@ class TestSingleShotGate:
             "cover_letter", "Initech", "SWE", "jd",
             content="Grew revenue 47% to $9M.", source_text="no numbers here",
         )
-        assert note.startswith("⚠ Provenance: unsourced claims")
-        assert "47%" in note and "$9M" in note
+        assert note.startswith("Provenance: ⚠ 2 unsourced")
+        assert '"47%"' in note and '"$9M"' in note
         assert recorded["verdict"] == "failed"
         assert recorded["violations"] == ["47%", "$9M"]
 
@@ -286,7 +328,7 @@ class TestSingleShotGate:
         # record_run itself swallows, but simulate an unexpected error path
         monkeypatch.setattr("lib.provenance.check_claims", boom)
         note = gen._provenance_note("resume", "", "", "", "x", "y")
-        assert note.startswith("⚠ Provenance check skipped")
+        assert note.startswith("Provenance: ⚠ check skipped")
 
 
 class TestResumeGraphReactsToVerdict:
@@ -299,14 +341,23 @@ class TestResumeGraphReactsToVerdict:
 
     def test_provenance_warning_triggers_revision(self):
         out = self._review(
-            "✓ Resume generated for X @ Y\n  ⚠ Provenance: unsourced claims — verify before sending: 47%"
+            '✓ Resume generated for X @ Y\n  Provenance: ⚠ 1 unsourced — "47%"'
         )
         assert out["needs_revision"] is True
         assert any("Provenance gate" in f for f in out["review_feedback"])
 
     def test_clean_verdict_passes_review(self):
+        # The PASS line contains the word "unsourced" ("0 unsourced") — the
+        # marker must anchor on the FAIL shape and not trip on it.
         out = self._review(
-            "✓ Resume generated for X @ Y\n  ✓ Provenance: all numeric claims trace to source material"
+            "✓ Resume generated for X @ Y\n  Provenance: ✓ PASS — 6 claims traced to source, 0 unsourced"
+        )
+        assert out["needs_revision"] is False
+        assert out["review_feedback"] == []
+
+    def test_skipped_check_does_not_trigger_revision(self):
+        out = self._review(
+            "✓ Resume generated for X @ Y\n  Provenance: ⚠ check skipped — db unavailable"
         )
         assert out["needs_revision"] is False
         assert out["review_feedback"] == []

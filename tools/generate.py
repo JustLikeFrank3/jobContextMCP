@@ -1177,8 +1177,14 @@ def _provenance_note(
     is fabricated by definition.
     """
     try:
-        from lib.provenance import check_claims, extract_claims, record_run
+        from lib.provenance import (
+            check_claims,
+            extract_claims,
+            format_provenance_line,
+            record_run,
+        )
 
+        claims = extract_claims(content)
         violations = check_claims(content, [source_text])
         record_run(
             kind=kind,
@@ -1186,19 +1192,14 @@ def _provenance_note(
             role=role,
             job_description=job_description,
             chunk_texts=[],
-            claims=extract_claims(content),
+            claims=claims,
             violations=violations,
             verdict="failed" if violations else "passed",
             revisions=0,
         )
-        if violations:
-            return (
-                "⚠ Provenance: unsourced claims — verify before sending: "
-                + ", ".join(violations[:6])
-            )
-        return "✓ Provenance: all numeric claims trace to source material"
+        return format_provenance_line(claims, violations)
     except Exception as exc:  # noqa: BLE001 — the gate must never break generation
-        return f"⚠ Provenance check skipped: {exc}"
+        return f"Provenance: ⚠ check skipped — {exc}"
 
 
 def generate_resume(

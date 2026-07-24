@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Panel, Button } from '../design-system'
 import { apiFetch, apiPost } from '../auth/api.js'
-import { Screen, EmptyState, EYEBROW } from './_shared.jsx'
+import { Screen, EmptyState, EYEBROW, Badge } from './_shared.jsx'
+import { parseProvenance, PROVENANCE_TONE, PROVENANCE_BADGE_LABEL } from './pipeline/provenance.js'
 import { useToolbarSlot } from '../shell/toolbarSlot.jsx'
 import { actionError } from './pipeline/shared.jsx'
 import JobCard, { ROW_GRID } from './pipeline/JobCard.jsx'
@@ -61,6 +62,7 @@ export default function Pipeline() {
   const [stageFilter, setStageFilter] = useState('all')
   const [persona, setPersona] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const [genResult, setGenResult] = useState(null) // { title, ok, provenance: parseProvenance() | null }
   const [editor, setEditor] = useState(null) // { type: 'edit-resume'|'edit-cl'|'templates', job }
 
   const load = useCallback(async ({ silent } = {}) => {
@@ -94,12 +96,24 @@ export default function Pipeline() {
         await apiPost('/dashboard/pipeline/evaluate', { job_id: job.id })
       } else if (type === 'resume') {
         setBusy(`Generating resume for ${job.company}…`)
+        setGenResult(null)
         const res = await apiPost('/dashboard/pipeline/generate-resume', { job_id: job.id, persona: activePersona })
+        setGenResult({
+          title: `Resume — ${job.company}`,
+          ok: !!res?.ok,
+          provenance: parseProvenance(res?.provenance),
+        })
         if (!res?.ok) window.alert(`Resume generation did not produce files.\n\n${String(res?.content || res?.notes || '').slice(0, 500)}`)
       } else if (type === 'cl-latex' || type === 'cl-html') {
         const pipeline = type === 'cl-latex' ? 'latex' : 'html'
         setBusy(`Generating cover letter (${pipeline.toUpperCase()}) for ${job.company}…`)
+        setGenResult(null)
         const res = await apiPost('/dashboard/pipeline/generate-cover-letter', { job_id: job.id, export_pipeline: pipeline, persona: activePersona })
+        setGenResult({
+          title: `Cover letter — ${job.company}`,
+          ok: !!res?.ok,
+          provenance: parseProvenance(res?.provenance),
+        })
         if (!res?.ok) window.alert(`Cover letter generation did not produce files (likely an API rate limit or provider error).\n\n${String(res?.content || res?.notes || '').slice(0, 500)}`)
       } else if (type === 'apply') {
         setBusy(`Queueing application for ${job.company}…`)
@@ -148,6 +162,40 @@ export default function Pipeline() {
       <div style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 14 }}>
         {activeCount} active {'·'} {countBy('applied')} applied
       </div>
+
+      {genResult && (
+        <Panel pad="10px 14px" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--text)' }}>
+              {genResult.title}
+            </span>
+            {genResult.provenance ? (
+              <>
+                <Badge tone={PROVENANCE_TONE[genResult.provenance.status]}>
+                  {PROVENANCE_BADGE_LABEL[genResult.provenance.status]}
+                </Badge>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)' }}>
+                  {genResult.provenance.text}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--faint)' }}>
+                No provenance verdict returned (context-package generation).
+              </span>
+            )}
+            <button
+              onClick={() => setGenResult(null)}
+              aria-label="Dismiss generation result"
+              style={{
+                marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--faint)', fontSize: 'var(--fs-sm)', lineHeight: 1, padding: 4,
+              }}
+            >
+              {'✕'}
+            </button>
+          </div>
+        </Panel>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <Chip active={stageFilter === 'all'} onClick={() => setStageFilter('all')}>All</Chip>

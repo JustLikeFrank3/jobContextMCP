@@ -106,6 +106,23 @@ def check_claims(draft: str, sources: list[str]) -> list[str]:
     ]
 
 
+def format_provenance_line(claims: list[str], violations: list[str]) -> str:
+    """One-line human-readable verdict for generation confirmations.
+
+    Single source of truth for how the gate's outcome reads — the agent
+    pipeline header and the single-shot confirmation strings must format
+    identically so dashboards and clients can match one shape.
+    """
+    if violations:
+        shown = ", ".join(f'"{v}"' for v in violations[:6])
+        if len(violations) > 6:
+            shown += ", …"
+        return f"Provenance: ⚠ {len(violations)} unsourced — {shown}"
+    return (
+        f"Provenance: ✓ PASS — {len(claims)} claims traced to source, 0 unsourced"
+    )
+
+
 def record_run(
     *,
     kind: str,
