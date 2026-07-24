@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **Provenance verdict surfaced to the user** -- the gate ran on every generation and wrote its audit row, but the single-shot dashboard path completed silently. Now `lib/provenance.format_provenance_line()` is the single source of truth for a one-line verdict (`Provenance: ✓ PASS — 6 claims traced to source, 0 unsourced` / `Provenance: ⚠ 2 unsourced — "47%", "$9M"`), consumed by the single-shot confirmation strings, the agent-pipeline header, and the API (`provenance` field on the generate-resume / generate-cover-letter responses). The Pipeline screen shows a dismissible result banner with a green/amber badge after every generation. Observe-and-report: a FAIL is informational — the document still generates with the warning attached.
+- **Truth gate on the AI edit dialogs** -- `/pipeline/edit-resume` and `/pipeline/edit-cover-letter` called the LLM directly and never ran the gate: an inline edit could inject a fabricated metric with no audit row and no warning. Both now run the observe-and-report gate over the edited draft (audit kinds `resume_edit` / `cover_letter_edit`), with sources = everything the model was shown (current document, JD, edit instructions — an explicitly instructed number is in-source by design). The verdict renders in the Edit Resume result view and in the cover-letter review phase, next to Accept & apply / Discard.
+- The `workflows/langgraph` resume graph anchors its revise trigger on the FAIL shape (`Provenance: ⚠ N unsourced`) so neither the PASS line ("0 unsourced") nor a check-skipped line trips a pointless revision.
+
 ---
 
 ## [1.3.1] - 2026-07-21
