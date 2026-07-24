@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-blue" alt="Version 1.3.1"/>
+  <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
   <img src="https://img.shields.io/badge/tests-1526%20passing-brightgreen" alt="1526 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
@@ -399,6 +399,12 @@ sequenceDiagram
 | `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
 | `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
 | `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
+
+---
+
+## v1.4 — Visible provenance: the verdict reaches the user, and edits face the gate
+
+v1.3 built the truth gate; v1.4 makes it visible and closes its last gap. Every generation confirmation now ends with a one-line verdict from a single shared formatter (`Provenance: ✓ PASS — 6 claims traced to source, 0 unsourced` / `Provenance: ⚠ 2 unsourced — "47%", "$9M"`), and the dashboard renders it as a green/amber badge — after generating from the pipeline, and inside the AI edit dialogs right where you decide to accept or discard a draft. Those edit dialogs had been calling the LLM without the gate at all; they now run the same observe-and-report check with their own audit kinds (`resume_edit`, `cover_letter_edit`), so an inline edit can no longer smuggle in a fabricated metric silently. The mobile app gains over-the-air JS updates and real navigation (detail pages, global search, timeline), and the Home dashboard's cards all lead somewhere. Full details in the CHANGELOG.
 
 ---
 
