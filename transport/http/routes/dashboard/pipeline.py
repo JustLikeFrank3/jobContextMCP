@@ -484,6 +484,13 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
     },
 )
 async def pipeline_accept_cover_letter_edit(req: _CoverLetterAcceptRequest) -> JSONResponse:
+    # Owner gate mirrors the edit/generate routes — check before any mutation.
+    if req.export_pdf and req.export_pipeline == "latex":
+        from lib.user_context import get_current_user_oid
+        from lib.config import OWNER_OID as _OWNER_OID
+        if not (bool(_OWNER_OID) and get_current_user_oid() == _OWNER_OID):
+            raise HTTPException(status_code=403, detail="LaTeX export is not available for beta accounts.")
+
     source = _resolve_cover_letter(req.cover_letter_name)
     draft = _resolve_cover_letter_draft(req.draft_name)
     if draft not in _list_cover_letter_drafts(source.name):
@@ -491,13 +498,53 @@ async def pipeline_accept_cover_letter_edit(req: _CoverLetterAcceptRequest) -> J
 
     backup = _safe_child_path(source.parent, f"{source.name}.bak", detail="Invalid cover-letter backup path")
     backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")  # NOSONAR
-    source.write_text(draft.read_text(encoding="utf-8"), encoding="utf-8")  # NOSONAR
+    accepted_text = draft.read_text(encoding="utf-8")
+    source.write_text(accepted_text, encoding="utf-8")  # NOSONAR
     deleted = _delete_cover_letter_drafts(source.name)
+
+    # The .txt just changed, so the canonical PDF is stale — regenerate it.
+    # The review-phase PDF was rendered from the .tmp draft (a preview file),
+    # not this document. Export failure must not fail the accept: the text is
+    # already applied; surface the warning instead.
+    pdf_result = ""
+    pdf_href = ""
+    if req.export_pdf:
+        job = {}
+        if req.job_id is not None:
+            try:
+                job = _find_job(req.job_id)
+            except HTTPException:
+                job = {}  # job removed since the edit — export with defaults
+        role = job.get("role", "") or "Software Engineer"
+        try:
+            if req.export_pipeline == "latex":
+                body = _extract_cover_letter_body(accepted_text) or accepted_text
+                pdf_path = generate_cover_letter_latex(
+                    body=body,
+                    company=job.get("company", ""),
+                    role=role,
+                    role_title=role,
+                )
+                pdf_result = f"✓ PDF exported: {pdf_path}"
+                pdf_href = _material_href_for_pdf(pdf_path)
+            else:
+                pdf_result = export_cover_letter_pdf(
+                    source.name,
+                    footer_tag=role.upper(),
+                    template=job.get("cl_template") or "",
+                    style=job.get("cl_style") or "navy",
+                )
+                pdf_href = _material_href_for_pdf(_pdf_path_from_export_result(pdf_result))
+        except Exception as exc:  # noqa: BLE001 — text is applied; report, don't fail
+            pdf_result = f"⚠ PDF export failed: {exc}"
+
     return JSONResponse({
         "ok": True,
         "cover_letter_name": source.name,
         "backup_name": backup.name,
         "deleted_drafts": deleted,
+        "pdf_result": pdf_result,
+        "pdf_href": pdf_href,
         "href": f"/dashboard/materials/file/cover_letters/{quote(source.name, safe='')}",
     })
 

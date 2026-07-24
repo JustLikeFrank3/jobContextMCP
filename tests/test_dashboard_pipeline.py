@@ -421,6 +421,105 @@ class TestCoverLetterEditDialog:
         assert not (cl_dir / "base.edit1.tmp").exists()
         assert not (cl_dir / "base.edit2.tmp").exists()
 
+    def test_accept_regenerates_canonical_pdf_with_job_template(self, http_client_noauth, monkeypatch):
+        """Accepting a draft rewrites the .txt — the canonical PDF must be
+        re-exported from the accepted text (the review-phase PDF was a preview
+        of the .tmp draft, not this document)."""
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("accepted body", encoding="utf-8")
+        _seed_jobs([_job(id=21, company="Equifax", role="Lead AI Engineer",
+                         cl_template="modern", cl_style="forest")])
+
+        captured = {}
+
+        def fake_export(filename, **kw):
+            captured["filename"] = filename
+            captured.update(kw)
+            return "✓ PDF exported: 09-Cover-Letter-PDFs/base.pdf"
+
+        monkeypatch.setattr(pl, "export_cover_letter_pdf", fake_export)
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/accept-cover-letter-edit",
+            json={"cover_letter_name": "base.txt", "draft_name": "base.edit1.tmp",
+                  "job_id": 21, "export_pdf": True, "export_pipeline": "html"},
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "accepted body"
+        # Export ran against the CANONICAL file with the job's saved selection.
+        assert captured["filename"] == "base.txt"
+        assert captured["template"] == "modern"
+        assert captured["style"] == "forest"
+        assert captured["footer_tag"] == "LEAD AI ENGINEER"
+        assert body["pdf_result"].startswith("✓ PDF exported")
+        assert body["pdf_href"] == "/dashboard/materials/file/cover_letter_pdfs/base.pdf"
+
+    def test_accept_skips_export_when_disabled(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("draft", encoding="utf-8")
+
+        def boom(*a, **kw):
+            raise AssertionError("export must not run when export_pdf is false")
+
+        monkeypatch.setattr(pl, "export_cover_letter_pdf", boom)
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/accept-cover-letter-edit",
+            json={"cover_letter_name": "base.txt", "draft_name": "base.edit1.tmp",
+                  "export_pdf": False},
+        )
+
+        assert r.status_code == 200
+        assert r.json()["pdf_result"] == ""
+        assert r.json()["pdf_href"] == ""
+
+    def test_accept_export_failure_does_not_fail_the_accept(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("accepted", encoding="utf-8")
+
+        def broken(*a, **kw):
+            raise RuntimeError("weasyprint on fire")
+
+        monkeypatch.setattr(pl, "export_cover_letter_pdf", broken)
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/accept-cover-letter-edit",
+            json={"cover_letter_name": "base.txt", "draft_name": "base.edit1.tmp"},
+        )
+
+        assert r.status_code == 200
+        # Text applied even though the export failed — surfaced, not fatal.
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "accepted"
+        assert r.json()["pdf_result"].startswith("⚠ PDF export failed")
+
+    def test_accept_latex_is_owner_gated_before_mutation(self, http_client_noauth, monkeypatch):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        (cl_dir / "base.edit1.tmp").write_text("draft", encoding="utf-8")
+
+        monkeypatch.setattr("lib.config.OWNER_OID", "owner-123")
+        monkeypatch.setattr("lib.user_context.get_current_user_oid", lambda: "someone-else")
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/accept-cover-letter-edit",
+            json={"cover_letter_name": "base.txt", "draft_name": "base.edit1.tmp",
+                  "export_pipeline": "latex"},
+        )
+
+        assert r.status_code == 403
+        # Gate fires BEFORE any mutation: original intact, draft still there.
+        assert (cl_dir / "base.txt").read_text(encoding="utf-8") == "original"
+        assert (cl_dir / "base.edit1.tmp").exists()
+
     def test_cancel_cover_letter_edit_removes_drafts_without_touching_original(self, http_client_noauth):
         cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
         cl_dir.mkdir(parents=True, exist_ok=True)
