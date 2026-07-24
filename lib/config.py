@@ -107,6 +107,7 @@ PERSONAL_CONTEXT_FILE: Path     = DATA_FOLDER / "personal_context.json"
 TONE_FILE: Path                 = DATA_FOLDER / "tone_samples.json"
 SCAN_INDEX_FILE: Path           = DATA_FOLDER / "scan_index.json"
 PEOPLE_FILE: Path               = DATA_FOLDER / "people.json"
+DISMISSALS_FILE: Path           = DATA_FOLDER / "dismissals.json"
 LINKEDIN_POSTS_FILE: Path       = DATA_FOLDER / "linkedin_posts.json"
 REJECTIONS_FILE: Path           = DATA_FOLDER / "rejections.json"
 INTERVIEWS_FILE: Path           = DATA_FOLDER / "interviews.json"
@@ -530,7 +531,7 @@ def _reconfigure(cfg: dict) -> None:
     global RESUME_FOLDER, LEETCODE_FOLDER, SIDE_PROJECT_FOLDERS, SIDE_PROJECT_REPOS, DATA_FOLDER
     global FB_FRIENDS_FOLDER, LATEX_RESUME_DIR
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE
-    global SCAN_INDEX_FILE, PEOPLE_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
+    global SCAN_INDEX_FILE, PEOPLE_FILE, DISMISSALS_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
     global INTERVIEWS_FILE, CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE
     global GITHUB_METRICS_FILE, JOB_QUEUE_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
@@ -563,6 +564,7 @@ def _reconfigure(cfg: dict) -> None:
     TONE_FILE                 = DATA_FOLDER / "tone_samples.json"
     SCAN_INDEX_FILE           = DATA_FOLDER / "scan_index.json"
     PEOPLE_FILE               = DATA_FOLDER / "people.json"
+    DISMISSALS_FILE           = DATA_FOLDER / "dismissals.json"
     LINKEDIN_POSTS_FILE       = DATA_FOLDER / "linkedin_posts.json"
     REJECTIONS_FILE           = DATA_FOLDER / "rejections.json"
     INTERVIEWS_FILE           = DATA_FOLDER / "interviews.json"

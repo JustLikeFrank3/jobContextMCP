@@ -342,7 +342,10 @@ class TestDashboardHomeCoverage:
             {"company": "Closed Co", "role": "Old Role", "last_updated": "closed"},
         ]
         queue_jobs = [{"company": "Queue Co", "role": "SWE", "status": "evaluated"}]
-        people = [{"name": "Dana", "outreach_status": "drafted"}]
+        # Drafted contacts now face the same liveness rules as the follow-up
+        # queue: a draft with no (or an ancient) last touch is not a priority.
+        dana_touch = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).strftime("%Y-%m-%d")
+        people = [{"name": "Dana", "outreach_status": "drafted", "last_contacted": dana_touch}]
         health = [{"date": "health-old"}]
         age_map = {"stale": 21, "fresh": 2, "closed": 30, "health-old": 4}
 
@@ -1706,6 +1709,10 @@ class TestDashboardMaterialsCoverage:
 
 class TestDashboardPeopleCoverage:
     def test_people_payload_sorts_recency_and_builds_follow_up_queue(self, monkeypatch):
+        # Dynamic recent dates: the queue now times out stale threads, so the
+        # fixture must stay inside the follow-up window regardless of today.
+        fresh = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).strftime("%Y-%m-%d")
+        fresher = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime("%Y-%m-%d")
         monkeypatch.setattr(
             people_routes,
             "_load_json",
@@ -1715,7 +1722,7 @@ class TestDashboardPeopleCoverage:
                     "company": "Acme",
                     "outreach_status": "sent",
                     "relationship": "recruiter",
-                    "last_contacted": "2026-06-28",
+                    "last_contacted": fresher,
                     "tags": ["warm"],
                 },
                 {
@@ -1723,7 +1730,7 @@ class TestDashboardPeopleCoverage:
                     "company": "Beta",
                     "outreach_status": "drafted",
                     "relationship": "manager",
-                    "last_updated": "2026-06-27",
+                    "last_updated": fresh,
                 },
                 {
                     "name": "Fran",
@@ -1732,6 +1739,7 @@ class TestDashboardPeopleCoverage:
                 },
             ],
         )
+        monkeypatch.setattr(people_routes.dismissals, "active_keys", lambda kind: set())
 
         payload = people_routes._people_payload()
 

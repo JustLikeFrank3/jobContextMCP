@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **Follow-up queue sanity** -- the People follow-up queue was "status ∈ {drafted, sent, follow-up}, forever": a ghosted recruiter stayed a suggested follow-up for months. The queue now (1) times out threads untouched for `followup_timeout_days` (default 21) into a collapsed "Gone cold" bucket instead of the to-do list, (2) excludes closed-thread tags (`unresponsive`, `closed-loop`, `do-not-contact`, `dormant`, `archived`), and (3) supports per-contact dismissal (✕ on the card; `POST /dashboard/people/dismiss-followup`, restorable). Dismissals live in a per-user overlay (`lib/dismissals.py`, `dismissals.json`) because the queue is a derived view with no row to delete.
+- **Home priorities are dismissible and face the same liveness rules** -- ✕ on a priority row hides it (`POST /api/dashboard/home/dismiss-priority`, expiring after 14 days so a still-true priority resurfaces); dismissing one promotes the next instead of leaving a gap. The "Send message to …" priority no longer surfaces drafts for ghosted or long-untouched contacts.
+
 ---
 
 ## [1.4.0] - 2026-07-24

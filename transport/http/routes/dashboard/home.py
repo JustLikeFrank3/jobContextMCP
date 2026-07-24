@@ -21,7 +21,9 @@ from tools.digest import (
     _is_waiting,
     _days_since,
 )
+from lib import dismissals
 from tools.job_hunt import _check_overdue_followups
+from .people import _followup_timeout_days, _has_excluded_tag, _is_followup_fresh
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -45,9 +47,17 @@ def _build_snapshot() -> dict:  # NOSONAR
 
     overdue      = _check_overdue_followups(active)
 
+    # Same liveness rules as the People follow-up queue: a draft for a
+    # closed/ghosted thread, an ancient draft, or a dismissed contact must
+    # not resurface as a Home priority.
+    _timeout = _followup_timeout_days()
+    _dismissed_people = dismissals.active_keys("followup")
     drafted_unsent = [
         p for p in people
         if p.get("outreach_status", "").lower() == "drafted"
+        and not _has_excluded_tag(p)
+        and _is_followup_fresh(p, _timeout)
+        and str(p.get("name") or "") not in _dismissed_people
     ]
     undecided = [j for j in queue_jobs if j.get("status") in ("pending", "evaluated")]
 
@@ -80,6 +90,11 @@ def _build_snapshot() -> dict:  # NOSONAR
         priorities.append("Apply to 2–3 new roles today")
         if not health or _days_since(health[-1].get("date", "2000-01-01")) >= 3:
             priorities.append("Log a check-in after your session")
+
+    # Per-user dismissals (exact text, default-expiring) — filter BEFORE the
+    # cap so dismissing one priority promotes the next instead of leaving a gap.
+    _dismissed_priorities = dismissals.active_keys("priority")
+    priorities = [p for p in priorities if p not in _dismissed_priorities]
 
     return {
         "has_data":      True,
