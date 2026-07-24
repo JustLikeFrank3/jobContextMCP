@@ -237,6 +237,48 @@ class TestResumeEditDialog:
         assert (opt_dir / "edited-stripe.txt").read_text(encoding="utf-8") == "FRANK\nNEW BULLET"
         saved = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})["jobs"][0]
         assert saved["last_edited_resume"] == "edited-stripe.txt"
+        # No numeric claims in the edited draft → clean PASS verdict surfaced.
+        assert body["provenance"] == (
+            "Provenance: ✓ PASS — 0 claims traced to source, 0 unsourced"
+        )
+
+    def test_edit_resume_flags_fabricated_claim(self, http_client_noauth, monkeypatch):
+        """Adversarial: the model injects a metric found nowhere in the prompt
+        (current resume, JD, instructions) — the gate names it, but the edit
+        still succeeds (observe-and-report, not blocking)."""
+        opt_dir = config.RESUME_FOLDER / config._cfg.get("optimized_resumes_dir", "01-Current-Optimized")
+        opt_dir.mkdir(parents=True, exist_ok=True)
+        (opt_dir / "base.txt").write_text("FRANK\nOLD BULLET", encoding="utf-8")
+        _seed_jobs([_job(id=13, company="Stripe", role="Staff Engineer")])
+
+        class FakeMessage:
+            content = "FRANK\nSaved the company $5M annually"
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = None
+
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
+
+        r = http_client_noauth.post(
+            "/dashboard/pipeline/edit-resume",
+            json={
+                "job_id": 13,
+                "resume_name": "base.txt",
+                "instructions": "Punch up the impact of the first bullet.",
+                "export_pdf": False,
+            },
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["provenance"].startswith("Provenance: ⚠ 1 unsourced")
+        assert '"$5M"' in body["provenance"]
 
 
 class TestCoverLetterEditDialog:
@@ -300,6 +342,9 @@ class TestCoverLetterEditDialog:
         assert body["edited_cover_letter"] == "base.edit1.tmp"
         assert body["draft_name"] == "base.edit1.tmp"
         assert body["draft_href"] == "/dashboard/pipeline/cover-letter-draft/base.edit1.tmp"
+        assert body["provenance"] == (
+            "Provenance: ✓ PASS — 0 claims traced to source, 0 unsourced"
+        )
         assert body["export_pipeline"] == "latex"
         assert "09-Cover-Letter-PDFs" in body["pdf_result"]
         assert body["pdf_href"] == "/dashboard/materials/file/cover_letter_pdfs/edited.pdf"
