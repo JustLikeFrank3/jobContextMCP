@@ -4,7 +4,7 @@ import { apiPost } from '../../auth/api.js'
 import useDesktopMode from '../../shell/useDesktopMode.js'
 import { nativeAnchorHandler } from '../../shell/nativeOpen.js'
 import { EYEBROW } from '../_shared.jsx'
-import { Modal, ResultLine, EmptyEditorState, modalField, modalLabel, actionError } from './shared.jsx'
+import { Modal, ResultLine, EmptyEditorState, ProvenanceNote, modalField, modalLabel, actionError } from './shared.jsx'
 
 /* Edit Cover Letter (draft → review → accept/discard) */
 export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDone }) {
@@ -86,6 +86,7 @@ export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner,
           background: 'var(--surface-sunken)', border: '1px solid var(--border-soft)', borderRadius: 'var(--radius-sm)',
           color: 'var(--text-soft)', fontSize: 'var(--fs-sm)', lineHeight: 1.5,
         }}>{draft.draft_content}</pre>
+        <ProvenanceNote line={draft.provenance} />
         {draft.save_result && <ResultLine>{draft.save_result}</ResultLine>}
         {draft.pdf_result && <ResultLine>{draft.pdf_result}</ResultLine>}
         {draft.pdf_href && (

@@ -17,7 +17,11 @@ from lib.openai_calls import create_chat_completion
 from services import JobAnalysisService, ResumeService
 from services.persona_service import PersonaService, DEFAULT_PERSONA
 from tools.export import export_cover_letter_pdf, export_resume_pdf
-from tools.generate import _extract_cover_letter_body, _sanitize_cover_letter_output
+from tools.generate import (
+    _extract_cover_letter_body,
+    _provenance_note,
+    _sanitize_cover_letter_output,
+)
 from tools.job_hunt import log_application_event, update_application
 from tools.latex_export import generate_cover_letter_latex
 from tools.resume import save_cover_letter_txt, save_resume_txt
@@ -167,6 +171,7 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
         "ok": result.success,
         "content": result.content,
         "notes": result.notes,
+        "provenance": result.provenance,
         "selected_resume": selected,
     })
 
@@ -203,6 +208,7 @@ async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse
         "ok": result.success,
         "content": result.content,
         "notes": result.notes,
+        "provenance": result.provenance,
         "selected_resume": selected,
     })
 
@@ -295,6 +301,19 @@ async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_resume": output_name}))
 
+    # Truth gate over the edited draft (observe-and-report, never blocks).
+    # Sources = everything the model was shown (current resume, JD, edit
+    # instructions): a numeric claim absent from all of it was fabricated by
+    # the edit. An explicitly instructed number is in-source by design.
+    prov_note = _provenance_note(
+        "resume_edit",
+        job.get("company", ""),
+        job.get("role", ""),
+        job.get("jd", ""),
+        edited,
+        "\n".join(str(m.get("content", "")) for m in messages),
+    )
+
     return JSONResponse({
         "ok": True,
         "job_id": req.job_id,
@@ -302,6 +321,7 @@ async def pipeline_edit_resume(req: _ResumeEditRequest) -> JSONResponse:
         "edited_resume": output_name,
         "save_result": save_result,
         "pdf_result": pdf_result,
+        "provenance": prov_note,
         "usage": {
             "prompt_tokens": getattr(response.usage, "prompt_tokens", None) if response.usage else None,
             "completion_tokens": getattr(response.usage, "completion_tokens", None) if response.usage else None,
@@ -425,11 +445,22 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
 
     _update_job(req.job_id, lambda j: j.update({"last_edited_cover_letter": source.name}))
 
+    # Same observe-and-report truth gate as edit-resume, over the CL draft.
+    prov_note = _provenance_note(
+        "cover_letter_edit",
+        job.get("company", ""),
+        job.get("role", ""),
+        job.get("jd", ""),
+        edited,
+        "\n".join(str(m.get("content", "")) for m in messages),
+    )
+
     return JSONResponse({
         "ok": True,
         "job_id": req.job_id,
         "source_cover_letter": source.name,
         "edited_cover_letter": draft_path.name,
+        "provenance": prov_note,
         "draft_name": draft_path.name,
         "draft_href": _draft_href(draft_path),
         "draft_content": edited,

@@ -1,8 +1,23 @@
 import { createPortal } from 'react-dom'
 import { Panel } from '../../design-system'
 import { ApiError } from '../../auth/api.js'
+import { Badge } from '../_shared.jsx'
+import { parseProvenance, PROVENANCE_TONE, PROVENANCE_BADGE_LABEL } from './provenance.js'
 
 /* Shared primitives for the Pipeline card actions and editor modals. */
+
+/* Renders the backend's one-line provenance verdict as a badge + line.
+   Renders nothing when the response carried no verdict (e.g. older server). */
+export function ProvenanceNote({ line }) {
+  const parsed = parseProvenance(line)
+  if (!parsed) return null
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 8px' }}>
+      <Badge tone={PROVENANCE_TONE[parsed.status]}>{PROVENANCE_BADGE_LABEL[parsed.status]}</Badge>
+      <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)' }}>{parsed.text}</span>
+    </div>
+  )
+}
 
 export function actionError(e) {
   if (e instanceof ApiError) {

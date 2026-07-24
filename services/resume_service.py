@@ -36,6 +36,11 @@ class ResumeResult:
                         save and export paths embedded in the message.
         pdf_exported:   True if a PDF export step ran and produced a file.
         notes:          Any non-fatal warnings collected during orchestration.
+        provenance:     The one-line provenance verdict emitted by the truth
+                        gate (lib.provenance.format_provenance_line), split
+                        out of `content` so clients can render it as its own
+                        element. None when no gate line is present (keyless
+                        context-package path).
     """
     success: bool
     company: str
@@ -44,10 +49,20 @@ class ResumeResult:
     content: str
     pdf_exported: bool = False
     notes: Optional[list[str]] = None
+    provenance: Optional[str] = None
 
     def __post_init__(self):
         if self.notes is None:
             self.notes = []
+
+
+def _extract_provenance_line(content: str) -> Optional[str]:
+    """Pull the gate's one-line verdict out of a confirmation string."""
+    for line in (content or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Provenance:"):
+            return stripped
+    return None
 
 
 class ResumeService:
@@ -162,6 +177,7 @@ class ResumeService:
             content=content,
             pdf_exported=pdf_exported,
             notes=notes,
+            provenance=_extract_provenance_line(content),
         )
 
     @staticmethod

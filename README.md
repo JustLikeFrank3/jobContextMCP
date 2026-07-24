@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.1-blue" alt="Version 1.3.1"/>
-  <img src="https://img.shields.io/badge/tests-1512%20passing-brightgreen" alt="1512 tests passing"/>
+  <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
+  <img src="https://img.shields.io/badge/tests-1526%20passing-brightgreen" alt="1526 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2085%20actions-informational" alt="11 domain tools, 85 actions"/>
+  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -34,8 +34,8 @@ Available as a **double-clickable desktop app** (macOS · Windows · Linux), a l
 
 | | |
 |---|---|
-| 11 domain tools (85 actions) | Resume + cover letter generation |
-| 1512 passing tests | Job fitment analysis with persona lenses |
+| 11 domain tools (88 actions) | Resume + cover letter generation |
+| 1526 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -165,7 +165,7 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
 | Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
 | Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, Entra-authenticated dashboard routes, LangGraph workflow streaming |
-| Provenance & trust | Deterministic truth gate on every generation path — numeric claims must trace to source material or the pipeline routes back to revision (reviewer approval alone is not enough); per-run audit records (`generation_provenance`), audited master-resume edits (`master_resume_edits`), durable gate metrics on `/metrics` for dashboards |
+| Provenance & trust | Deterministic truth gate on every generation path *and* the AI edit dialogs — numeric claims must trace to source material or the pipeline routes back to revision (reviewer approval alone is not enough); the verdict is surfaced in every confirmation and as a pass/fail badge in the dashboard; per-run audit records (`generation_provenance`), audited master-resume edits (`master_resume_edits`), durable gate metrics on `/metrics` for dashboards |
 | Self-hosting | Disposable local k3d cluster and a documented single-node k3s deployment (proven on a Raspberry Pi 4, 4GB): arm64 image cross-builds, nightly SQLite-safe backups, Prometheus/Grafana/Loki wallboard with a rotating kiosk, and prod-metrics federation over a scoped outbound tunnel |
 
 ---
@@ -399,6 +399,12 @@ sequenceDiagram
 | `get_fb_outreach_queue(limit?, offset?, sort_by?, include_pending?)` | **v0.9** — prioritized queue of Facebook friends not yet connected on LinkedIn; sorted by recency (freshest relationships first); active job target companies included so the AI can flag anyone who works there |
 | `save_interview_prep(company, content, filename?)` | Save a generated interview prep document to `08-Interview-Prep-Docs/` as a `.md` file; filename defaults to `{COMPANY}_INTERVIEW_PREP.md`; overwrites for iterative improvement |
 | `save_job_assessment(company, content, filename?, source?)` | Save a generated fitment assessment to `07-Job-Assessments/` (or `07-Job-Assessments/<source>/` subfolder); filename defaults to `{Company} - Fitment Assessment.md` |
+
+---
+
+## v1.4 — Visible provenance: the verdict reaches the user, and edits face the gate
+
+v1.3 built the truth gate; v1.4 makes it visible and closes its last gap. Every generation confirmation now ends with a one-line verdict from a single shared formatter (`Provenance: ✓ PASS — 6 claims traced to source, 0 unsourced` / `Provenance: ⚠ 2 unsourced — "47%", "$9M"`), and the dashboard renders it as a green/amber badge — after generating from the pipeline, and inside the AI edit dialogs right where you decide to accept or discard a draft. Those edit dialogs had been calling the LLM without the gate at all; they now run the same observe-and-report check with their own audit kinds (`resume_edit`, `cover_letter_edit`), so an inline edit can no longer smuggle in a fabricated metric silently. The mobile app gains over-the-air JS updates and real navigation (detail pages, global search, timeline), and the Home dashboard's cards all lead somewhere. Full details in the CHANGELOG.
 
 ---
 
@@ -683,7 +689,7 @@ brew install python@3.12
 
 # Smoke test: confirm the server imports cleanly and registers all tools
 .venv/bin/python3 -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
-# Expected: OK, 11 tools (85 actions; set JOBCONTEXT_LEGACY_TOOLS=1 for the old per-function surface)
+# Expected: OK, 11 tools (88 actions; set JOBCONTEXT_LEGACY_TOOLS=1 for the old per-function surface)
 ```
 
 > ⚠️ **macOS venv gotcha:** if you accidentally run `python3 -m venv .venv` with the system 3.9 first, the resulting `.venv/bin/python3` symlink points at the system 3.9 binary. A follow-up `python3.12 -m venv .venv` call will NOT replace it — the broken symlink survives. Symptom: `ModuleNotFoundError: No module named 'mcp'` even though `pip list` shows it installed. Fix: `rm -rf .venv` and recreate with the explicit `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv` command above.

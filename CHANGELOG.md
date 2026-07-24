@@ -6,6 +6,33 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.4.0] - 2026-07-24
+
+The visible-provenance release: the truth gate's verdict now reaches the user on every path that produces or edits a document — one formatted line in every confirmation, a pass/fail badge in the dashboard — and the AI edit dialogs, which had been bypassing the gate entirely, are gated and audited. Plus mobile over-the-air updates and screen-to-screen navigation, an actionable Home dashboard, a Materials redesign, and a LaTeX header website field. 1526 passing tests.
+
+### Features
+
+- **Provenance verdict surfaced to the user** -- the gate ran on every generation and wrote its audit row, but the single-shot dashboard path completed silently. Now `lib/provenance.format_provenance_line()` is the single source of truth for a one-line verdict (`Provenance: ✓ PASS — 6 claims traced to source, 0 unsourced` / `Provenance: ⚠ 2 unsourced — "47%", "$9M"`), consumed by the single-shot confirmation strings, the agent-pipeline header, and the API (`provenance` field on the generate-resume / generate-cover-letter responses). The Pipeline screen shows a dismissible result banner with a green/amber badge after every generation. Observe-and-report: a FAIL is informational — the document still generates with the warning attached.
+- **Truth gate on the AI edit dialogs** -- `/pipeline/edit-resume` and `/pipeline/edit-cover-letter` called the LLM directly and never ran the gate: an inline edit could inject a fabricated metric with no audit row and no warning. Both now run the observe-and-report gate over the edited draft (audit kinds `resume_edit` / `cover_letter_edit`), with sources = everything the model was shown (current document, JD, edit instructions — an explicitly instructed number is in-source by design). The verdict renders in the Edit Resume result view and in the cover-letter review phase, next to Accept & apply / Discard.
+- The `workflows/langgraph` resume graph anchors its revise trigger on the FAIL shape (`Provenance: ⚠ N unsourced`) so neither the PASS line ("0 unsourced") nor a check-skipped line trips a pointless revision.
+- **Mobile OTA updates** -- expo-updates wired into the companion app with EAS Update channels on the preview/production build profiles, so JS changes ship without a store build; EAS project owner pinned to `justlikefrank`.
+- **Mobile navigation** -- detail pages, global search, and a timeline: cards are no longer dead ends.
+- **Actionable Home dashboard** -- every card on the SPA Home screen is a door to its underlying screen.
+- **Materials redesign** -- global filter and the four real workspace folders (the mtime-based "recents" strip proved noisy and was dropped).
+- **LaTeX website field** -- optional website in resume and cover-letter headers.
+
+### Bug fixes
+
+- **Modals trapped in the page wrapper** -- `.jc-page`'s enter animation animates `transform`, making it the containing block for fixed descendants; modals now portal to `<body>` so overlays center on the viewport.
+- **Silent dead-click opening files on desktop Linux** -- file opens from Materials now report failures instead of doing nothing.
+- **PAT/mobile users greeted as "there"** -- the dashboard greeting (and its avatar initial) now uses the API-key identity name instead of a placeholder.
+
+### CI
+
+- Desktop releases can be dispatched by maintainers without tag-push rights (workflow_dispatch path).
+
+---
+
 ## [1.3.1] - 2026-07-21
 
 Patch: clears the v1.3.0 SonarCloud quality gate (one S2083 false positive on `update_master_resume`'s file write — fourth occurrence of the taint-engine pattern, fixed with the repo's established `open()` idiom; no behavior change). Tagged so the release lineage ends on a green gate.

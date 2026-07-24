@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../../design-system'
 import { apiPost } from '../../auth/api.js'
-import { Modal, ResultLine, EmptyEditorState, modalField, modalLabel, actionError } from './shared.jsx'
+import { Modal, ResultLine, EmptyEditorState, ProvenanceNote, modalField, modalLabel, actionError } from './shared.jsx'
 
 export default function EditResumeModal({ job, resumeOptions, onClose, onDone }) {
   const options = resumeOptions || []
@@ -36,6 +36,7 @@ export default function EditResumeModal({ job, resumeOptions, onClose, onDone })
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', color: 'var(--text-strong)', wordBreak: 'break-all' }}>{result.edited_resume}</div>
             )}
           </div>
+          <ProvenanceNote line={result.provenance} />
           {result.save_result && <ResultLine>{result.save_result}</ResultLine>}
           {result.pdf_result && <ResultLine>{result.pdf_result}</ResultLine>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
