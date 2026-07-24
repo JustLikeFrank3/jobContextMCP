@@ -111,6 +111,44 @@ class TestResumeService:
         )
         assert isinstance(result, ResumeResult)
 
+    def test_provenance_line_extracted_into_result(self, isolated_server, monkeypatch):
+        monkeypatch.setattr(
+            "tools.generate.generate_resume",
+            lambda *a, **k: (
+                "✓ Resume generated for R @ C\n"
+                "  ✓ Saved: resume.txt\n"
+                "  Provenance: ✓ PASS — 2 claims traced to source, 0 unsourced"
+            ),
+        )
+        result = ResumeService.generate(
+            company="C", role="R", job_description="jd", kind="resume",
+        )
+        assert result.provenance == (
+            "Provenance: ✓ PASS — 2 claims traced to source, 0 unsourced"
+        )
+
+    def test_provenance_fail_line_extracted_verbatim(self, isolated_server, monkeypatch):
+        monkeypatch.setattr(
+            "tools.generate.generate_resume",
+            lambda *a, **k: (
+                '✓ Resume generated for R @ C\n  Provenance: ⚠ 1 unsourced — "2M"'
+            ),
+        )
+        result = ResumeService.generate(
+            company="C", role="R", job_description="jd", kind="resume",
+        )
+        assert result.provenance == 'Provenance: ⚠ 1 unsourced — "2M"'
+        # Informational, not blocking: the run still reports success.
+        assert result.success is True
+
+    def test_provenance_none_when_no_gate_line(self, isolated_server):
+        # Keyless config returns the context package, which carries no gate line.
+        result = ResumeService.generate(
+            company="Stripe", role="Staff Engineer", job_description="JD",
+            kind="resume",
+        )
+        assert result.provenance is None
+
     def test_starting_event_payload_includes_company_and_role(self, isolated_server):
         events, cb = _capture()
         ResumeService.generate(

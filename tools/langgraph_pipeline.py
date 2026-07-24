@@ -479,12 +479,11 @@ def generate_resume_agent(company: str, role: str, job_description: str) -> str:
     revisions = final_state["revision_count"]
     review = final_state["review_notes"]
     review_summary = review[:80] + "..." if len(review) > 80 else review
+    from lib.provenance import extract_claims, format_provenance_line
+
     violations = final_state.get("provenance_violations") or []
-    provenance_line = (
-        "  Provenance: PASSED — every numeric claim traces to source material"
-        if not violations
-        else "  Provenance: FAILED — unsourced claims survived revision: "
-        + ", ".join(violations[:5])
+    provenance_line = "  " + format_provenance_line(
+        extract_claims(final_state["draft"]), violations
     )
 
     header = "\n".join([

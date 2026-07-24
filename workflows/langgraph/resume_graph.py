@@ -30,6 +30,7 @@ falls back to deterministic disk/text operations when no key is present.
 
 from __future__ import annotations
 
+import re
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
@@ -120,9 +121,11 @@ def _node_review(state: ResumeGraphState) -> dict:
         feedback.append("LLM call returned an error marker.")
     # The provenance gate runs inside tools.generate (this graph's draft node
     # delegates to it); an unsourced-claims verdict rides back in the
-    # confirmation string. Treat it as a review failure so the revise loop
-    # gets one shot at a clean regeneration.
-    if "⚠ Provenance: unsourced claims" in draft:
+    # confirmation string (lib.provenance.format_provenance_line). Treat it
+    # as a review failure so the revise loop gets one shot at a clean
+    # regeneration. The pattern must not match the PASS line ("0 unsourced")
+    # or the check-skipped line, so it anchors on the FAIL shape "⚠ N unsourced".
+    if re.search(r"Provenance: ⚠ \d+ unsourced", draft):
         feedback.append(
             "Provenance gate found unsourced numeric claims — regenerate "
             "using only facts from the master resume."
