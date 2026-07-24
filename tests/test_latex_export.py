@@ -43,6 +43,25 @@ def test_latex_user_identity_blank_strings_fall_back_to_placeholder(monkeypatch)
     assert "example" in identity["email"]
     assert identity["linkedin"] == "yourhandle"
     assert identity["github"] == "YourGitHub"
+    # website has NO placeholder: blank must stay blank so the header's
+    # \ifx\website\empty guard suppresses the third link entirely.
+    assert identity["website"] == ""
+
+
+def test_latex_user_identity_website_is_schemeless(monkeypatch):
+    """The header renders \\href{https://\\website}{\\website}, so the stored
+    value must come back scheme-less and without a trailing slash."""
+    monkeypatch.setattr(
+        latex_export.cfg, "get_contact_info",
+        lambda: {"website": "https://jobcontext.ai/"},
+    )
+    assert latex_export._user_identity()["website"] == "jobcontext.ai"
+
+    monkeypatch.setattr(
+        latex_export.cfg, "get_contact_info",
+        lambda: {"website": "jobcontext.ai"},
+    )
+    assert latex_export._user_identity()["website"] == "jobcontext.ai"
 
 
 def test_latex_cover_letter_defaults_to_cover_letter_pdf_folder(monkeypatch, tmp_path):
@@ -361,6 +380,39 @@ def test_inject_identity_overrides_all_contact_macros():
     # Non-identity macros (role) are never touched by identity injection.
     assert r"\def\role{Keep Me}" in out
     assert "PLACEHOLDER" not in out
+
+
+def test_inject_identity_sets_website_when_provided():
+    src = r"\def\website{}"
+    out = latex_export._inject_identity(src, {"website": "jobcontext.ai"})
+    assert r"\def\website{jobcontext.ai}" in out
+
+
+def test_inject_identity_blank_website_keeps_template_macro_empty():
+    """resume.tex ships \\def\\website{} and _header.tex hides the link via
+    \\ifx\\website\\empty — a blank identity value must leave that untouched
+    (never render a bare https:// link)."""
+    src = r"\def\website{}"
+    out = latex_export._inject_identity(src, {"website": ""})
+    assert out == src
+
+
+def test_cover_letter_template_carries_website_def():
+    """The cover-letter template must declare \\def\\website before
+    \\input{_header} so both documents can render the third header link; an
+    empty value must produce a literally-empty def (the guard's empty test)."""
+    rendered = latex_export._TEX_TEMPLATE.format(
+        name="N", phone="P", city="C", email="E", linkedin="L", github="G",
+        website="", role_title="R", date="D", body="B",
+    )
+    assert "\\def\\website{}" in rendered
+    assert rendered.index("\\def\\website{}") < rendered.index("\\input{_header}")
+
+    rendered = latex_export._TEX_TEMPLATE.format(
+        name="N", phone="P", city="C", email="E", linkedin="L", github="G",
+        website="jobcontext.ai", role_title="R", date="D", body="B",
+    )
+    assert "\\def\\website{jobcontext.ai}" in rendered
 
 
 def test_inject_identity_skips_absent_macros():

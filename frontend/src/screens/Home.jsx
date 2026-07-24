@@ -21,7 +21,11 @@ import useDesktopMode from '../shell/useDesktopMode.js'
      augments the page rather than replacing the digest.
    - Animated gauge + bars on mount (skipped under prefers-reduced-motion).
    - The page title/subtitle come from DashboardShell — this screen renders
-     content only. */
+     content only.
+   - Every card is a door, not a poster: stat tiles, priority rows, and
+     digest rows navigate to the screen where the number can be acted on;
+     free-text priorities route by keyword and fall back to seeding the
+     chat assistant with the priority itself. */
 
 const ACCENT = 'var(--cyan-500)'
 
@@ -60,6 +64,57 @@ const MOCK = {
     date: '',
     items: [],
   },
+}
+
+/* Keyboard-accessible click wrapper for the dashboard's cards. Hover gives
+   a small lift so actionability is discoverable without changing the
+   handoff's visual design. */
+function Actionable({ onGo, title, style, hoverStyle, children }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      title={title}
+      onClick={onGo}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onGo()
+        }
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        cursor: 'pointer',
+        transition: 'transform .15s ease, border-color .15s ease, background .15s ease',
+        ...style,
+        ...(hover ? { transform: 'translateY(-1px)', ...hoverStyle } : null),
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/* Where a free-text priority ("Follow up with SeatGeek", "Review: GM — SWE")
+   leads. Unknown shapes fall back to null → the row seeds the assistant. */
+function priorityTarget(text) {
+  const t = String(text || '').toLowerCase()
+  if (/interview|prep|panel|debrief/.test(t)) return '/interviews'
+  if (/follow.?up|message|reply|reach out|email|recruiter|contact/.test(t)) return '/people'
+  if (/\bpost\b|linkedin/.test(t)) return '/posts'
+  if (/review|apply|application|assessment|role\b|job\b|offer|resume|cover letter/.test(t)) return '/pipeline'
+  if (/check.?in|wellbeing|health|sleep|readiness/.test(t)) return '/health'
+  return null
+}
+
+/* The digest's label vocabulary is fixed server-side (_digest_payload). */
+function digestTarget(label) {
+  const l = String(label || '').toLowerCase()
+  if (l.includes('follow-up')) return '/people'
+  if (l.includes('interview')) return '/interviews'
+  return '/pipeline' // stale applications, new assessments ready
 }
 
 function prefersReducedMotion() {
@@ -236,9 +291,11 @@ function Toggle({ on, onClick, accent, disabled = false }) {
   )
 }
 
-function StatTile({ value, label, tint = false, valueColor }) {
+function StatTile({ value, label, tint = false, valueColor, onGo, goTitle }) {
   return (
-    <div
+    <Actionable
+      onGo={onGo}
+      title={goTitle}
       style={{
         flex: '1 1 150px',
         padding: 18,
@@ -246,6 +303,7 @@ function StatTile({ value, label, tint = false, valueColor }) {
         background: tint ? 'rgba(0,181,200,.1)' : CARD_BG,
         border: tint ? '1px solid rgba(0,181,200,.24)' : CARD_BORDER,
       }}
+      hoverStyle={{ border: '1px solid rgba(0,181,200,.4)' }}
     >
       <div
         style={{
@@ -259,17 +317,19 @@ function StatTile({ value, label, tint = false, valueColor }) {
         {value}
       </div>
       <div style={{ fontSize: 12, color: tint ? '#8AB6C4' : 'var(--muted)', marginTop: 3 }}>{label}</div>
-    </div>
+    </Actionable>
   )
 }
 
 /* Digest rows styled like the handoff's FOLLOW-UPS DUE list — one card per
    item with a colored dot + label and a mono status chip on the right. */
-function Digest({ digest }) {
+function Digest({ digest, navigate }) {
   const items = digest?.items || []
   if (items.length === 0) {
     return (
-      <div
+      <Actionable
+        onGo={() => navigate('/job-hunt')}
+        title="Open Job Hunt"
         style={{
           borderRadius: 14,
           padding: '14px 16px',
@@ -278,18 +338,22 @@ function Digest({ digest }) {
           color: 'var(--faint)',
           fontSize: 13,
         }}
+        hoverStyle={{ border: '1px solid rgba(0,181,200,.3)' }}
       >
-        Nothing pressing right now. Apply to 2 or 3 new roles today.
-      </div>
+        Nothing pressing right now. Apply to 2 or 3 new roles today {'→'}
+      </Actionable>
     )
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {items.map((d, i) => {
         const col = d.color || 'var(--cyan-300)'
+        const to = digestTarget(d.label)
         return (
-          <div
+          <Actionable
             key={i}
+            onGo={() => navigate(to)}
+            title={`Open ${to.slice(1).replace('-', ' ')}`}
             style={{
               borderRadius: 14,
               padding: '14px 16px',
@@ -300,29 +364,32 @@ function Digest({ digest }) {
               justifyContent: 'space-between',
               gap: 12,
             }}
+            hoverStyle={{ border: '1px solid rgba(0,181,200,.3)' }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text)' }}>
               <span style={{ width: 7, height: 7, borderRadius: 999, background: col, flexShrink: 0 }} />
               {d.label}
             </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10.5,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '.5px',
-                color: col,
-                background: `color-mix(in srgb, ${col} 14%, transparent)`,
-                padding: '4px 9px',
-                borderRadius: 8,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              {d.value}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '.5px',
+                  color: col,
+                  background: `color-mix(in srgb, ${col} 14%, transparent)`,
+                  padding: '4px 9px',
+                  borderRadius: 8,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {d.value}
+              </span>
+              <span style={{ color: 'var(--faint)', fontSize: 14, lineHeight: 1 }}>{'›'}</span>
             </span>
-          </div>
+          </Actionable>
         )
       })}
     </div>
@@ -331,37 +398,61 @@ function Digest({ digest }) {
 
 /* Numbered checkbox rows per the handoff's priorities card — the first
    (current) item gets the cyan box. */
-function Priorities({ priorities }) {
+function Priorities({ priorities, navigate, isDesktop }) {
   if (!priorities || priorities.length === 0) {
     return <div style={{ color: 'var(--faint)', fontSize: 13.5 }}>No priority actions queued.</div>
   }
-  return priorities.map((p, i) => (
-    <div key={p.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-      <span
+  return priorities.map((p, i) => {
+    const to = priorityTarget(p.text)
+    // Chat (the seed fallback) is desktop-only — on web an unmatched
+    // priority goes to the pipeline instead of a dead chat screen.
+    const go = () => {
+      if (to) navigate(to)
+      else if (isDesktop) navigate('/chat', { state: { seed: `Help me with this priority: ${p.text}` } })
+      else navigate('/pipeline')
+    }
+    return (
+      <Actionable
+        key={p.n}
+        onGo={go}
+        title={to ? `Open ${to.slice(1)}` : isDesktop ? 'Work on it with the assistant' : 'Open pipeline'}
         style={{
-          width: 18,
-          height: 18,
-          borderRadius: 6,
-          border: `2px solid ${i === 0 ? 'var(--cyan-500)' : 'rgba(215,227,248,.35)'}`,
-          color: i === 0 ? 'var(--cyan-300)' : 'var(--faint)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9,
-          fontWeight: 700,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          marginTop: 1,
+          alignItems: 'flex-start',
+          gap: 12,
+          margin: '-4px -6px',
+          padding: '4px 6px',
+          borderRadius: 8,
         }}
+        hoverStyle={{ background: 'rgba(0,181,200,.08)', transform: 'none' }}
       >
-        {p.n}
-      </span>
-      <span style={{ fontSize: 14.5, color: '#E8EFFB', lineHeight: 1.4 }}>{p.text}</span>
-    </div>
-  ))
+        <span
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 6,
+            border: `2px solid ${i === 0 ? 'var(--cyan-500)' : 'rgba(215,227,248,.35)'}`,
+            color: i === 0 ? 'var(--cyan-300)' : 'var(--faint)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            marginTop: 1,
+          }}
+        >
+          {p.n}
+        </span>
+        <span style={{ fontSize: 14.5, color: '#E8EFFB', lineHeight: 1.4, flex: 1 }}>{p.text}</span>
+        <span style={{ color: 'var(--faint)', fontSize: 14, lineHeight: 1.4, flexShrink: 0 }}>{'›'}</span>
+      </Actionable>
+    )
+  })
 }
 
-function ReadinessCard({ data, hasOura, setHasOura, ouraConnected, accent, animate }) {
+function ReadinessCard({ data, hasOura, setHasOura, ouraConnected, accent, animate, navigate }) {
   const showReadiness = hasOura && data.oura
   return (
     <div>
@@ -409,6 +500,26 @@ function ReadinessCard({ data, hasOura, setHasOura, ouraConnected, accent, anima
               : 'No Oura ring connected. Connect a ring in Settings to see readiness.'}
           </div>
         )}
+        <div
+          role="link"
+          tabIndex={0}
+          onClick={() => navigate(showReadiness || ouraConnected ? '/health' : '/settings')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              navigate(showReadiness || ouraConnected ? '/health' : '/settings')
+            }
+          }}
+          style={{
+            marginTop: 14,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: 'var(--cyan-300)',
+            cursor: 'pointer',
+          }}
+        >
+          {showReadiness || ouraConnected ? 'Open Wellbeing →' : 'Connect in Settings →'}
+        </div>
       </div>
     </div>
   )
@@ -493,12 +604,25 @@ export default function Home() {
         </button>
       )}
 
-      {/* stat tile row */}
+      {/* stat tile row — each tile opens the screen where its number lives */}
       <div style={{ marginTop: 22, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <StatTile value={data.today.active} label="Active apps" />
-        <StatTile value={data.today.inflight} label="In-flight" />
-        <StatTile value={readinessOn ? data.oura.score : '—'} label="Readiness" tint={Boolean(readinessOn)} valueColor={readinessOn ? undefined : 'var(--faint)'} />
-        <StatTile value={data.today.overdue} label="Overdue follow-ups" valueColor={data.today.overdue > 0 ? '#E0B77A' : 'var(--text)'} />
+        <StatTile value={data.today.active} label="Active apps" onGo={() => navigate('/pipeline')} goTitle="Open Pipeline" />
+        <StatTile value={data.today.inflight} label="In-flight" onGo={() => navigate('/pipeline')} goTitle="Open Pipeline" />
+        <StatTile
+          value={readinessOn ? data.oura.score : '—'}
+          label="Readiness"
+          tint={Boolean(readinessOn)}
+          valueColor={readinessOn ? undefined : 'var(--faint)'}
+          onGo={() => navigate('/health')}
+          goTitle="Open Wellbeing"
+        />
+        <StatTile
+          value={data.today.overdue}
+          label="Overdue follow-ups"
+          valueColor={data.today.overdue > 0 ? '#E0B77A' : 'var(--text)'}
+          onGo={() => navigate('/people')}
+          goTitle="Open People"
+        />
       </div>
 
       {/* two-column grid (collapses via .hero-split-grid at <=720px) */}
@@ -518,7 +642,7 @@ export default function Home() {
           >
             <div style={MONO_EYEBROW_CYAN}>Today&rsquo;s priorities</div>
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Priorities priorities={data.today.priorities} />
+              <Priorities priorities={data.today.priorities} navigate={navigate} isDesktop={isDesktop} />
             </div>
           </div>
 
@@ -533,7 +657,7 @@ export default function Home() {
               )}
             </div>
             <div style={{ marginTop: 10 }}>
-              <Digest digest={data.digest} />
+              <Digest digest={data.digest} navigate={navigate} />
             </div>
           </div>
         </div>
@@ -546,16 +670,26 @@ export default function Home() {
             ouraConnected={ouraConnected}
             accent={ACCENT}
             animate={animate}
+            navigate={navigate}
           />
 
-          {/* today's move — the handoff's nudge card */}
-          <div
+          {/* today's move — the handoff's nudge card; hands the move to the
+              assistant so the nudge is startable, not just readable. Chat is
+              desktop-only, so web routes to the move's subject instead. */}
+          <Actionable
+            onGo={() =>
+              isDesktop
+                ? navigate('/chat', { state: { seed: `Today's move is: "${data.today.move}" — help me get started.` } })
+                : navigate(priorityTarget(data.today.move) || '/pipeline')
+            }
+            title={isDesktop ? 'Work on it with the assistant' : 'Open the relevant screen'}
             style={{
               borderRadius: 16,
               padding: 18,
               background: 'rgba(0,181,200,.06)',
               border: '1px solid rgba(0,181,200,.16)',
             }}
+            hoverStyle={{ border: '1px solid rgba(0,181,200,.34)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <span style={{ width: 6, height: 6, borderRadius: 999, background: '#6FD3A0', flexShrink: 0 }} />
@@ -564,7 +698,10 @@ export default function Home() {
             <div style={{ marginTop: 8, fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.4 }}>
               {data.today.move}
             </div>
-          </div>
+            <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: 'var(--cyan-300)' }}>
+              {isDesktop ? 'Start with the assistant' : 'Get started'} {'→'}
+            </div>
+          </Actionable>
         </div>
       </div>
 

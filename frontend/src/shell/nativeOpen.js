@@ -5,11 +5,18 @@
 // anchor/popup behavior.
 import { apiPost } from '../auth/api.js'
 
-/** Open a workspace-file href (materials/pipeline artifacts) natively. */
-export function openFileNative(href) {
-  return apiPost('/desktop/open-file', { href }).catch(() => {
-    window.alert('Could not open the file.')
-  })
+/** Open a workspace-file href (materials/pipeline artifacts) natively.
+ *  Resolves true/false; pass notify:false to render failures inline —
+ *  window.alert is unreliable in the Tauri webview (notably WebKitGTK),
+ *  which made Linux failures fully silent. */
+export function openFileNative(href, { notify = true } = {}) {
+  return apiPost('/desktop/open-file', { href }).then(
+    () => true,
+    () => {
+      if (notify) window.alert('Could not open the file.')
+      return false
+    },
+  )
 }
 
 /** Open an external http(s) URL in the system browser. */

@@ -4,9 +4,11 @@
 // Data: GET /dashboard/posts/data; updates via POST /dashboard/posts/metrics.
 // The design's "Followers" tile has no counterpart in the payload, so the
 // strip shows Comments instead.
+import { useNavigation } from '@react-navigation/native'
 import { useCallback, useState } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
+import { PressableScale } from '../ui/detail'
 import {
   Card,
   EmptyState,
@@ -45,6 +47,7 @@ function digitsOnly(v: string): string {
 }
 
 export default function Posts() {
+  const nav = useNavigation<any>()
   const load = useCallback(() => api<Payload>('/dashboard/posts/data'), [])
   const { data, loading, refreshing, error, refresh } = useDashData(load)
 
@@ -98,31 +101,36 @@ export default function Posts() {
           </View>
 
           {data.posts.length === 0 ? (
-            <EmptyState message="No posts logged yet — import your LinkedIn CSV from the desktop app." />
+            <EmptyState
+              message="No posts logged yet."
+              suggestions={['Import your LinkedIn CSV from the desktop app', 'Posting after interviews tends to earn the most engagement']}
+            />
           ) : (
             data.posts.map((p) => (
-              <Card key={p.id} raised style={{ marginTop: 10 }}>
-                <Text style={styles.postText} numberOfLines={4}>
-                  {p.text}
-                </Text>
-                {p.hashtags && p.hashtags.length > 0 ? (
-                  <Text style={styles.tags} numberOfLines={1}>
-                    {p.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}
+              <PressableScale key={p.id} onPress={() => nav.navigate('PostDetail', { post: p })}>
+                <Card raised style={{ marginTop: 10 }}>
+                  <Text style={styles.postText} numberOfLines={4}>
+                    {p.text}
                   </Text>
-                ) : p.posted_date ? (
-                  <Text style={styles.tags}>{p.posted_date.slice(0, 10)}</Text>
-                ) : null}
-                <View style={styles.metricsRow}>
-                  <View style={styles.metrics}>
-                    <Text style={styles.metric}>◎ {fmtK(p.impressions)}</Text>
-                    <Text style={styles.metric}>♥ {fmtK(p.reactions)}</Text>
-                    <Text style={styles.metric}>💬 {fmtK(p.comments)}</Text>
+                  {p.hashtags && p.hashtags.length > 0 ? (
+                    <Text style={styles.tags} numberOfLines={1}>
+                      {p.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}
+                    </Text>
+                  ) : p.posted_date ? (
+                    <Text style={styles.tags}>{p.posted_date.slice(0, 10)}</Text>
+                  ) : null}
+                  <View style={styles.metricsRow}>
+                    <View style={styles.metrics}>
+                      <Text style={styles.metric}>◎ {fmtK(p.impressions)}</Text>
+                      <Text style={styles.metric}>♥ {fmtK(p.reactions)}</Text>
+                      <Text style={styles.metric}>💬 {fmtK(p.comments)}</Text>
+                    </View>
+                    <Pressable style={styles.updateBtn} onPress={() => openSheet(p)}>
+                      <Text style={styles.updateText}>Update</Text>
+                    </Pressable>
                   </View>
-                  <Pressable style={styles.updateBtn} onPress={() => openSheet(p)}>
-                    <Text style={styles.updateText}>Update</Text>
-                  </Pressable>
-                </View>
-              </Card>
+                </Card>
+              </PressableScale>
             ))
           )}
         </>

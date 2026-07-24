@@ -47,12 +47,13 @@
     "safety_margin_tokens": 500
   },
 
-  "_comment_contact": "Contact info for cover letter PDF sidebar. Lives here (gitignored) so it never appears in source code.",
+  "_comment_contact": "Contact info for cover letter PDF sidebar. Lives here (gitignored) so it never appears in source code. 'website' is scheme-less (e.g. jobcontext.ai, not https://…) and optional — leave it empty and the resume/letter header renders only the LinkedIn + GitHub links.",
   "contact": {
     "name": "YOUR FULL NAME",
     "phone": "555-867-5309",
     "email": "you@example.com",
     "linkedin": "www.linkedin.com/in/yourhandle",
+    "website": "",
     "address": "123 Your Street",
     "city_state": "Your City, ST 00000",
     "location": "Your City, ST"
