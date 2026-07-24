@@ -2,16 +2,67 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
-from lib import config
+from lib import config, dismissals
 from lib.io import _load_json
 from transport.http.auth import require_api_key
 from .shared import html_page
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
+
+# A contact only belongs in the follow-up queue while the thread is alive.
+# After this many days with no touch, "follow up" is fiction — the entry
+# moves to the gone-cold bucket instead of nagging forever. Override with
+# config value "followup_timeout_days".
+DEFAULT_FOLLOWUP_TIMEOUT_DAYS = 21
+
+# Tags that mean "this thread is closed" regardless of outreach_status —
+# a ghosted recruiter marked unresponsive must never be a suggested follow-up.
+_EXCLUDED_TAGS = {"unresponsive", "closed-loop", "do-not-contact", "dormant", "archived"}
+
+_ACTIONABLE_STATUSES = ("drafted", "sent", "follow-up")
+
+
+def _followup_timeout_days() -> int:
+    try:
+        return int(config.get_config_value("followup_timeout_days", DEFAULT_FOLLOWUP_TIMEOUT_DAYS))
+    except (TypeError, ValueError):
+        return DEFAULT_FOLLOWUP_TIMEOUT_DAYS
+
+
+def _last_touch(person: dict) -> "datetime | None":
+    """Best-effort parse of the contact's most recent touch date."""
+    for field in ("last_contacted", "last_updated"):
+        value = str(person.get(field) or "").strip()
+        if not value:
+            continue
+        try:
+            return datetime.fromisoformat(value[:10]).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _has_excluded_tag(person: dict) -> bool:
+    tags = person.get("tags") or []
+    return any(str(t).strip().lower().replace("_", "-") in _EXCLUDED_TAGS for t in tags)
+
+
+def _is_followup_fresh(person: dict, timeout_days: int) -> bool:
+    """True while the thread is recent enough that a follow-up makes sense.
+
+    No parseable date means we cannot claim the thread is alive — treat as
+    timed out rather than nagging about a contact of unknown age.
+    """
+    touched = _last_touch(person)
+    if touched is None:
+        return False
+    return (datetime.now(timezone.utc) - touched).days <= timeout_days
 
 
 def _people_payload() -> dict:
@@ -31,22 +82,58 @@ def _people_payload() -> dict:
     status_counts = Counter(p.get("outreach_status", "none") for p in people)
     relationship_counts = Counter(p.get("relationship", "unknown") for p in people)
 
-    follow_up = [
+    timeout_days = _followup_timeout_days()
+    dismissed = dismissals.active_keys("followup")
+
+    actionable = [
         p for p in people
-        if (p.get("outreach_status") or "").lower() in ("drafted", "sent", "follow-up")
+        if (p.get("outreach_status") or "").lower() in _ACTIONABLE_STATUSES
+        and not _has_excluded_tag(p)
+        and str(p.get("name") or "") not in dismissed
     ]
+    follow_up = [p for p in actionable if _is_followup_fresh(p, timeout_days)]
+    # Timed-out threads: not hidden (the data is real), just not a to-do.
+    gone_cold = [p for p in actionable if not _is_followup_fresh(p, timeout_days)]
     follow_up.sort(key=_recency_key, reverse=True)
+    gone_cold.sort(key=_recency_key, reverse=True)
 
     return {
         "total": len(people),
         "by_status": [{"status": s, "count": c} for s, c in status_counts.most_common()],
         "by_relationship": [{"relationship": r, "count": c} for r, c in relationship_counts.most_common()],
         "follow_up_queue": follow_up[:30],
+        "gone_cold": gone_cold[:30],
+        "gone_cold_total": len(gone_cold),
+        "followup_timeout_days": timeout_days,
         "recent": people_sorted[:20],
         # Full roster (recency-sorted, sanity-capped) so clients can filter by
         # outreach_status/relationship without a round-trip per facet.
         "people": people_sorted[:500],
     }
+
+
+class _DismissFollowupRequest(BaseModel):
+    name: str
+    days: int | None = None  # None = permanent
+    restore: bool = False
+
+
+@router.post("/people/dismiss-followup", responses={400: {"description": "Missing contact name"}})
+async def people_dismiss_followup(req: _DismissFollowupRequest) -> JSONResponse:
+    """Drop (or restore) a contact from the follow-up surfaces.
+
+    The queue is a derived view, so this records a per-user overlay entry
+    rather than mutating the contact. Dismissal also removes the contact
+    from the gone-cold bucket and from Home's drafted-message priority.
+    """
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Contact name is required")
+    if req.restore:
+        dismissals.restore("followup", name)
+    else:
+        dismissals.dismiss("followup", name, days=req.days)
+    return JSONResponse({"ok": True, "name": name, "restored": req.restore})
 
 
 @router.get("/people/data")

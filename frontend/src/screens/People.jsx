@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   useApi, Screen, StatGrid, Stat, Chips, EmptyState, fmtDate,
 } from './_shared.jsx'
+import { apiPost } from '../auth/api.js'
 
 /* Outreach — contacts, warm vs cold, and the follow-up queue.
    Data: GET /dashboard/people/data (_people_payload).
@@ -76,7 +77,7 @@ function SectionLabel({ label, count, first }) {
   )
 }
 
-function PersonCard({ person }) {
+function PersonCard({ person, onDismiss }) {
   const [fg, bg] = statusColors(person.outreach_status)
   const status = person.outreach_status || 'none'
   const hasBody =
@@ -133,6 +134,20 @@ function PersonCard({ person }) {
         >
           {status}
         </div>
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={() => onDismiss(person)}
+            aria-label={`Dismiss ${person.name || 'contact'} from follow-ups`}
+            title="Not a follow-up — remove from this queue"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              color: '#6B7A96', fontSize: 14, lineHeight: 1, flexShrink: 0,
+            }}
+          >
+            {'✕'}
+          </button>
+        )}
       </div>
 
       {hasBody && (
@@ -177,21 +192,32 @@ function PersonCard({ person }) {
   )
 }
 
-function CardGrid({ people, keyPrefix }) {
+function CardGrid({ people, keyPrefix, onDismiss }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 10 }}>
-      {people.map((p, i) => <PersonCard key={`${keyPrefix}-${p.name}-${i}`} person={p} />)}
+      {people.map((p, i) => <PersonCard key={`${keyPrefix}-${p.name}-${i}`} person={p} onDismiss={onDismiss} />)}
     </div>
   )
 }
 
 export default function People() {
-  const { data, loading, error } = useApi('/dashboard/people/data')
+  const { data, loading, error, reload } = useApi('/dashboard/people/data')
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
+  const [showCold, setShowCold] = useState(false)
   const recent = data?.recent || []
   const followUp = data?.follow_up_queue || []
+  const goneCold = data?.gone_cold || []
+  const timeoutDays = data?.followup_timeout_days || 21
   const byStatus = data?.by_status || []
+
+  async function dismissFollowup(person) {
+    if (!person?.name) return
+    try {
+      await apiPost('/dashboard/people/dismiss-followup', { name: person.name })
+      reload()
+    } catch { /* transient — the entry just stays until next try */ }
+  }
 
   /* Filter chips from the real status values present in the payload. */
   const statuses = byStatus.length > 0
@@ -296,14 +322,36 @@ export default function People() {
       {shownFollowUp.length > 0 && (
         <>
           <SectionLabel label="Follow-up queue" count={shownFollowUp.length} first />
-          <CardGrid people={shownFollowUp} keyPrefix="fu" />
+          <CardGrid people={shownFollowUp} keyPrefix="fu" onDismiss={dismissFollowup} />
+        </>
+      )}
+
+      {goneCold.length > 0 && (
+        <>
+          <div
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              marginTop: shownFollowUp.length === 0 ? 0 : 22, marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowCold(!showCold)}
+              style={{ ...MONO_EYEBROW, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              title={`Threads with no touch in over ${timeoutDays} days — timed out of the follow-up queue`}
+            >
+              {`${showCold ? '▾' : '▸'} Gone cold (${data?.gone_cold_total ?? goneCold.length})`}
+            </button>
+            <div style={{ ...MONO_EYEBROW, letterSpacing: 0 }}>{`> ${timeoutDays}d untouched`}</div>
+          </div>
+          {showCold && <CardGrid people={goneCold.filter(match)} keyPrefix="gc" onDismiss={dismissFollowup} />}
         </>
       )}
 
       <SectionLabel
         label="Recent contacts"
         count={`${shownRecent.length}${filtering ? ` of ${recent.length}` : ''}`}
-        first={shownFollowUp.length === 0}
+        first={shownFollowUp.length === 0 && goneCold.length === 0}
       />
       {shownRecent.length > 0 ? (
         <CardGrid people={shownRecent} keyPrefix="re" />
