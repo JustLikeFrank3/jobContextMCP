@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { Panel } from '../../design-system'
 import { ApiError } from '../../auth/api.js'
 
@@ -19,7 +20,11 @@ export const modalField = {
 export const modalLabel = { display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginBottom: 5 }
 
 export function Modal({ title, onClose, children, maxWidth = 640 }) {
-  return (
+  // Portal to <body>: .jc-page's enter animation animates `transform`,
+  // which makes it the containing block for fixed descendants — a modal
+  // rendered in-tree gets trapped (and clipped) inside the page wrapper,
+  // visibly so when the page content is short (empty pipeline, qa).
+  return createPortal(
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 900, overflowY: 'auto', padding: '24px 14px' }}
@@ -31,7 +36,8 @@ export function Modal({ title, onClose, children, maxWidth = 640 }) {
         </div>
         {children}
       </Panel>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
