@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Bug fixes
+
+- **Accepting a cover-letter edit now regenerates the canonical PDF** -- accept-cover-letter-edit rewrote the .txt (with a .bak backup) but never re-exported, leaving the document's PDF stale; the only fresh PDF was the review-phase preview of the .tmp draft. Accept now re-exports from the accepted text using the job's saved template/style (HTML or owner-only LaTeX, gated before any mutation), surfaces the result + a link in the done view, and reports export failures as warnings without failing the accept. The resume edit dialog was not affected (its one-shot flow already exported the edited copy).
+
 ### Features
 
 - **Follow-up queue sanity** -- the People follow-up queue was "status ∈ {drafted, sent, follow-up}, forever": a ghosted recruiter stayed a suggested follow-up for months. The queue now (1) times out threads untouched for `followup_timeout_days` (default 21) into a collapsed "Gone cold" bucket instead of the to-do list, (2) excludes closed-thread tags (`unresponsive`, `closed-loop`, `do-not-contact`, `dormant`, `archived`), and (3) supports per-contact dismissal (✕ on the card; `POST /dashboard/people/dismiss-followup`, restorable). Dismissals live in a per-user overlay (`lib/dismissals.py`, `dismissals.json`) because the queue is a derived view with no row to delete.
