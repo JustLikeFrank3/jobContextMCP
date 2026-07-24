@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from lib import config
+from lib import config, dismissals
 from lib.api_keys import create_key, list_keys, revoke_key
 from lib.io import _load_json
 from transport.http.auth import require_authenticated_user
@@ -313,6 +313,30 @@ async def dashboard_home_data(
         "digest": _digest_payload(snap),
     }
     return JSONResponse(payload)
+
+
+class _DismissPriorityBody(BaseModel):
+    text: str
+    days: int = 14  # expiring by default: a recurring priority can resurface
+
+
+@router.post("/home/dismiss-priority", responses={400: {"description": "Missing priority text"}})
+async def dismiss_priority(
+    body: _DismissPriorityBody,
+    user: Annotated[User, Depends(require_authenticated_user)],
+) -> JSONResponse:
+    """Hide a Home priority the user has ✕'d out.
+
+    Priorities are derived strings regenerated on every load, so the
+    dismissal is recorded by exact text with a default 14-day expiry —
+    permanent enough to stop the nagging, temporary enough that a priority
+    which is *still* true two weeks later gets another shot.
+    """
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Priority text is required")
+    dismissals.dismiss("priority", text, days=max(1, body.days))
+    return JSONResponse({"ok": True, "text": text})
 
 
 # ── API keys ─────────────────────────────────────────────────────────────────

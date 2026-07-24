@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../auth/api.js'
+import { apiFetch, apiPost } from '../auth/api.js'
 import useDesktopMode from '../shell/useDesktopMode.js'
 
 /* HomeScreen — re-skinned to the desktop design handoff's HOME page:
@@ -398,7 +398,7 @@ function Digest({ digest, navigate }) {
 
 /* Numbered checkbox rows per the handoff's priorities card — the first
    (current) item gets the cyan box. */
-function Priorities({ priorities, navigate, isDesktop }) {
+function Priorities({ priorities, navigate, isDesktop, onDismiss }) {
   if (!priorities || priorities.length === 0) {
     return <div style={{ color: 'var(--faint)', fontSize: 13.5 }}>No priority actions queued.</div>
   }
@@ -446,6 +446,20 @@ function Priorities({ priorities, navigate, isDesktop }) {
           {p.n}
         </span>
         <span style={{ fontSize: 14.5, color: '#E8EFFB', lineHeight: 1.4, flex: 1 }}>{p.text}</span>
+        {onDismiss && (
+          <button
+            type="button"
+            aria-label={`Dismiss priority: ${p.text}`}
+            title="Not a real priority — hide it"
+            onClick={(e) => { e.stopPropagation(); onDismiss(p) }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+              color: 'var(--faint)', fontSize: 13, lineHeight: 1.4, flexShrink: 0,
+            }}
+          >
+            {'✕'}
+          </button>
+        )}
         <span style={{ color: 'var(--faint)', fontSize: 14, lineHeight: 1.4, flexShrink: 0 }}>{'›'}</span>
       </Actionable>
     )
@@ -553,6 +567,17 @@ export default function Home() {
 
   const readinessOn = hasOura && data.oura
 
+  // ✕ on a priority row: persist the dismissal, drop it locally right away.
+  async function dismissPriority(p) {
+    setData((d) => ({
+      ...d,
+      today: { ...d.today, priorities: (d.today.priorities || []).filter((x) => x.text !== p.text) },
+    }))
+    try {
+      await apiPost('/api/dashboard/home/dismiss-priority', { text: p.text })
+    } catch { /* transient — it will just reappear on next load */ }
+  }
+
   return (
     <div>
       {/* greeting — the 28px page title lives in DashboardShell; this is the
@@ -642,7 +667,7 @@ export default function Home() {
           >
             <div style={MONO_EYEBROW_CYAN}>Today&rsquo;s priorities</div>
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Priorities priorities={data.today.priorities} navigate={navigate} isDesktop={isDesktop} />
+              <Priorities priorities={data.today.priorities} navigate={navigate} isDesktop={isDesktop} onDismiss={dismissPriority} />
             </div>
           </div>
 
