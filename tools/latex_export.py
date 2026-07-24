@@ -51,6 +51,7 @@ _TEX_TEMPLATE = r"""\documentclass[letter,11pt]{{article}}
 \def\email{{{email}}}
 \def\linkedin{{{linkedin}}}
 \def\github{{{github}}}
+\def\website{{{website}}}
 \def\role{{{role_title}}}
 
 \input{{_header}}
@@ -143,6 +144,13 @@ def _user_identity() -> dict[str, str]:
     linkedin = linkedin.replace("https://www.linkedin.com/in/", "").replace("www.linkedin.com/in/", "").strip("/")
     github = str(contact.get("github", "") or "")
     github = github.replace("https://www.github.com/", "").replace("www.github.com/", "").replace("https://github.com/", "").strip("/")
+    # Personal site: _header.tex renders \href{https://\website}{\website},
+    # so the value must be scheme-less (a scheme would double-prefix). Unlike
+    # the other fields there is deliberately NO placeholder fallback — the
+    # header's \ifx\website\empty guard hides the third link entirely when
+    # unconfigured, and a fake placeholder URL would render as a real link.
+    website = str(contact.get("website", "") or "")
+    website = re.sub(r"^https?://", "", website.strip()).strip("/")
     return {
         "name":     str(contact.get("name", "") or "") or _AUTHOR_DEFAULTS["name"],
         "phone":    str(contact.get("phone", "") or "") or _AUTHOR_DEFAULTS["phone"],
@@ -150,6 +158,7 @@ def _user_identity() -> dict[str, str]:
         "email":    str(contact.get("email", "") or "") or _AUTHOR_DEFAULTS["email"],
         "linkedin": linkedin or _AUTHOR_DEFAULTS["linkedin"],
         "github":   github or _AUTHOR_DEFAULTS["github"],
+        "website":  website,
     }
 
 
@@ -394,7 +403,7 @@ _RESUME_TEX = "resume.tex"
 #: *fixed* set of literal names — never built from caller input — so the
 #: matchers below are fully static (no request-influenced regex construction).
 _MACRO_NAMES: tuple[str, ...] = (
-    "role", "name", "phone", "city", "email", "linkedin", "github",
+    "role", "name", "phone", "city", "email", "linkedin", "github", "website",
 )
 
 #: Precompiled ``\def\<macro>{...}`` matchers, one per known macro. Built from
@@ -410,7 +419,10 @@ _ROLE_DEF_RE = _MACRO_DEF_PATTERNS["role"]
 #: Header identity macros populated from the active user's contact info so a
 #: compiled resume never carries another user's name/contact. Mirrors the
 #: cover-letter pipeline's _user_identity() field set.
-_IDENTITY_MACROS = ("name", "phone", "city", "email", "linkedin", "github")
+#: \website has no placeholder default: blank means "no third header link"
+#: (resume.tex ships \def\website{} and _header.tex guards on \ifx\website\empty),
+#: and _inject_def's blank-is-no-op behavior preserves exactly that.
+_IDENTITY_MACROS = ("name", "phone", "city", "email", "linkedin", "github", "website")
 
 #: Defensive ceiling on an injected header value (name/role are short by nature).
 _MACRO_VALUE_MAX_LEN = 200
