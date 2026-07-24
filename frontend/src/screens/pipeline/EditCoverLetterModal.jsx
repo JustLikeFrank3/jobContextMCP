@@ -43,6 +43,9 @@ export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner,
     try {
       const res = await apiPost('/dashboard/pipeline/accept-cover-letter-edit', {
         cover_letter_name: clName, draft_name: draft.draft_name,
+        // The accepted text replaces the .txt, so the canonical PDF is
+        // regenerated server-side with this job's template/style.
+        job_id: job.id, export_pdf: exportPdf, export_pipeline: pipeline,
       })
       setAccepted(res); setPhase('done')
     } catch (e) { setErr(actionError(e)) } finally { setSubmitting(false) }
@@ -69,9 +72,15 @@ export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner,
             The draft was applied to {clName}. A .bak backup of the previous version was saved.
           </div>
         </div>
-        {accepted?.href && (
-          <a href={accepted.href} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(isDesktop, accepted.href, 'file')} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the updated file {'↗'}</a>
-        )}
+        {accepted?.pdf_result && <ResultLine>{accepted.pdf_result}</ResultLine>}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {accepted?.href && (
+            <a href={accepted.href} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(isDesktop, accepted.href, 'file')} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the updated file {'↗'}</a>
+          )}
+          {accepted?.pdf_href && (
+            <a href={accepted.pdf_href} target="_blank" rel="noreferrer" onClick={nativeAnchorHandler(isDesktop, accepted.pdf_href, 'file')} style={{ color: 'var(--cyan-300)', fontSize: 'var(--fs-sm)', textDecoration: 'none' }}>Open the regenerated PDF {'↗'}</a>
+          )}
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
           <Button size="sm" onClick={onDone}>Done</Button>
         </div>
