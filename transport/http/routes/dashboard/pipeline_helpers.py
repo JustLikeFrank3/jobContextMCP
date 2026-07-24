@@ -57,6 +57,12 @@ class _CoverLetterEditRequest(BaseModel):
 class _CoverLetterAcceptRequest(BaseModel):
     cover_letter_name: str = Field(..., min_length=1)
     draft_name: str = Field(..., min_length=1)
+    # Applying a draft rewrites the .txt — the canonical PDF must follow.
+    # job_id supplies the saved template/style + role footer; export_pipeline
+    # mirrors the edit dialog's selection (latex stays owner-only).
+    job_id: int | None = None
+    export_pdf: bool = True
+    export_pipeline: str = "html"
 
 
 class _CoverLetterCancelRequest(BaseModel):
