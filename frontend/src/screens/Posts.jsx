@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import useDesktopMode from '../shell/useDesktopMode.js'
 import { nativeAnchorHandler } from '../shell/nativeOpen.js'
 import { useToolbarSlot } from '../shell/toolbarSlot.jsx'
@@ -49,7 +50,9 @@ function MetricSheet({ post, onClose, onSaved }) {
     color: 'var(--text)', fontSize: 15, fontFamily: 'var(--font-sans)', outline: 'none',
   }
 
-  return (
+  // Portal to <body> — same containing-block trap as pipeline's Modal:
+  // .jc-page animates `transform`, which captures fixed descendants.
+  return createPortal(
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(4,7,14,.66)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
@@ -81,7 +84,8 @@ function MetricSheet({ post, onClose, onSaved }) {
           {busy ? 'Saving…' : 'Save metrics'}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
