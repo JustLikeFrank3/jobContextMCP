@@ -4,9 +4,11 @@
 #  - adds a grafana-dashboard-pi configmap with the kiosk Cluster Health
 #    dashboard; pi-deploy.sh patches the grafana deployment to mount it at
 #    /var/lib/grafana/dashboards/pi (the base provider loads recursively).
-# The wallboard playlist alternates two views every 30s:
-#    jobcontext-overview (application health, from the base stack)
-#  + kiosk-cluster (cluster health, below)
+# The wallboard playlist alternates two views:
+#    kiosk-ollama (workstation local-LLM: Ollama + GPU + desktop llm_*)
+#  + kiosk-cloud  (production on AKS, federated series)
+# The other kiosk dashboards stay provisioned for manual viewing but are
+# out of the rotation (pi-deploy.sh wallboard owns the playlist).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -28,12 +30,13 @@ data:
         access: proxy
         url: http://loki.monitoring.svc:3100
       # AKS Prometheus via the outbound tunnel held by aks-prom-tunnel.service
-      # on the Pi host (see pi-deploy.sh aks-feed) — reached at the node IP.
+      # on the Pi host (see pi-deploy.sh aks-feed) — reached at the Pi's LAN
+      # address (the 192.168.101.2 direct link is gone).
       - name: Prometheus-AKS
         uid: prometheus-aks
         type: prometheus
         access: proxy
-        url: http://192.168.101.2:9091
+        url: http://192.168.68.51:9091
   dashboards.yaml: |
     apiVersion: 1
     providers:
@@ -50,6 +53,67 @@ metadata:
   name: grafana-dashboard-pi
   namespace: monitoring
 data:
+  kiosk-ollama.json: |
+    {
+      "uid": "kiosk-ollama", "title": "Local LLM — Ollama on the Workstation", "tags": ["kiosk"],
+      "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
+      "time": {"from": "now-3h", "to": "now"},
+      "panels": [
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🦙 LOCAL LLM — Ollama · qwen3-jobcontext · RTX 5060 Ti"}},
+        {"type": "stat", "title": "Ollama", "gridPos": {"x":0,"y":3,"w":3,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(ollama_up{job=\"ollama-workstation\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+        {"type": "stat", "title": "Model in VRAM", "gridPos": {"x":3,"y":3,"w":4,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum by(model)(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "{{model}}"}],
+         "fieldConfig": {"defaults": {"unit": "bytes"}},
+         "options": {"textMode": "value_and_name"}},
+        {"type": "stat", "title": "Context window", "gridPos": {"x":7,"y":3,"w":3,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(ollama_model_context_length{job=\"ollama-workstation\"})"}]},
+        {"type": "gauge", "title": "GPU temp", "gridPos": {"x":10,"y":3,"w":3,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(gpu_temperature_celsius{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"unit": "celsius", "min": 20, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
+        {"type": "gauge", "title": "GPU util", "gridPos": {"x":13,"y":3,"w":4,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":80},{"color":"red","value":95}]}}}},
+        {"type": "gauge", "title": "VRAM used", "gridPos": {"x":17,"y":3,"w":4,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "100 * max(gpu_memory_used_bytes{job=\"ollama-workstation\"}) / max(gpu_memory_total_bytes{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":85},{"color":"red","value":95}]}}}},
+        {"type": "stat", "title": "Desktop app", "gridPos": {"x":21,"y":3,"w":3,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(jobcontext_desktop_up{job=\"ollama-workstation\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+        {"type": "timeseries", "title": "LLM calls (1h) by model/outcome", "gridPos": {"x":0,"y":9,"w":8,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(llm_calls_total{job=\"ollama-workstation\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":8,"y":9,"w":8,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(llm_tokens_total{job=\"ollama-workstation\"}[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
+        {"type": "timeseries", "title": "Avg LLM call latency", "gridPos": {"x":16,"y":9,"w":8,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum by(model)(rate(llm_call_seconds_sum{job=\"ollama-workstation\"}[15m])) / sum by(model)(rate(llm_call_seconds_count{job=\"ollama-workstation\"}[15m]))", "legendFormat": "{{model}}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}},
+        {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "GPU util"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
+        {"type": "timeseries", "title": "VRAM", "gridPos": {"x":12,"y":18,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [
+           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "used"},
+           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "total"},
+           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"}],
+         "fieldConfig": {"defaults": {"unit": "bytes"}}}
+      ]
+    }
   kiosk-app.json: |
     {
       "uid": "kiosk-app", "title": "Application Health — jobContext (Pi)", "tags": ["kiosk"],

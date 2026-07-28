@@ -25,7 +25,8 @@
 #                                      aks-prom-tunnel systemd service on the
 #                                      Pi (port-forward -> :9091)
 #
-# Assumes: SSH alias pi-node1 (direct link, 192.168.101.2) with passwordless
+# Assumes: SSH alias pi-node1 (LAN, 192.168.68.51 — the direct ethernet
+# link is decommissioned) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
 # (docker run --privileged --rm tonistiigi/binfmt --install arm64).
 #
@@ -170,7 +171,8 @@ case "${1:-}" in
       sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana deploy/loki deploy/kube-state-metrics --timeout=300s'
     # Rotating kiosk playlist via the Grafana API (playlists are not
     # file-provisionable). Replace-on-apply so edits here take effect:
-    # app health <-> cluster health every 30s.
+    # local LLM (Ollama) <-> production (AKS). The Pi-health dashboards
+    # stay provisioned but out of the rotation.
     ssh "${PI}" 'set -e
       GPW=$(sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath="{.data.admin-password}" | base64 -d)
       G="http://admin:${GPW}@localhost:3000"
@@ -178,10 +180,8 @@ case "${1:-}" in
       BODY="{
         \"name\": \"jcmcp-wallboard\", \"interval\": \"60s\",
         \"items\": [
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-app\", \"order\": 1},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cluster\", \"order\": 2},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 3},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-provenance\", \"order\": 4}
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-ollama\", \"order\": 1},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 2}
         ]}"
       # Update in place when it exists — keeps the uid (and thus the TV kiosk
       # URL baked into the Pi autostart) stable across re-applies.
@@ -230,7 +230,7 @@ KC
       sudo mkdir -p /etc/jcmcp
       sudo install -m 600 -o root -g root /tmp/aks-prom.kubeconfig /etc/jcmcp/aks-prom.kubeconfig
       rm /tmp/aks-prom.kubeconfig
-      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.101.2\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
+      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.68.51\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
         | sudo tee /etc/systemd/system/aks-prom-tunnel.service >/dev/null
       sudo systemctl daemon-reload
       sudo systemctl enable --now aks-prom-tunnel.service
