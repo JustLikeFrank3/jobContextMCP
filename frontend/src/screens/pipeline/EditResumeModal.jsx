@@ -3,10 +3,10 @@ import { Button } from '../../design-system'
 import { apiPost } from '../../auth/api.js'
 import { Modal, ResultLine, EmptyEditorState, ProvenanceNote, modalField, modalLabel, actionError } from './shared.jsx'
 
-export default function EditResumeModal({ job, resumeOptions, onClose, onDone }) {
+export default function EditResumeModal({ job, resumeOptions, initialInstructions, onClose, onDone }) {
   const options = resumeOptions || []
   const [resumeName, setResumeName] = useState(job.suggested_edit_resume || options[0] || '')
-  const [instructions, setInstructions] = useState('')
+  const [instructions, setInstructions] = useState(initialInstructions || '')
   const [exportPdf, setExportPdf] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState('')

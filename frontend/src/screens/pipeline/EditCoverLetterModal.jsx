@@ -7,11 +7,11 @@ import { EYEBROW } from '../_shared.jsx'
 import { Modal, ResultLine, EmptyEditorState, ProvenanceNote, modalField, modalLabel, actionError } from './shared.jsx'
 
 /* Edit Cover Letter (draft → review → accept/discard) */
-export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner, onClose, onDone }) {
+export default function EditCoverLetterModal({ job, coverLetterOptions, isOwner, initialInstructions, onClose, onDone }) {
   const isDesktop = useDesktopMode()
   const options = coverLetterOptions || []
   const [clName, setClName] = useState(job.suggested_edit_cover_letter || options[0] || '')
-  const [instructions, setInstructions] = useState('')
+  const [instructions, setInstructions] = useState(initialInstructions || '')
   const [pipeline, setPipeline] = useState(isOwner ? 'latex' : 'html')
   const [exportPdf, setExportPdf] = useState(true)
   const [submitting, setSubmitting] = useState(false)
