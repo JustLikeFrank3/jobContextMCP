@@ -9,6 +9,7 @@ import JobCard, { ROW_GRID } from './pipeline/JobCard.jsx'
 import AddJobModal from './pipeline/AddJobModal.jsx'
 import EditResumeModal from './pipeline/EditResumeModal.jsx'
 import EditCoverLetterModal from './pipeline/EditCoverLetterModal.jsx'
+import ProvenanceViolationsModal from './pipeline/ProvenanceViolationsModal.jsx'
 import TemplateModal from './pipeline/TemplateModal.jsx'
 
 /* Pipeline — the share-sheet intake queue: assess, generate, decide, apply.
@@ -62,8 +63,9 @@ export default function Pipeline() {
   const [stageFilter, setStageFilter] = useState('all')
   const [persona, setPersona] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [genResult, setGenResult] = useState(null) // { title, ok, provenance: parseProvenance() | null }
-  const [editor, setEditor] = useState(null) // { type: 'edit-resume'|'edit-cl'|'templates', job }
+  const [genResult, setGenResult] = useState(null) // { title, ok, provenance, genKind: 'resume'|'cl', job }
+  const [editor, setEditor] = useState(null) // { type: 'edit-resume'|'edit-cl'|'templates', job, initialInstructions? }
+  const [violModal, setViolModal] = useState(null) // { job, genKind } — provenance violations detail
 
   const load = useCallback(async ({ silent } = {}) => {
     if (!silent) setState((s) => ({ ...s, loading: !s.data, error: null }))
@@ -98,22 +100,20 @@ export default function Pipeline() {
         setBusy(`Generating resume for ${job.company}…`)
         setGenResult(null)
         const res = await apiPost('/dashboard/pipeline/generate-resume', { job_id: job.id, persona: activePersona })
-        setGenResult({
-          title: `Resume — ${job.company}`,
-          ok: !!res?.ok,
-          provenance: parseProvenance(res?.provenance),
-        })
+        const provenance = parseProvenance(res?.provenance)
+        setGenResult({ title: `Resume — ${job.company}`, ok: !!res?.ok, provenance, genKind: 'resume', job })
+        // Violations demand attention at generation time, not on the wallboard
+        // after the fact — auto-open the full list.
+        if (provenance?.status === 'fail') setViolModal({ job, genKind: 'resume' })
         if (!res?.ok) window.alert(`Resume generation did not produce files.\n\n${String(res?.content || res?.notes || '').slice(0, 500)}`)
       } else if (type === 'cl-latex' || type === 'cl-html') {
         const pipeline = type === 'cl-latex' ? 'latex' : 'html'
         setBusy(`Generating cover letter (${pipeline.toUpperCase()}) for ${job.company}…`)
         setGenResult(null)
         const res = await apiPost('/dashboard/pipeline/generate-cover-letter', { job_id: job.id, export_pipeline: pipeline, persona: activePersona })
-        setGenResult({
-          title: `Cover letter — ${job.company}`,
-          ok: !!res?.ok,
-          provenance: parseProvenance(res?.provenance),
-        })
+        const provenance = parseProvenance(res?.provenance)
+        setGenResult({ title: `Cover letter — ${job.company}`, ok: !!res?.ok, provenance, genKind: 'cl', job })
+        if (provenance?.status === 'fail') setViolModal({ job, genKind: 'cl' })
         if (!res?.ok) window.alert(`Cover letter generation did not produce files (likely an API rate limit or provider error).\n\n${String(res?.content || res?.notes || '').slice(0, 500)}`)
       } else if (type === 'apply') {
         setBusy(`Queueing application for ${job.company}…`)
@@ -177,6 +177,12 @@ export default function Pipeline() {
                 <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)' }}>
                   {genResult.provenance.text}
                 </span>
+                {genResult.provenance.status === 'fail' && (
+                  <Button size="sm" variant="ghost"
+                    onClick={() => setViolModal({ job: genResult.job, genKind: genResult.genKind })}>
+                    View violations
+                  </Button>
+                )}
               </>
             ) : (
               <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--faint)' }}>
@@ -282,10 +288,29 @@ export default function Pipeline() {
         />
       )}
 
+      {violModal && (
+        <ProvenanceViolationsModal
+          job={violModal.job}
+          onClose={() => setViolModal(null)}
+          onFix={(instructions) => {
+            // Hand off to the AI-edit flow for whichever document was just
+            // generated; use the freshest job row so the edit modal suggests
+            // the newly generated file.
+            const fresh = jobs.find((j) => j.id === violModal.job.id) || violModal.job
+            setViolModal(null)
+            setEditor({
+              type: violModal.genKind === 'cl' ? 'edit-cl' : 'edit-resume',
+              job: fresh,
+              initialInstructions: instructions,
+            })
+          }}
+        />
+      )}
       {editor?.type === 'edit-resume' && (
         <EditResumeModal
           job={editor.job}
           resumeOptions={data?.optimized_resume_options}
+          initialInstructions={editor.initialInstructions}
           onClose={() => setEditor(null)}
           onDone={() => { setEditor(null); load({ silent: true }) }}
         />
@@ -295,6 +320,7 @@ export default function Pipeline() {
           job={editor.job}
           coverLetterOptions={data?.cover_letter_options}
           isOwner={!!data?.is_owner}
+          initialInstructions={editor.initialInstructions}
           onClose={() => setEditor(null)}
           onDone={() => { setEditor(null); load({ silent: true }) }}
         />

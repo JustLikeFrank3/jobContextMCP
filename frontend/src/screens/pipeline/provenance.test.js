@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseProvenance, PROVENANCE_TONE, PROVENANCE_BADGE_LABEL } from './provenance.js'
+import { parseProvenance, PROVENANCE_TONE, PROVENANCE_BADGE_LABEL, buildFixInstruction } from './provenance.js'
 
 describe('parseProvenance', () => {
   it('classifies the PASS line as pass', () => {
@@ -46,5 +46,30 @@ describe('badge mappings', () => {
       expect(PROVENANCE_TONE[status]).toBeTruthy()
       expect(PROVENANCE_BADGE_LABEL[status]).toBeTruthy()
     }
+  })
+})
+
+describe('buildFixInstruction', () => {
+  it('empty input yields empty string', () => {
+    expect(buildFixInstruction([])).toBe('')
+    expect(buildFixInstruction(null)).toBe('')
+  })
+
+  it('single violation reads as one claim, quoted', () => {
+    const out = buildFixInstruction(['47%'])
+    expect(out).toContain('1 unsourced claim:')
+    expect(out).toContain('"47%"')
+    expect(out).toContain('remove it entirely')
+  })
+
+  it('lists every violation — no cap', () => {
+    const vs = Array.from({ length: 9 }, (_, i) => `${i + 1}%`)
+    const out = buildFixInstruction(vs)
+    expect(out).toContain('9 unsourced claims:')
+    for (const v of vs) expect(out).toContain(`"${v}"`)
+  })
+
+  it('forbids inventing replacements', () => {
+    expect(buildFixInstruction(['$9M'])).toMatch(/Do not invent/)
   })
 })

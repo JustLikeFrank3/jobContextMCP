@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from lib.provenance import check_claims, extract_claims, record_run
+from lib.provenance import check_claims, extract_claims, latest_run, record_run
 
 
 # ===========================================================================
@@ -160,6 +160,48 @@ class TestRecordRun:
             chunk_texts=[], claims=[], violations=[], verdict="failed",
             revisions=0, db_path=tmp_path,
         )  # must not raise
+
+
+# ===========================================================================
+# latest_run — read side for the dashboard violations modal
+# ===========================================================================
+
+class TestLatestRun:
+    def _seed(self, db, **over):
+        base = dict(
+            kind="resume", company="Initech", role="SWE",
+            job_description="jd", chunk_texts=[], claims=["34%", "12%"],
+            violations=[], verdict="passed", revisions=0, db_path=db,
+        )
+        base.update(over)
+        record_run(**base)
+
+    def test_empty_db_returns_none(self, tmp_path):
+        db = tmp_path / "prov.db"
+        # create the schema without inserting
+        from lib.db import get_connection
+        with get_connection(path=db):
+            pass
+        assert latest_run(db_path=db) is None
+
+    def test_newest_row_wins_and_json_fields_decode(self, tmp_path):
+        db = tmp_path / "prov.db"
+        self._seed(db)
+        self._seed(db, violations=["47%", "$9M"], verdict="failed")
+        run = latest_run(db_path=db)
+        assert run["verdict"] == "failed"
+        assert run["violations"] == ["47%", "$9M"]
+        assert run["claims"] == ["34%", "12%"]
+        assert run["kind"] == "resume"
+
+    def test_company_role_filter_skips_other_jobs(self, tmp_path):
+        db = tmp_path / "prov.db"
+        self._seed(db, company="Initech", violations=["1%"], verdict="failed")
+        self._seed(db, company="Hooli", role="PM", verdict="passed")
+        run = latest_run(company="Initech", role="SWE", db_path=db)
+        assert run["company"] == "Initech"
+        assert run["violations"] == ["1%"]
+        assert latest_run(company="Nowhere", db_path=db) is None
 
 
 # ===========================================================================

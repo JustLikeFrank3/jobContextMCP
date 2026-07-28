@@ -175,6 +175,43 @@ def record_run(
         pass
 
 
+def latest_run(
+    *, company: str = "", role: str = "", db_path=None
+) -> dict | None:
+    """Most recent generation_provenance row (partition-scoped DB).
+
+    Filters by company/role when given so a concurrent generation for a
+    different job can't be mistaken for this one. Returns the row with
+    claims/violations decoded, or None when nothing matches — the caller
+    (the dashboard's violations modal) treats None as "no gate record".
+    """
+    from lib.db import get_connection
+
+    where, params = [], []
+    if company:
+        where.append("company = ?")
+        params.append(company)
+    if role:
+        where.append("role = ?")
+        params.append(role)
+    sql = (
+        "SELECT id, ts, kind, company, role, claims, violations, verdict, "
+        "revisions FROM generation_provenance"
+        + (" WHERE " + " AND ".join(where) if where else "")
+        + " ORDER BY id DESC LIMIT 1"
+    )
+    with get_connection(path=db_path) as conn:
+        row = conn.execute(sql, params).fetchone()
+    if row is None:
+        return None
+    keys = ("id", "ts", "kind", "company", "role", "claims", "violations",
+            "verdict", "revisions")
+    out = dict(zip(keys, row))
+    out["claims"] = json.loads(out["claims"] or "[]")
+    out["violations"] = json.loads(out["violations"] or "[]")
+    return out
+
+
 def render_durable_metrics(db_path=None) -> str:
     """Prometheus gauge lines computed from the generation_provenance table.
 
