@@ -124,6 +124,19 @@ async def pipeline_data() -> JSONResponse:
     return JSONResponse(_pipeline_payload())
 
 
+@router.get("/pipeline/provenance/latest")
+async def pipeline_provenance_latest(company: str = "", role: str = "") -> JSONResponse:
+    """Full detail of the most recent truth-gate run — the generation
+    responses only carry the one-line verdict (capped at 6 violations), so
+    the violations modal reads the complete list from the audit row."""
+    from lib.provenance import latest_run
+
+    run = latest_run(company=company, role=role)
+    if run is None:
+        return JSONResponse({"found": False})
+    return JSONResponse({"found": True, **run})
+
+
 @router.post("/pipeline/evaluate", responses={404: {"description": "Job id not found"}})
 async def pipeline_evaluate(req: _JobActionRequest) -> JSONResponse:
     job = _find_job(req.job_id)

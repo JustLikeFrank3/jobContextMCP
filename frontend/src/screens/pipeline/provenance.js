@@ -29,3 +29,19 @@ export const PROVENANCE_BADGE_LABEL = {
   fail: '⚠ unsourced claims',
   skipped: 'provenance skipped',
 }
+
+/* Edit-flow instruction for fixing unsourced claims. Feeds the existing
+   AI-edit modals (edit-resume / edit-cover-letter), whose pipeline re-runs
+   the truth gate — so "Fix with AI" closes the loop with a fresh verdict.
+   Pure so the exact contract with the edit prompt is unit-testable. */
+export function buildFixInstruction(violations) {
+  const vs = (violations || []).filter(Boolean)
+  if (vs.length === 0) return ''
+  const list = vs.map((v) => `"${v}"`).join(', ')
+  const noun = vs.length === 1 ? 'claim' : 'claims'
+  return (
+    `The provenance gate flagged ${vs.length} unsourced ${noun}: ${list}. ` +
+    'For each flagged claim, either rephrase it using only facts present in my source material, ' +
+    'or remove it entirely. Do not invent or substitute any numbers, metrics, or named facts.'
+  )
+}

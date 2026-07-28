@@ -75,7 +75,9 @@ data:
       # wallboard's Cloud page reads these locally instead of querying
       # through the tunnel at render time (which never finished a first
       # render). namespace labels (jcmcp/jcmcp-qa) disambiguate from the
-      # Pi's own jcmcp-pi series.
+      # Pi's own jcmcp-pi series. Target is the Pi's static address on the
+      # direct ethernet link (the tunnel binds it) — static beats the
+      # DHCP-leased wlan address, which broke the kiosk once (2026-07-15).
       - job_name: aks-federate
         honor_labels: true
         metrics_path: /federate
@@ -84,6 +86,13 @@ data:
             - '{namespace=~"jcmcp|jcmcp-qa"}'
         static_configs:
           - targets: ["192.168.101.2:9091"]
+      # Workstation local-LLM stack: Ollama status + GPU + the desktop
+      # app's relayed llm_* series (scripts/ollama-exporter.py, installed
+      # by scripts/ollama-exporter-setup.sh on the workstation), reached
+      # over the direct ethernet link (static IPs both ends).
+      - job_name: ollama-workstation
+        static_configs:
+          - targets: ["192.168.101.1:9105"]
       - job_name: cadvisor
         kubernetes_sd_configs:
           - role: node

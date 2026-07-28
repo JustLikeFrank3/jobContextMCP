@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-1549%20passing-brightgreen" alt="1549 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1555%20passing-brightgreen" alt="1555 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -35,7 +35,7 @@ Available as a **double-clickable desktop app** (macOS · Windows · Linux), a l
 | | |
 |---|---|
 | 11 domain tools (88 actions) | Resume + cover letter generation |
-| 1549 passing tests | Job fitment analysis with persona lenses |
+| 1555 passing tests | Job fitment analysis with persona lenses |
 | SQLite persistence + JSON fallback | Interview prep + debrief logging |
 | Local RAG semantic search | Outreach + relationship tracking |
 | Azure AKS deployment | Microsoft Entra ID authentication |
@@ -165,8 +165,8 @@ JobContextMCP is now more than a stdio MCP server. The current branch combines:
 | Storage | SQLite with dual-write JSON fallback — all pipeline writes go to both; reads come from SQLite when `USE_SQLITE=1`. Migration script bootstraps from existing JSON. Sync-delete on save keeps SQLite and JSON consistent. `SQLITE_ONLY=1` skips JSON writes for mapped tables (production AKS default). |
 | Deployment | AKS (Azure Kubernetes Service) — single-node cluster with workload identity, Azure Container Registry, Azure Blob Storage workspace seeding via init container (seeds all workspace dirs + DB on pod start), ConfigMap-driven config, provider-agnostic LLM (OpenAI / Azure AI Foundry keyless / Ollama). Sidecar container (`workspace-sync`) pushes PVC workspace files + DB back to Blob every 15 min so data survives pod replacement. One-shot `provision_aks.sh` idempotent provisioner. |
 | Transports | MCP stdio (local/Docker), MCP Streamable HTTP (`protocolVersion: 2025-03-26`) served by FastMCP via AKS or Docker, FastAPI REST/SSE, CLI, Entra-authenticated dashboard routes, LangGraph workflow streaming |
-| Provenance & trust | Deterministic truth gate on every generation path *and* the AI edit dialogs — numeric claims must trace to source material or the pipeline routes back to revision (reviewer approval alone is not enough); the verdict is surfaced in every confirmation and as a pass/fail badge in the dashboard; per-run audit records (`generation_provenance`), audited master-resume edits (`master_resume_edits`), durable gate metrics on `/metrics` for dashboards |
-| Self-hosting | Disposable local k3d cluster and a documented single-node k3s deployment (proven on a Raspberry Pi 4, 4GB): arm64 image cross-builds, nightly SQLite-safe backups, Prometheus/Grafana/Loki wallboard with a rotating kiosk, and prod-metrics federation over a scoped outbound tunnel |
+| Provenance & trust | Deterministic truth gate on every generation path *and* the AI edit dialogs — numeric claims must trace to source material or the pipeline routes back to revision (reviewer approval alone is not enough); the verdict is surfaced in every confirmation and as a pass/fail badge in the dashboard; on a gate failure a violations modal auto-opens with every unsourced claim listed and actionable (per-claim **Fix** / **Fix all** hand off to the AI-edit flow, which re-runs the gate); per-run audit records (`generation_provenance`), audited master-resume edits (`master_resume_edits`), durable gate metrics on `/metrics` for dashboards |
+| Self-hosting | Disposable local k3d cluster and a documented single-node k3s deployment (proven on a Raspberry Pi 4, 4GB): arm64 image cross-builds, nightly SQLite-safe backups, Prometheus/Grafana/Loki wallboard with a rotating two-screen kiosk (local-LLM dashboard — Ollama/GPU/provenance via a workstation exporter — alternating with AKS production), and prod-metrics federation over a scoped outbound tunnel |
 
 ---
 

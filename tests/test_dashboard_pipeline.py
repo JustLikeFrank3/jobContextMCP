@@ -772,3 +772,47 @@ class TestPipelineHelpers:
     def test_first_sentence_truncates(self):
         out = pl._first_sentence("x" * 500, max_len=32)
         assert len(out) <= 32
+
+
+# GET /dashboard/pipeline/provenance/latest — full violation detail for the
+# violations modal (the generation responses cap the line at 6 claims).
+
+class TestProvenanceLatest:
+    def test_no_record_reports_found_false(self, http_client_noauth):
+        r = http_client_noauth.get("/dashboard/pipeline/provenance/latest")
+        assert r.status_code == 200
+        assert r.json() == {"found": False}
+
+    def test_returns_every_violation_uncapped(self, http_client_noauth):
+        from lib.provenance import record_run
+
+        violations = [f"{n}%" for n in range(1, 9)]  # 8 > the 6-line cap
+        record_run(
+            kind="resume", company="Initech", role="SWE",
+            job_description="jd", chunk_texts=["src"],
+            claims=violations + ["10x"], violations=violations,
+            verdict="failed", revisions=0,
+        )
+        r = http_client_noauth.get(
+            "/dashboard/pipeline/provenance/latest",
+            params={"company": "Initech", "role": "SWE"},
+        )
+        body = r.json()
+        assert body["found"] is True
+        assert body["violations"] == violations
+        assert body["verdict"] == "failed"
+        assert body["kind"] == "resume"
+        assert len(body["claims"]) == 9
+
+    def test_company_filter_misses_other_jobs(self, http_client_noauth):
+        from lib.provenance import record_run
+
+        record_run(
+            kind="resume", company="Hooli", role="PM", job_description="",
+            chunk_texts=[], claims=[], violations=[], verdict="passed",
+            revisions=0,
+        )
+        r = http_client_noauth.get(
+            "/dashboard/pipeline/provenance/latest", params={"company": "Initech"}
+        )
+        assert r.json() == {"found": False}
