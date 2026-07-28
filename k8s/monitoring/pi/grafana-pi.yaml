@@ -30,13 +30,13 @@ data:
         access: proxy
         url: http://loki.monitoring.svc:3100
       # AKS Prometheus via the outbound tunnel held by aks-prom-tunnel.service
-      # on the Pi host (see pi-deploy.sh aks-feed) — reached at the Pi's LAN
-      # address (the 192.168.101.2 direct link is gone).
+      # on the Pi host (see pi-deploy.sh aks-feed) — reached at the Pi's
+      # static direct-link address (DHCP-immune).
       - name: Prometheus-AKS
         uid: prometheus-aks
         type: prometheus
         access: proxy
-        url: http://192.168.68.51:9091
+        url: http://192.168.101.2:9091
   dashboards.yaml: |
     apiVersion: 1
     providers:
@@ -91,21 +91,36 @@ data:
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "max(jobcontext_desktop_up{job=\"ollama-workstation\"}) or vector(0)"}],
          "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
-        {"type": "timeseries", "title": "LLM calls (1h) by model/outcome", "gridPos": {"x":0,"y":9,"w":8,"h":9},
+        {"type": "timeseries", "title": "LLM calls (1h) by model/outcome", "gridPos": {"x":0,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_calls_total{job=\"ollama-workstation\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
-        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":8,"y":9,"w":8,"h":9},
+        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":6,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_tokens_total{job=\"ollama-workstation\"}[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
-        {"type": "timeseries", "title": "Avg LLM call latency", "gridPos": {"x":16,"y":9,"w":8,"h":9},
+        {"type": "timeseries", "title": "Avg LLM call latency", "gridPos": {"x":12,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(model)(rate(llm_call_seconds_sum{job=\"ollama-workstation\"}[15m])) / sum by(model)(rate(llm_call_seconds_count{job=\"ollama-workstation\"}[15m]))", "legendFormat": "{{model}}"}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":12,"h":9},
+        {"type": "timeseries", "title": "Provenance gate runs by verdict", "gridPos": {"x":18,"y":9,"w":6,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum by(verdict)(provenance_runs_total{job=\"ollama-workstation\"})", "legendFormat": "{{verdict}}"}]},
+        {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "GPU util"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
-        {"type": "timeseries", "title": "VRAM", "gridPos": {"x":12,"y":18,"w":12,"h":9},
+        {"type": "stat", "title": "Gate pass rate", "gridPos": {"x":16,"y":18,"w":4,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "100 * sum(provenance_runs_total{job=\"ollama-workstation\",verdict=\"passed\"}) / clamp_min(sum(provenance_runs_total{job=\"ollama-workstation\"}), 1)"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"red","value":null},{"color":"orange","value":80},{"color":"green","value":99}]}}}},
+        {"type": "stat", "title": "Gate runs", "gridPos": {"x":20,"y":18,"w":4,"h":5},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(provenance_runs_total{job=\"ollama-workstation\"}) or vector(0)"}]},
+        {"type": "stat", "title": "Violations", "gridPos": {"x":20,"y":23,"w":4,"h":4},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(provenance_violations_recorded_total{job=\"ollama-workstation\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":1}]}}}},
+        {"type": "timeseries", "title": "VRAM", "gridPos": {"x":8,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [
            {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "used"},

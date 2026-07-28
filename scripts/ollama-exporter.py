@@ -32,7 +32,8 @@ TIMEOUT = 3
 # Desktop-app families forwarded verbatim (with their # TYPE lines); the
 # scrape's job label keeps them distinct from the k8s-scraped series.
 RELAY_FAMILIES = ("llm_calls_total", "llm_call_seconds", "llm_tokens_total",
-                  "process_uptime_seconds")
+                  "process_uptime_seconds", "provenance_runs_total",
+                  "provenance_violations_recorded_total")
 
 
 def _get_json(url: str):
@@ -114,21 +115,34 @@ def _desktop_ports() -> list[int]:
     return sorted(set(ports))
 
 
+# Last successful relay, kept so a probe timeout doesn't punch gaps in the
+# series: the sidecar's /metrics stalls while an LLM generation blocks its
+# event loop — exactly when the wallboard is most interesting.
+_relay_cache: list[str] = []
+
+
 def desktop_lines() -> list[str]:
-    for port in _desktop_ports():
+    ports = _desktop_ports()
+    if not ports:
+        _relay_cache.clear()
+        return ["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 0"]
+    for port in ports:
         try:
             with urllib.request.urlopen(
                     f"http://127.0.0.1:{port}/metrics", timeout=TIMEOUT) as resp:
                 body = resp.read().decode()
         except Exception:
             continue
-        lines = ["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 1"]
+        _relay_cache.clear()
         for line in body.splitlines():
             name = line.split("# TYPE ", 1)[-1] if line.startswith("#") else line
             if name.startswith(RELAY_FAMILIES):
-                lines.append(line)
-        return lines
-    return ["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 0"]
+                _relay_cache.append(line)
+        break
+    # Port exists → the app is alive even if the probe timed out (busy
+    # generating); serve the cached series rather than dropping them.
+    return (["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 1"]
+            + _relay_cache)
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -25,8 +25,8 @@
 #                                      aks-prom-tunnel systemd service on the
 #                                      Pi (port-forward -> :9091)
 #
-# Assumes: SSH alias pi-node1 (LAN, 192.168.68.51 — the direct ethernet
-# link is decommissioned) with passwordless
+# Assumes: SSH alias pi-node1 (direct ethernet link, 192.168.101.2;
+# LAN fallback 192.168.68.51) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
 # (docker run --privileged --rm tonistiigi/binfmt --install arm64).
 #
@@ -230,7 +230,7 @@ KC
       sudo mkdir -p /etc/jcmcp
       sudo install -m 600 -o root -g root /tmp/aks-prom.kubeconfig /etc/jcmcp/aks-prom.kubeconfig
       rm /tmp/aks-prom.kubeconfig
-      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.68.51\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
+      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.101.2\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
         | sudo tee /etc/systemd/system/aks-prom-tunnel.service >/dev/null
       sudo systemctl daemon-reload
       sudo systemctl enable --now aks-prom-tunnel.service
@@ -253,7 +253,10 @@ KC
 # 4 loops x 68 chromium processes and starved the Pi (2026-07-20 incident).
 exec 9>/run/user/1000/wallboard-kiosk.lock
 flock -n 9 || { echo "wallboard-kiosk already running"; exit 0; }
-URL="http://192.168.68.51:3000/playlists/play/afs4gyxml4uf4f?kiosk"
+# localhost (chromium runs on the Pi itself) — immune to DHCP lease
+# changes, which stranded the kiosk on a hardcoded LAN IP before
+# (2026-07-15 incident).
+URL="http://localhost:3000/playlists/play/afs4gyxml4uf4f?kiosk"
 
 wait_for_url() {
   until curl -sf -o /dev/null --max-time 3 "$URL"; do
