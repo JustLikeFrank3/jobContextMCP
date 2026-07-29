@@ -87,12 +87,32 @@ def _git_sha() -> str:
 
 
 def default_generate(entry: GoldenEntry, jd_text: str) -> str:
-    """Generate through the real production path (tools.generate)."""
-    from tools import generate  # noqa: PLC0415 — lazy: imports server config + LLM client
+    """Generate through the real production path (tools.generate).
 
+    Outputs are saved under an EVAL-prefixed filename so eval artifacts are
+    recognizable in the workspace and never overwrite real application
+    materials.
+    """
+    from lib import config  # noqa: PLC0415 — lazy: imports server config + LLM client
+    from tools import generate  # noqa: PLC0415
+
+    output_filename = f"EVAL {entry.id} {entry.company} {entry.role}"
     if entry.output_kind == "cover_letter":
-        return generate.generate_cover_letter(entry.company, entry.role, jd_text)
-    return generate.generate_resume(entry.company, entry.role, jd_text)
+        status = generate.generate_cover_letter(
+            entry.company, entry.role, jd_text, output_filename=output_filename
+        )
+        out_dir = config.get_active_cover_letters_dir()
+    else:
+        status = generate.generate_resume(
+            entry.company, entry.role, jd_text, output_filename=output_filename
+        )
+        out_dir = config.get_active_optimized_resumes_dir()
+    # generate_* returns a status report; the document itself is saved to the
+    # workspace. A missing ✓ means generation fell back or errored — fail the
+    # run rather than judging a status message.
+    if not status.lstrip().startswith("✓"):
+        raise RuntimeError(f"generation did not complete: {status[:300]}")
+    return (out_dir / f"{output_filename}.txt").read_text(encoding="utf-8")
 
 
 def _master_excerpt(max_chars: int = 6000) -> str:
