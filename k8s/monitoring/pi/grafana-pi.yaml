@@ -106,7 +106,9 @@ data:
          "targets": [{"expr": "sum by(verdict)(provenance_runs_total{job=\"ollama-workstation\"})", "legendFormat": "{{verdict}}"}]},
         {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "GPU util"}],
+         "targets": [
+           {"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "workstation"},
+           {"expr": "max(gpu_utilization_percent{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
         {"type": "stat", "title": "Gate pass rate", "gridPos": {"x":16,"y":18,"w":4,"h":9},
          "datasource": {"uid":"prometheus"},
@@ -123,9 +125,10 @@ data:
         {"type": "timeseries", "title": "VRAM", "gridPos": {"x":8,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [
-           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "used"},
-           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "total"},
-           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"}],
+           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation used"},
+           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation total"},
+           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"},
+           {"expr": "max(gpu_memory_used_bytes{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig used"}],
          "fieldConfig": {"defaults": {"unit": "bytes"}}}
       ]
     }
