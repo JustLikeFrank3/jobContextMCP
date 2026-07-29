@@ -46,6 +46,13 @@ jobs:
       - name: Run tests
         run: pytest -m "not live_llm" --cov --cov-report=xml
 
+      # Layer 1 smoke gate (evals/): every non-network eval case runs against
+      # an isolated throwaway workspace with fully verbose per-case logging
+      # (invocation, expectations, tags, response excerpt). Smoke pass rate
+      # <95% exits non-zero — this job fails and the deploy jobs never run.
+      - name: Layer 1 smoke gate (verbose)
+        run: python scripts/ci_smoke_gate.py
+
   badges:
     needs: test
     # Only on direct pushes to long-lived branches — never on PRs or manual runs,

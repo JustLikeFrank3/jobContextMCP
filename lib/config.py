@@ -115,6 +115,7 @@ CONTACT_CROSSREF_FILE: Path     = DATA_FOLDER / "contact_crossref.json"
 LINKEDIN_CONNECTIONS_FILE: Path = DATA_FOLDER / "linkedin_connections.json"
 GITHUB_METRICS_FILE: Path       = DATA_FOLDER / "github_metrics.json"
 JOB_QUEUE_FILE: Path            = DATA_FOLDER / "job_queue.json"
+EVAL_RESULTS_FILE: Path         = DATA_FOLDER / "eval_results.json"
 
 # ── resume / reference file paths ────────────────────────────────────────────
 
@@ -533,7 +534,7 @@ def _reconfigure(cfg: dict) -> None:
     global STATUS_FILE, HEALTH_LOG_FILE, PERSONAL_CONTEXT_FILE, TONE_FILE
     global SCAN_INDEX_FILE, PEOPLE_FILE, DISMISSALS_FILE, LINKEDIN_POSTS_FILE, REJECTIONS_FILE
     global INTERVIEWS_FILE, CONTACT_CROSSREF_FILE, LINKEDIN_CONNECTIONS_FILE
-    global GITHUB_METRICS_FILE, JOB_QUEUE_FILE
+    global GITHUB_METRICS_FILE, JOB_QUEUE_FILE, EVAL_RESULTS_FILE
     global MASTER_RESUME, LEETCODE_CHEATSHEET, QUICK_REFERENCE
     global RESUME_TEMPLATE_PNG, COVER_LETTER_TEMPLATE_PNG, TEMPLATE_FORMAT
     global ACHIEVEMENTS, FEEDBACK_RECEIVED, SKILLS_SHORTER
@@ -572,6 +573,7 @@ def _reconfigure(cfg: dict) -> None:
     LINKEDIN_CONNECTIONS_FILE = DATA_FOLDER / "linkedin_connections.json"
     GITHUB_METRICS_FILE       = DATA_FOLDER / "github_metrics.json"
     JOB_QUEUE_FILE            = DATA_FOLDER / "job_queue.json"
+    EVAL_RESULTS_FILE         = DATA_FOLDER / "eval_results.json"
 
     def _res(key: str, fallback: str) -> Path:
         return RESUME_FOLDER / cfg.get(key, fallback)

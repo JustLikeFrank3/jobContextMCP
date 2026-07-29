@@ -1,0 +1,55 @@
+{
+  "_comment": "Golden dataset manifest — hand-curated (JD, 5/5 reference output) pairs. reference_file resolves against the workspace optimized-resumes folder; jd_file against workspace/evals/golden (see evals/golden.py). The files themselves are personal data and are NOT committed. JD provenance: recovered verbatim from the application queue (2026-07-29), except GD-02 which is the condensed JD preserved in the Agent 365 cover-letter args — replace with the full posting if recovered.",
+  "entries": [
+    {
+      "id": "GD-01",
+      "company": "Accenture",
+      "role": "AI Native Engineer",
+      "archetype": "Consulting + AI integration, stakeholder communication",
+      "eval_signal": "Company specificity; AI stack accuracy; consulting tone",
+      "reference_file": "Frank Vladmir MacBride III Resume - Accenture AI Native Engineer Resume.txt",
+      "jd_file": "GD-01-accenture-jd.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-02",
+      "company": "Microsoft",
+      "role": "SWE II Agent 365",
+      "archetype": "Large tech, agentic AI, distributed systems",
+      "eval_signal": "Keyword coverage: agents, LLM, Azure; no hallucinations on MS internals",
+      "reference_file": "Frank MacBride Resume - Microsoft SWE II Agent 365.txt",
+      "jd_file": "GD-02-microsoft-jd.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-03",
+      "company": "Home Depot",
+      "role": "Sr SWE AI Innovation",
+      "archetype": "Retail tech, full-stack, AI innovation",
+      "eval_signal": "Retail domain relevance; innovation framing; ATS readiness",
+      "reference_file": "Frank Vladmir MacBride III Resume - The Home Depot SR SOFTWARE ENGINEER AI Innovation Resume.txt",
+      "jd_file": "GD-03-homedepot-jd.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-04",
+      "company": "Delta",
+      "role": "Senior Digital Experience AI",
+      "archetype": "Aviation, real-time systems, AI/ML integration",
+      "eval_signal": "Domain adaptation; safety-conscious framing",
+      "reference_file": "Frank Vladmir MacBride III Resume - Delta Air Lines Senior Digital Experience Developer Artificial Intelligence Resume.txt",
+      "jd_file": "GD-04-delta-jd.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-05",
+      "company": "Sema4.ai",
+      "role": "Staff Backend Agent Platform",
+      "archetype": "AI infra, agentic systems, platform engineering",
+      "eval_signal": "Technical depth; agentic architecture vocabulary",
+      "reference_file": "Frank Vladmir MacBride III Resume - Sema4ai Staff Backend Engineer Agent Platform Resume.txt",
+      "jd_file": "GD-05-sema4-jd.txt",
+      "output_kind": "resume"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ Install with scripts/ollama-exporter-setup.sh (user systemd unit).
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.request
@@ -33,7 +34,7 @@ TIMEOUT = 3
 # scrape's job label keeps them distinct from the k8s-scraped series.
 RELAY_FAMILIES = ("llm_calls_total", "llm_call_seconds", "llm_tokens_total",
                   "process_uptime_seconds", "provenance_runs_total",
-                  "provenance_violations_recorded_total")
+                  "provenance_violations_recorded_total", "eval_")
 
 
 def _get_json(url: str):
@@ -101,18 +102,29 @@ def gpu_lines() -> list[str]:
 
 
 def _desktop_ports() -> list[int]:
+    """Sidecar ports found by process-name scan, then any extra fixed ports.
+
+    Order is relay priority (first responder wins per family): the real
+    sidecar owns shared families; extras — e.g. a repo-checkout server
+    exposing eval_* before a desktop release ships the endpoint, via
+    JOBCONTEXT_EXTRA_METRICS_PORTS="8321,8322" — fill in what it lacks.
+    """
+    ports: list[int] = []
     try:
         out = subprocess.run(["ss", "-ltnHp"], capture_output=True, text=True,
                              timeout=TIMEOUT, check=True).stdout
     except Exception:
-        return []
-    ports = []
+        out = ""
     for line in out.splitlines():
         if "jobcontext-back" in line:
             m = re.search(r"127\.0\.0\.1:(\d+)", line)
             if m:
                 ports.append(int(m.group(1)))
-    return sorted(set(ports))
+    for raw in os.environ.get("JOBCONTEXT_EXTRA_METRICS_PORTS", "").split(","):
+        raw = raw.strip()
+        if raw.isdigit():
+            ports.append(int(raw))
+    return list(dict.fromkeys(ports))
 
 
 # Last successful relay, kept so a probe timeout doesn't punch gaps in the
@@ -126,6 +138,12 @@ def desktop_lines() -> list[str]:
     if not ports:
         _relay_cache.clear()
         return ["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 0"]
+    # Merge across ports, first responder wins per family — the frozen
+    # sidecar and a repo-checkout server (JOBCONTEXT_EXTRA_METRICS_PORTS)
+    # each contribute the families the other lacks, without duplicates.
+    collected: list[str] = []
+    seen_families: set[str] = set()
+    any_ok = False
     for port in ports:
         try:
             with urllib.request.urlopen(
@@ -133,12 +151,21 @@ def desktop_lines() -> list[str]:
                 body = resp.read().decode()
         except Exception:
             continue
-        _relay_cache.clear()
+        any_ok = True
+        port_families: set[str] = set()
         for line in body.splitlines():
             name = line.split("# TYPE ", 1)[-1] if line.startswith("#") else line
-            if name.startswith(RELAY_FAMILIES):
-                _relay_cache.append(line)
-        break
+            if not name.startswith(RELAY_FAMILIES):
+                continue
+            family = name.split(" ", 1)[0].split("{", 1)[0]
+            if family in seen_families and family not in port_families:
+                continue  # an earlier port already owns this family
+            port_families.add(family)
+            collected.append(line)
+        seen_families |= port_families
+    if any_ok:
+        _relay_cache.clear()
+        _relay_cache.extend(collected)
     # Port exists → the app is alive even if the probe timed out (busy
     # generating); serve the cached series rather than dropping them.
     return (["# TYPE jobcontext_desktop_up gauge", "jobcontext_desktop_up 1"]

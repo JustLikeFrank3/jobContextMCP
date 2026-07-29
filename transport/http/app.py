@@ -248,6 +248,10 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
         # Control plane: durable background work (capture, doc generation).
         await _work.start_dispatcher()
+        # Re-expose stored eval results as gauges (they reset on restart).
+        from transport.http.routes.evals import restore_gauges
+
+        restore_gauges()
         try:
             if mcp_starlette is not None:
                 # The Starlette sub-app carries its own lifespan that initialises
@@ -299,6 +303,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         from transport.http.routes import chat as chat_routes
         app.include_router(desktop_routes.router)
         app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
+    from transport.http.routes import evals as evals_routes
     from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
     from transport.http.routes import work as work_routes
@@ -306,6 +311,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
     app.include_router(work_routes.router)  # control-plane work-item status
+    app.include_router(evals_routes.router)  # eval results ingest → eval_* gauges
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)

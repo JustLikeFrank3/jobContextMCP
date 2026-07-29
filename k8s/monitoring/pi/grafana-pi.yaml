@@ -4,9 +4,10 @@
 #  - adds a grafana-dashboard-pi configmap with the kiosk Cluster Health
 #    dashboard; pi-deploy.sh patches the grafana deployment to mount it at
 #    /var/lib/grafana/dashboards/pi (the base provider loads recursively).
-# The wallboard playlist alternates two views:
+# The wallboard playlist rotates three views:
 #    kiosk-ollama (workstation local-LLM: Ollama + GPU + desktop llm_*)
 #  + kiosk-cloud  (production on AKS, federated series)
+#  + kiosk-evals  (resume-quality evals: judge scores, variance, alerts)
 # The other kiosk dashboards stay provisioned for manual viewing but are
 # out of the rotation (pi-deploy.sh wallboard owns the playlist).
 apiVersion: v1
@@ -106,7 +107,9 @@ data:
          "targets": [{"expr": "sum by(verdict)(provenance_runs_total{job=\"ollama-workstation\"})", "legendFormat": "{{verdict}}"}]},
         {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "GPU util"}],
+         "targets": [
+           {"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "workstation"},
+           {"expr": "max(gpu_utilization_percent{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
         {"type": "stat", "title": "Gate pass rate", "gridPos": {"x":16,"y":18,"w":4,"h":9},
          "datasource": {"uid":"prometheus"},
@@ -123,9 +126,10 @@ data:
         {"type": "timeseries", "title": "VRAM", "gridPos": {"x":8,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [
-           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "used"},
-           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "total"},
-           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"}],
+           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation used"},
+           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation total"},
+           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"},
+           {"expr": "max(gpu_memory_used_bytes{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig used"}],
          "fieldConfig": {"defaults": {"unit": "bytes"}}}
       ]
     }
@@ -620,5 +624,69 @@ data:
             }
           }
         }
+      ]
+    }
+  kiosk-evals.json: |
+    {
+      "uid": "kiosk-evals", "title": "Evals — resume quality (LLM-as-judge)", "tags": ["kiosk"],
+      "timezone": "browser", "refresh": "1m", "schemaVersion": 39,
+      "time": {"from": "now-7d", "to": "now"},
+      "panels": [
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · adversarial judge · N-run variance"}},
+        {"type": "stat", "title": "Mean judge score (worst entry)", "gridPos": {"x": 0, "y": 3, "w": 5, "h": 6},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "min(eval_mean_score{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"min": 1, "max": 5, "decimals": 2,
+          "thresholds": {"steps": [{"color": "red", "value": null},
+           {"color": "orange", "value": 3.8}, {"color": "green", "value": 4}]}}}},
+        {"type": "stat", "title": "Hallucinations", "gridPos": {"x": 5, "y": 3, "w": 5, "h": 6},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "max(eval_hallucination_rate_pct{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.001}]}}}},
+        {"type": "stat", "title": "Verdict flips", "gridPos": {"x": 10, "y": 3, "w": 5, "h": 6},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "max(eval_verdict_flip_rate_pct{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "orange", "value": 20}]}}}},
+        {"type": "stat", "title": "Layer 1 smoke", "gridPos": {"x": 15, "y": 3, "w": 5, "h": 6},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "eval_layer1_smoke_pass_rate_pct{job=\"ollama-workstation\"}"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
+          "thresholds": {"steps": [{"color": "red", "value": null},
+           {"color": "orange", "value": 95}, {"color": "green", "value": 100}]}}}},
+        {"type": "stat", "title": "Alerts", "gridPos": {"x": 20, "y": 3, "w": 4, "h": 6},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "sum(eval_alert_count{job=\"ollama-workstation\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"decimals": 0,
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}}},
+        {"type": "timeseries", "title": "Mean judge score by golden entry", "gridPos": {"x": 0, "y": 9, "w": 12, "h": 9},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "eval_mean_score{job=\"ollama-workstation\"}", "legendFormat": "{{gd_id}}"}],
+         "fieldConfig": {"defaults": {"min": 1, "max": 5,
+          "custom": {"thresholdsStyle": {"mode": "line"}},
+          "thresholds": {"steps": [{"color": "transparent", "value": null}, {"color": "red", "value": 3.8}]}}}},
+        {"type": "timeseries", "title": "CoV % (instability) by golden entry", "gridPos": {"x": 12, "y": 9, "w": 12, "h": 9},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "eval_cov_pct{job=\"ollama-workstation\"}", "legendFormat": "{{gd_id}}"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0,
+          "custom": {"thresholdsStyle": {"mode": "line"}},
+          "thresholds": {"steps": [{"color": "transparent", "value": null}, {"color": "orange", "value": 20}]}}}},
+        {"type": "bargauge", "title": "Per-dimension mean (across entries)", "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "avg by(dimension)(eval_dimension_score{job=\"ollama-workstation\"})", "legendFormat": "{{dimension}}"}],
+         "options": {"displayMode": "gradient", "orientation": "horizontal"},
+         "fieldConfig": {"defaults": {"min": 1, "max": 5, "decimals": 2,
+          "thresholds": {"steps": [{"color": "red", "value": null},
+           {"color": "orange", "value": 3}, {"color": "green", "value": 4}]}}}},
+        {"type": "stat", "title": "Time since last suite run", "gridPos": {"x": 12, "y": 18, "w": 6, "h": 8},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "time() - eval_last_run_timestamp_seconds{job=\"ollama-workstation\",kind=\"suite\"}"}],
+         "fieldConfig": {"defaults": {"unit": "s", "decimals": 0,
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "orange", "value": 604800}]}}}},
+        {"type": "timeseries", "title": "Eval pushes by kind (1d)", "gridPos": {"x": 18, "y": 18, "w": 6, "h": 8},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "sum by(kind)(increase(eval_pushes_total{job=\"ollama-workstation\"}[1d]))", "legendFormat": "{{kind}}"}]}
       ]
     }
