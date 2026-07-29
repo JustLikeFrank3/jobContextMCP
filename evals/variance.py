@@ -50,6 +50,7 @@ class RunAggregate:
     hallucination_rate_pct: float
     flip_rate_pct: float
     verdicts: list[str] = field(default_factory=list)
+    hallucinations: list[str] = field(default_factory=list)  # unique claims across runs
 
     @property
     def alerts(self) -> list[str]:
@@ -78,6 +79,7 @@ class RunAggregate:
                 for d, m in self.per_dimension.items()
             },
             "verdicts": self.verdicts,
+            "hallucinations": self.hallucinations,
             "alerts": self.alerts,
         }
 
@@ -104,6 +106,7 @@ def aggregate_runs(runs: list[JudgeScore]) -> RunAggregate:
         hallucination_rate_pct=sum(bool(r.hallucinations) for r in runs) / len(runs) * 100,
         flip_rate_pct=verdict_flip_rate(verdicts),
         verdicts=verdicts,
+        hallucinations=sorted({h for r in runs for h in r.hallucinations}),
     )
 
 

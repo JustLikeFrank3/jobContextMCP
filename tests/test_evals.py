@@ -241,6 +241,8 @@ def test_variance_alerts():
     assert agg.hallucination_rate_pct == pytest.approx(100 / 3)
     assert agg.flip_rate_pct == pytest.approx(100 / 3)
     assert any("hallucination" in a for a in agg.alerts)
+    assert agg.hallucinations == ["made-up title"]  # the flagged claims persist
+    assert agg.to_dict()["hallucinations"] == ["made-up title"]
     assert agg.to_dict()["n_runs"] == 3
 
 
