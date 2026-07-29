@@ -4,10 +4,13 @@
 #  - adds a grafana-dashboard-pi configmap with the kiosk Cluster Health
 #    dashboard; pi-deploy.sh patches the grafana deployment to mount it at
 #    /var/lib/grafana/dashboards/pi (the base provider loads recursively).
-# The wallboard playlist rotates three views:
-#    kiosk-ollama (workstation local-LLM: Ollama + GPU + desktop llm_*)
-#  + kiosk-cloud  (production on AKS, federated series)
-#  + kiosk-evals  (resume-quality evals: judge scores, variance, alerts)
+# The wallboard rotation is OS-dependent: the workstation dual-boots, and
+# the kiosk script picks a playlist by probing which GPU exporter is up
+# (see pi-deploy.sh wallboard/kiosk-setup):
+#    jcmcp-wallboard-linux:   kiosk-ollama + kiosk-cloud + kiosk-evals
+#    jcmcp-wallboard-windows: kiosk-gaming + kiosk-cloud + kiosk-evals
+# kiosk-gaming plots the same physical RTX 5060 Ti as kiosk-ollama — its
+# gauges max() across both scrape jobs since only one OS is ever up.
 # The other kiosk dashboards stay provisioned for manual viewing but are
 # out of the rotation (pi-deploy.sh wallboard owns the playlist).
 apiVersion: v1
@@ -130,6 +133,57 @@ data:
            {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation total"},
            {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"},
            {"expr": "max(gpu_memory_used_bytes{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig used"}],
+         "fieldConfig": {"defaults": {"unit": "bytes"}}}
+      ]
+    }
+  kiosk-gaming.json: |
+    {
+      "uid": "kiosk-gaming", "title": "GPU — flight-sim rig / workstation", "tags": ["kiosk"],
+      "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
+      "time": {"from": "now-3h", "to": "now"},
+      "panels": [
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🎮 GPU — RTX 5060 Ti · whichever OS is booted"}},
+        {"type": "stat", "title": "Flight-sim rig (Windows)", "gridPos": {"x":0,"y":3,"w":4,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(up{job=\"gpu-windows\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+        {"type": "stat", "title": "Workstation (Linux)", "gridPos": {"x":4,"y":3,"w":4,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(up{job=\"ollama-workstation\"}) or vector(0)"}],
+         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+        {"type": "gauge", "title": "GPU util", "gridPos": {"x":8,"y":3,"w":6,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(gpu_utilization_percent{job=~\"ollama-workstation|gpu-windows\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":80},{"color":"red","value":95}]}}}},
+        {"type": "gauge", "title": "VRAM used", "gridPos": {"x":14,"y":3,"w":5,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "100 * max(gpu_memory_used_bytes{job=~\"ollama-workstation|gpu-windows\"}) / max(gpu_memory_total_bytes{job=~\"ollama-workstation|gpu-windows\"})"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":85},{"color":"red","value":95}]}}}},
+        {"type": "gauge", "title": "GPU temp", "gridPos": {"x":19,"y":3,"w":5,"h":6},
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "max(gpu_temperature_celsius{job=~\"ollama-workstation|gpu-windows\"})"}],
+         "fieldConfig": {"defaults": {"unit": "celsius", "min": 20, "max": 100,
+           "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
+        {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":9,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [
+           {"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "workstation"},
+           {"expr": "max(gpu_utilization_percent{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
+        {"type": "timeseries", "title": "GPU temp", "gridPos": {"x":12,"y":9,"w":12,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [
+           {"expr": "max(gpu_temperature_celsius{job=\"ollama-workstation\"})", "legendFormat": "workstation"},
+           {"expr": "max(gpu_temperature_celsius{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig"}],
+         "fieldConfig": {"defaults": {"unit": "celsius"}}},
+        {"type": "timeseries", "title": "VRAM", "gridPos": {"x":0,"y":18,"w":24,"h":9},
+         "datasource": {"uid":"prometheus"},
+         "targets": [
+           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation used"},
+           {"expr": "max(gpu_memory_used_bytes{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig used"},
+           {"expr": "max(gpu_memory_total_bytes{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "total"}],
          "fieldConfig": {"defaults": {"unit": "bytes"}}}
       ]
     }

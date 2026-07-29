@@ -14,7 +14,8 @@
 #                                        + nightly systemd timer (03:30) writing
 #                                        to the USB drive at /mnt/backup
 #   ./scripts/pi-deploy.sh wallboard   node-exporter + kube-state-metrics + Loki
-#                                      + kiosk dashboards + rotating playlist
+#                                      + kiosk dashboards + the OS-dependent
+#                                      playlist pair (-linux/-windows)
 #                                      (requires `monitoring` deployed first)
 #   ./scripts/pi-deploy.sh kiosk-setup  chromium kiosk autostart on the Pi HDMI
 #                                       (waits for Grafana, survives reboots)
@@ -36,7 +37,9 @@
 
 set -euo pipefail
 
-PI=pi-node1
+# Override with PI_HOST when the direct-link alias isn't available (e.g.
+# running from the Windows boot): PI_HOST=fvm3@192.168.68.51
+PI="${PI_HOST:-pi-node1}"
 NS=jcmcp-pi
 IMAGE=jcmcp:pi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -169,36 +172,53 @@ case "${1:-}" in
     ssh "${PI}" 'sudo k3s kubectl -n monitoring set resources deploy/grafana --limits=cpu=1500m,memory=512Mi >/dev/null && \
       sudo k3s kubectl -n monitoring rollout restart deploy/prometheus deploy/grafana && \
       sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana deploy/loki deploy/kube-state-metrics --timeout=300s'
-    # Rotating kiosk playlist via the Grafana API (playlists are not
-    # file-provisionable). Replace-on-apply so edits here take effect:
-    # local LLM (Ollama) <-> production (AKS). The Pi-health dashboards
-    # stay provisioned but out of the rotation.
+    # Rotating kiosk playlists via the Grafana API (playlists are not
+    # file-provisionable). Replace-on-apply so edits here take effect.
+    # Two OS-dependent rotations — the workstation dual-boots, so the
+    # kiosk script (kiosk-setup) probes which GPU exporter is up and
+    # plays the matching playlist, resolving uids by name at runtime:
+    #   -linux:   local LLM (Ollama) <-> production <-> evals
+    #   -windows: GPU/flight-sim    <-> production <-> evals
+    # The Pi-health dashboards stay provisioned but out of the rotation.
     ssh "${PI}" 'set -e
       GPW=$(sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath="{.data.admin-password}" | base64 -d)
       G="http://admin:${GPW}@localhost:3000"
       for i in $(seq 1 30); do curl -sf "${G}/api/health" >/dev/null && break; sleep 2; done
-      BODY="{
-        \"name\": \"jcmcp-wallboard\", \"interval\": \"60s\",
+      upsert() {
+        NAME="$1"; BODY="$2"
+        OLD=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==sys.argv[1]), \"\"))" "${NAME}")
+        if [ -n "${OLD}" ]; then
+          curl -sf -X PUT -H "Content-Type: application/json" "${G}/api/playlists/${OLD}" -d "${BODY}" >/dev/null && echo "${NAME}: ${OLD} (updated)"
+        else
+          curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "${BODY}" | python3 -c "import json,sys; print(sys.argv[1] + \":\", json.load(sys.stdin)[\"uid\"], \"(created)\")" "${NAME}"
+        fi
+      }
+      upsert jcmcp-wallboard-linux "{
+        \"name\": \"jcmcp-wallboard-linux\", \"interval\": \"60s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-ollama\", \"order\": 1},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 2},
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-evals\", \"order\": 3}
         ]}"
-      # Update in place when it exists — keeps the uid (and thus the TV kiosk
-      # URL baked into the Pi autostart) stable across re-applies.
-      OLD=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==\"jcmcp-wallboard\"), \"\"))")
-      if [ -n "${OLD}" ]; then
-        curl -sf -X PUT -H "Content-Type: application/json" "${G}/api/playlists/${OLD}" -d "${BODY}" >/dev/null && echo "playlist uid: ${OLD} (updated)"
-      else
-        curl -sf -X POST -H "Content-Type: application/json" "${G}/api/playlists" -d "${BODY}" | python3 -c "import json,sys; print(\"playlist uid:\", json.load(sys.stdin)[\"uid\"], \"(created)\")"
+      upsert jcmcp-wallboard-windows "{
+        \"name\": \"jcmcp-wallboard-windows\", \"interval\": \"60s\",
+        \"items\": [
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-gaming\", \"order\": 1},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 2},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-evals\", \"order\": 3}
+        ]}"
+      # Retire the old single jcmcp-wallboard playlist if it survives.
+      STALE=$(curl -sf "${G}/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==\"jcmcp-wallboard\"), \"\"))")
+      if [ -n "${STALE}" ]; then
+        curl -sf -X DELETE "${G}/api/playlists/${STALE}" >/dev/null && echo "jcmcp-wallboard: ${STALE} (removed — superseded by the -linux/-windows pair)"
       fi'
     # Anonymous read-only access so the TV kiosk needs no login (LAN-only).
     ssh "${PI}" 'sudo k3s kubectl -n monitoring set env deploy/grafana \
         GF_AUTH_ANONYMOUS_ENABLED=true GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer && \
       sudo k3s kubectl -n monitoring rollout status deploy/grafana --timeout=180s'
     echo
-    echo "Wallboard: http://192.168.68.51:3000/playlists (hit ▶ on jcmcp-wallboard)"
-    echo "Kiosk URL: http://192.168.68.51:3000/playlists/play/<uid>?kiosk"
+    echo "Wallboard: http://192.168.68.51:3000/playlists (jcmcp-wallboard-linux / -windows)"
+    echo "Kiosk picks one by booted OS — see kiosk-setup (wallboard-kiosk.sh)"
     ;;
   logs)
     pk logs -f deployment/jcmcp-pi
@@ -247,7 +267,9 @@ KC
     # e.g. wlan0 DHCP handing out a different lease than the hardcoded IP
     # after a reboot, 2026-07-15 incident), and a watchdog keeps checking
     # the URL after launch, relaunching chromium if it goes unreachable for
-    # ~90s so later network blips don't strand a dead page either.
+    # ~90s so later network blips don't strand a dead page either. The same
+    # watchdog probes which OS the dual-boot workstation is in (gpu-windows
+    # job up ⇒ Windows) and swaps to the matching playlist when it flips.
     ssh "${PI}" 'sudo tee /usr/local/bin/wallboard-kiosk.sh >/dev/null << "EOF"
 #!/bin/bash
 # Single-instance guard: relaunching without killing the old wrapper bred
@@ -257,16 +279,40 @@ flock -n 9 || { echo "wallboard-kiosk already running"; exit 0; }
 # localhost (chromium runs on the Pi itself) — immune to DHCP lease
 # changes, which stranded the kiosk on a hardcoded LAN IP before
 # (2026-07-15 incident).
-URL="http://localhost:3000/playlists/play/afs4gyxml4uf4f?kiosk"
+G="http://localhost:3000"
+# The workstation dual-boots: the gpu-windows scrape job is up only when
+# it is in Windows, so this one probe picks the playlist (Prometheus via
+# the anonymous Grafana datasource proxy — no credentials on disk).
+PROBE="$G/api/datasources/proxy/uid/prometheus/api/v1/query?query=max(up%7Bjob%3D%22gpu-windows%22%7D)"
 
-wait_for_url() {
-  until curl -sf -o /dev/null --max-time 3 "$URL"; do
-    sleep 5
-  done
+mode() {
+  local resp
+  # Distinguish "probe unreachable" (unknown — do not flap the kiosk on a
+  # network blip) from a real answer.
+  resp=$(curl -sf --max-time 5 "$PROBE") || { echo unknown; return; }
+  if echo "$resp" | grep -q ",\"1\"\]"; then echo windows; else echo linux; fi
+}
+
+playlist_url() {
+  # Resolve uid by name at runtime — playlist uids are minted by Grafana,
+  # so baking one here broke every time the playlist was recreated.
+  local uid
+  uid=$(curl -sf --max-time 5 "$G/api/playlists" | python3 -c "import json,sys; print(next((p[\"uid\"] for p in json.load(sys.stdin) if p[\"name\"]==sys.argv[1]), \"\"))" "jcmcp-wallboard-$1")
+  [ -n "$uid" ] && echo "$G/playlists/play/$uid?kiosk"
 }
 
 while true; do
-  wait_for_url
+  until curl -sf -o /dev/null --max-time 3 "$G/api/health"; do
+    sleep 5
+  done
+  MODE=$(mode)
+  [ "$MODE" = unknown ] && MODE=linux
+  URL=$(playlist_url "$MODE")
+  if [ -z "$URL" ]; then
+    echo "playlist jcmcp-wallboard-$MODE not found — run pi-deploy.sh wallboard"
+    sleep 30
+    continue
+  fi
   chromium --password-store=basic --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble "$URL" &
   CHROME_PID=$!
   fails=0
@@ -279,6 +325,13 @@ while true; do
       fails=0
     else
       fails=$((fails + 1))
+    fi
+    NEW_MODE=$(mode)
+    if [ "$NEW_MODE" != unknown ] && [ "$NEW_MODE" != "$MODE" ]; then
+      # The booted OS changed — swap to the matching playlist.
+      kill "$CHROME_PID" 2>/dev/null
+      wait "$CHROME_PID" 2>/dev/null
+      break
     fi
     if [ "$fails" -ge 3 ]; then
       kill "$CHROME_PID" 2>/dev/null
