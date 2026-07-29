@@ -1,0 +1,55 @@
+{
+  "_comment": "Golden dataset manifest — hand-curated (JD, 5/5 reference output) pairs. File paths are relative to the active workspace's optimized-resumes folder (reference_file) and jd folder (jd_file); loaders fall back to a literal path if the relative one is missing. The files themselves are personal data and are NOT committed.",
+  "entries": [
+    {
+      "id": "GD-01",
+      "company": "Accenture",
+      "role": "AI Native Engineer",
+      "archetype": "Consulting + AI integration, stakeholder communication",
+      "eval_signal": "Company specificity; AI stack accuracy; consulting tone",
+      "reference_file": "Accenture AI Native Engineer Resume.txt",
+      "jd_file": "Accenture AI Native Engineer JD.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-02",
+      "company": "Microsoft",
+      "role": "SWE II Agent 365",
+      "archetype": "Large tech, agentic AI, distributed systems",
+      "eval_signal": "Keyword coverage: agents, LLM, Azure; no hallucinations on MS internals",
+      "reference_file": "Microsoft SWE II Agent 365 Resume.txt",
+      "jd_file": "Microsoft SWE II Agent 365 JD.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-03",
+      "company": "Home Depot",
+      "role": "Sr SWE AI Innovation",
+      "archetype": "Retail tech, full-stack, AI innovation",
+      "eval_signal": "Retail domain relevance; innovation framing; ATS readiness",
+      "reference_file": "Home Depot Sr Software Engineer AI Innovation.txt",
+      "jd_file": "Home Depot Sr Software Engineer AI Innovation JD.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-04",
+      "company": "Delta",
+      "role": "Senior Digital Experience AI",
+      "archetype": "Aviation, real-time systems, AI/ML integration",
+      "eval_signal": "Domain adaptation; safety-conscious framing",
+      "reference_file": "Delta Air Lines Senior Digital Experience.txt",
+      "jd_file": "Delta Air Lines Senior Digital Experience JD.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "GD-05",
+      "company": "Sema4.ai",
+      "role": "Staff Backend Agent Platform",
+      "archetype": "AI infra, agentic systems, platform engineering",
+      "eval_signal": "Technical depth; agentic architecture vocabulary",
+      "reference_file": "Sema4ai Staff Backend Engineer Agent Platform.txt",
+      "jd_file": "Sema4ai Staff Backend Engineer Agent Platform JD.txt",
+      "output_kind": "resume"
+    }
+  ]
+}
