@@ -93,6 +93,16 @@ data:
       - job_name: ollama-workstation
         static_configs:
           - targets: ["192.168.101.1:9105"]
+      # Same physical box, other boot: the workstation dual-boots Windows
+      # for gaming, where scripts/gpu-exporter.ps1 serves the same GPU on
+      # :9106. Only one OS runs at a time, so exactly one of these two jobs
+      # is up at any moment — the kiosk GPU panels plot both series
+      # ("workstation" vs "flight-sim rig"). Target is the wired NIC's
+      # DHCP-by-MAC lease, identical under either OS; the direct-link IP
+      # (101.1) is Linux-only config, so it can't be used here.
+      - job_name: gpu-windows
+        static_configs:
+          - targets: ["192.168.68.50:9106"]
       - job_name: cadvisor
         kubernetes_sd_configs:
           - role: node
