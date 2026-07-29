@@ -82,6 +82,10 @@ spec:
           env:
             - name: START_MODE
               value: "http"
+            # Nightly server-side golden-suite eval run (control-plane kind
+            # run_evals) for the owner partition — 08:00 UTC ≈ 4am ET.
+            - name: EVALS_NIGHTLY_HOUR_UTC
+              value: "8"
             - name: USE_SQLITE
               value: "1"
             - name: SQLITE_ONLY

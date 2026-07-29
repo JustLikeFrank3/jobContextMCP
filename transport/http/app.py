@@ -248,10 +248,13 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
         # Control plane: durable background work (capture, doc generation).
         await _work.start_dispatcher()
-        # Re-expose stored eval results as gauges (they reset on restart).
-        from transport.http.routes.evals import restore_gauges
+        # Re-expose stored eval results as gauges (they reset on restart),
+        # and start the nightly server-side eval schedule when configured.
+        from evals.ingest import restore_gauges
+        from evals.work import start_nightly_task
 
         restore_gauges()
+        nightly_evals_task = start_nightly_task()
         try:
             if mcp_starlette is not None:
                 # The Starlette sub-app carries its own lifespan that initialises
@@ -262,6 +265,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
             else:
                 yield
         finally:
+            if nightly_evals_task is not None:
+                nightly_evals_task.cancel()
             await _work.stop_dispatcher()
 
     app = FastAPI(
