@@ -11,6 +11,7 @@ provider resolved by ``lib.config.get_llm_client``.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 from dataclasses import dataclass, field
@@ -28,7 +29,10 @@ JUDGE_SYSTEM = (
     "Score honestly and critically."
 )
 
-JUDGE_USER_TEMPLATE = """JOB DESCRIPTION:
+JUDGE_USER_TEMPLATE = """TODAY'S DATE: {today}. Dates on or before today are NOT future-dated; \
+do not flag employment dates as hallucinations merely because they are recent.
+
+JOB DESCRIPTION:
 {job_description}
 
 MASTER RESUME EXCERPT:
@@ -37,7 +41,9 @@ MASTER RESUME EXCERPT:
 GENERATED OUTPUT:
 {generated_output}
 
-Score the output on each dimension 1-5. Return ONLY a JSON object, no other text:
+Score the output on each dimension 1-5. The "hallucinations" list must contain \
+ONLY claims from the output that cannot be traced to the master resume excerpt — \
+if there are none, return an empty list []. Return ONLY a JSON object, no other text:
 {{"keyword_coverage": N, "relevance": N, "accuracy": N, "impact_language": N,
  "ats_readiness": N, "rationale": "...", "hallucinations": ["..."],
  "verdict": "pass" or "fail"}}"""
@@ -66,16 +72,28 @@ class JudgeScore:
 
 
 def build_judge_messages(
-    job_description: str, master_resume_excerpt: str, generated_output: str
+    job_description: str,
+    master_resume_excerpt: str,
+    generated_output: str,
+    today: str = "",
 ) -> list[dict]:
+    if not today:
+        today = datetime.date.today().isoformat()
     return [
         {"role": "system", "content": JUDGE_SYSTEM},
         {"role": "user", "content": JUDGE_USER_TEMPLATE.format(
+            today=today,
             job_description=job_description,
             master_resume_excerpt=master_resume_excerpt,
             generated_output=generated_output,
         )},
     ]
+
+
+# Judges sometimes put a clean-bill NOTE into the hallucinations array
+# ("No hallucinations detected...") — counting those as hallucinations
+# inflated the rate to 60% on an entry with zero real findings.
+_CLEAN_BILL = re.compile(r"(?i)\bno hallucinations?\b|^none\b\.?$")
 
 
 def parse_judge_json(text: str) -> JudgeScore:
@@ -107,6 +125,7 @@ def parse_judge_json(text: str) -> JudgeScore:
     hallucinations = obj.get("hallucinations") or []
     if not isinstance(hallucinations, list):
         hallucinations = [str(hallucinations)]
+    hallucinations = [str(h) for h in hallucinations if not _CLEAN_BILL.search(str(h))]
     return JudgeScore(
         scores=scores,
         rationale=str(obj.get("rationale", "")),

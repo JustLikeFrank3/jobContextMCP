@@ -165,6 +165,25 @@ def test_parse_judge_json_tolerates_think_blocks_and_fences():
     assert judge_mod.parse_judge_json(noisy).verdict == "pass"
 
 
+def test_judge_messages_include_todays_date():
+    msgs = judge_mod.build_judge_messages("JD", "M", "OUT", today="2026-07-29")
+    assert "TODAY'S DATE: 2026-07-29" in msgs[1]["content"]
+    # default fills in a real ISO date rather than leaving the slot empty
+    auto = judge_mod.build_judge_messages("JD", "M", "OUT")[1]["content"]
+    assert "TODAY'S DATE: 20" in auto
+
+
+def test_parse_judge_json_filters_clean_bill_notes():
+    payload = json.loads(_GOOD_JUDGE_JSON)
+    payload["hallucinations"] = [
+        "No hallucinations detected; claims are traceable.",
+        "None.",
+        "Invented award claim",
+    ]
+    score = judge_mod.parse_judge_json(json.dumps(payload))
+    assert score.hallucinations == ["Invented award claim"]
+
+
 def test_parse_judge_json_rejects_bad_output():
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json("no json here")
@@ -340,6 +359,120 @@ def test_restore_gauges_after_restart(http_client_noauth):
     assert "eval_mean_score" not in metrics.render_prometheus()
     restore_gauges()
     assert 'eval_mean_score{gd_id="GD-01"} 4.27' in metrics.render_prometheus()
+
+
+# ── server-side runs (control plane) ─────────────────────────────────────────
+
+def test_run_evals_executor_end_to_end(isolated_server, tmp_path, monkeypatch):
+    """enqueue → dispatch → executor runs the (stubbed) suite → results stored,
+    gauges set, artifacts on the work row."""
+    from evals import runner as runner_mod
+    from evals import work as evals_work
+    from lib import config, metrics, work
+    from lib.io import _load_json
+
+    def fake_run_suite(entries=None, n=5, results_dir=None):
+        assert n == 2
+        assert [e.id for e in entries] == ["GD-01"]
+        suite = runner_mod.SuiteResult(n_runs=n, started_at="2026-07-29T22:00:00")
+        suite.entries.append(runner_mod.EntryResult(
+            "GD-01", "AI Native Engineer",
+            aggregate=variance.aggregate_runs([_score({})]),
+        ))
+        return suite
+
+    monkeypatch.setattr(runner_mod, "run_suite", fake_run_suite)
+    item_id = evals_work.enqueue_run(n=2, entries=["GD-01"], origin="test")
+    work._execute(None, item_id)
+
+    item = work.get_item(item_id)
+    assert item["status"] == "succeeded", item["error"]
+    assert item["artifacts"]["entries_scored"] == 1
+    assert item["artifacts"]["rows"][0]["gd_id"] == "GD-01"
+    stored = _load_json(config.EVAL_RESULTS_FILE, {})
+    assert stored["suite"]["rows"][0]["mean"] == 4.0
+    assert 'eval_mean_score{gd_id="GD-01"} 4' in metrics.render_prometheus()
+
+
+def test_run_evals_executor_reports_failure(isolated_server, monkeypatch):
+    from evals import runner as runner_mod
+    from evals import work as evals_work
+    from lib import work
+
+    def boom(**_kwargs):
+        raise RuntimeError("provider exploded")
+
+    monkeypatch.setattr(runner_mod, "run_suite", boom)
+    item_id = evals_work.enqueue_run(n=1)
+    work._execute(None, item_id)
+    item = work.get_item(item_id)
+    assert item["status"] == "failed"
+    assert "provider exploded" in item["error"]
+
+
+def test_seconds_until_utc_hour():
+    import datetime as dt
+
+    from evals.work import seconds_until_utc_hour
+
+    now = dt.datetime(2026, 7, 29, 6, 30, tzinfo=dt.timezone.utc)
+    assert seconds_until_utc_hour(8, now) == 5400  # 1.5h ahead
+    assert seconds_until_utc_hour(6, now) == 23.5 * 3600  # already past → tomorrow
+    on_the_hour = dt.datetime(2026, 7, 29, 8, 0, tzinfo=dt.timezone.utc)
+    assert seconds_until_utc_hour(8, on_the_hour) == 24 * 3600  # never 0
+
+
+def test_nightly_enqueue_skips_when_pending(isolated_server, monkeypatch):
+    from evals import work as evals_work
+
+    monkeypatch.setattr(evals_work, "_owner_partition", lambda: None)
+    first = evals_work._enqueue_nightly()
+    assert first is not None
+    assert evals_work._enqueue_nightly() is None  # one already queued
+
+
+def test_start_nightly_task_env_gate(monkeypatch):
+    from evals.work import start_nightly_task
+
+    monkeypatch.delenv("EVALS_NIGHTLY_HOUR_UTC", raising=False)
+    assert start_nightly_task() is None
+    monkeypatch.setenv("EVALS_NIGHTLY_HOUR_UTC", "not-an-hour")
+    assert start_nightly_task() is None
+    monkeypatch.setenv("EVALS_NIGHTLY_HOUR_UTC", "25")
+    assert start_nightly_task() is None
+
+    async def _valid():
+        monkeypatch.setenv("EVALS_NIGHTLY_HOUR_UTC", "8")
+        task = start_nightly_task()
+        assert task is not None
+        task.cancel()
+
+    import asyncio
+
+    asyncio.run(_valid())
+
+
+def test_run_route_enqueues(http_client_noauth, monkeypatch):
+    from evals import work as evals_work
+
+    seen = {}
+
+    def fake_enqueue(n=5, entries=None, origin="api"):
+        seen.update(n=n, entries=entries)
+        return 42
+
+    monkeypatch.setattr(evals_work, "enqueue_run", fake_enqueue)
+    resp = http_client_noauth.post("/api/evals/run", json={"n": 3, "entries": ["GD-02"]})
+    assert resp.status_code == 200
+    assert resp.json() == {"work_id": 42, "status_url": "/api/work/42"}
+    assert seen == {"n": 3, "entries": ["GD-02"]}
+
+    assert http_client_noauth.post(
+        "/api/evals/run", json={"n": "many"}
+    ).status_code == 422
+    assert http_client_noauth.post(
+        "/api/evals/run", json={"entries": "GD-02"}
+    ).status_code == 422
 
 
 # ── push client ───────────────────────────────────────────────────────────────
