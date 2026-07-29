@@ -181,7 +181,8 @@ case "${1:-}" in
         \"name\": \"jcmcp-wallboard\", \"interval\": \"60s\",
         \"items\": [
           {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-ollama\", \"order\": 1},
-          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 2}
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-cloud\", \"order\": 2},
+          {\"type\": \"dashboard_by_uid\", \"value\": \"kiosk-evals\", \"order\": 3}
         ]}"
       # Update in place when it exists — keeps the uid (and thus the TV kiosk
       # URL baked into the Pi autostart) stable across re-applies.

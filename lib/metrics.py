@@ -29,6 +29,7 @@ _LabelKey = tuple[str, tuple[tuple[str, str], ...]]
 _LOCK = threading.Lock()
 _COUNTERS: dict[_LabelKey, float] = {}
 _SUMMARIES: dict[_LabelKey, list[float]] = {}  # [count, sum]
+_GAUGES: dict[_LabelKey, float] = {}
 _STARTED_AT = time.time()
 
 
@@ -41,6 +42,18 @@ def inc(name: str, amount: float = 1.0, **labels: str) -> None:
     key = _key(name, labels)
     with _LOCK:
         _COUNTERS[key] = _COUNTERS.get(key, 0.0) + amount
+
+
+def set_gauge(name: str, value: float, **labels: str) -> None:
+    """Set a gauge to an absolute value (last write wins).
+
+    For externally-computed levels — eval scores, rates — where the current
+    value, not an accumulation, is the signal. In-process like everything
+    here: gauges reset on restart and repopulate on the next write.
+    """
+    key = _key(name, labels)
+    with _LOCK:
+        _GAUGES[key] = value
 
 
 def observe(name: str, value: float, **labels: str) -> None:
@@ -63,7 +76,11 @@ def snapshot() -> dict:
             {"name": name, "labels": dict(labels), "count": e[0], "sum": e[1]}
             for (name, labels), e in sorted(_SUMMARIES.items())
         ]
-    return {"counters": counters, "summaries": summaries}
+        gauges = [
+            {"name": name, "labels": dict(labels), "value": v}
+            for (name, labels), v in sorted(_GAUGES.items())
+        ]
+    return {"counters": counters, "summaries": summaries, "gauges": gauges}
 
 
 def reset() -> None:
@@ -71,6 +88,7 @@ def reset() -> None:
     with _LOCK:
         _COUNTERS.clear()
         _SUMMARIES.clear()
+        _GAUGES.clear()
 
 
 def _escape(value: str) -> str:
@@ -104,6 +122,12 @@ def render_prometheus() -> str:
                 if n == name:
                     lines.append(f"{name}_count{_fmt_labels(labels)} {count:g}")
                     lines.append(f"{name}_sum{_fmt_labels(labels)} {total:g}")
+        gauge_names = sorted({name for name, _ in _GAUGES})
+        for name in gauge_names:
+            lines.append(f"# TYPE {name} gauge")
+            for (n, labels), value in sorted(_GAUGES.items()):
+                if n == name:
+                    lines.append(f"{name}{_fmt_labels(labels)} {value:g}")
     return "\n".join(lines) + "\n"
 
 
