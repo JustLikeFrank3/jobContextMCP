@@ -165,6 +165,25 @@ def test_parse_judge_json_tolerates_think_blocks_and_fences():
     assert judge_mod.parse_judge_json(noisy).verdict == "pass"
 
 
+def test_judge_messages_include_todays_date():
+    msgs = judge_mod.build_judge_messages("JD", "M", "OUT", today="2026-07-29")
+    assert "TODAY'S DATE: 2026-07-29" in msgs[1]["content"]
+    # default fills in a real ISO date rather than leaving the slot empty
+    auto = judge_mod.build_judge_messages("JD", "M", "OUT")[1]["content"]
+    assert "TODAY'S DATE: 20" in auto
+
+
+def test_parse_judge_json_filters_clean_bill_notes():
+    payload = json.loads(_GOOD_JUDGE_JSON)
+    payload["hallucinations"] = [
+        "No hallucinations detected; claims are traceable.",
+        "None.",
+        "Invented award claim",
+    ]
+    score = judge_mod.parse_judge_json(json.dumps(payload))
+    assert score.hallucinations == ["Invented award claim"]
+
+
 def test_parse_judge_json_rejects_bad_output():
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json("no json here")
