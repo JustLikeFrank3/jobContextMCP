@@ -115,7 +115,10 @@ def default_generate(entry: GoldenEntry, jd_text: str) -> str:
     return (out_dir / f"{output_filename}.txt").read_text(encoding="utf-8")
 
 
-def _master_excerpt(max_chars: int = 6000) -> str:
+# qwen3-jobcontext runs a 40K-token context; the full ~30K-char master fits.
+# Truncating to 6K made 80% of the master invisible and the judge flagged
+# real (unseen) claims as hallucinations.
+def _master_excerpt(max_chars: int = 32000) -> str:
     from tools import resume  # noqa: PLC0415 — lazy: imports server config
 
     return resume.read_master_resume()[:max_chars]
