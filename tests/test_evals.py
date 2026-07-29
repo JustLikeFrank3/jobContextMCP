@@ -92,6 +92,17 @@ def test_layer1_check_response_rules():
     assert "shorter" in layer1.check_response(case, "Alp")
 
 
+def test_layer1_verbose_report_shows_invocation_and_checks(isolated_server):
+    report = layer1.run_cases(cases=[case_mod.CASES[0]])  # TC-001 workspace.check
+    text = report.to_text(verbose=True)
+    assert "call:     workspace.check" in text
+    assert "expected: " in text and "WORKSPACE STATUS" in text
+    assert "response: " in text
+    assert "tags:     smoke, read-only" in text
+    # non-verbose stays compact
+    assert "call:" not in report.to_text()
+
+
 def test_layer1_report_math():
     report = layer1.Layer1Report(results=[
         layer1.CaseResult("a", True, 10.0, tags=("smoke",)),
@@ -245,6 +256,154 @@ def test_keyword_delta():
     base = variance.aggregate_runs([_score({"keyword_coverage": 5})])
     curr = variance.aggregate_runs([_score({"keyword_coverage": 4})])
     assert variance.keyword_delta(curr, base) == -1.0
+
+
+# ── ingest endpoint + metrics bridge ─────────────────────────────────────────
+
+_SUITE_PAYLOAD = {
+    "started_at": "2026-07-29T12:00:00", "git_sha": "abc1234", "provider": "ollama",
+    "n_runs": 3,
+    "rows": [
+        {"gd_id": "GD-01", "role": "AI Native Engineer", "keyword": 4.0,
+         "relevance": 5.0, "accuracy": 3.33, "impact": 5.0, "ats": 4.0,
+         "mean": 4.27, "cov_pct": 2.7, "flip_rate_pct": 0.0,
+         "alerts": ["hallucination rate 100% — immediate review"]},
+        {"gd_id": "GD-02", "role": "SWE II", "error": "JD file not found: x.txt"},
+    ],
+    "detail": {"GD-01": {"hallucination_rate_pct": 100.0}},
+}
+
+
+@pytest.fixture(autouse=True)
+def _clean_metrics():
+    from lib import metrics
+
+    metrics.reset()
+    yield
+    metrics.reset()
+
+
+def test_ingest_suite_sets_gauges_and_persists(http_client_noauth):
+    from lib import metrics
+
+    resp = http_client_noauth.post("/api/evals/results", json=_SUITE_PAYLOAD)
+    assert resp.status_code == 200
+    assert resp.json() == {"stored": "suite", "entries_scored": 1}
+
+    text = metrics.render_prometheus()
+    assert 'eval_mean_score{gd_id="GD-01"} 4.27' in text
+    assert 'eval_hallucination_rate_pct{gd_id="GD-01"} 100' in text
+    assert 'eval_dimension_score{dimension="keyword_coverage",gd_id="GD-01"} 4' in text
+    assert 'eval_alert_count{gd_id="GD-01"} 1' in text
+    assert "GD-02" not in text  # errored entry must not fabricate scores
+    assert 'eval_pushes_total{kind="suite"} 1' in text
+
+    stored = http_client_noauth.get("/api/evals/results").json()
+    assert stored["suite"]["rows"][0]["gd_id"] == "GD-01"
+    assert "updated_at" in stored
+
+
+def test_ingest_layer1_and_bad_payload(http_client_noauth):
+    from lib import metrics
+
+    resp = http_client_noauth.post(
+        "/api/evals/results", json={"pass_rate": 1.0, "smoke_pass_rate": 0.9}
+    )
+    assert resp.status_code == 200
+    text = metrics.render_prometheus()
+    assert "eval_layer1_pass_rate_pct 100" in text
+    assert "eval_layer1_smoke_pass_rate_pct 90" in text
+
+    assert http_client_noauth.post(
+        "/api/evals/results", json={"wat": True}
+    ).status_code == 422
+
+
+def test_ingest_requires_auth(http_client_authed):
+    resp = http_client_authed.post("/api/evals/results", json=_SUITE_PAYLOAD)
+    assert resp.status_code == 401
+    ok = http_client_authed.post(
+        "/api/evals/results", json=_SUITE_PAYLOAD,
+        headers={"Authorization": "Bearer test-key"},
+    )
+    assert ok.status_code == 200
+
+
+def test_restore_gauges_after_restart(http_client_noauth):
+    from lib import metrics
+    from transport.http.routes.evals import restore_gauges
+
+    http_client_noauth.post("/api/evals/results", json=_SUITE_PAYLOAD)
+    metrics.reset()  # simulate process restart
+    assert "eval_mean_score" not in metrics.render_prometheus()
+    restore_gauges()
+    assert 'eval_mean_score{gd_id="GD-01"} 4.27' in metrics.render_prometheus()
+
+
+# ── push client ───────────────────────────────────────────────────────────────
+
+def test_push_results_posts_json(monkeypatch):
+    from evals import push as push_mod
+
+    captured = {}
+
+    class FakeResponse:
+        def read(self):
+            return b'{"stored": "suite", "entries_scored": 1}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["auth"] = request.get_header("Authorization")
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(push_mod.urllib.request, "urlopen", fake_urlopen)
+    result = push_mod.push_results(
+        {"rows": []}, url="http://127.0.0.1:9999/", api_key="sekret"
+    )
+    assert result == {"stored": "suite", "entries_scored": 1}
+    assert captured["url"] == "http://127.0.0.1:9999/api/evals/results"
+    assert captured["auth"] == "Bearer sekret"
+    assert captured["body"] == {"rows": []}
+
+
+def test_push_results_requires_url():
+    from evals.push import push_results
+
+    with pytest.raises(ValueError, match="no server URL"):
+        push_results({"rows": []}, url="")
+
+
+def test_cli_push_uses_latest_results(monkeypatch, tmp_path, capsys):
+    from evals import __main__ as cli
+    from evals import runner as runner_mod
+
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "results-20260729-120000.json").write_text('{"rows": []}', encoding="utf-8")
+    monkeypatch.setattr(runner_mod, "RESULTS_DIR", results)
+    monkeypatch.setattr(
+        "evals.push.push_results",
+        lambda payload, url, api_key: {"stored": "suite", "entries_scored": 0},
+    )
+    rc = cli.main(["push", "--push-url", "http://x"])
+    assert rc == 0
+    assert "pushed" in capsys.readouterr().out
+
+
+def test_cli_push_no_results_fails_cleanly(monkeypatch, tmp_path, capsys):
+    from evals import __main__ as cli
+    from evals import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod, "RESULTS_DIR", tmp_path / "empty")
+    assert cli.main(["push", "--push-url", "http://x"]) == 1
+    assert "run the suite first" in capsys.readouterr().err
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

@@ -23,6 +23,8 @@ class CaseResult:
     response_excerpt: str = ""
     response_length: int = 0
     tags: tuple[str, ...] = ()
+    invocation: str = ""   # "tool.action(inputs)" for verbose reports
+    checks: str = ""       # human-readable expectations for verbose reports
 
 
 @dataclass
@@ -70,7 +72,7 @@ class Layer1Report:
             ],
         }
 
-    def to_text(self) -> str:
+    def to_text(self, verbose: bool = False) -> str:
         lines = ["═══ LAYER 1 EVAL REPORT ═══", ""]
         for r in self.results:
             mark = "✓" if r.ok else "✗"
@@ -78,6 +80,14 @@ class Layer1Report:
             if r.detail:
                 line += f"  — {r.detail}"
             lines.append(line)
+            if verbose:
+                lines += [
+                    f"    call:     {r.invocation}",
+                    f"    expected: {r.checks}",
+                    f"    tags:     {', '.join(r.tags) or '—'}",
+                    f"    response: {r.response_excerpt!r}",
+                    "",
+                ]
         lines += [
             "",
             f"Pass rate: {self.pass_rate:.0%}  ({sum(r.ok for r in self.results)}"
@@ -107,6 +117,17 @@ def check_response(case: EvalCase, response: str) -> str:
     return ""
 
 
+def describe_checks(case: EvalCase) -> str:
+    parts = [f"≥{case.min_length} chars", "no traceback"]
+    if case.contains_all:
+        parts.append("contains " + " AND ".join(repr(n) for n in case.contains_all))
+    if case.contains_any:
+        parts.append("contains " + " OR ".join(repr(n) for n in case.contains_any))
+    if case.error_ok:
+        parts.append("(graceful error IS the expected outcome)")
+    return "; ".join(parts)
+
+
 def run_case(case: EvalCase, dispatch=None) -> CaseResult:
     if dispatch is None:
         from tools.consolidated import _run as dispatch  # noqa: PLC0415 — lazy: importing tools loads server config
@@ -126,6 +147,8 @@ def run_case(case: EvalCase, dispatch=None) -> CaseResult:
         response_excerpt=str(response)[:200],
         response_length=len(str(response)),
         tags=case.tags,
+        invocation=f"{case.tool}.{case.action}({case.inputs or ''})",
+        checks=describe_checks(case),
     )
 
 

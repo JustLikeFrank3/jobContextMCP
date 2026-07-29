@@ -18,6 +18,20 @@ def clean_registry():
     metrics.reset()
 
 
+def test_gauges_last_write_wins_and_render():
+    metrics.set_gauge("eval_mean_score", 4.2, gd_id="GD-01")
+    metrics.set_gauge("eval_mean_score", 3.9, gd_id="GD-01")  # overwrite, not accumulate
+    metrics.set_gauge("eval_mean_score", 4.5, gd_id="GD-02")
+    text = metrics.render_prometheus()
+    assert "# TYPE eval_mean_score gauge" in text
+    assert 'eval_mean_score{gd_id="GD-01"} 3.9' in text
+    assert 'eval_mean_score{gd_id="GD-02"} 4.5' in text
+    snap = metrics.snapshot()
+    assert {"name": "eval_mean_score", "labels": {"gd_id": "GD-01"}, "value": 3.9} in snap["gauges"]
+    metrics.reset()
+    assert metrics.snapshot()["gauges"] == []
+
+
 def test_counters_accumulate_by_label_set():
     metrics.inc("jobs_total", kind="a", status="ok")
     metrics.inc("jobs_total", kind="a", status="ok")
