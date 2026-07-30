@@ -1,10 +1,14 @@
+import { useEffect, useState } from 'react'
 import Logo from '../design-system/Logo.jsx'
+import { apiFetch } from '../auth/api.js'
+import { workspaceStatusCard } from './workspaceStatus.js'
 
 /* Sidebar — the desktop design's left rail: badge + wordmark, WORKSPACE nav
    with gradient-glass active pills and a cyan left accent bar, secondary
    TOOLS section (routes the design bundle doesn't cover but the product
    has), Settings pinned to the bottom, and the workspace status card
-   (LOCAL · SQLITE on desktop, CLOUD WORKSPACE hosted). */
+   (CLOUD WORKSPACE hosted; on desktop LOCAL · SQLITE only while cloud sync
+   is off — a synced desktop says so, per /desktop/sync). */
 
 const STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' }
 
@@ -57,6 +61,17 @@ const MONO_HEAD = {
 }
 
 export default function Sidebar({ primary, secondary, active, onSelect, isDesktop, onSignOut }) {
+  const [sync, setSync] = useState(null)
+  useEffect(() => {
+    if (!isDesktop) return undefined
+    let live = true
+    apiFetch('/desktop/sync')
+      .then((s) => { if (live) setSync(s) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [isDesktop])
+  const card = workspaceStatusCard(isDesktop, sync)
+
   return (
     <div className="jc-sidebar jc-scroll">
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '2px 8px 20px' }}>
@@ -89,15 +104,13 @@ export default function Sidebar({ primary, secondary, active, onSelect, isDeskto
 
       <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: 'rgba(0,181,200,.06)', border: '1px solid rgba(0,181,200,.14)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#6FD3A0', animation: 'jc-pulse 2s ease-in-out infinite' }} />
-          <span style={{ fontSize: 11, fontWeight: 'var(--fw-semibold)', color: '#8FD3AE', fontFamily: 'var(--font-mono)' }}>
-            {isDesktop ? 'LOCAL · SQLITE' : 'CLOUD WORKSPACE'}
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: card.warn ? 'var(--warn)' : '#6FD3A0', animation: 'jc-pulse 2s ease-in-out infinite' }} />
+          <span style={{ fontSize: 11, fontWeight: 'var(--fw-semibold)', color: card.warn ? 'var(--warn)' : '#8FD3AE', fontFamily: 'var(--font-mono)' }}>
+            {card.label}
           </span>
         </div>
         <div style={{ fontSize: 11, color: '#7C93A8', lineHeight: 1.45, marginTop: 6 }}>
-          {isDesktop
-            ? 'All data stays on this machine. Nothing leaves the device.'
-            : 'Synced workspace — desktop and mobile stay up to date.'}
+          {card.detail}
         </div>
         {!isDesktop && (
           <div onClick={onSignOut} style={{ marginTop: 8, fontSize: 11.5, fontWeight: 'var(--fw-semibold)', color: 'var(--cyan-300)', cursor: 'pointer' }}>
