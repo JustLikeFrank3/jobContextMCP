@@ -138,11 +138,11 @@ data:
     }
   kiosk-gaming.json: |
     {
-      "uid": "kiosk-gaming", "title": "GPU — flight-sim rig / workstation", "tags": ["kiosk"],
+      "uid": "kiosk-gaming", "title": "Flight Sim Rig — GPU (Windows)", "tags": ["kiosk"],
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🎮 GPU — RTX 5060 Ti · whichever OS is booted"}},
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🛩️ FLIGHT SIM RIG — RTX 5060 Ti · Windows"}},
         {"type": "stat", "title": "Flight-sim rig (Windows)", "gridPos": {"x":0,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "max(up{job=\"gpu-windows\"}) or vector(0)"}],
