@@ -21,8 +21,8 @@ How to connect any MCP-compatible AI client to JobContextMCP, whether you're run
 ### Local mode
 
 - Python 3.12 + virtual environment set up (`python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`)
-- `config.json` created via `setup_workspace()` or copied from `config.example.json`
-- (Optional) Docker Desktop if using `MCP_MODE=docker`
+- `config.json` created via `workspace(action="setup")` or copied from `config.example.json`
+- (Optional) Docker Desktop if running the containerized server
 
 See the main [README.md](../README.md#setup) for full local setup steps.
 
@@ -39,29 +39,24 @@ See the main [README.md](../README.md#setup) for full local setup steps.
 
 ### 1a. Local stdio (recommended for development)
 
-The workspace-scoped `.vscode/mcp.json` is already committed. It points at `scripts/run_mcp.sh` which reads `MCP_MODE` from `.env` and dispatches to local Python or Docker.
+The workspace-scoped `.vscode/mcp.json` is committed pointing at the hosted Streamable HTTP endpoint. For local stdio development, replace the server entry with:
 
-**Switch to local mode** (fastest iteration):
-
-```dotenv
-# .env
-MCP_MODE=local
+```jsonc
+"jobContextMCP": {
+  "type": "stdio",
+  "command": "${workspaceFolder}/.venv/bin/python3",
+  "args": ["server.py"],
+  "cwd": "${workspaceFolder}"
+}
 ```
 
 Reload: **Command Palette → MCP: List Servers → restart jobContextMCP**
 
-You should see `Discovered N tools` within ~0.5s in the Output panel.
+You should see `Discovered 11 tools` within ~0.5s in the Output panel.
 
-> **Do not** use the VS Code "Add MCP Server" UI plug icon. It writes a broken global entry to `~/Library/Application Support/Code/User/mcp.json` that conflicts with this workspace config.
+> **Do not** use the VS Code "Add MCP Server" UI plug icon. It writes a broken global entry to the user-level `mcp.json` that conflicts with this workspace config.
 
-**Switch to Docker mode:**
-
-```dotenv
-# .env
-MCP_MODE=docker
-```
-
-Requires `docker compose build` after any code change.
+**Docker mode** — point the entry at `docker compose run --rm -i jobcontextmcp` instead; requires `docker compose build` after any code change. See [local-development.md](local-development.md) for the live-vs-baked trade-offs.
 
 ---
 
@@ -361,7 +356,7 @@ az rest --method POST \
 
 ### VS Code: tools not appearing
 
-- Confirm `MCP_MODE` in `.env` matches your setup (`local` or `docker`).
+- Confirm your `.vscode/mcp.json` entry points at the mode you expect (local stdio vs the hosted HTTP endpoint).
 - Check **Output → MCP: jobContextMCP** for startup errors.
 - Make sure you didn't add the server via the VS Code UI (which writes a broken global config).
 

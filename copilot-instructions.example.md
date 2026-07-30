@@ -2,10 +2,10 @@
 
 ## ⚡ SESSION STARTUP
 **Every session, before anything else:**
-1. Call `get_session_context()` — loads resume, pipeline, tone profile, and personal stories in one shot.
-2. If tools are unavailable or context is empty, call `check_workspace()` first.
-   - If workspace is not configured, call `setup_workspace()` to create everything from scratch.
-   - After setup, call `get_session_context()` to begin.
+1. Call `insights(action="session_context")` — loads resume, pipeline, tone profile, and personal stories in one shot.
+2. If tools are unavailable or context is empty, call `workspace(action="check")` first.
+   - If workspace is not configured, call `workspace(action="setup")` to create everything from scratch.
+   - After setup, call `insights(action="session_context")` to begin.
 
 ---
 
@@ -21,28 +21,28 @@ It is configured in `.vscode/mcp.json` and auto-connects to every session.
 **Always prefer using MCP tools over re-reading files manually.**
 
 Key tools available:
-- `check_workspace()` — scan for missing config/data/folders; safe to call any time, makes no changes
-- `setup_workspace(name, email, phone, linkedin, city_state, master_resume_content, ...)` — bootstrap everything from scratch; drag resume into chat and pass as master_resume_content; idempotent
-- `get_job_hunt_status()` — current application pipeline
-- `update_application()` — update application status/notes
-- `log_application_event(company, role, event_type)` — append events to an application (phone screen, offer, note, etc.)
-- `log_rejection(company, role, stage)` — log a rejection; enables pattern analysis
-- `get_rejections()` — retrieve rejections with stage breakdown and bottleneck flags
-- `get_daily_digest()` — morning briefing: overdue actions, stale apps, recent rejections, 3 priorities
-- `weekly_summary()` — 7-day aggregate with mental health trend
-- `update_compensation(company, role, base, equity_total, bonus_target_pct)` — attach comp data to an application
-- `get_compensation_comparison()` — side-by-side comp table sorted by total comp
-- `read_master_resume()` — full master resume with all metrics
-- `assess_job_fitment(company, role, jd)` — fitment analysis context
-- `generate_interview_prep_context(company, role, stage)` — structured prep context
-- `get_leetcode_cheatsheet(section)` — algorithm patterns reference
-- `scan_project_for_skills()` — auto-scan side project for new resume skills
-- `log_mental_health_checkin(mood, energy)` — mood/energy logging
-- `get_mental_health_log()` — recent check-in history
-- `list_existing_materials(company)` — list resumes/cover letters
-- `resume_diff(file_a, file_b)` — diff two resume versions
-- `review_message(text)` — tone review: flags corporate phrases, desperation, hedging
-- `get_existing_prep_file(company)` — read existing interview prep file
+- `workspace(action="check")` — scan for missing config/data/folders; safe to call any time, makes no changes
+- `workspace(action="setup", name=..., email=..., phone=..., linkedin=..., city_state=..., master_resume_content=...)` — bootstrap everything from scratch; drag resume into chat and pass as master_resume_content; idempotent
+- `applications(action="status")` — current application pipeline
+- `applications(action="update", company=..., role=..., status=...)` — update application status/notes
+- `applications(action="log_event", company=..., role=..., event_type=...)` — append events to an application (phone screen, offer, note, etc.)
+- `insights(action="rejection_log", company=..., role=..., stage=...)` — log a rejection; enables pattern analysis
+- `insights(action="rejections")` — retrieve rejections with stage breakdown and bottleneck flags
+- `insights(action="daily_digest")` — morning briefing: overdue actions, stale apps, recent rejections, 3 priorities
+- `insights(action="weekly_summary")` — 7-day aggregate with mental health trend
+- `insights(action="compensation_update", company=..., role=..., base=...)` — attach comp data to an application
+- `insights(action="compensation_compare")` — side-by-side comp table sorted by total comp
+- `materials(action="read_master_resume")` — full master resume with all metrics
+- `applications(action="assess", company=..., role=..., job_description=...)` — fitment analysis context
+- `interviews(action="prep_context", company=..., role=..., stage=...)` — structured prep context
+- `interviews(action="leetcode_cheatsheet")` — algorithm patterns reference
+- `brand(action="scan_project_skills")` — auto-scan side project for new resume skills
+- `wellbeing(action="checkin", mood=..., energy=...)` — mood/energy logging
+- `wellbeing(action="log")` — recent check-in history
+- `materials(action="list", company=...)` — list resumes/cover letters
+- `documents(action="diff", file_a=..., file_b=...)` — diff two resume versions
+- `people(action="review_message", text=...)` — tone review: flags corporate phrases, desperation, hedging
+- `interviews(action="get_prep", company=...)` — read existing interview prep file
 
 ## BACKGROUND
 
@@ -62,7 +62,7 @@ Key tools available:
 - Reference materials in `06-Reference-Materials/`
 
 ### Active Interviews
-⚠ For live status call `get_job_hunt_status()` via MCP.
+⚠ For live status call `applications(action="status")` via MCP.
 
 ### Resume Customization Strategy
 - **Testing** → testing framework expertise, coverage %, TDD
@@ -86,11 +86,11 @@ Key tools available:
 
 ## QUICK RECOVERY INSTRUCTIONS
 If context is lost mid-session:
-1. Call `get_session_context()` — restores everything
-2. Call `get_job_hunt_status()` — live pipeline only
+1. Call `insights(action="session_context")` — restores everything
+2. Call `applications(action="status")` — live pipeline only
 3. Ask: "What are we working on?" and "What's your energy like today?"
-4. Call `get_mental_health_log()` if relevant
+4. Call `wellbeing(action="log")` if relevant
 
 If tools are missing or workspace is broken:
-1. Call `check_workspace()` — diagnoses what's missing
-2. Call `setup_workspace()` — rebuilds missing files (safe to re-run, skips existing)
+1. Call `workspace(action="check")` — diagnoses what's missing
+2. Call `workspace(action="setup")` — rebuilds missing files (safe to re-run, skips existing)

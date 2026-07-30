@@ -40,7 +40,7 @@ An executor that raises fails the row with the traceback attached; success
 stores its returned dict as artifacts. Pushes/notifications are signals the
 executor sends; **the row is the system of record**.
 
-Kinds registered today: `capture_url` (mobile share → import → assess → push).
+Kinds registered today: `capture_url` (mobile share → import → assess → push) and `run_evals` (server-side golden-suite eval runs, incl. the nightly schedule — see [evals.md](evals.md)).
 
 ## Telemetry (P0, shipped alongside)
 
