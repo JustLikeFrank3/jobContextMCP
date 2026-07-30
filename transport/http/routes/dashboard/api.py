@@ -176,7 +176,8 @@ def _interview_today() -> "str | None":
 def _digest_payload(snap: dict) -> dict:
     """Build the daily-digest items shown when no Oura ring is connected."""
     today = datetime.date.today()
-    date_line = f"{today.strftime('%A, %B %-d')} \u00b7 Morning briefing"
+    # today.day instead of '%-d', which is Linux-only and raises on Windows.
+    date_line = f"{today.strftime('%A, %B')} {today.day} \u00b7 Morning briefing"
 
     # Stale = active, not waiting on them, untouched 14+ days.
     try:
