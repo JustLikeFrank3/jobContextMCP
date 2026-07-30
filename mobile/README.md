@@ -1,13 +1,15 @@
-# jobContext mobile (P1)
+# jobContext mobile
 
 Desktop creates. Mobile captures. Cloud synchronizes.
 
-P1 surface: **Career Inbox** (chronological feed of everything that changed,
-served by `/api/events` off the sync journal), **share-sheet capture**
-(share a job URL → imported, queued, assessed in the background → push
-notification with the score), **push registration** (Expo push service —
-no APNs/FCM console setup), **Settings** (cloud URL + API key from the
-dashboard's API Keys tab, stored in the device keychain).
+Expo (SDK 57 / React Native 0.86) companion app. Current surface:
+
+- **Tabs**: Home (today view + activity), Pipeline, Interviews, People, Posts, Wellbeing — each with drill-in detail screens (job, interview, person, company, post, check-in), plus Search, Timeline, Activity feed, and Settings.
+- **Share-sheet capture** — share a job URL from any app; the page is extracted **on-device** (`src/pageExtract.ts`, the phone can read pages that authwall datacenter IPs), then imported, queued, and assessed in the background via the server's durable `capture_url` work item → push notification with the score. Server-side scrape is the fallback.
+- **Career Inbox / Activity** — chronological feed of everything that changed, served by `/api/events` off the sync journal.
+- **Push** — Expo push service, no APNs/FCM console setup.
+- **Settings** — cloud URL + API key (create it in the dashboard's API Keys tab), stored in the device keychain.
+- **OTA updates** — EAS Update channels on the preview/production build profiles.
 
 ## Run it
 
@@ -39,7 +41,6 @@ Add your API key inside the app (Settings tab) — create it from the dashboard'
 API Keys tab first, then paste it in. No sign-in flow: a static key has no
 inactivity expiry to trip over while the app sits unopened.
 
-## Next (P2/P3)
-Pipeline glance + contact cards, voice debrief (on-device transcription →
-log_interview), interview mode with offline prep cache, widgets, business
-card OCR. See the session design notes.
+## Next
+Voice debrief (on-device transcription → interview log), interview mode with
+offline prep cache, widgets, business card OCR. See the session design notes.

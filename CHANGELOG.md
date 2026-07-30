@@ -2,11 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Versions through 1.4.0 predate this note; their section headings vary slightly.
+
 ## [Unreleased]
 
 ### Bug fixes
 
 - **Accepting a cover-letter edit now regenerates the canonical PDF** -- accept-cover-letter-edit rewrote the .txt (with a .bak backup) but never re-exported, leaving the document's PDF stale; the only fresh PDF was the review-phase preview of the .tmp draft. Accept now re-exports from the accepted text using the job's saved template/style (HTML or owner-only LaTeX, gated before any mutation), surfaces the result + a link in the done view, and reports export failures as warnings without failing the accept. The resume edit dialog was not affected (its one-shot flow already exported the edited copy).
+- **Wallboard relay predated the eval framework** -- the metrics-relay allowlist would never have forwarded `eval_*` gauges to the Pi; the relay also took the first responding port only. It now relays the eval families and merges per-family across ports, with `JOBCONTEXT_EXTRA_METRICS_PORTS` for servers the process scan can't see.
 
 ### Features
 
@@ -15,6 +20,20 @@ All notable changes to this project will be documented in this file.
 
 - **Follow-up queue sanity** -- the People follow-up queue was "status ∈ {drafted, sent, follow-up}, forever": a ghosted recruiter stayed a suggested follow-up for months. The queue now (1) times out threads untouched for `followup_timeout_days` (default 21) into a collapsed "Gone cold" bucket instead of the to-do list, (2) excludes closed-thread tags (`unresponsive`, `closed-loop`, `do-not-contact`, `dormant`, `archived`), and (3) supports per-contact dismissal (✕ on the card; `POST /dashboard/people/dismiss-followup`, restorable). Dismissals live in a per-user overlay (`lib/dismissals.py`, `dismissals.json`) because the queue is a derived view with no row to delete.
 - **Home priorities are dismissible and face the same liveness rules** -- ✕ on a priority row hides it (`POST /api/dashboard/home/dismiss-priority`, expiring after 14 days so a still-true priority resurfaces); dismissing one promotes the next instead of leaving a gap. The "Send message to …" priority no longer surfaces drafts for ghosted or long-untouched contacts.
+- **Three-layer eval framework** (`evals/`) -- the generation pipeline now has a regression harness. Layer 1: 22 declarative tool-eval cases (plus smoke coverage of all 11 domains) run through `tools.consolidated._run` — the exact dispatch MCP clients hit — reporting pass rate and latency p50/p95. Layer 2: resume/cover-letter rubrics with hard passing thresholds. Layer 3: an adversarial LLM-as-judge over a 5-entry golden dataset (JDs recovered verbatim from the application queue), with N-run variance analysis (mean, CoV, hallucination rate, verdict flip rate) and baseline delta tracking. Eval-generated documents save under an `EVAL-` prefix so artifacts never overwrite real materials. The test suite doubles as a drift guard: every case must reference a real domain/action/parameter, so a surface rename fails CI before it fails a live eval. First calibrated judge run caught a planted hallucination 3/3 times (verdict flip rate 0%). Judge calibration folded in after the first n=5 run exposed three harness defects that produced false hallucination flags: the judge now knows today's date (real 2026 dates aren't "future-dated"), sees the full master resume instead of a 6K-char truncation, and filters clean-bill notes out of the hallucinations array; flagged claims are persisted in run aggregates so an alert carries its evidence.
+- **Server-side nightly eval runs via the control plane** -- a new `run_evals` work kind executes the golden suite inside the server process (partition context from the work row, results history under `<partition>/eval_runs/`); `POST /api/evals/run` enqueues a run and returns the work id. `EVALS_NIGHTLY_HOUR_UTC` schedules one run per day from the always-on pod — a fixed-model drift baseline, with local workstation runs becoming a comparison overlay rather than the only source. Results push into `eval_*` Prometheus gauges (restored from stored results at startup) and a `kiosk-evals` wallboard dashboard whose queries are source-agnostic, so the board keeps showing scores when the workstation is off.
+- **Eval CI smoke gate** -- `scripts/ci_smoke_gate.py` runs every non-network Layer 1 case against an isolated throwaway workspace in `deploy.yml`'s test job; a smoke pass rate below 95% fails the workflow before any AKS deploy.
+- **Wallboard: OS-dependent rotation with a dedicated GPU dashboard** -- the workstation dual-boots Windows for gaming; the kiosk used to play one static playlist, leaving the Ollama dashboard empty during a Windows boot. A Windows-boot GPU exporter (`scripts/gpu-exporter.ps1`, raw-TCP Prometheus on :9106 via a logon scheduled task) serves nvidia-smi from the gaming side; exactly one OS is up at a time, so the two GPU jobs complement each other. A new `kiosk-gaming` dashboard (big util/VRAM/temp gauges max()ed across both scrape jobs) joins a provisioned playlist pair, and `wallboard-kiosk.sh` probes `up{job=gpu-windows}` to play the playlist matching the booted OS, swapping when it flips.
+
+### CI
+
+- **`mcp<2` pinned** -- mcp 2.0.0 removed `mcp.server.fastmcp`, breaking test collection.
+
+### Documentation
+
+- **README rewritten as a concise front door** (~1,666 → ~330 lines) -- badges kept bot-compatible (dead updater anchors restored; the two CLI-count patterns were removed from `update_readme_badges.py` instead, since `cli.py` exposes the legacy surface and any auto-written number would be wrong for one surface or the other), stale roadmap replaced with Recent Releases, the legacy 70-row tool table replaced by the 11-domain surface, live wallboard screenshots added (`docs/images/wallboard/`), and a full docs index added -- previously the README linked to zero docs pages.
+- **Six new reference pages, all code-derived**: `docs/tools.md` (every domain/action/parameter + coercion and return conventions), `docs/api-reference.md` (every HTTP route, schema, auth requirement, and error convention), `docs/configuration.md` (every env var and config key the code actually reads), `docs/evals.md`, `docs/persistence.md`, plus relocated `docs/http-api.md`, `docs/aks-deployment.md`, `docs/local-development.md`, `docs/generation.md`.
+- **Drift eliminated**: removed documentation of things that don't exist for cloners -- `scripts/run_mcp.sh` + the `MCP_MODE` dispatcher story (file no longer in the tree; README, `.env.example`, and `docs/client-setup.md` all described it), `scripts/start_server.sh`, `scripts/provision_aks.sh` / `upload_workspace.sh` (AKS docs now describe the real CI-driven deploy), `scripts/sync_data_from_production.sh` (gitignored operator tooling), and the phantom `GET /context/session` endpoint. `.env.example` rewritten to match variables the code reads (adds `USE_SQLITE`/`SQLITE_ONLY`, the Entra triple, `LLM_PROVIDER`/`LLM_API_KEY`, `APP_ENCRYPTION_KEY`, evals vars; drops orphaned `MCP_MODE`/`DATA_SYNC_SOURCE`/`BACKUP_RETENTION`). `config.example.json` gains the `anthropic` and `ollama` provider blocks and current Foundry defaults. `copilot-instructions.example.md` migrated from legacy tool names to the consolidated `domain(action=...)` surface. `mobile/README.md` updated to the current tab/detail-screen surface and OTA channels. `docs/control-plane.md` now lists both registered work kinds. `docs/remote-mobile-architecture.md` marked as a historical design doc.
 
 ---
 
@@ -344,10 +363,6 @@ First release of the remote/mobile track. Adds an HTTP+SSE transport (so the iPa
 - **`.github/agents/resume-writer.agent.md`** — resume writer agent; loads master resume + tone profile before writing; hard honesty checkpoint before saving any file; customization strategy table by role type.
 - **`.github/agents/linkedin-outreach.agent.md`** — LinkedIn voice agent; enforces tone rules, logs every confirmed post/send to MCP database, distinguishes post / comment / DM / connection note formats.
 
-## Background
-
-Built during an active job search after a layoff. What began as a few tools to stop re-explaining context to AI assistants every session grew into a full MCP server. Shared here for anyone in the same situation.
-
 ## [0.6.5] - 2026-05-25
 
 ### Added
@@ -360,7 +375,7 @@ Built during an active job search after a layoff. What began as a few tools to s
 - **`JOB_QUEUE_FILE`** path constant added to `lib/config.py` and wired through `server.py` `_sync_config_exports()`.
 - **`tests/test_job_queue.py`** — 21 tests covering entry creation, auto-increment IDs, duplicate detection, status filtering, fitment context assembly, the evaluation gate, `add` pipeline write-through, `dismiss` isolation (does not touch `status.json`), fitment score storage, double-decision guard, and missing-job error paths; 21/21 passing, full suite 383/383.
 
-
+## [0.6.4] - 2026-05-24
 
 ### Added
 - **`get_person(name)`** (`tools/people.py`) — single-record people lookup by partial, case-insensitive name match. Returns the full person record when exactly one match is found; returns a disambiguation list when multiple names match. Does not emit the `PEOPLE DATABASE` list header — output is a flat record string, not a table. Token cost is proportional to one person's data rather than the entire 75-person database. Use this instead of `get_people()` whenever you only need one contact.

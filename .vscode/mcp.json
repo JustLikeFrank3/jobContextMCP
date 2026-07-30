@@ -6,8 +6,8 @@
   // To switch back to local stdio for development, replace with:
   //   "jobContextMCP": {
   //     "type": "stdio",
-  //     "command": "${workspaceFolder}/scripts/run_mcp.sh",
-  //     "args": [],
+  //     "command": "${workspaceFolder}/.venv/bin/python3",
+  //     "args": ["server.py"],
   //     "cwd": "${workspaceFolder}"
   //   }
   "servers": {
