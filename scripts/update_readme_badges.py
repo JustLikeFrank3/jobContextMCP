@@ -87,12 +87,9 @@ def update_readme(text: str, tests: int, tools: int) -> str:
         ("TL;DR tests row",
          r"\| \d+ passing tests \|",
          f"| {tests} passing tests |"),
-        ("CLI 'all N tools'",
-         r"invokes all \d+ tools directly",
-         f"invokes all {tools} tools directly"),
-        ("CLI 'any of the N tools'",
-         r"Invoke any of the \d+ tools directly",
-         f"Invoke any of the {tools} tools directly"),
+        # The CLI section deliberately quotes no tool count — cli.py exposes the
+        # legacy per-function surface, not the {tools}-facade MCP surface, so a
+        # single auto-written number there would always be wrong for one of them.
         ("diagram subgraph label",
          r'TOOLS\["\d+ MCP / CLI tools"\]',
          f'TOOLS["{tools} MCP / CLI tools"]'),

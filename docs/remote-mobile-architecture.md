@@ -1,5 +1,7 @@
 # jobContextMCP Remote + Mobile Architecture Plan
 
+> **Historical design document.** This plan has since shipped (and evolved): the HTTP transport, dashboard, and per-user API keys are documented in [http-api.md](http-api.md) / [api-reference.md](api-reference.md), the cloud deployment in [aks-deployment.md](aks-deployment.md), and the mobile companion app in [../mobile/README.md](../mobile/README.md). Kept for the decision history.
+
 ## Goal
 
 Add remote/mobile access support to jobContextMCP so the system can be used from:

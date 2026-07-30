@@ -1,0 +1,50 @@
+# Persistence & Sync
+
+How data is stored, partitioned, synced, and backed up. Derived from `lib/db.py`, `lib/io.py`, `lib/io_sqlite.py`, `lib/sync.py`, `lib/sync_client.py`, `lib/user_provisioning.py`, `lib/work.py`.
+
+## Three storage tiers
+
+1. **SQLite** — one DB per partition at `<DATA_FOLDER>/db/jobcontextmcp.db` (WAL mode, foreign keys on). Core relational tables: applications, application_events, job_queue, people, interviews, rejections, tone_samples, health_log, linkedin_posts, stories, star_stories, plus user_api_keys (global DB), oura_readiness/oura_tokens, chat_sessions/chat_messages, generation_provenance, master_resume_edits, work_items, and the sync journal.
+2. **JSON documents** — flat files under `DATA_FOLDER` (`status.json`, `people.json`, `job_queue.json`, `interviews.json`, `eval_results.json`, …). Nine of them have SQLite handlers; the rest are JSON-only.
+3. **Workspace flat files** — the numbered directory tree (`01-Current-Optimized` … `09-Cover-Letter-PDFs`, `leetcode/`): resumes, cover letters, PDFs, reference materials, prep docs.
+
+### SQLite ⇄ JSON switching
+
+| `USE_SQLITE` | `SQLITE_ONLY` | Mapped file | Behavior |
+|---|---|---|---|
+| off | — | — | JSON only |
+| on | off | yes | SQLite **and** JSON (human-readable audit trail) |
+| on | on | yes | SQLite only (cloud + desktop default) |
+| on | either | no | JSON always written |
+
+Reads fall back gracefully: a missing/corrupt DB returns the JSON default; writes to SQLite raise on error ("silent data loss is worse than a visible failure").
+
+## Migrations
+
+`lib/db.py` applies an ordered migration list lazily on every connection, tracked by a count-based ledger (`applied_migrations`). The baseline schema lives in `scripts/migrate_to_sqlite.py` (canonical DDL) and `lib/user_provisioning.py` (tenant provisioning) — the three are kept in sync by convention. Global-DB connections skip per-user migrations but still advance the ledger.
+
+## Multi-tenant partitioning
+
+Every tenant's data lives under `DATA_FOLDER/users/{oid}`. Routing is a `ContextVar` set per-request by middleware — authenticated identities are always scoped to their partition; `lib/io` transparently reroutes any `DATA_FOLDER`-relative path. Partitions are provisioned on first access (file-level idempotent: full workspace tree, starter `config.json`, seeded data files, full-schema DB).
+
+Background work never inherits ambient context: the control plane (`lib/work.py`) stores the partition on the `work_items` row and executors enter it from the row — see [control-plane.md](control-plane.md).
+
+## Desktop ⇄ cloud sync
+
+Journal-based bidirectional sync (`lib/sync.py`), configured on the desktop with `cloud_sync_url` + `cloud_sync_pat` (a `jcmcp_` PAT from the dashboard); auto-sync runs every 15 minutes when enabled.
+
+- **Journal**: AFTER-triggers on synced tables write to `sync_log`; no application write path changes. Applying remote changes flips an `applying` flag the triggers check, preventing echo loops.
+- **Row semantics**: upsert tables (applications, job_queue, people, interviews, oura_readiness) resolve conflicts last-writer-wins by timestamp, deletes travel as tombstones; append tables (application_events, rejections, health_log, linkedin_posts) are insert-if-absent so replays dedupe by construction.
+- **Cross-replica identity**: integer ids never leave the machine — rows are identified by natural keys; child rows carry the parent's natural key and re-resolve on apply.
+- **File sync**: sha256 manifest diff against a baseline; changed-both-sides conflicts keep the remote copy as a `" (sync conflict from cloud)"` sibling instead of overwriting. Manifest keys are always POSIX-separated (a Windows peer would otherwise fork every key and re-transfer the workspace both ways). Databases, `config.json`, backups, and index artifacts stay machine-local; per-file transfer errors skip-and-report rather than wedging the pass.
+- **Contact block**: `config.json` never syncs, so the `contact` block is exchanged separately, fill-empty-only in both directions.
+
+## Backup / export / import
+
+| Mechanism | What it does |
+|---|---|
+| `GET /api/dashboard/export` | Zip of the caller's whole data root (requires a user session; excludes WAL sidecars) |
+| `POST /desktop/import-workspace` | Restores an export zip; the existing data dir is moved aside (`-backup-<timestamp>`), never deleted; restart required |
+| `scripts/pi-backup.sh` | Nightly timer on the Pi: rsync snapshot + consistent `sqlite3 .backup` per DB, 7 retained |
+| Dual-write JSON | The non-`SQLITE_ONLY` mode keeps JSON as a human-readable audit trail |
+| `scripts/migrate_to_sqlite.py` | One-time JSON → SQLite bootstrap (operates on `data_dev/`; recreates the DB each run) |
