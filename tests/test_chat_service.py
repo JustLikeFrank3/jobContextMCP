@@ -24,9 +24,17 @@ def _tool_call(call_id: str, name: str, arguments: dict) -> SimpleNamespace:
     )
 
 
-def _response(content: str | None = None, tool_calls=None) -> SimpleNamespace:
+def _response(
+    content: str | None = None, tool_calls=None, usage: dict | None = None
+) -> SimpleNamespace:
     message = SimpleNamespace(content=content, tool_calls=tool_calls or None)
-    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+    response = SimpleNamespace(choices=[SimpleNamespace(message=message)])
+    if usage is not None:
+        response.usage = SimpleNamespace(
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+        )
+    return response
 
 
 class FakeClient:
@@ -183,6 +191,117 @@ def test_provider_exception_surfaces_as_error(mcp_instance):
     events = _run_turn(mcp_instance, sid, "hi", ExplodingClient([]))
     assert events[-1].type == "error"
     assert events[-1].data["code"] == "provider"
+
+
+# ── telemetry ──────────────────────────────────────────────────────────────────
+# Chat bypasses lib.openai_calls (its 12s rate gate would stall tool hops), so
+# it must emit the llm_* series itself with the same label shapes.
+
+@pytest.fixture()
+def clean_metrics():
+    from lib import metrics
+    metrics.reset()
+    yield metrics
+    metrics.reset()
+
+
+def _series(snap: dict, kind: str, name: str, **labels):
+    """Value of the first counter/summary matching name + label subset."""
+    for entry in snap[kind]:
+        if entry["name"] == name and all(
+            entry["labels"].get(k) == v for k, v in labels.items()
+        ):
+            return entry
+    return None
+
+
+def test_chat_turn_records_llm_metrics_from_usage(mcp_instance, clean_metrics):
+    sid = chat_service.create_session()
+    client = FakeClient([
+        _response(content="Hi Frank!", usage={"prompt_tokens": 100, "completion_tokens": 20}),
+    ])
+
+    _run_turn(mcp_instance, sid, "hello", client)
+
+    snap = clean_metrics.snapshot()
+    calls = _series(snap, "counters", "llm_calls_total",
+                    label="chat", model="fake", outcome="ok")
+    assert calls["value"] == 1
+    seconds = _series(snap, "summaries", "llm_call_seconds", label="chat", model="fake")
+    assert seconds["count"] == 1
+    prompt = _series(snap, "counters", "llm_tokens_total",
+                     label="chat", model="fake", direction="prompt")
+    completion = _series(snap, "counters", "llm_tokens_total",
+                         label="chat", model="fake", direction="completion")
+    assert prompt["value"] == 100
+    assert completion["value"] == 20
+
+
+def test_chat_metrics_estimate_tokens_when_usage_missing(mcp_instance, clean_metrics):
+    sid = chat_service.create_session()
+    client = FakeClient([_response(content="A reply long enough to estimate.")])
+
+    _run_turn(mcp_instance, sid, "hello there, estimate me", client)
+
+    snap = clean_metrics.snapshot()
+    prompt = _series(snap, "counters", "llm_tokens_total",
+                     label="chat", model="fake", direction="prompt")
+    completion = _series(snap, "counters", "llm_tokens_total",
+                         label="chat", model="fake", direction="completion")
+    # Estimated (chars/4), so exact values are not pinned — just non-empty.
+    assert prompt["value"] > 0
+    assert completion["value"] > 0
+
+
+def test_chat_tool_hops_count_each_completion(mcp_instance, clean_metrics):
+    sid = chat_service.create_session()
+    client = FakeClient([
+        _response(tool_calls=[_tool_call("c1", "applications", {"action": "status"})]),
+        _response(content="Done."),
+    ])
+
+    _run_turn(mcp_instance, sid, "how's my pipeline?", client)
+
+    snap = clean_metrics.snapshot()
+    calls = _series(snap, "counters", "llm_calls_total",
+                    label="chat", model="fake", outcome="ok")
+    assert calls["value"] == 2
+    seconds = _series(snap, "summaries", "llm_call_seconds", label="chat", model="fake")
+    assert seconds["count"] == 2
+
+
+def test_chat_provider_error_records_error_outcome(mcp_instance, clean_metrics):
+    sid = chat_service.create_session()
+
+    class ExplodingClient(FakeClient):
+        def _create(self, **_kwargs):
+            exc = RuntimeError("rate limited")
+            exc.response = SimpleNamespace(status_code=429)
+            raise exc
+
+    _run_turn(mcp_instance, sid, "hi", ExplodingClient([]))
+
+    snap = clean_metrics.snapshot()
+    calls = _series(snap, "counters", "llm_calls_total",
+                    label="chat", model="fake", outcome="error_429")
+    assert calls["value"] == 1
+    # No success series and no duration for a failed call.
+    assert _series(snap, "counters", "llm_calls_total", outcome="ok") is None
+    assert _series(snap, "summaries", "llm_call_seconds", label="chat") is None
+
+
+def test_chat_error_without_status_is_network(mcp_instance, clean_metrics):
+    sid = chat_service.create_session()
+
+    class ExplodingClient(FakeClient):
+        def _create(self, **_kwargs):
+            raise RuntimeError("boom")
+
+    _run_turn(mcp_instance, sid, "hi", ExplodingClient([]))
+
+    calls = _series(clean_metrics.snapshot(), "counters", "llm_calls_total",
+                    label="chat", model="fake", outcome="error_network")
+    assert calls["value"] == 1
 
 
 def test_history_replays_into_next_turn(mcp_instance):

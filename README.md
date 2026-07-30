@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-1601%20passing-brightgreen" alt="1601 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1606%20passing-brightgreen" alt="1606 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-11-informational" alt="11 MCP tools"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -39,7 +39,7 @@ jobContext gives AI assistants access to structured job-search context that pers
 | | |
 |---|---|
 | 11 MCP tools | 88 domain actions behind them |
-| 1601 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 1606 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
