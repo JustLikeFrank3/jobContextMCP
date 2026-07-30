@@ -11,7 +11,9 @@ What gets instrumented where:
                       http_requests_total / http_request_seconds{method,route,status}
   - Work items      → lib/work.py dispatcher
                       work_items_total / work_item_seconds{kind,status}
-  - LLM calls       → lib/openai_calls.create_chat_completion
+  - LLM calls       → lib/openai_calls.create_chat_completion, plus
+                      services/chat_service.py (chat bypasses the helper's
+                      rate gate and emits the same series with label="chat")
                       llm_calls_total{label,model,outcome}
                       llm_call_seconds{label,model}
                       llm_tokens_total{label,model,direction}

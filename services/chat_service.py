@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 
 import anyio
 
+from lib import metrics
 from lib.db import get_connection
 
 _log = logging.getLogger(__name__)
@@ -268,6 +270,56 @@ async def _execute_tool(mcp, name: str, arguments_json: str) -> str:
     return text
 
 
+# ── telemetry ──────────────────────────────────────────────────────────────────
+# Chat calls the provider directly instead of lib.openai_calls.create_chat_completion:
+# that helper's process-wide 12s rate-spacing gate would stall every tool hop of an
+# interactive conversation. The cost is that chat must emit the same llm_* series
+# itself — label values and outcome formats below must stay in lockstep with
+# lib/openai_calls.py so the Grafana LLM panels aggregate both paths.
+
+_METRICS_LABEL = "chat"
+
+
+def _estimate_tokens(text: str) -> int:
+    # ~4 chars/token: rough, but keeps the tokens panel non-empty for
+    # providers that omit usage.
+    return len(text) // 4 if text else 0
+
+
+def _record_llm_error(model: str, exc: Exception) -> None:
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    metrics.inc(
+        "llm_calls_total",
+        label=_METRICS_LABEL,
+        model=str(model),
+        outcome=f"error_{status_code or 'network'}",
+    )
+
+
+def _record_llm_success(model: str, started: float, response: Any, messages: list[dict]) -> None:
+    model = str(model)
+    metrics.inc("llm_calls_total", label=_METRICS_LABEL, model=model, outcome="ok")
+    metrics.observe(
+        "llm_call_seconds", time.monotonic() - started, label=_METRICS_LABEL, model=model)
+    usage = getattr(response, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+    completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+    if prompt_tokens is None:
+        prompt_tokens = _estimate_tokens(
+            "".join(str(m.get("content") or "") for m in messages))
+    if completion_tokens is None:
+        reply = response.choices[0].message
+        parts = [reply.content or ""]
+        parts.extend(tc.function.arguments or "" for tc in reply.tool_calls or ())
+        completion_tokens = _estimate_tokens("".join(parts))
+    if prompt_tokens:
+        metrics.inc("llm_tokens_total", float(prompt_tokens),
+                    label=_METRICS_LABEL, model=model, direction="prompt")
+    if completion_tokens:
+        metrics.inc("llm_tokens_total", float(completion_tokens),
+                    label=_METRICS_LABEL, model=model, direction="completion")
+
+
 # ── the agent loop ─────────────────────────────────────────────────────────────
 
 def _build_system_prompt() -> str:
@@ -315,6 +367,7 @@ async def run_chat_turn(
     _save_message(session_id, "user", user_message)
 
     for _hop in range(MAX_TOOL_HOPS):
+        started = time.monotonic()
         try:
             response = await anyio.to_thread.run_sync(
                 lambda: client.chat.completions.create(
@@ -322,10 +375,12 @@ async def run_chat_turn(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — surface provider errors to the UI
+            _record_llm_error(model, exc)
             _log.warning("chat completion failed: %s", exc)
             yield ChatEvent("error", {"message": f"AI provider error: {exc}", "code": "provider"})
             return
 
+        _record_llm_success(model, started, response, messages)
         reply = response.choices[0].message
 
         if not reply.tool_calls:
