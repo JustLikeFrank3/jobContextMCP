@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
   <img src="https://img.shields.io/badge/tests-1606%20passing-brightgreen" alt="1606 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-11-informational" alt="11 MCP tools"/>
+  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
