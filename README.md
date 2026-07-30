@@ -16,7 +16,7 @@
 
 # jobContext
 
-A personal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server, dashboard, desktop app, and mobile companion that give AI assistants — GitHub Copilot, Claude, Cursor, Windsurf, Zed, and any MCP-compatible or HTTP-capable client — persistent, structured memory of your job search. You never re-explain your resume, pipeline, interview history, outreach context, or portfolio from scratch.
+The memory layer for your job search: a desktop app, a hosted cloud workspace, and a mobile companion built on one capability layer. Your resume, pipeline, interview history, outreach context, and portfolio live as structured context that persists across sessions — AI assistants (GitHub Copilot, Claude, Cursor, Windsurf, Zed) plug in over the [Model Context Protocol](https://modelcontextprotocol.io/), while the dashboard, CLI, and mobile app drive the same tools over HTTP. You never re-explain yourself from scratch.
 
 Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (dual-write JSON audit trail), a React dashboard, WeasyPrint/LaTeX PDF export, and pluggable LLM generation (OpenAI, Azure AI Foundry, Anthropic Claude, or local Ollama — all BYOK, or run keyless and let your AI client do the writing).
 
@@ -34,7 +34,7 @@ Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLi
 
 ## TL;DR
 
-jobContext gives AI assistants access to structured job-search context that persists across sessions — through MCP tools, HTTP APIs, a web dashboard, and cloud-hosted services.
+jobContext keeps your job-search context structured and persistent, and exposes it every way you work: MCP tools for AI assistants, HTTP APIs for automation, a web dashboard, a desktop app, and a mobile companion.
 
 | | |
 |---|---|
@@ -82,11 +82,19 @@ Architecture, build docs, and the full decision log: [desktop/README.md](desktop
 
 ## Output
 
-### Web dashboard
+### The dashboard
 
-![jobContext Dashboard v2](docs/jobContextMCP%20Dashboard%20v2.png)
+The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
 
-The dashboard (a React SPA served at `/app`) turns the workspace into a job-search command center: Home with dismissible priorities and daily digest, Pipeline (queue → assess → generate → decide, with template selection, LLM-powered edit dialogs, and provenance verdicts), Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
+![Home — your career command center](docs/images/dashboard/home.png)
+*Home: active/in-flight counts, dismissible priorities, daily digest, and Oura readiness driving "today's move".*
+
+| | |
+|---|---|
+| ![Pipeline](docs/images/dashboard/pipeline.png) | ![Job Hunt Tracker](docs/images/dashboard/job-hunt.png) |
+| Pipeline: intake → assessment (fitment score + signals) → generate → queue apply, with per-job templates and AI edit dialogs | Job Hunt Tracker: applications kanban from outreach through offer |
+| ![Wellbeing](docs/images/dashboard/wellbeing.png) | ![Settings](docs/images/dashboard/settings.png) |
+| Wellbeing: mood/energy check-ins beside Oura readiness | Settings: AI provider status, Oura connection, one-click workspace export |
 
 ### Generated documents
 
