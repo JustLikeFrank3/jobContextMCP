@@ -82,11 +82,19 @@ Architecture, build docs, and the full decision log: [desktop/README.md](desktop
 
 ## Output
 
-### Web dashboard
+### The dashboard
 
-![jobContext Dashboard v2](docs/jobContextMCP%20Dashboard%20v2.png)
+The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
 
-The dashboard (a React SPA served at `/app`) turns the workspace into a job-search command center: Home with dismissible priorities and daily digest, Pipeline (queue → assess → generate → decide, with template selection, LLM-powered edit dialogs, and provenance verdicts), Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
+![Home — your career command center](docs/images/dashboard/home.png)
+*Home: active/in-flight counts, dismissible priorities, daily digest, and Oura readiness driving "today's move".*
+
+| | |
+|---|---|
+| ![Pipeline](docs/images/dashboard/pipeline.png) | ![Job Hunt Tracker](docs/images/dashboard/job-hunt.png) |
+| Pipeline: intake → assessment (fitment score + signals) → generate → queue apply, with per-job templates and AI edit dialogs | Job Hunt Tracker: applications kanban from outreach through offer |
+| ![Wellbeing](docs/images/dashboard/wellbeing.png) | ![Settings](docs/images/dashboard/settings.png) |
+| Wellbeing: mood/energy check-ins beside Oura readiness | Settings: AI provider status, Oura connection, one-click workspace export |
 
 ### Generated documents
 
