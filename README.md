@@ -76,7 +76,25 @@ Download, drag to Applications (or run the installer), double-click.
 
 On top of the server you get an **embedded AI chat** over your own job-search data (OpenAI/Anthropic BYOK or local Ollama), **one-click MCP connect** for Claude Desktop / VS Code / Cursor, **cloud workspace import/export**, **desktop ⇄ cloud sync**, Oura readiness, and **automatic updates**. Everything stays on your machine: local SQLite, loopback-only server, keys in your local config.
 
+| | |
+|---|---|
+| ![Desktop — Home](docs/images/desktop/home.png) | ![Desktop — Chat](docs/images/desktop/chat.png) |
+| Home: the same command center as the cloud, running against local SQLite | Chat: embedded AI over your own data — here on a local Ollama model, no keys, no cloud |
+
 Architecture, build docs, and the full decision log: [desktop/README.md](desktop/README.md).
+
+---
+
+## jobContext Mobile — iOS beta (TestFlight)
+
+The Expo companion app, now in TestFlight beta. *Desktop creates knowledge, mobile captures reality*: share a job posting from Safari or LinkedIn straight into your pipeline (pages are extracted on-device, so it reads postings that block datacenter IPs), triage what's awaiting assessment, log a wellbeing check-in from the couch. It talks to your cloud workspace with an API key from the dashboard's API Keys tab — paste it once into Settings and it lives in the device keychain. Everything it captures syncs back to desktop.
+
+| | | | |
+|---|---|---|---|
+| ![Mobile — splash](docs/images/mobile/splash.png) | ![Mobile — Home](docs/images/mobile/home.png) | ![Mobile — Pipeline](docs/images/mobile/pipeline.png) | ![Mobile — Wellbeing](docs/images/mobile/wellbeing.png) |
+| Restoring your context | Home: today's priority + readiness | Pipeline: assessed vs awaiting | Wellbeing: check-ins + Oura |
+
+Screens, capture flow, and build/ship docs: [mobile/README.md](mobile/README.md).
 
 ---
 
