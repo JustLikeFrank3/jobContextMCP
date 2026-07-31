@@ -361,6 +361,66 @@ def test_restore_gauges_after_restart(http_client_noauth):
     assert 'eval_mean_score{gd_id="GD-01"} 4.27' in metrics.render_prometheus()
 
 
+def test_restore_keeps_run_timestamp_honest(http_client_noauth, monkeypatch):
+    """A restart must NOT re-stamp eval_last_run_timestamp_seconds with 'now'
+    — that resets the wallboard's 'time since last run' on every deploy and
+    masks a stalled schedule. The stamp survives via payload.completed_at."""
+    from evals import ingest as ingest_mod
+    from lib import metrics
+
+    monkeypatch.setattr(ingest_mod.time, "time", lambda: 1000.0)
+    http_client_noauth.post("/api/evals/results", json=_SUITE_PAYLOAD)
+    assert 'eval_last_run_timestamp_seconds{kind="suite"} 1000' in metrics.render_prometheus()
+
+    metrics.reset()  # simulate process restart, much later
+    monkeypatch.setattr(ingest_mod.time, "time", lambda: 99999.0)
+    ingest_mod.restore_gauges()
+    text = metrics.render_prometheus()
+    assert 'eval_last_run_timestamp_seconds{kind="suite"} 1000' in text  # not 99999
+
+
+def test_restore_legacy_payload_sets_no_timestamp(isolated_server):
+    """A stored payload from before completed_at existed: restoring must not
+    invent a run time — an absent gauge is honest, a restart stamp is not."""
+    import json as json_mod
+
+    import server as srv
+    from evals import ingest as ingest_mod
+    from lib import metrics
+
+    legacy = {k: v for k, v in _SUITE_PAYLOAD.items()}  # no completed_at
+    srv.EVAL_RESULTS_FILE.write_text(json_mod.dumps({"suite": legacy}), encoding="utf-8")
+    ingest_mod.restore_gauges()
+    text = metrics.render_prometheus()
+    assert 'eval_mean_score{gd_id="GD-01"} 4.27' in text
+    assert "eval_last_run_timestamp_seconds" not in text
+
+
+def test_restore_reads_owner_partition(isolated_server, monkeypatch):
+    """Cloud: results are stored in the owner's partition; a restart restore
+    that reads the root partition finds nothing and silently drops every
+    eval gauge (ghost-series wallboard). restore_gauges must enter the
+    owner partition when ENTRA_OWNER_OID points at one."""
+    import json as json_mod
+
+    from evals import ingest as ingest_mod
+    from lib import config, metrics
+
+    oid = "owner-oid-123"
+    partition = config.DATA_FOLDER / "users" / oid
+    partition.mkdir(parents=True)
+    payload = {**_SUITE_PAYLOAD, "completed_at": 1234.0}
+    (partition / "eval_results.json").write_text(
+        json_mod.dumps({"suite": payload}), encoding="utf-8"
+    )
+    monkeypatch.setenv("ENTRA_OWNER_OID", oid)
+
+    ingest_mod.restore_gauges()
+    text = metrics.render_prometheus()
+    assert 'eval_mean_score{gd_id="GD-01"} 4.27' in text
+    assert 'eval_last_run_timestamp_seconds{kind="suite"} 1234' in text
+
+
 # ── server-side runs (control plane) ─────────────────────────────────────────
 
 def test_run_evals_executor_end_to_end(isolated_server, tmp_path, monkeypatch):
