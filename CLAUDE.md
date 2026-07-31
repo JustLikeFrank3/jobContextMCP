@@ -40,7 +40,7 @@ commits — never tag those) → desktop-release workflow → rolling
   (rate-spacing, 429/400 retries, thinking-budget empty-at-cap retry).
   Provider resolution: `lib/config.get_llm_client()`; status surfaces use
   `llm_generation_status()` — keep them in lockstep.
-- **MCP surface**: 11 consolidated domain tools (`tools/consolidated.py`).
+- **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
   facade doesn't expose — update the facade signature.
 

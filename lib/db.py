@@ -226,6 +226,46 @@ _MIGRATIONS = [
         old_text  TEXT    NOT NULL,
         new_text  TEXT    NOT NULL
     )""",
+    # v9 — employer directory (tools/certification.py): cache-first business
+    # address/website registry for weekly work-search certification. One row
+    # per employer, enriched once and reused every week; manual_override rows
+    # are never auto-overwritten by the enrichment pipeline.
+    """CREATE TABLE IF NOT EXISTS employer_directory (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        canonical_name  TEXT    NOT NULL UNIQUE,
+        aliases         TEXT    NOT NULL DEFAULT '[]',
+        street          TEXT    NOT NULL DEFAULT '',
+        city            TEXT    NOT NULL DEFAULT '',
+        state           TEXT    NOT NULL DEFAULT '',
+        zip             TEXT    NOT NULL DEFAULT '',
+        website         TEXT    NOT NULL DEFAULT '',
+        phone           TEXT    NOT NULL DEFAULT '',
+        address_kind    TEXT    NOT NULL DEFAULT 'hq',
+        source_url      TEXT    NOT NULL DEFAULT '',
+        confidence      TEXT    NOT NULL DEFAULT 'manual',
+        verified_at     TEXT    NOT NULL DEFAULT '',
+        manual_override INTEGER NOT NULL DEFAULT 0,
+        created_at      TEXT    NOT NULL DEFAULT '',
+        updated_at      TEXT    NOT NULL DEFAULT ''
+    )""",
+    # v10 — certification reports (tools/certification.py): immutable weekly
+    # work-search snapshots — a compliance artifact, not a live view.
+    # Regeneration/swaps create a new (week_ending, version) row; entries are
+    # frozen at generation. exports_json is append-only audit metadata about
+    # the frozen report, never a mutation of its entries.
+    """CREATE TABLE IF NOT EXISTS certification_report (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_ending   TEXT    NOT NULL,
+        version       INTEGER NOT NULL DEFAULT 1,
+        state         TEXT    NOT NULL DEFAULT '',
+        profile_json  TEXT    NOT NULL DEFAULT '{}',
+        entries_json  TEXT    NOT NULL DEFAULT '[]',
+        alternates_json TEXT  NOT NULL DEFAULT '[]',
+        gaps_json     TEXT    NOT NULL DEFAULT '[]',
+        generated_at  TEXT    NOT NULL,
+        exports_json  TEXT    NOT NULL DEFAULT '[]',
+        UNIQUE(week_ending, version)
+    )""",
 ]
 
 

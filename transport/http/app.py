@@ -252,9 +252,11 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         # and start the nightly server-side eval schedule when configured.
         from evals.ingest import restore_gauges
         from evals.work import start_nightly_task
+        from tools.certification_work import start_weekly_task
 
         restore_gauges()
         nightly_evals_task = start_nightly_task()
+        certification_task = start_weekly_task()
         try:
             if mcp_starlette is not None:
                 # The Starlette sub-app carries its own lifespan that initialises
@@ -267,6 +269,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         finally:
             if nightly_evals_task is not None:
                 nightly_evals_task.cancel()
+            if certification_task is not None:
+                certification_task.cancel()
             await _work.stop_dispatcher()
 
     app = FastAPI(

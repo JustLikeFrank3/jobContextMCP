@@ -176,7 +176,8 @@ def _interview_today() -> "str | None":
 def _digest_payload(snap: dict) -> dict:
     """Build the daily-digest items shown when no Oura ring is connected."""
     today = datetime.date.today()
-    date_line = f"{today.strftime('%A, %B %-d')} \u00b7 Morning briefing"
+    # today.day instead of '%-d', which is Linux-only and raises on Windows.
+    date_line = f"{today.strftime('%A, %B')} {today.day} \u00b7 Morning briefing"
 
     # Stale = active, not waiting on them, untouched 14+ days.
     try:
@@ -311,8 +312,39 @@ async def dashboard_home_data(
             "priorities": priorities,
         },
         "digest": _digest_payload(snap),
+        "certification": _certification_payload(),
     }
     return JSONResponse(payload)
+
+
+def _certification_payload() -> "dict | None":
+    """Weekly work-search progress for the Home card, or None when the
+    feature is unconfigured. Defensive by convention: Home must never break."""
+    try:
+        from tools import certification
+
+        if not certification.is_configured():
+            return None
+        profile = certification.get_state_profile()
+        target = int(profile.get("min_activities_per_week", 3))
+        end = certification.current_week_ending(profile)
+        start, end_date = certification._week_window(end)
+        activities = certification.derive_activities(start, end_date, profile)
+        picked, _ = certification.select_entries(activities, target)
+        logged = len(picked)
+        return {
+            "logged": logged,
+            "target": target,
+            "weekEnding": end_date.isoformat(),
+            "onTrack": logged >= target,
+            "label": (
+                f"{logged}/{target} logged this week ✓"
+                if logged >= target
+                else f"{logged}/{target} — {target - logged} short"
+            ),
+        }
+    except Exception:  # noqa: BLE001 — the card is optional, Home is not
+        return None
 
 
 class _DismissPriorityBody(BaseModel):

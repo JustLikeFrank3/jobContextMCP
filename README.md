@@ -4,9 +4,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-1606%20passing-brightgreen" alt="1606 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-1634%20passing-brightgreen" alt="1634 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
+  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%2095%20actions-informational" alt="12 domain tools, 95 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -38,8 +38,8 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 | | |
 |---|---|
-| 11 MCP tools | 88 domain actions behind them |
-| 1606 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 12 MCP tools | 95 domain actions behind them |
+| 1634 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
@@ -156,7 +156,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-11 consolidated domain tools, 88 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 95 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
@@ -184,7 +184,7 @@ flowchart LR
         CLI["cli.py / scripts"]
     end
     subgraph Server
-        TOOLS["11 MCP / CLI tools"]
+        TOOLS["12 MCP / CLI tools"]
         HTTP["FastAPI transport<br/>REST + SSE + /mcp"]
         WORK["Control plane<br/>(durable work_items)"]
         GATE["Provenance truth gate"]
@@ -251,10 +251,10 @@ Smoke-test the tool surface:
 
 ```bash
 .venv/bin/python -c "import server; print('OK,', len(server.mcp._tool_manager.list_tools()), 'tools')"
-# Expected: OK, 11 tools
+# Expected: OK, 12 tools
 ```
 
-Then connect a client — for VS Code, add a stdio entry to `.vscode/mcp.json` and restart the server from the MCP panel; the Output pane should show `Discovered 11 tools`. Per-client walkthroughs (VS Code, Claude Desktop, ChatGPT desktop, Cursor, Windsurf): **[docs/client-setup.md](docs/client-setup.md)** and [docs/setup-claude-desktop.md](docs/setup-claude-desktop.md).
+Then connect a client — for VS Code, add a stdio entry to `.vscode/mcp.json` and restart the server from the MCP panel; the Output pane should show `Discovered 12 tools`. Per-client walkthroughs (VS Code, Claude Desktop, ChatGPT desktop, Cursor, Windsurf): **[docs/client-setup.md](docs/client-setup.md)** and [docs/setup-claude-desktop.md](docs/setup-claude-desktop.md).
 
 There's no manual JSON authoring: ask your AI client to run `workspace(action="check")`, then `workspace(action="setup")` with your details — it creates the directory tree, seeds the data files, and writes config. Feeding the system well (stories, tone samples, reference materials) is what makes generation good: [docs/generation.md](docs/generation.md).
 

@@ -5,6 +5,7 @@ import Pipeline from './screens/Pipeline.jsx'
 import JobHunt from './screens/JobHunt.jsx'
 import Materials from './screens/Materials.jsx'
 import Rejections from './screens/Rejections.jsx'
+import Certification from './screens/Certification.jsx'
 import Posts from './screens/Posts.jsx'
 import People from './screens/People.jsx'
 import Health from './screens/Health.jsx'
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/job-hunt" element={<JobHunt />} />
         <Route path="/materials" element={<Materials />} />
         <Route path="/rejections" element={<Rejections />} />
+        <Route path="/certification" element={<Certification />} />
         <Route path="/posts" element={<Posts />} />
         <Route path="/people" element={<People />} />
         <Route path="/health" element={<Health />} />

@@ -18,8 +18,8 @@ from tools.consolidated import DOMAINS, FACADES, _actions_doc, _run
 
 # ── surface shape ─────────────────────────────────────────────────────────────
 
-def test_eleven_domain_tools():
-    assert len(FACADES) == 11
+def test_twelve_domain_tools():
+    assert len(FACADES) == 12
     assert set(FACADES) == set(DOMAINS)
 
 
@@ -36,9 +36,10 @@ def test_action_count_covers_legacy_surface():
     # 85/84 when stories gained update/delete (a wrong fact could only be
     # superseded by a second entry before, never corrected in place); bumped
     # again when materials gained update_master_resume (stale metrics could
-    # only be read, never fixed, from MCP clients).
+    # only be read, never fixed, from MCP clients); 88 → 95 when the
+    # certification domain landed (weekly work-search reports, 7 actions).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 88, f"action count changed: {total} — update this pin deliberately"
+    assert total == 95, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():
@@ -53,7 +54,7 @@ def test_facade_params_cover_every_target_param():
                 )
 
 
-def test_registration_registers_eleven(monkeypatch):
+def test_registration_registers_all_domains(monkeypatch):
     registered = []
 
     class FakeMCP:
@@ -148,9 +149,9 @@ def test_chat_allowlist_matches_domain_names():
     assert set(CHAT_TOOL_ALLOWLIST) == set(FACADES)
 
 
-@pytest.mark.parametrize("flag,expected", [("", 11), ("1", 88)])
+@pytest.mark.parametrize("flag,expected", [("", 12), ("1", 95)])
 def test_server_surface_size(flag, expected, tmp_path):
-    """server.py registers 11 consolidated tools by default, 88 legacy ones
+    """server.py registers 12 consolidated tools by default, 95 legacy ones
     behind JOBCONTEXT_LEGACY_TOOLS=1.
 
     Runs in a subprocess: re-importing server inside the test process would
