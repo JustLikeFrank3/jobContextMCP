@@ -18,6 +18,16 @@
   --text-strong: #ffffff;
   --muted: #9aa8bf;
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  /* Native form-control popups (select option lists) are painted by the OS
+     in light mode unless told otherwise — light text becomes invisible. */
+  color-scheme: dark;
+}
+
+/* Fallback for engines that ignore color-scheme for popup surfaces: the
+   option list inherits the select's translucent background over white. */
+select option {
+  background-color: var(--surface, var(--ink-900));
+  color: var(--text, var(--text-strong));
 }
 
 html,
