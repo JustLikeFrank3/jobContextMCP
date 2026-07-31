@@ -577,7 +577,10 @@ def certification(
     out_entry: int | None = None,
     in_entry: str | None = None,
     name: str | None = None,
-    fields: str | None = None,
+    # str | dict, not just str: several MCP clients (claude.ai, Claude Code)
+    # auto-parse JSON-looking argument strings into objects before sending —
+    # a string-only schema hard-rejects those calls at validation.
+    fields: str | dict | None = None,
     mode: str | None = None,
     state: str | None = None,
     min_activities_per_week: int | None = None,

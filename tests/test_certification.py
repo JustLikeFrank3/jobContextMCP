@@ -442,6 +442,24 @@ class TestFacadeDispatch:
         )
         assert out.startswith("✓")
 
+    def test_override_fields_dict_through_facade(self, workspace):
+        # claude.ai / Claude Code harnesses auto-parse JSON-string args into
+        # objects — the facade schema must accept the dict form too.
+        from tools import consolidated
+        out = consolidated.certification(
+            action="employer_override", name="DictCo",
+            fields={"street": "1 Main St", "city": "Atlanta",
+                    "state": "GA", "zip": "30303"},
+        )
+        assert out.startswith("✓")
+
+    def test_override_fields_double_encoded_string(self, workspace):
+        payload = json.dumps(json.dumps({
+            "street": "1 Main St", "city": "Atlanta",
+            "state": "GA", "zip": "30303",
+        }))
+        assert cert.override_employer("DoubleCo", payload).startswith("✓")
+
     def test_activity_kinds_csv_becomes_list_not_characters(self, workspace):
         from tools import consolidated
         out = consolidated.certification(
