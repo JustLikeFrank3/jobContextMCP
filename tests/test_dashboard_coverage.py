@@ -540,6 +540,20 @@ class TestDashboardHomeApiCoverage:
         assert body["oura"] is None
         assert body["digest"]["items"]
 
+    def test_digest_date_line_is_windows_safe(self):
+        """'%-d' is glibc-only — strftime raises ValueError on Windows, which
+        500'd /api/dashboard/home for every Windows desktop user without a
+        ring (the digest builds unconditionally). The day must come from
+        today.day, and glibc-only '%-' flags must stay out of the module."""
+        import inspect
+        import re
+
+        digest = dashboard_api_routes._digest_payload(dict(self._SNAP))
+        today = dt.date.today()
+        assert digest["date"] == f"{today.strftime('%A, %B')} {today.day} · Morning briefing"
+        # Guard for Linux CI, where '%-d' silently works.
+        assert not re.search(r"strftime\([^)]*%-", inspect.getsource(dashboard_api_routes))
+
     def test_api_home_requires_auth(self, monkeypatch, isolated_server):
         """With auth enabled, an anonymous fetch is rejected (not a redirect)."""
         from fastapi.testclient import TestClient
