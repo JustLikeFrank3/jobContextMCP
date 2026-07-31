@@ -39,7 +39,7 @@ def test_action_count_covers_legacy_surface():
     # only be read, never fixed, from MCP clients); 88 → 95 when the
     # certification domain landed (weekly work-search reports, 7 actions).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 95, f"action count changed: {total} — update this pin deliberately"
+    assert total == 96, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():
