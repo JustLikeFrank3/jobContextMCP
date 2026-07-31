@@ -468,7 +468,8 @@ _AGENCY_RE = re.compile(
 _ADDRESS_RE = re.compile(
     r"(?P<street>(?:\d{1,6}|One|Two|Three|Four|Five|Ten)\s+[A-Za-z0-9 .'-]{3,60}"
     r"(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Way|"
-    r"Court|Ct|Place|Pl|Parkway|Pkwy|Circle|Cir|Highway|Hwy|Suite [\w-]+)\.?)"
+    r"Court|Ct|Place|Pl|Plaza|Plz|Square|Sq|Parkway|Pkwy|Circle|Cir|Highway|Hwy|"
+    r"Suite [\w-]+)\.?)"
     r"[,\s]+(?P<city>[A-Za-z .'-]{2,40})[,\s]+"
     r"(?P<state>[A-Z]{2})[,\s]+(?P<zip>\d{5}(?:-\d{4})?)"
 )
