@@ -179,6 +179,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "list_reports": (certification_mod.list_certification_reports, "History of frozen weekly reports."),
         "export": (certification_mod.export_certification_report, "Render a frozen report for the claim portal."),
         "swap_entry": (certification_mod.swap_certification_entry, "Replace an entry with an alternate (new version)."),
+        "mark_submitted": (certification_mod.mark_certification_submitted, "Stamp a report as the version filed with the state."),
         "employer_lookup": (certification_mod.lookup_employer, "Read/refresh one employer directory row."),
         "employer_override": (certification_mod.override_employer, "Manually correct an employer (locks the row)."),
         "state_profile": (certification_mod.certification_state_profile, "Read/update the state's certification rules."),
@@ -569,13 +570,14 @@ def workspace(
 
 
 def certification(
-    action: Literal["weekly_report", "list_reports", "export", "swap_entry", "employer_lookup", "employer_override", "state_profile"],
+    action: Literal["weekly_report", "list_reports", "export", "swap_entry", "mark_submitted", "employer_lookup", "employer_override", "state_profile"],
     week_ending: str | None = None,
     limit: int | None = None,
     report_id: int | None = None,
     format: str | None = None,
     out_entry: int | None = None,
     in_entry: str | None = None,
+    confirmation_number: str | None = None,
     name: str | None = None,
     # str | dict, not just str: several MCP clients (claude.ai, Claude Code)
     # auto-parse JSON-looking argument strings into objects before sending —

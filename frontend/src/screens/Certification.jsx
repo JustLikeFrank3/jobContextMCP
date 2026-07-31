@@ -25,6 +25,7 @@ const SELECT_STYLE = {
 export default function Certification() {
   const { data, loading, error, reload } = useApi('/dashboard/certification/data')
   const reports = data?.reports || []
+  const archive = data?.archive || []
   const progress = data?.progress || null
   const profile = data?.profile || {}
 
@@ -32,6 +33,7 @@ export default function Certification() {
   const [report, setReport] = useState(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [confirmation, setConfirmation] = useState('')
 
   // Default the week dropdown to the newest frozen report.
   useEffect(() => {
@@ -75,6 +77,27 @@ export default function Certification() {
     }
   }
 
+  const markSubmitted = async () => {
+    if (reportId === null) return
+    setBusy(true)
+    try {
+      await apiPost('/dashboard/certification/submit', {
+        report_id: reportId,
+        confirmation_number: confirmation.trim(),
+      })
+      setNotice('Marked as the filed record for this week.')
+      setConfirmation('')
+      reload()
+    } catch (e) {
+      setNotice(e?.message || 'Mark failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const selectedMeta = reports.find((r) => r.id === reportId)
+  const weekStamp = archive.find((w) => w.weekEnding === report?.weekEnding)
+
   const under = progress && progress.logged < progress.target
 
   return (
@@ -117,7 +140,7 @@ export default function Certification() {
               {reports.length === 0 && <option value="">no frozen reports yet</option>}
               {reports.map((r) => (
                 <option key={r.id} value={r.id}>
-                  week ending {r.weekEnding} · v{r.version} ({r.entries} entries{r.gaps ? `, ${r.gaps} gaps` : ''})
+                  {r.submitted ? '★ ' : ''}week ending {r.weekEnding} · v{r.version} ({r.entries} entries{r.gaps ? `, ${r.gaps} gaps` : ''})
                 </option>
               ))}
             </select>
@@ -149,6 +172,41 @@ export default function Certification() {
             title={`Week ending ${report.weekEnding} — v${report.version}`}
             right={`generated ${report.generatedAt}`}
           />
+          <Panel style={{ marginBottom: 14 }}>
+            {selectedMeta?.submitted ? (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
+                <Badge tone="green">★ FILED RECORD</Badge>
+                <span style={{ color: 'var(--text-soft)' }}>
+                  submitted {weekStamp?.submittedAt?.slice(0, 16) || ''}
+                  {weekStamp?.confirmation ? ` · confirmation ${weekStamp.confirmation}` : ''}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
+                {weekStamp?.submittedVersion != null && (
+                  <span style={{ color: 'var(--warn)' }}>
+                    ⚠ v{weekStamp.submittedVersion} is this week's filed record — marking this version moves the stamp.
+                  </span>
+                )}
+                <input
+                  type="text"
+                  placeholder="confirmation # (optional)"
+                  value={confirmation}
+                  disabled={busy}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                  style={{ ...SELECT_STYLE, width: 200 }}
+                />
+                <button
+                  type="button"
+                  onClick={markSubmitted}
+                  disabled={busy}
+                  style={{ ...SELECT_STYLE, cursor: busy ? 'wait' : 'pointer', border: '1px solid rgba(0,181,200,.4)' }}
+                >
+                  Mark as filed with the state
+                </button>
+              </div>
+            )}
+          </Panel>
           {report.gaps?.length > 0 && (
             <Panel style={{ marginBottom: 14, border: '1px solid rgba(255,180,0,.35)' }}>
               {report.gaps.map((g, i) => (
@@ -195,6 +253,30 @@ export default function Certification() {
               </List>
             </>
           )}
+        </>
+      )}
+      {archive.length > 0 && (
+        <>
+          <SectionHead title="Weekly archive" right={`${archive.length} week${archive.length === 1 ? '' : 's'}`} />
+          <List>
+            {archive.map((w) => (
+              <Row
+                key={w.weekEnding}
+                title={`Week ending ${fmtDate(w.weekEnding)}`}
+                subtitle={
+                  w.submittedVersion != null
+                    ? `filed v${w.submittedVersion} · ${w.submittedAt?.slice(0, 16) || ''}${w.confirmation ? ` · confirmation ${w.confirmation}` : ''}`
+                    : `${w.versions} frozen version${w.versions === 1 ? '' : 's'} — none marked as filed`
+                }
+                right={
+                  w.submittedVersion != null
+                    ? <Badge tone="green">★ filed</Badge>
+                    : <Badge tone="warn">not filed</Badge>
+                }
+                onClick={w.reportId != null ? () => setReportId(w.reportId) : undefined}
+              />
+            ))}
+          </List>
         </>
       )}
       {!report && reports.length === 0 && (

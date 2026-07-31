@@ -248,9 +248,9 @@ export function List({ children }) {
   return <div style={{ display: 'grid', gap: 8 }}>{children}</div>
 }
 
-export function Row({ title, subtitle, meta, right, children }) {
+export function Row({ title, subtitle, meta, right, children, onClick }) {
   return (
-    <Panel pad="12px 14px">
+    <Panel pad="12px 14px" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           {title && (

@@ -266,6 +266,22 @@ _MIGRATIONS = [
         exports_json  TEXT    NOT NULL DEFAULT '[]',
         UNIQUE(week_ending, version)
     )""",
+    # v11 — final submissions (tools/certification.py): one row per week
+    # marking WHICH frozen version was actually filed with the state agency.
+    # Report ids are local-only (they diverge across sync peers), so the
+    # filed report is identified by (week_ending, version, generated_at).
+    # Re-marking a week moves the stamp — the row is the single source of
+    # truth for "what did the agency receive."
+    """CREATE TABLE IF NOT EXISTS certification_submission (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_ending         TEXT    NOT NULL UNIQUE,
+        version             INTEGER NOT NULL DEFAULT 1,
+        generated_at        TEXT    NOT NULL DEFAULT '',
+        submitted_at        TEXT    NOT NULL DEFAULT '',
+        confirmation_number TEXT    NOT NULL DEFAULT '',
+        created_at          TEXT    NOT NULL DEFAULT '',
+        updated_at          TEXT    NOT NULL DEFAULT ''
+    )""",
 ]
 
 

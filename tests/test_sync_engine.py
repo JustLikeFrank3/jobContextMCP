@@ -596,3 +596,59 @@ def test_sync_contact_endpoint_tolerates_missing_config(tmp_path, monkeypatch):
     assert out == {"contact": {"name": "Frank"}, "filled": 1}
     saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert saved["contact"] == {"name": "Frank"}
+
+
+def _write_employer(name, street="", manual=0):
+    with db.get_connection() as con:
+        con.execute(
+            "INSERT INTO employer_directory (canonical_name, street, city, state, zip,"
+            " manual_override, created_at, updated_at)"
+            " VALUES (?, ?, 'Atlanta', 'GA', '30303', ?, datetime('now'), datetime('now'))"
+            " ON CONFLICT(canonical_name) DO UPDATE SET street=excluded.street,"
+            " manual_override=excluded.manual_override, updated_at=excluded.updated_at",
+            (name, street, manual),
+        )
+
+
+def _backdate_journal(tbl):
+    with db.get_connection() as con:
+        con.execute("UPDATE sync_log SET ts = '2020-01-01T00:00:00' WHERE tbl = ?", (tbl,))
+
+
+def test_manual_override_survives_newer_auto_row(replicas):
+    """A peer's failed auto-enrichment (empty row, fresh ts) must never clobber
+    a manually corrected address — the lock holds across sync, not just within
+    the enrichment pipeline."""
+    desktop, cloud = replicas
+    with cloud:
+        _write_employer("Acme", street="1 Real St", manual=1)
+        _backdate_journal("employer_directory")  # make the manual row LWW-losable
+    with desktop:
+        _write_employer("Acme", street="", manual=0)  # fresh ts: would win LWW
+        batch = _export()
+    with cloud:
+        stats = _apply(batch["changes"])
+        rows = _rows(
+            "SELECT street, manual_override FROM employer_directory WHERE canonical_name='Acme'"
+        )
+        assert rows == [{"street": "1 Real St", "manual_override": 1}]
+        assert stats["skipped_guard"] >= 1
+
+
+def test_manual_override_propagates_over_auto_row(replicas):
+    """The guard is one-way: an incoming manual correction still replaces a
+    peer's auto row via normal LWW."""
+    desktop, cloud = replicas
+    with desktop:
+        _write_employer("Acme", street="", manual=0)
+        _backdate_journal("employer_directory")
+    with cloud:
+        _write_employer("Acme", street="75 5th St NW", manual=1)
+        batch = _export()
+    with desktop:
+        stats = _apply(batch["changes"])
+        rows = _rows(
+            "SELECT street, manual_override FROM employer_directory WHERE canonical_name='Acme'"
+        )
+        assert rows == [{"street": "75 5th St NW", "manual_override": 1}]
+        assert stats["applied"] >= 1
