@@ -9,7 +9,9 @@ on this server instance.
 """
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 
 from lib import metrics
 from lib.io import _load_json, _save_json
@@ -60,24 +62,41 @@ def _record_layer1_gauges(payload: dict) -> None:
         )
 
 
-def apply_results(payload: dict) -> tuple[str, int]:
+def apply_results(payload: dict, *, restored: bool = False) -> tuple[str, int]:
     """Mirror *payload* into eval_* gauges; returns (kind, scored_count).
+
+    ``eval_last_run_timestamp_seconds`` must mean "when the run happened",
+    not "when this process last saw the payload": a fresh ingest stamps
+    now and records it on the payload (completed_at), while a post-restart
+    restore reuses the recorded stamp — and sets nothing when an old
+    payload predates the stamp (an absent gauge is honest; a restart-time
+    stamp is a lie that masks a stalled schedule).
 
     Raises ValueError for payloads that are neither suite results nor a
     Layer 1 report.
     """
     if "rows" in payload:
-        scored = _record_suite_gauges(payload)
-        metrics.set_gauge("eval_last_run_timestamp_seconds", time.time(), kind="suite")
-        return "suite", scored
-    if "pass_rate" in payload:
+        kind, scored = "suite", _record_suite_gauges(payload)
+    elif "pass_rate" in payload:
         _record_layer1_gauges(payload)
-        metrics.set_gauge("eval_last_run_timestamp_seconds", time.time(), kind="layer1")
-        return "layer1", 0
-    raise ValueError(
-        "Unrecognized eval payload — expected suite results (rows) "
-        "or a Layer 1 report (pass_rate)."
-    )
+        kind, scored = "layer1", 0
+    else:
+        raise ValueError(
+            "Unrecognized eval payload — expected suite results (rows) "
+            "or a Layer 1 report (pass_rate)."
+        )
+    if restored:
+        completed = payload.get("completed_at")
+        if completed:
+            metrics.set_gauge(
+                "eval_last_run_timestamp_seconds", float(completed), kind=kind
+            )
+    else:
+        payload["completed_at"] = time.time()
+        metrics.set_gauge(
+            "eval_last_run_timestamp_seconds", float(payload["completed_at"]), kind=kind
+        )
+    return kind, scored
 
 
 def store_results(payload: dict) -> tuple[str, int]:
@@ -93,14 +112,40 @@ def store_results(payload: dict) -> tuple[str, int]:
     return kind, scored
 
 
-def restore_gauges() -> None:
-    """Re-expose stored results as gauges after a restart (best-effort)."""
+def _owner_partition() -> "str | None":
+    """The owner tenant's partition, when this server fronts one (cloud)."""
     from lib import config  # noqa: PLC0415
 
-    stored = _load_json(config.EVAL_RESULTS_FILE, {})
+    oid = str(os.environ.get("ENTRA_OWNER_OID", "") or "").strip()
+    if not oid:
+        return None
+    candidate = Path(str(config.DATA_FOLDER)) / "users" / oid
+    return str(candidate) if candidate.is_dir() else None
+
+
+def restore_gauges() -> None:
+    """Re-expose stored results as gauges after a restart (best-effort).
+
+    Runs at app startup with no request/partition context, but the nightly
+    executor and the ingest route both store into the OWNER's partition on
+    multi-tenant servers — restoring from the root partition there finds
+    nothing, so every restart silently dropped the eval gauges and the
+    wallboard rendered ghost values from dead pods' series. Enter the
+    owner partition when one exists.
+    """
+    from lib import config  # noqa: PLC0415
+    from lib.user_context import reset_data_folder, set_data_folder  # noqa: PLC0415
+
+    partition = _owner_partition()
+    token = set_data_folder(partition) if partition else None
+    try:
+        stored = _load_json(config.EVAL_RESULTS_FILE, {})
+    finally:
+        if token is not None:
+            reset_data_folder(token)
     for payload in (stored.get("suite"), stored.get("layer1")):
         if isinstance(payload, dict):
             try:
-                apply_results(payload)
+                apply_results(payload, restored=True)
             except ValueError:
                 pass
