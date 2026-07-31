@@ -157,7 +157,9 @@ JOB_ASSESSMENTS_FOLDER: Path = RESUME_FOLDER / _cfg.get("job_assessments_dir",
 
 # ── misc ──────────────────────────────────────────────────────────────────────
 
-SERPAPI_KEY: str = _cfg.get("serpapi_key", "")
+# Set via SERPAPI_KEY env var (k8s secret in the cloud); falls back to
+# config.json "serpapi_key" (desktop/dev).
+SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "") or _cfg.get("serpapi_key", "")
 
 # OID of the application owner — used to gate owner-only features (e.g. LaTeX export).
 # Set via ENTRA_OWNER_OID env var; falls back to config.json "entra_owner_oid" key.
@@ -604,4 +606,4 @@ def _reconfigure(cfg: dict) -> None:
     INTERVIEW_PREP_FOLDER  = RESUME_FOLDER / cfg.get("interview_prep_docs_dir", "08-Interview-Prep-Docs")
     JOB_ASSESSMENTS_FOLDER = RESUME_FOLDER / cfg.get("job_assessments_dir", "07-Job-Assessments")
 
-    SERPAPI_KEY = cfg.get("serpapi_key", "")
+    SERPAPI_KEY = os.getenv("SERPAPI_KEY", "") or cfg.get("serpapi_key", "")

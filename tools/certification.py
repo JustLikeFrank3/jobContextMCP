@@ -269,6 +269,35 @@ def _load_interviews() -> list[dict]:
     return [i for i in ivs if isinstance(i, dict)]
 
 
+
+_JOB_BOARD_HOSTS = {
+    "linkedin.com", "indeed.com", "workforcenow.adp.com", "greenhouse.io",
+    "lever.co", "ashbyhq.com", "glassdoor.com", "ziprecruiter.com",
+    "myworkdayjobs.com",
+}
+
+
+def _website_hint_from(*texts: str) -> str:
+    """First employer-domain URL found in logged text, as a scrape base.
+
+    Job-board and ATS hosts are skipped — jobs.mercedes-benz.com yields
+    https://mercedes-benz.com, but a LinkedIn posting URL yields nothing.
+    Provenance-clean: the hint comes from logged data, never model memory.
+    """
+    for text in texts:
+        for match in re.finditer(r"https?://([^/\s)\]>\"']+)", str(text or "")):
+            host = match.group(1).lower().split(":")[0]
+            if any(host == h or host.endswith("." + h) for h in _JOB_BOARD_HOSTS):
+                continue
+            parts = [p for p in host.split(".") if p]
+            if len(parts) >= 2:
+                registrable = ".".join(parts[-2:])
+                if parts[0] in ("jobs", "careers", "apply", "www") or len(parts) == 2:
+                    return f"https://{registrable}"
+                return f"https://{host}"
+    return ""
+
+
 def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -> list[dict]:
     """All qualifying work-search activities inside [start, end], from logged
     events only. Each activity carries the source_event_ids it derives from."""
@@ -279,14 +308,34 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
     seen_ids: set[str] = set()
 
     def add(kind: str, company: str, position: str, date: str, method: str,
-            contact: str, result: str, source_ids: list[str]) -> None:
+            contact: str, result: str, source_ids: list[str],
+            website_hint: str = "") -> None:
         if kind not in accepted or not company.strip():
             return
         primary = source_ids[0]
         if primary in seen_ids:
             return
         seen_ids.add(primary)
+        norm = re.sub(r"[^a-z0-9]", "", company.lower())
+        for existing in activities:
+            if existing["kind"] != kind or existing["date"] != date:
+                continue
+            if existing["position"].strip().lower() != position.strip().lower():
+                continue
+            e_norm = re.sub(r"[^a-z0-9]", "", existing["employer"].lower())
+            if norm and e_norm and (norm.startswith(e_norm) or e_norm.startswith(norm)):
+                # Same activity logged under an employer alias (e.g. "Mercedes"
+                # vs "Mercedes-Benz USA") — merge, keep the longer name.
+                existing["source_event_ids"] = sorted(
+                    set(existing["source_event_ids"]) | set(source_ids)
+                )
+                if len(company.strip()) > len(existing["employer"]):
+                    existing["employer"] = company.strip()
+                if contact and not existing.get("contact"):
+                    existing["contact"] = contact
+                return
         activities.append({
+            "website_hint": website_hint,
             "kind": kind,
             "strength": _KIND_STRENGTH.get(kind, 9),
             "employer": company.strip(),
@@ -332,6 +381,10 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
         company = str(app.get("company", "") or "")
         position = str(app.get("role", "") or "")
         contact = _contact_name(app)
+        hint = _website_hint_from(
+            app.get("notes", ""), app.get("next_steps", ""),
+            *[e.get("notes", "") for e in (app.get("events", []) or [])],
+        )
         status_active = not any(
             s in str(app.get("status", "") or "").lower() for s in _CLOSED_STATUSES
         )
@@ -345,7 +398,7 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
             if ev_type == "applied":
                 add("application_submitted", company, position, ev_date,
                     _method_from(notes, "Online application"), contact,
-                    _derive_result(app, ev_date), source)
+                    _derive_result(app, ev_date), source, website_hint=hint)
             elif ev_type == "phone_screen":
                 add("screening_completed", company, position, ev_date,
                     _method_from(notes, "Phone screen"), contact,
@@ -369,7 +422,8 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
         if _in_window(applied, start, end):
             add("application_submitted", company, position, applied,
                 "Online application", contact, _derive_result(app, applied),
-                [_event_id("applied_date", company, position, applied)])
+                [_event_id("applied_date", company, position, applied)],
+                website_hint=hint)
 
     return activities
 
@@ -409,7 +463,7 @@ _AGENCY_RE = re.compile(
 # Street address: "123 Any St[reet …], City, ST 12345" — deliberately strict;
 # a wrong address on a certification is worse than a flagged gap.
 _ADDRESS_RE = re.compile(
-    r"(?P<street>\d{1,6}\s+[A-Za-z0-9 .'-]{3,60}"
+    r"(?P<street>(?:\d{1,6}|One|Two|Three|Four|Five|Ten)\s+[A-Za-z0-9 .'-]{3,60}"
     r"(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Way|"
     r"Court|Ct|Place|Pl|Parkway|Pkwy|Circle|Cir|Highway|Hwy|Suite [\w-]+)\.?)"
     r"[,\s]+(?P<city>[A-Za-z .'-]{2,40})[,\s]+"
@@ -527,6 +581,35 @@ def _web_search_address(company: str) -> "tuple[dict, str] | None":
     return None
 
 
+def _ddg_search_address(company: str) -> "tuple[dict, str] | None":
+    """Keyless fallback: DuckDuckGo HTML results via the page-fetch proxy.
+
+    No API key required, so deployments without a serpapi_key still enrich.
+    A results page mixes many businesses (ads, directories), so an address
+    only counts when the company's name appears just before it — same
+    snippet, not merely same page. Nothing comes from model memory.
+    """
+    from urllib.parse import quote_plus
+
+    url = ("https://html.duckduckgo.com/html/?q="
+           + quote_plus(f"{company} corporate office business address"))
+    try:
+        text = _fetch_page(url)
+    except Exception:  # noqa: BLE001 — enrichment is best-effort
+        return None
+    tokens = re.findall(r"[a-z0-9]+", company.lower())
+    needle = next((t for t in tokens if len(t) >= 3), "")
+    if not needle:
+        return None
+    for match in _ADDRESS_RE.finditer(text):
+        window = re.sub(
+            r"[^a-z0-9]", "", text[max(0, match.start() - 300):match.start()].lower()
+        )
+        if needle in window:
+            return dict(match.groupdict()), url
+    return None
+
+
 def _llm_extract_address(page_text: str, company: str) -> "dict | None":
     """Optional LLM extraction from a fetched page (BYOK-consistent).
 
@@ -606,7 +689,7 @@ def enrich_employer(name: str, website_hint: str = "") -> dict:
         found = _scrape_address(website, canonical)
         confidence = "verified" if found else ""
     if not found:
-        found = _web_search_address(canonical)
+        found = _web_search_address(canonical) or _ddg_search_address(canonical)
         confidence = "scraped" if found else ""
         # An address found on the company's own domain upgrades to verified.
         if found and website:
@@ -678,11 +761,16 @@ def lookup_employer(name: str) -> str:
     ]))
 
 
-def override_employer(name: str, fields: dict | None = None) -> str:
+def override_employer(name: str, fields: dict | str | None = None) -> str:
     """Manually correct a directory row. Sets manual_override — the
     enrichment pipeline will never overwrite it again."""
     if not str(name or "").strip():
         return "✗ employer name is required."
+    if isinstance(fields, str) and fields.strip():
+        try:
+            fields = json.loads(fields)
+        except ValueError:
+            return "✗ fields must be JSON, e.g. {\"street\": \"123 Main St\", \"city\": \"Atlanta\", \"state\": \"GA\", \"zip\": \"30303\"}."
     if not isinstance(fields, dict) or not fields:
         return (
             "✗ fields is required — e.g. {\"street\": \"123 Main St\", "
@@ -808,7 +896,10 @@ def weekly_certification_report(week_ending: str = "") -> str:
     gaps: list[str] = []
     for activity in picked:
         try:
-            row = enrich_employer(activity["employer"])
+            row = enrich_employer(
+                activity["employer"],
+                website_hint=activity.get("website_hint", ""),
+            )
         except Exception:  # noqa: BLE001 — enrichment failure ≠ report failure
             row = {"canonical_name": employer_of_record(activity["employer"]), "aliases": []}
         entry = _entry_payload(activity, row)
