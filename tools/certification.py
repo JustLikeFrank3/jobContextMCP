@@ -570,7 +570,9 @@ def _web_search_address(company: str) -> "tuple[dict, str] | None":
         resp.raise_for_status()
         payload = resp.json()
     except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
-        _log.warning("serpapi search failed for %r: %s", company, exc)
+        # httpx exception text embeds the full request URL — api_key included.
+        _log.warning("serpapi search failed for %r: %s", company,
+                     re.sub(r"api_key=[^&'\s]+", "api_key=***", str(exc)))
         return None
     blobs: list[tuple[str, str]] = []
     kg = payload.get("knowledge_graph", {}) or {}
