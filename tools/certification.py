@@ -29,12 +29,15 @@ import datetime
 import hashlib
 import io
 import json
+import logging
 import re
 from typing import Literal
 
 from lib import config
 from lib.db import get_connection
 from lib.io import _load_json, _now, _save_json
+
+_log = logging.getLogger(__name__)
 
 # ── State profile ─────────────────────────────────────────────────────────────
 
@@ -566,7 +569,8 @@ def _web_search_address(company: str) -> "tuple[dict, str] | None":
         )
         resp.raise_for_status()
         payload = resp.json()
-    except Exception:  # noqa: BLE001 — enrichment is best-effort
+    except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
+        _log.warning("serpapi search failed for %r: %s", company, exc)
         return None
     blobs: list[tuple[str, str]] = []
     kg = payload.get("knowledge_graph", {}) or {}
@@ -578,6 +582,8 @@ def _web_search_address(company: str) -> "tuple[dict, str] | None":
         match = _ADDRESS_RE.search(text)
         if match:
             return dict(match.groupdict()), source
+    _log.info("serpapi returned %d results for %r, none with a parseable address",
+              len(blobs), company)
     return None
 
 
@@ -595,7 +601,8 @@ def _ddg_search_address(company: str) -> "tuple[dict, str] | None":
            + quote_plus(f"{company} corporate office business address"))
     try:
         text = _fetch_page(url)
-    except Exception:  # noqa: BLE001 — enrichment is best-effort
+    except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
+        _log.warning("ddg fallback fetch failed for %r: %s", company, exc)
         return None
     tokens = re.findall(r"[a-z0-9]+", company.lower())
     needle = next((t for t in tokens if len(t) >= 3), "")
@@ -607,6 +614,8 @@ def _ddg_search_address(company: str) -> "tuple[dict, str] | None":
         )
         if needle in window:
             return dict(match.groupdict()), url
+    _log.info("ddg fetched %d chars for %r, no company-adjacent address matched",
+              len(text), company)
     return None
 
 
@@ -659,7 +668,8 @@ def _scrape_address(website: str, company: str) -> "tuple[dict, str] | None":
         url = f"{base}{path}"
         try:
             text = _fetch_page(url)
-        except Exception:  # noqa: BLE001 — try the next page
+        except Exception as exc:  # noqa: BLE001 — try the next page
+            _log.warning("scrape fetch failed for %s: %s", url, exc)
             continue
         match = _ADDRESS_RE.search(text)
         if match:
@@ -667,6 +677,7 @@ def _scrape_address(website: str, company: str) -> "tuple[dict, str] | None":
         extracted = _llm_extract_address(text, company)
         if extracted:
             return extracted, url
+        _log.info("scraped %s (%d chars), no address matched", url, len(text))
     return None
 
 
@@ -766,7 +777,11 @@ def override_employer(name: str, fields: dict | str | None = None) -> str:
     enrichment pipeline will never overwrite it again."""
     if not str(name or "").strip():
         return "✗ employer name is required."
-    if isinstance(fields, str) and fields.strip():
+    # Up to two decode passes: MCP clients variously send the object itself,
+    # a JSON string, or a double-encoded JSON string (client re-serialized).
+    for _ in range(2):
+        if not (isinstance(fields, str) and fields.strip()):
+            break
         try:
             fields = json.loads(fields)
         except ValueError:
