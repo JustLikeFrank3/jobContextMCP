@@ -6,6 +6,7 @@ JSON endpoints the React Certification screen consumes:
     GET  /dashboard/certification/report/{id}   one frozen report, full detail
     POST /dashboard/certification/profile       update state rules (the dropdown)
     POST /dashboard/certification/generate      freeze a report for a week
+    POST /dashboard/certification/submit        mark a version as the filed record
 """
 from __future__ import annotations
 
@@ -49,6 +50,7 @@ def _index_payload() -> dict:
             "SELECT id, week_ending, version, state, entries_json, gaps_json, generated_at"
             " FROM certification_report ORDER BY week_ending DESC, version DESC LIMIT 60"
         ).fetchall()
+        submitted = certification.submissions_by_week(con)
     reports = []
     for row in rows:
         try:
@@ -56,6 +58,7 @@ def _index_payload() -> dict:
             gaps = json.loads(row["gaps_json"] or "[]")
         except (TypeError, ValueError):
             n_entries, gaps = 0, []
+        stamp = submitted.get(row["week_ending"])
         reports.append({
             "id": row["id"],
             "weekEnding": row["week_ending"],
@@ -64,12 +67,34 @@ def _index_payload() -> dict:
             "entries": n_entries,
             "gaps": len(gaps),
             "generatedAt": row["generated_at"],
+            "submitted": bool(stamp and stamp["version"] == row["version"]),
         })
+    # Archive: one line per week — what was (or wasn't) filed. The filed
+    # version is resolved back to a local report id when that row is present
+    # (sync peers may hold the stamp before the report row arrives).
+    weeks: dict[str, dict] = {}
+    for rep in reports:
+        wk = rep["weekEnding"]
+        stamp = submitted.get(wk)
+        if wk not in weeks:
+            weeks[wk] = {
+                "weekEnding": wk,
+                "versions": 0,
+                "submittedVersion": stamp["version"] if stamp else None,
+                "submittedAt": stamp["submitted_at"] if stamp else "",
+                "confirmation": stamp["confirmation_number"] if stamp else "",
+                "reportId": None,
+            }
+        weeks[wk]["versions"] += 1
+        if stamp and rep["version"] == stamp["version"] and weeks[wk]["reportId"] is None:
+            weeks[wk]["reportId"] = rep["id"]
+    archive = sorted(weeks.values(), key=lambda w: w["weekEnding"], reverse=True)
     return {
         "configured": certification.is_configured(),
         "profile": profile,
         "progress": progress,
         "reports": reports,
+        "archive": archive,
         "total": len(reports),
     }
 
@@ -127,6 +152,25 @@ async def certification_profile(body: ProfileBody) -> JSONResponse:
         min_activities_per_week=body.min_activities_per_week,
         week_ends_on=body.week_ends_on,
         counts_inbound_recruiter=body.counts_inbound_recruiter,
+    )
+    if result.startswith("✗"):
+        raise HTTPException(status_code=400, detail=result)
+    return JSONResponse({"ok": True, "message": result})
+
+
+class SubmitBody(BaseModel):
+    report_id: int
+    confirmation_number: str = ""
+
+
+@router.post("/certification/submit")
+async def certification_submit(body: SubmitBody) -> JSONResponse:
+    from tools import certification
+
+    result = await asyncio.to_thread(
+        certification.mark_certification_submitted,
+        body.report_id,
+        confirmation_number=body.confirmation_number,
     )
     if result.startswith("✗"):
         raise HTTPException(status_code=400, detail=result)

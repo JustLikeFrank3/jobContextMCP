@@ -970,6 +970,44 @@ def weekly_certification_report(week_ending: str = "") -> str:
     return "\n".join(lines)
 
 
+def submissions_by_week(con) -> dict:
+    """week_ending → the submission stamp (which version was actually filed)."""
+    rows = con.execute(
+        "SELECT week_ending, version, generated_at, submitted_at, confirmation_number"
+        " FROM certification_submission"
+    ).fetchall()
+    return {row["week_ending"]: dict(row) for row in rows}
+
+
+def mark_certification_submitted(report_id: int, confirmation_number: str = "") -> str:
+    """Stamp a frozen report as THE version filed with the state agency.
+
+    One stamp per week; re-marking moves it (corrected filings happen).
+    Report ids are local-only, so the stamp stores (week, version,
+    generated_at) — the identity that survives sync."""
+    confirmation = str(confirmation_number or "").strip()
+    with get_connection() as con:
+        report = _load_report(con, report_id)
+        if report is None:
+            return f"✗ No report with id={report_id}. See certification(action=\"list_reports\")."
+        now = _now()
+        con.execute(
+            "INSERT INTO certification_submission (week_ending, version, generated_at,"
+            " submitted_at, confirmation_number, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(week_ending) DO UPDATE SET version=excluded.version,"
+            " generated_at=excluded.generated_at, submitted_at=excluded.submitted_at,"
+            " confirmation_number=excluded.confirmation_number, updated_at=excluded.updated_at",
+            (report["week_ending"], report["version"], report["generated_at"],
+             now, confirmation, now, now),
+        )
+    suffix = f", confirmation {confirmation}" if confirmation else ""
+    return (
+        f"✓ Week ending {report['week_ending']} marked SUBMITTED as v{report['version']}"
+        f"{suffix}. This is the filed record for the week — later freezes won't unseat it."
+    )
+
+
 def list_certification_reports(limit: int = 10) -> str:
     """History of frozen weekly reports, newest first."""
     with get_connection() as con:
@@ -978,6 +1016,7 @@ def list_certification_reports(limit: int = 10) -> str:
             " FROM certification_report ORDER BY week_ending DESC, version DESC LIMIT ?",
             (max(1, int(limit)),),
         ).fetchall()
+        submitted = submissions_by_week(con)
     if not rows:
         return (
             "No certification reports yet. Generate the current week with "
@@ -991,9 +1030,14 @@ def list_certification_reports(limit: int = 10) -> str:
         except (TypeError, ValueError):
             n_entries, n_gaps = 0, 0
         flag = f" · ⚠ {n_gaps} gap(s)" if n_gaps else ""
+        stamp = submitted.get(row["week_ending"])
+        star = (
+            f" · ★ SUBMITTED {stamp['submitted_at'][:10]}"
+            if stamp and stamp["version"] == row["version"] else ""
+        )
         lines.append(
             f"  #{row['id']} — week ending {row['week_ending']} v{row['version']}"
-            f" ({row['state']}) · {n_entries} entries{flag} · generated {row['generated_at']}"
+            f" ({row['state']}) · {n_entries} entries{flag} · generated {row['generated_at']}{star}"
         )
     return "\n".join(lines)
 

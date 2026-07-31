@@ -2,6 +2,7 @@
 immutable snapshots, and the export truth gate."""
 import datetime
 import json
+import re
 
 import pytest
 
@@ -409,6 +410,67 @@ class TestEnrichmentFixes:
     def test_override_rejects_malformed_string(self, workspace):
         out = cert.override_employer("Mercedes-Benz USA", "{'nope': True}")
         assert out.startswith("✗ fields must be JSON")
+
+
+def _freeze_week(monkeypatch) -> int:
+    """Freeze WEEK_END with stubbed enrichment; return the new report id."""
+    monkeypatch.setattr(
+        cert, "enrich_employer",
+        lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+    )
+    out = cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+    return int(re.search(r"report #(\d+)", out).group(1))
+
+
+class TestSubmission:
+    """The filed-record stamp: one per week, human-set, survives regeneration."""
+
+    def test_mark_and_list_annotation(self, workspace, monkeypatch):
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        rid = _freeze_week(monkeypatch)
+        out = cert.mark_certification_submitted(rid, "GA-778899")
+        assert out.startswith("✓") and "SUBMITTED" in out and "GA-778899" in out
+        assert "★ SUBMITTED" in cert.list_certification_reports()
+
+    def test_unknown_report_id(self, workspace):
+        assert cert.mark_certification_submitted(9999).startswith("✗")
+
+    def test_remark_moves_single_stamp(self, workspace, monkeypatch):
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        rid1 = _freeze_week(monkeypatch)
+        rid2 = _freeze_week(monkeypatch)
+        assert rid2 != rid1
+        cert.mark_certification_submitted(rid1)
+        cert.mark_certification_submitted(rid2, "CORRECTED-1")
+        from lib.db import get_connection
+        with get_connection() as con:
+            stamps = cert.submissions_by_week(con)
+        assert len(stamps) == 1
+        stamp = stamps[_iso(WEEK_END)]
+        assert stamp["version"] == 2 and stamp["confirmation_number"] == "CORRECTED-1"
+
+    def test_facade_mark_submitted(self, workspace, monkeypatch):
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        rid = _freeze_week(monkeypatch)
+        from tools import consolidated
+        out = consolidated.certification(
+            action="mark_submitted", report_id=rid, confirmation_number="GA-42",
+        )
+        assert out.startswith("✓") and "GA-42" in out
+
+    def test_submit_endpoint_and_archive(self, http_client_noauth, monkeypatch):
+        _write_interviews([])
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        rid = _freeze_week(monkeypatch)
+        resp = http_client_noauth.post(
+            "/dashboard/certification/submit",
+            json={"report_id": rid, "confirmation_number": "GA-1"},
+        )
+        assert resp.status_code == 200
+        data = http_client_noauth.get("/dashboard/certification/data").json()
+        week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
+        assert week["submittedVersion"] == 1 and week["confirmation"] == "GA-1"
+        assert next(r for r in data["reports"] if r["id"] == rid)["submitted"] is True
 
 
 class TestDdgFallback:

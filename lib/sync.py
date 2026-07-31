@@ -92,6 +92,9 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     # post-freeze mutation (exports_json audit appends) is machine-local
     # metadata and intentionally does not re-journal.
     TableSpec("certification_report", "append", ("week_ending", "version")),
+    # One row per week: which frozen version was actually filed. Upsert so a
+    # re-mark (corrected filing) propagates; keyed by week alone.
+    TableSpec("certification_submission", "upsert", ("week_ending",)),
 )
 
 _SPECS_BY_NAME = {s.name: s for s in TABLE_SPECS}
@@ -258,6 +261,7 @@ class ApplyStats:
     skipped_lww: int = 0
     skipped_dupe: int = 0
     skipped_missing_parent: int = 0
+    skipped_guard: int = 0
     errors: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -266,6 +270,7 @@ class ApplyStats:
             "skipped_lww": self.skipped_lww,
             "skipped_dupe": self.skipped_dupe,
             "skipped_missing_parent": self.skipped_missing_parent,
+            "skipped_guard": self.skipped_guard,
             "errors": self.errors[:10],
         }
 
@@ -315,6 +320,23 @@ def _apply_one(con, change: dict, stats: ApplyStats) -> None:
         local_ts = _local_latest_ts(con, spec.name, nk)
         if local_ts is not None and local_ts >= ts:
             stats.skipped_lww += 1
+            return
+
+    # A manually corrected employer row outranks ANY auto-enriched peer row,
+    # regardless of timestamp — enrichment's "manual_override is never
+    # auto-overwritten" promise must hold across sync too, or one peer's
+    # failed enrichment attempt (empty row, fresh ts) silently clobbers a
+    # verified address on every other peer.
+    if (
+        op != "delete"
+        and spec.name == "employer_directory"
+        and not (change.get("row") or {}).get("manual_override")
+    ):
+        local = con.execute(
+            f"SELECT manual_override FROM {spec.name} WHERE {where} LIMIT 1", nk_values
+        ).fetchone()
+        if local and local[0]:
+            stats.skipped_guard += 1
             return
 
     if op == "delete":
