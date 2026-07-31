@@ -350,3 +350,104 @@ class TestDashboard:
         resp = http_client_noauth.get("/api/dashboard/home")
         assert resp.status_code == 200
         assert resp.json()["certification"] is None
+
+
+class TestEnrichmentFixes:
+    """Website hints, alias dedupe, spelled street numbers, override coercion."""
+
+    def test_website_hint_skips_job_boards_and_strips_jobs_subdomain(self):
+        hint = cert._website_hint_from(
+            "posted at https://www.linkedin.com/jobs/view/444 and "
+            "https://jobs.mercedes-benz.com/ai-productization-engineer-230835"
+        )
+        assert hint == "https://mercedes-benz.com"
+
+    def test_website_hint_empty_when_only_ats_urls(self):
+        hint = cert._website_hint_from(
+            "https://nasdaq.wd1.myworkdayjobs.com/x https://linkedin.com/jobs/1"
+        )
+        assert hint == ""
+
+    def test_address_regex_accepts_spelled_leading_number(self):
+        match = cert._ADDRESS_RE.search(
+            "HQ: One Mercedes-Benz Drive, Sandy Springs, GA 30328"
+        )
+        assert match and match.group("street") == "One Mercedes-Benz Drive"
+
+    def test_alias_activities_merge_into_one(self, workspace):
+        _write_interviews([])
+        _write_status([
+            {"company": "Mercedes", "role": "AI Productization Engineer",
+             "status": "applied", "applied_date": _iso(IN_WEEK)},
+            {"company": "Mercedes-Benz USA", "role": "AI Productization Engineer",
+             "status": "applied", "applied_date": _iso(IN_WEEK)},
+        ])
+        profile = cert.get_state_profile()
+        start, end = cert._week_window(WEEK_END)
+        acts = cert.derive_activities(start, end, profile)
+        apps = [a for a in acts if a["kind"] == "application_submitted"]
+        assert len(apps) == 1
+        assert apps[0]["employer"] == "Mercedes-Benz USA"
+        assert len(apps[0]["source_event_ids"]) == 2
+
+    def test_override_accepts_json_string(self, workspace):
+        out = cert.override_employer(
+            "Mercedes-Benz USA",
+            '{"street": "One Mercedes-Benz Drive", "city": "Sandy Springs",'
+            ' "state": "GA", "zip": "30328"}',
+        )
+        assert out.startswith("✓")
+
+    def test_override_rejects_malformed_string(self, workspace):
+        out = cert.override_employer("Mercedes-Benz USA", "{'nope': True}")
+        assert out.startswith("✗ fields must be JSON")
+
+
+class TestDdgFallback:
+    """Keyless search fallback: company-adjacent addresses only, no network."""
+
+    PAGE = (
+        "Ad: Joe's Plumbing Supply — 55 Fake Ave, Nowhere, GA 30000. "
+        "Mercedes-Benz USA headquarters: One Mercedes-Benz Drive, "
+        "Sandy Springs, GA 30328."
+    )
+
+    def test_accepts_address_adjacent_to_company_name(self, monkeypatch):
+        monkeypatch.setattr(cert, "_fetch_page", lambda url: self.PAGE)
+        found = cert._ddg_search_address("Mercedes-Benz USA")
+        assert found and found[0]["street"] == "One Mercedes-Benz Drive"
+        assert found[0]["zip"] == "30328"
+
+    def test_rejects_page_with_only_unrelated_addresses(self, monkeypatch):
+        monkeypatch.setattr(cert, "_fetch_page", lambda url: self.PAGE)
+        assert cert._ddg_search_address("Globex") is None
+
+    def test_fetch_failure_is_silent(self, monkeypatch):
+        def boom(url):
+            raise RuntimeError("blocked")
+        monkeypatch.setattr(cert, "_fetch_page", boom)
+        assert cert._ddg_search_address("Mercedes-Benz USA") is None
+
+
+class TestFacadeDispatch:
+    """tools/certification.py uses postponed annotations — the consolidated
+    dispatcher must still coerce facade strings to real types."""
+
+    def test_override_fields_json_string_through_facade(self, workspace):
+        from tools import consolidated
+        out = consolidated.certification(
+            action="employer_override", name="Acme",
+            fields='{"street": "1 Main St", "city": "Atlanta",'
+                   ' "state": "GA", "zip": "30303"}',
+        )
+        assert out.startswith("✓")
+
+    def test_activity_kinds_csv_becomes_list_not_characters(self, workspace):
+        from tools import consolidated
+        out = consolidated.certification(
+            action="state_profile", mode="set",
+            accepted_activity_kinds="application_submitted,interview_attended",
+        )
+        assert out.startswith("✓")
+        kinds = cert.get_state_profile()["accepted_activity_kinds"]
+        assert kinds == ["application_submitted", "interview_attended"]

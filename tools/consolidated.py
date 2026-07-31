@@ -274,7 +274,13 @@ def _run(domain: str, action: str, params: dict) -> str:
             f"Valid actions: {', '.join(actions)}."
         )
     fn = spec[0]
-    sig = inspect.signature(fn)
+    try:
+        # eval_str resolves postponed annotations — target modules using
+        # `from __future__ import annotations` otherwise present their types
+        # as strings ('dict | None') and silently dodge coercion.
+        sig = inspect.signature(fn, eval_str=True)
+    except Exception:  # noqa: BLE001 — unresolvable hints coerce nothing, as before
+        sig = inspect.signature(fn)
     provided = {}
     for k, v in params.items():
         if k == "action" or v is None or k not in sig.parameters:

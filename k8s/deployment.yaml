@@ -137,6 +137,15 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
+            # SerpAPI key for employer-address enrichment (certification tool)
+            # and job scraping. Optional: without it, enrichment falls back to
+            # website scraping and the keyless DDG search.
+            - name: SERPAPI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: serpapi_key
+                  optional: true
             # Oura Ring OAuth client credentials. Optional: when absent the
             # connect flow shows "not enabled" instead of erroring. Add the
             # keys to jcmcp-app-secrets and restart to turn it on.
