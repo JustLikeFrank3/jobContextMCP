@@ -83,6 +83,15 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     TableSpec("rejections", "append", ("company", "role", "logged_at")),
     TableSpec("health_log", "append", ("timestamp", "date")),
     TableSpec("linkedin_posts", "append", ("timestamp", "posted_date", "title")),
+    # Employer directory rows are corrected over time (verification, manual
+    # override) — upsert so fixes propagate; canonical_name is the key the
+    # alias matcher resolves to.
+    TableSpec("employer_directory", "upsert", ("canonical_name",)),
+    # Certification reports are immutable snapshots; a regeneration or swap
+    # is a NEW (week_ending, version) row, so append semantics hold. The one
+    # post-freeze mutation (exports_json audit appends) is machine-local
+    # metadata and intentionally does not re-journal.
+    TableSpec("certification_report", "append", ("week_ending", "version")),
 )
 
 _SPECS_BY_NAME = {s.name: s for s in TABLE_SPECS}

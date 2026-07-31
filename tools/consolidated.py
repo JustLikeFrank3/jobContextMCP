@@ -27,6 +27,7 @@ import types
 from typing import Literal, get_args, get_origin, Union
 
 from tools import (
+    certification as certification_mod,
     compensation,
     context,
     crossref,
@@ -172,6 +173,15 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     "workspace": {
         "check": (setup.check_workspace, "Diagnose what's present/missing (read-only)."),
         "setup": (setup.setup_workspace, "Create/complete the workspace from your details."),
+    },
+    "certification": {
+        "weekly_report": (certification_mod.weekly_certification_report, "Derive, enrich, rank, and freeze this week's work-search report."),
+        "list_reports": (certification_mod.list_certification_reports, "History of frozen weekly reports."),
+        "export": (certification_mod.export_certification_report, "Render a frozen report for the claim portal."),
+        "swap_entry": (certification_mod.swap_certification_entry, "Replace an entry with an alternate (new version)."),
+        "employer_lookup": (certification_mod.lookup_employer, "Read/refresh one employer directory row."),
+        "employer_override": (certification_mod.override_employer, "Manually correct an employer (locks the row)."),
+        "state_profile": (certification_mod.certification_state_profile, "Read/update the state's certification rules."),
     },
 }
 
@@ -552,6 +562,28 @@ def workspace(
     return _run("workspace", action, locals())
 
 
+def certification(
+    action: Literal["weekly_report", "list_reports", "export", "swap_entry", "employer_lookup", "employer_override", "state_profile"],
+    week_ending: str | None = None,
+    limit: int | None = None,
+    report_id: int | None = None,
+    format: str | None = None,
+    out_entry: int | None = None,
+    in_entry: str | None = None,
+    name: str | None = None,
+    fields: str | None = None,
+    mode: str | None = None,
+    state: str | None = None,
+    min_activities_per_week: int | None = None,
+    week_ends_on: str | None = None,
+    accepted_activity_kinds: str | None = None,
+    counts_inbound_recruiter: bool | None = None,
+    counts_materials_prep: bool | None = None,
+) -> str:
+    """Weekly work-search certification: frozen weekly reports derived from logged events, employer address directory, portal-ready exports, and per-state rules."""
+    return _run("certification", action, locals())
+
+
 # MCP tool name → facade. interviews/people shadow imported modules, hence
 # the _tool suffix on the functions; the registered names stay clean.
 FACADES: dict[str, object] = {
@@ -566,6 +598,7 @@ FACADES: dict[str, object] = {
     "brand": brand,
     "insights": insights,
     "workspace": workspace,
+    "certification": certification,
 }
 
 

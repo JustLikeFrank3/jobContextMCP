@@ -64,6 +64,7 @@ const MOCK = {
     date: '',
     items: [],
   },
+  certification: null,
 }
 
 /* Keyboard-accessible click wrapper for the dashboard's cards. Hover gives
@@ -727,6 +728,42 @@ export default function Home() {
               {isDesktop ? 'Start with the assistant' : 'Get started'} {'→'}
             </div>
           </Actionable>
+
+          {/* weekly work-search certification — only renders once the feature
+              is configured (null payload otherwise). Amber when under target:
+              a Wednesday "2/3" beats a Sunday compliance surprise. */}
+          {data.certification && (
+            <Actionable
+              onGo={() => navigate('/certification')}
+              title="Open Certification"
+              style={{
+                borderRadius: 16,
+                padding: 18,
+                background: data.certification.onTrack ? 'rgba(111,211,160,.06)' : 'rgba(255,180,0,.07)',
+                border: data.certification.onTrack ? '1px solid rgba(111,211,160,.2)' : '1px solid rgba(255,180,0,.28)',
+              }}
+              hoverStyle={{ border: '1px solid rgba(0,181,200,.34)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+                  background: data.certification.onTrack ? '#6FD3A0' : 'var(--warn)',
+                }} />
+                <span style={{
+                  ...MONO_EYEBROW,
+                  color: data.certification.onTrack ? '#6FD3A0' : 'var(--warn)',
+                }}>
+                  Work-search certification
+                </span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.4 }}>
+                {data.certification.label} · week ending {data.certification.weekEnding}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: 'var(--cyan-300)' }}>
+                {data.certification.onTrack ? 'Review the week' : 'See what still counts'} {'→'}
+              </div>
+            </Actionable>
+          )}
         </div>
       </div>
 
