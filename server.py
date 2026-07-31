@@ -65,6 +65,7 @@ from tools import (
     job_queue,
     job_scraper,
     github,
+    certification,
 )
 
 
@@ -78,6 +79,7 @@ def _sync_config_exports() -> None:
     global ACHIEVEMENTS, FEEDBACK_RECEIVED, SKILLS_SHORTER
     global INTERVIEW_PREP_FOLDER, JOB_QUEUE_FILE, EVAL_RESULTS_FILE
     global JOB_ASSESSMENTS_FOLDER, SERPAPI_KEY, LATEX_RESUME_DIR, OWNER_OID, APP_ENCRYPTION_KEY
+    global STATE_PROFILE_FILE, CERTIFICATION_AUDIT_FILE
 
     _cfg = config._cfg
 
@@ -120,6 +122,8 @@ def _sync_config_exports() -> None:
     OWNER_OID = config.OWNER_OID
     APP_ENCRYPTION_KEY = config.APP_ENCRYPTION_KEY
     LATEX_RESUME_DIR = config.LATEX_RESUME_DIR
+    STATE_PROFILE_FILE = config.STATE_PROFILE_FILE
+    CERTIFICATION_AUDIT_FILE = config.CERTIFICATION_AUDIT_FILE
 
 
 def _reconfigure(cfg: dict) -> None:
@@ -191,6 +195,7 @@ if os.getenv("JOBCONTEXT_LEGACY_TOOLS", "").strip().lower() in ("1", "true", "ye
     setup.register(mcp)
     job_scraper.register(mcp)
     github.register(mcp)
+    certification.register(mcp)
 else:
     from tools import consolidated
 
@@ -330,11 +335,26 @@ get_github_stats = github.get_github_stats
 refresh_portfolio_metrics = github.refresh_portfolio_metrics
 get_portfolio_metrics = github.get_portfolio_metrics
 
+weekly_certification_report = certification.weekly_certification_report
+list_certification_reports = certification.list_certification_reports
+export_certification_report = certification.export_certification_report
+swap_certification_entry = certification.swap_certification_entry
+lookup_employer = certification.lookup_employer
+override_employer = certification.override_employer
+certification_state_profile = certification.certification_state_profile
+get_state_profile = certification.get_state_profile
+is_configured = certification.is_configured
+derive_activities = certification.derive_activities
+select_entries = certification.select_entries
+employer_of_record = certification.employer_of_record
+enrich_employer = certification.enrich_employer
+current_week_ending = certification.current_week_ending
+
 _TOOL_MODULES = [
     session, job_hunt, resume, fitment, interview, interviews, project_scanner,
     health, context, tone, rag, star, outreach, export, generate,
     langgraph_pipeline, people, posts, rejections, digest, compensation,
-    ingest, hbdi, crossref, job_queue, setup, job_scraper, github,
+    ingest, hbdi, crossref, job_queue, setup, job_scraper, github, certification,
 ]
 
 

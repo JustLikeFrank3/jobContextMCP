@@ -48,6 +48,7 @@ CHAT_TOOL_ALLOWLIST: tuple[str, ...] = (
     "people",
     "stories",
     "wellbeing",
+    "certification",
     "brand",
     "insights",
     "workspace",

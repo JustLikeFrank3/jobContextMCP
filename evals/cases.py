@@ -178,6 +178,16 @@ CASES: tuple[EvalCase, ...] = (
         min_length=5, tags=("network", "read-only"),
         notes="Open-web search; excluded from default runs.",
     ),
+    EvalCase(
+        id="TC-023", tool="certification", action="list_reports",
+        min_length=3, tags=("smoke", "read-only"),
+        notes="Must not error before any weekly report exists.",
+    ),
+    EvalCase(
+        id="TC-024", tool="certification", action="state_profile",
+        contains_all=("CERTIFICATION PROFILE",), tags=("smoke", "read-only"),
+        notes="GA defaults render without a saved state_profile.json.",
+    ),
 )
 
 

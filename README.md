@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
   <img src="https://img.shields.io/badge/tests-1606%20passing-brightgreen" alt="1606 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-11%20domains%20%C2%B7%2088%20actions-informational" alt="11 domain tools, 88 actions"/>
+  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%2095%20actions-informational" alt="12 domain tools, 95 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -38,7 +38,7 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 | | |
 |---|---|
-| 11 MCP tools | 88 domain actions behind them |
+| 12 MCP tools | 95 domain actions behind them |
 | 1606 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
@@ -156,7 +156,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-11 consolidated domain tools, 88 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 95 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|

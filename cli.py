@@ -50,7 +50,7 @@ def _discover_tools() -> dict[str, callable]:
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
         rejections, digest, compensation, ingest, hbdi, crossref,
-        github, job_scraper, job_queue,
+        github, job_scraper, job_queue, certification,
     )
     collector = _Collector()
     for mod in [
@@ -58,7 +58,7 @@ def _discover_tools() -> dict[str, callable]:
         project_scanner, health, context, tone, rag, star,
         outreach, export, people, generate, setup, posts,
         rejections, digest, compensation, ingest, hbdi, crossref,
-        github, job_scraper, job_queue,
+        github, job_scraper, job_queue, certification,
     ]:
         mod.register(collector)
     return collector._tools

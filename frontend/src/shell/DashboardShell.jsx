@@ -28,6 +28,7 @@ const SECONDARY_NAV = [
   { label: 'Job Hunt', key: 'job-hunt' },
   { label: 'Materials', key: 'materials' },
   { label: 'Rejections', key: 'rejections' },
+  { label: 'Certification', key: 'certification' },
   { label: 'API Keys', key: 'api-keys' },
 ]
 
@@ -49,6 +50,7 @@ const PAGE_META = {
   chat: ['Chat', 'Ask about your job search — answers come from your local data'],
   settings: ['Settings', 'API keys, integrations (Oura ring) & account preferences'],
   'api-keys': ['API Keys', 'Personal access tokens for MCP clients'],
+  certification: ['Certification', 'Weekly work-search reports for your unemployment claim'],
 }
 
 const keyToPath = (key) => (key === 'home' ? '/' : `/${key}`)
@@ -86,7 +88,12 @@ export default function DashboardShell() {
   const narrow = useNarrowViewport()
   const [slotNode, setSlotNode] = useState(null)
 
-  const secondary = isDesktop ? [...SECONDARY_NAV.slice(0, 3), CHAT_ITEM, SECONDARY_NAV[3]] : SECONDARY_NAV
+  // Desktop splices Chat in ahead of API Keys; anchor by key, not index, so
+  // adding a TOOLS entry can't silently drop the tail of the list.
+  const apiKeysIdx = SECONDARY_NAV.findIndex((i) => i.key === 'api-keys')
+  const secondary = isDesktop
+    ? [...SECONDARY_NAV.slice(0, apiKeysIdx), CHAT_ITEM, ...SECONDARY_NAV.slice(apiKeysIdx)]
+    : SECONDARY_NAV
   const allItems = [...PRIMARY_NAV, ...secondary, { label: 'Settings', key: 'settings' }]
   const tab = pathToKey(location.pathname)
   const [title, subtitle] = PAGE_META[tab] || [allItems.find((t) => t.key === tab)?.label || '', '']

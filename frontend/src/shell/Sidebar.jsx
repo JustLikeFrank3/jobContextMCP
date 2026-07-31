@@ -25,6 +25,7 @@ const ICONS = {
   rejections: <g><circle cx="12" cy="12" r="8" /><path d="M9.5 9.5l5 5 M14.5 9.5l-5 5" /></g>,
   chat: <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4Z" />,
   'api-keys': <g><circle cx="8" cy="14" r="4" /><path d="M11 11 L20 4 M16 7l2.5 2.5 M13 10l2 2" /></g>,
+  certification: <g><rect x="5" y="3.5" width="14" height="17" rx="2" /><path d="M9 8h6 M9 11.5h6 M9 15l1.6 1.6L14 13.2" /></g>,
 }
 
 function NavIcon({ name }) {
