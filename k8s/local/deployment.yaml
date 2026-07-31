@@ -90,6 +90,12 @@ spec:
                   name: jcmcp-local-app-secrets
                   key: llm_api_key
                   optional: true
+            - name: SERPAPI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-local-app-secrets
+                  key: serpapi_key
+                  optional: true
             - name: OURA_CLIENT_ID
               valueFrom:
                 secretKeyRef:
