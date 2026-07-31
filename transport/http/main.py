@@ -20,6 +20,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
 )
+# httpx logs every request line at INFO with the full URL — for SerpAPI that
+# is the api_key in a query param. Errors still surface via callers' logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 app = create_app(mcp=_server.mcp)
