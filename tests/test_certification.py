@@ -374,6 +374,14 @@ class TestEnrichmentFixes:
         )
         assert match and match.group("street") == "One Mercedes-Benz Drive"
 
+    def test_address_regex_accepts_plaza(self):
+        # Real corporate HQs SerpAPI actually returns: State Farm's is a Plaza.
+        match = cert._ADDRESS_RE.search(
+            "Headquarters: One State Farm Plaza, Bloomington, IL 61710"
+        )
+        assert match and match.group("street") == "One State Farm Plaza"
+        assert match.group("zip") == "61710"
+
     def test_alias_activities_merge_into_one(self, workspace):
         _write_interviews([])
         _write_status([
