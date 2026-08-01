@@ -43,8 +43,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      # The whole suite, live_llm included — those tests bring their own mocked
+      # client (they only opt out of the autouse offline stub), so nothing here
+      # touches the network and the gate gets a few more tests for free. Running
+      # the same selection the badges want means it measures once, not twice.
       - name: Run tests
-        run: pytest -m "not live_llm" --cov --cov-report=xml
+        run: pytest --cov --cov-report=xml --junitxml=junit.xml
 
       # Layer 1 smoke gate (evals/): every non-network eval case runs against
       # an isolated throwaway workspace with fully verbose per-case logging
@@ -52,6 +56,16 @@ jobs:
       # <95% exits non-zero — this job fails and the deploy jobs never run.
       - name: Layer 1 smoke gate (verbose)
         run: python scripts/ci_smoke_gate.py
+
+      - name: Upload measurements for the badge job
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-measurements
+          path: |
+            junit.xml
+            coverage.xml
+          if-no-files-found: error
+          retention-days: 1
 
   badges:
     needs: test
@@ -72,11 +86,18 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Runtime deps only — this job no longer runs pytest, it just needs to
+      # `import server` to count the MCP tools.
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements.txt
 
-      - name: Measure suite (full, including mocked live_llm)
-        run: pytest --cov --cov-report=xml --junitxml=junit.xml -q
+      # The suite already ran in `test`; re-running it here cost ~90s and, more
+      # to the point, widened the window in which concurrent badge jobs collide
+      # on the push below.
+      - name: Fetch measurements from the test job
+        uses: actions/download-artifact@v4
+        with:
+          name: suite-measurements
 
       - name: Regenerate README badges
         run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md --resume-section templates/latex_assets/sections/experience.tex
