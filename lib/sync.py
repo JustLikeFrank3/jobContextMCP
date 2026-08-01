@@ -101,6 +101,23 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     TableSpec("rejections", "append", ("company", "role", "logged_at")),
     TableSpec("health_log", "append", ("timestamp", "date")),
     TableSpec("linkedin_posts", "append", ("timestamp", "posted_date", "title")),
+    # personal_context.json's three tables. Stories are corrected in place
+    # (update_personal_story) so they upsert; the natural key is creation
+    # time + title because the integer id is a per-replica max()+1 counter
+    # that collides across peers. A retitle therefore lands as a new row on
+    # the peer — the lesser evil against keying on timestamp alone, where any
+    # row with an empty timestamp would swallow every other such row.
+    TableSpec("stories", "upsert", ("timestamp", "title")),
+    # star_stories.id is a hand-authored TEXT slug (star_001…), stable across
+    # replicas — so it IS the key and must travel rather than being excluded.
+    TableSpec("star_stories", "upsert", ("id",), exclude=()),
+    # The HBDI profile is a singleton blob in personal_context.json with no
+    # relational shape; personal_profile is its key/value home.
+    TableSpec("personal_profile", "upsert", ("key",)),
+    # Tone samples are immutable once logged — no update tool exists, and
+    # re-saving the file rewrites identical rows — so append semantics keep
+    # the journal quiet and dedupe replays.
+    TableSpec("tone_samples", "append", ("timestamp", "source")),
     # Employer directory rows are corrected over time (verification, manual
     # override) — upsert so fixes propagate; canonical_name is the key the
     # alias matcher resolves to.
@@ -205,18 +222,27 @@ def _backfill_journal(con) -> None:
     them at now-time once; the guard key makes this idempotent. Runs before
     any pull can apply (ensure precedes every engine call), so pre-existing
     local state wins LWW against older peer timestamps.
+
+    The guard is PER TABLE (``journal_backfill:<table>``). It used to be one
+    global flag, which meant every existing install had already "done" the
+    backfill — so a table registered in TABLE_SPECS later (stories,
+    star_stories, tone_samples) would never backfill, and the whole
+    pre-existing library stayed invisible to export until something happened
+    to rewrite each row. Re-running a table's backfill is harmless: the
+    NOT EXISTS clause only journals rows that have no entry at all.
     """
-    done = con.execute(
-        "SELECT value FROM sync_meta WHERE key = 'journal_backfill_v1'"
-    ).fetchone()
-    if done:
-        return
+    done = {
+        row[0].split(":", 1)[1]
+        for row in con.execute(
+            "SELECT key FROM sync_meta WHERE key LIKE 'journal_backfill:%'"
+        ).fetchall()
+    }
     existing = {
         r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     ts = _now_ts()
     for spec in TABLE_SPECS:
-        if spec.name not in existing:
+        if spec.name not in existing or spec.name in done:
             continue
         nk_expr = "json_array(" + ", ".join(f"t.{c}" for c in spec.identity) + ")"
         op = "upsert" if spec.kind == "upsert" else "insert"
@@ -229,9 +255,10 @@ def _backfill_journal(con) -> None:
                 )""",
             (ts,),
         )
-    con.execute(
-        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('journal_backfill_v1', ?)", (ts,)
-    )
+        con.execute(
+            "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
+            (f"journal_backfill:{spec.name}", ts),
+        )
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────

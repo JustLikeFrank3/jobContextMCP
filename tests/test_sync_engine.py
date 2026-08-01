@@ -176,7 +176,7 @@ def test_backfill_journals_pretrigger_rows(replicas):
                 "VALUES ('2026-07-01T09:00:00', 'PreSync Co', 'SWE', '2026-07-01', 'recruiter_screen')"
             )
             con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
-            con.execute("DELETE FROM sync_meta WHERE key = 'journal_backfill_v1'")
+            con.execute("DELETE FROM sync_meta WHERE key LIKE 'journal_backfill:%'")
             con.commit()
         # Next connection re-runs ensure_sync_schema → backfill.
         batch = _export()
@@ -274,6 +274,282 @@ def test_export_converts_vanished_upsert_to_delete(replicas):
             con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
         batch = _export()
         assert batch["changes"][0]["op"] == "delete"
+
+
+# ── personal context + tone samples ────────────────────────────────────────────
+#
+# These tables are mapped in lib/io_sqlite.py but were missing from TABLE_SPECS,
+# so they never row-synced. They can't travel by file sync either: the desktop
+# runs SQLITE_ONLY=1 (never writes the JSON) and nothing imports a received
+# JSON back into SQLite. Net effect was silent staleness in both directions.
+
+def _log_story(title="Migration weekend", ts="2026-07-08T09:00:00.123456"):
+    with db.get_connection() as con:
+        con.execute(
+            "INSERT INTO stories (timestamp, title, story, tags, people) "
+            "VALUES (?, ?, 'We cut over 400 services in one weekend.', '[\"cloud\"]', '[]')",
+            (ts, title),
+        )
+
+
+def _log_tone(source="cover_letter_acme", ts="2026-07-08T10:00:00.654321"):
+    with db.get_connection() as con:
+        con.execute(
+            "INSERT INTO tone_samples (timestamp, source, context, text, word_count) "
+            "VALUES (?, ?, 'ctx', 'I write like this, plainly.', 5)",
+            (ts, source),
+        )
+
+
+def test_personal_story_roundtrip_desktop_to_cloud(replicas):
+    desktop, cloud = replicas
+    with desktop:
+        _log_story()
+        batch = _export()
+        assert any(c["tbl"] == "stories" for c in batch["changes"]), batch
+    with cloud:
+        stats = _apply(batch["changes"])
+        assert stats["applied"] >= 1, stats
+        assert _rows("SELECT title FROM stories") == [{"title": "Migration weekend"}]
+
+
+def test_personal_story_edit_syncs(replicas):
+    """update_personal_story rewrites the row in place — the edit must travel."""
+    desktop, cloud = replicas
+    with desktop:
+        _log_story()
+        first = _export()
+    with cloud:
+        _apply(first["changes"])
+    time.sleep(0.01)
+    with desktop:
+        with db.get_connection() as con:
+            con.execute("UPDATE stories SET story = 'Corrected: 420 services.'")
+        second = _export(since=first["last_id"])
+        assert second["changes"], "story UPDATE must journal"
+    with cloud:
+        assert _apply(second["changes"])["applied"] == 1
+        assert _rows("SELECT story FROM stories") == [
+            {"story": "Corrected: 420 services."}
+        ]
+
+
+def test_personal_story_delete_propagates(replicas):
+    """delete_personal_story drops the entry from the payload; the save handler
+    must prune the row so the delete journals and reaches the peer (otherwise
+    the ghost row is re-pushed forever)."""
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr("lib.io._USE_SQLITE", True)
+    monkey.setattr("lib.io._SQLITE_ONLY", True)
+    desktop, cloud = replicas
+    try:
+        with desktop:
+            monkey.setattr(cfg, "PERSONAL_CONTEXT_FILE", desktop.root / "personal_context.json")
+            from tools.context import delete_personal_story, log_personal_story
+
+            log_personal_story("Keep me.", ["a"], title="Keeper")
+            log_personal_story("Logged by mistake.", ["b"], title="Oops")
+            first = _export()
+        with cloud:
+            _apply(first["changes"])
+            assert len(_rows("SELECT id FROM stories")) == 2
+        time.sleep(0.01)
+        with desktop:
+            oops = next(
+                r["id"] for r in _rows("SELECT id, title FROM stories") if r["title"] == "Oops"
+            )
+            delete_personal_story(oops)
+            assert [r["title"] for r in _rows("SELECT title FROM stories")] == ["Keeper"]
+            second = _export(since=first["last_id"])
+            assert any(c["op"] == "delete" for c in second["changes"]), second
+        with cloud:
+            _apply(second["changes"])
+            assert [r["title"] for r in _rows("SELECT title FROM stories")] == ["Keeper"]
+    finally:
+        monkey.undo()
+
+
+def test_backfill_is_per_table_so_a_newly_specced_table_still_lands(replicas):
+    """The upgrade path for stories/star_stories/tone_samples.
+
+    Every existing install had already recorded "backfill done" under the old
+    single global key. With a per-table guard, a table registered in
+    TABLE_SPECS later still backfills on its first ensure — otherwise the whole
+    pre-existing story library stays invisible to export.
+    """
+    desktop, _ = replicas
+    with desktop:
+        with db.get_connection() as con:
+            # A story from before these tables were specced: no trigger, no
+            # journal entry — but every OTHER table is already marked done.
+            con.execute("UPDATE sync_state SET applying = 1 WHERE id = 1")
+            con.execute(
+                "INSERT INTO stories (timestamp, title, story) "
+                "VALUES ('2026-07-01T09:00:00', 'Legacy story', 'Predates the spec.')"
+            )
+            con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
+            con.execute("DELETE FROM sync_log")
+            con.execute("DELETE FROM sync_meta WHERE key = 'journal_backfill:stories'")
+            con.commit()
+        # Next connection re-runs ensure_sync_schema → backfills stories only.
+        batch = _export()
+        assert any(
+            c["tbl"] == "stories" and (c["row"] or {}).get("title") == "Legacy story"
+            for c in batch["changes"]
+        ), batch
+
+
+def test_star_story_roundtrip_keeps_its_slug_id(replicas):
+    """star_stories.id is a hand-authored TEXT slug — stable across replicas,
+    so it is the natural key and must survive the trip (unlike the integer
+    rowids everywhere else, which are machine-local)."""
+    desktop, cloud = replicas
+    with desktop:
+        with db.get_connection() as con:
+            con.execute(
+                "INSERT INTO star_stories (id, title, tags, situation, result) "
+                "VALUES ('star_001', 'Prod outage', '[\"incident\"]', 'DB at 100%', 'Inside SLA')"
+            )
+        batch = _export()
+    with cloud:
+        assert _apply(batch["changes"])["applied"] >= 1
+        assert _rows("SELECT id, title FROM star_stories") == [
+            {"id": "star_001", "title": "Prod outage"}
+        ]
+
+
+def test_tone_sample_roundtrip_desktop_to_cloud(replicas):
+    desktop, cloud = replicas
+    with desktop:
+        _log_tone()
+        batch = _export()
+        assert any(c["tbl"] == "tone_samples" for c in batch["changes"]), batch
+    with cloud:
+        assert _apply(batch["changes"])["applied"] >= 1
+        assert _rows("SELECT source FROM tone_samples") == [
+            {"source": "cover_letter_acme"}
+        ]
+
+
+def test_tone_samples_dedupe_on_replay(replicas):
+    """Samples are immutable once logged — a replayed batch must not duplicate."""
+    desktop, cloud = replicas
+    with desktop:
+        _log_tone()
+        batch = _export()
+    with cloud:
+        assert _apply(batch["changes"])["applied"] == 1
+        stats = _apply(batch["changes"])
+        assert stats["applied"] == 0 and stats["skipped_dupe"] == 1, stats
+        assert len(_rows("SELECT id FROM tone_samples")) == 1
+
+
+def test_desktop_tool_writes_reach_the_peer(replicas, monkeypatch):
+    """End-to-end through the real tool write path in desktop mode.
+
+    Desktop is SQLITE_ONLY: log_personal_story/log_tone_sample write SQLite and
+    no JSON at all, so the JSON file is not just stale — it is absent. This is
+    why file sync could never have carried this data.
+    """
+    monkeypatch.setattr("lib.io._USE_SQLITE", True)
+    monkeypatch.setattr("lib.io._SQLITE_ONLY", True)
+    desktop, cloud = replicas
+
+    with desktop:
+        monkeypatch.setattr(cfg, "PERSONAL_CONTEXT_FILE", desktop.root / "personal_context.json")
+        monkeypatch.setattr(cfg, "TONE_FILE", desktop.root / "tone_samples.json")
+        from tools.context import log_personal_story
+        from tools.tone import log_tone_sample
+
+        log_personal_story("I led the cutover.", ["leadership"], title="Cutover")
+        log_tone_sample("Plain, direct, no filler.", "outreach_note")
+        # The JSON files the file-sync leg would have carried are never written.
+        assert not cfg.PERSONAL_CONTEXT_FILE.exists()
+        assert not cfg.TONE_FILE.exists()
+        batch = _export()
+
+    with cloud:
+        _apply(batch["changes"])
+        assert _rows("SELECT title FROM stories") == [{"title": "Cutover"}]
+        assert _rows("SELECT source FROM tone_samples") == [{"source": "outreach_note"}]
+
+
+def test_hbdi_profile_roundtrip(replicas, monkeypatch):
+    """The HBDI profile is a singleton blob inside personal_context.json.
+
+    It had no SQLite home at all, so on desktop (SQLITE_ONLY) an assessment was
+    written nowhere: run_hbdi_assessment reported success and get_hbdi_profile
+    then answered "No HBDI profile found."
+    """
+    monkeypatch.setattr("lib.io._USE_SQLITE", True)
+    monkeypatch.setattr("lib.io._SQLITE_ONLY", True)
+    desktop, cloud = replicas
+
+    with desktop:
+        monkeypatch.setattr(cfg, "PERSONAL_CONTEXT_FILE", desktop.root / "personal_context.json")
+        from lib.io import _load_json, _save_json
+
+        data = _load_json(cfg.PERSONAL_CONTEXT_FILE, {"stories": []})
+        data["hbdi_profile"] = {"primary": "D", "scores": {"A": 3, "B": 2, "C": 2, "D": 4}}
+        _save_json(cfg.PERSONAL_CONTEXT_FILE, data)
+        # Survives the write → read cycle locally...
+        assert _load_json(cfg.PERSONAL_CONTEXT_FILE, {})["hbdi_profile"]["primary"] == "D"
+        batch = _export()
+
+    with cloud:
+        monkeypatch.setattr(cfg, "PERSONAL_CONTEXT_FILE", cloud.root / "personal_context.json")
+        from lib.io import _load_json as _load
+
+        _apply(batch["changes"])
+        # ...and reaches the peer.
+        assert _load(cfg.PERSONAL_CONTEXT_FILE, {}).get("hbdi_profile", {}).get("primary") == "D"
+
+
+def test_tone_sample_ids_never_collide_with_pulled_rows():
+    """New sample ids come from max()+1, not the sample count.
+
+    A pulled sample lands on a locally assigned rowid, so count and highest id
+    diverge — and _save_tone upserts ON CONFLICT(id), which would then
+    overwrite an existing sample instead of appending.
+    """
+    from lib.helpers import _build_tone_sample_entry
+
+    existing = [{"id": 7}, {"id": 9}]  # ids from a peer; only two rows
+    assert _build_tone_sample_entry(existing, "text", "src", "")["id"] == 10
+    assert _build_tone_sample_entry([], "text", "src", "")["id"] == 1
+
+
+def test_every_sqlite_mapped_table_row_syncs():
+    """Self-maintaining drift guard.
+
+    A table that lib/io_sqlite.py reads or writes holds the SQLite copy of a
+    mapped JSON file. If it is missing from TABLE_SPECS it never row-syncs —
+    and it cannot fall back to file sync either, because SQLITE_ONLY means the
+    JSON is never written and nothing imports a received JSON back into
+    SQLite. That was exactly the personal_context/tone_samples hole.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    src = _Path(sync.__file__).with_name("io_sqlite.py").read_text(encoding="utf-8")
+    referenced = {
+        m.group(1)
+        for m in re.finditer(
+            r"(?:INSERT\s+INTO|(?:SELECT\s.*?\s)?FROM|UPDATE(?!\s+SET))"
+            r"\s+([A-Za-z_][A-Za-z0-9_]*)",
+            src,
+        )
+    }
+    # Non-table matches from Python source (imports, f-string placeholders).
+    referenced -= {"lib", "typing", "pathlib", "table", "__future__"}
+    spec_names = {s.name for s in sync.TABLE_SPECS}
+
+    missing = sorted(referenced - spec_names)
+    assert not missing, (
+        f"io_sqlite touches {missing} but they are absent from TABLE_SPECS — "
+        "those tables would silently never sync; add a TableSpec with a "
+        "replica-stable natural key"
+    )
 
 
 # ── file sync planning ─────────────────────────────────────────────────────────

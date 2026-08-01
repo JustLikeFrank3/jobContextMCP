@@ -4,8 +4,10 @@ How data is stored, partitioned, synced, and backed up. Derived from `lib/db.py`
 
 ## Three storage tiers
 
-1. **SQLite** — one DB per partition at `<DATA_FOLDER>/db/jobcontextmcp.db` (WAL mode, foreign keys on). Core relational tables: applications, application_events, job_queue, people, interviews, rejections, tone_samples, health_log, linkedin_posts, stories, star_stories, plus user_api_keys (global DB), oura_readiness/oura_tokens, chat_sessions/chat_messages, generation_provenance, master_resume_edits, work_items, and the sync journal.
+1. **SQLite** — one DB per partition at `<DATA_FOLDER>/db/jobcontextmcp.db` (WAL mode, foreign keys on). Core relational tables: applications, application_events, job_queue, people, interviews, rejections, tone_samples, health_log, linkedin_posts, stories, star_stories, personal_profile, plus user_api_keys (global DB), oura_readiness/oura_tokens, chat_sessions/chat_messages, generation_provenance, master_resume_edits, work_items, and the sync journal.
 2. **JSON documents** — flat files under `DATA_FOLDER` (`status.json`, `people.json`, `job_queue.json`, `interviews.json`, `eval_results.json`, …). Nine of them have SQLite handlers; the rest are JSON-only.
+
+Every field of a mapped file needs a SQLite home. Under `SQLITE_ONLY` the JSON leg is skipped entirely, so a field with no column is not merely stale on disk — it is never written anywhere. `hbdi_profile`, a singleton blob inside `personal_context.json`, was that case until `personal_profile` (a key/value table) gave it one.
 3. **Workspace flat files** — the numbered directory tree (`01-Current-Optimized` … `09-Cover-Letter-PDFs`, `leetcode/`): resumes, cover letters, PDFs, reference materials, prep docs.
 
 ### SQLite ⇄ JSON switching
@@ -33,9 +35,10 @@ Background work never inherits ambient context: the control plane (`lib/work.py`
 
 Journal-based bidirectional sync (`lib/sync.py`), configured on the desktop with `cloud_sync_url` + `cloud_sync_pat` (a `jcmcp_` PAT from the dashboard); auto-sync runs every 15 minutes when enabled.
 
-- **Journal**: AFTER-triggers on synced tables write to `sync_log`; no application write path changes. Applying remote changes flips an `applying` flag the triggers check, preventing echo loops.
-- **Row semantics**: upsert tables (applications, job_queue, people, interviews, oura_readiness) resolve conflicts last-writer-wins by timestamp, deletes travel as tombstones; append tables (application_events, rejections, health_log, linkedin_posts) are insert-if-absent so replays dedupe by construction.
-- **Cross-replica identity**: integer ids never leave the machine — rows are identified by natural keys; child rows carry the parent's natural key and re-resolve on apply.
+- **Journal**: AFTER-triggers on synced tables write to `sync_log`; no application write path changes. Applying remote changes flips an `applying` flag the triggers check, preventing echo loops. Rows predating a table's triggers are journaled once by a backfill, guarded per table (`sync_meta` key `journal_backfill:<table>`) so a table added to `TABLE_SPECS` later still backfills on installs that already ran an earlier backfill.
+- **Row semantics**: upsert tables (applications, job_queue, people, interviews, oura_readiness, stories, star_stories, personal_profile) resolve conflicts last-writer-wins by timestamp, deletes travel as tombstones; append tables (application_events, rejections, health_log, linkedin_posts, tone_samples) are insert-if-absent so replays dedupe by construction.
+- **Cross-replica identity**: integer ids never leave the machine — rows are identified by natural keys; child rows carry the parent's natural key and re-resolve on apply. `star_stories` is the exception: its id is a hand-authored TEXT slug, stable everywhere, so it *is* the key and travels.
+- **Coverage is the gap to watch**: a table mapped in `lib/io_sqlite.py` but missing from `TABLE_SPECS` silently never syncs, and file sync cannot cover for it (under `SQLITE_ONLY` the JSON is never written, and a JSON received by file sync is never imported back into SQLite). `test_every_sqlite_mapped_table_row_syncs` fails on that drift.
 - **File sync**: sha256 manifest diff against a baseline; changed-both-sides conflicts keep the remote copy as a `" (sync conflict from cloud)"` sibling instead of overwriting. Manifest keys are always POSIX-separated (a Windows peer would otherwise fork every key and re-transfer the workspace both ways). Databases, `config.json`, backups, and index artifacts stay machine-local; per-file transfer errors skip-and-report rather than wedging the pass.
 - **Contact block**: `config.json` never syncs, so the `contact` block is exchanged separately, fill-empty-only in both directions.
 
