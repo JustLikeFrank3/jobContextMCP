@@ -312,7 +312,7 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
 
     def add(kind: str, company: str, position: str, date: str, method: str,
             contact: str, result: str, source_ids: list[str],
-            website_hint: str = "") -> None:
+            website_hint: str = "", logged_at: str = "") -> None:
         if kind not in accepted or not company.strip():
             return
         primary = source_ids[0]
@@ -339,6 +339,9 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
                 return
         activities.append({
             "website_hint": website_hint,
+            # When the record was WRITTEN (not when the event happened) — two
+            # records of one event are usually logged minutes apart.
+            "logged_at": logged_at,
             "kind": kind,
             "strength": _KIND_STRENGTH.get(kind, 9),
             "employer": company.strip(),
@@ -377,6 +380,7 @@ def derive_activities(start: datetime.date, end: datetime.date, profile: dict) -
             str(iv.get("interviewer", "") or ""),
             "Interview completed",
             [_event_id("interview", iv.get("timestamp", ""), iv.get("company", ""), iv.get("role", ""))],
+            logged_at=str(iv.get("timestamp", "") or ""),
         )
 
     # 2. Application events.
@@ -836,6 +840,54 @@ def _entry_payload(activity: dict, directory_row: dict) -> dict:
     return entry
 
 
+def _logged_hours_apart(entries: list[dict]) -> "float | None":
+    """Hours between the earliest and latest *logging* time in a group."""
+    stamps = []
+    for e in entries:
+        raw = str(e.get("logged_at", "") or "").strip()[:16]
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+            try:
+                stamps.append(datetime.datetime.strptime(raw, fmt))
+                break
+            except ValueError:
+                continue
+    if len(stamps) < 2:
+        return None
+    return (max(stamps) - min(stamps)).total_seconds() / 3600
+
+
+def _duplicate_warnings(activities: list[dict]) -> list[str]:
+    """Flag one employer contributing the same activity kind twice in a week.
+
+    A second interview round is a real, countable activity; the same event
+    logged twice is not — and only a human knows which. So this never drops
+    an entry, it makes the collision impossible to file by accident. Two
+    records written minutes apart is the tell for a double-log, so say so.
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for act in activities:
+        groups.setdefault((act["employer"].casefold(), act["kind"]), []).append(act)
+    warnings = []
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        dates = ", ".join(sorted(a["date"] for a in group))
+        apart = _logged_hours_apart(group)
+        tell = ""
+        if apart is not None and apart <= 24:
+            when = f"{int(apart)}h" if apart >= 1 else f"{int(apart * 60)}min"
+            tell = (
+                f" — and both records were written within {when} of each other,"
+                " which usually means one event logged twice"
+            )
+        warnings.append(
+            f"DUPLICATE? {group[0]['employer']}: {len(group)} × "
+            f"{group[0]['kind'].replace('_', ' ')} in one week ({dates}){tell}. "
+            "Confirm they are distinct events — a state may count them as one."
+        )
+    return warnings
+
+
 def _audit_append(record: dict) -> None:
     """Dual-write JSON audit trail beside the SQLite rows."""
     data = _load_json(config.CERTIFICATION_AUDIT_FILE, {"reports": []})
@@ -928,6 +980,7 @@ def weekly_certification_report(week_ending: str = "") -> str:
         {k: a[k] for k in ("kind", "employer", "position", "date", "method", "contact", "result", "source_event_ids")}
         for a in alternates
     ]
+    gaps.extend(_duplicate_warnings(picked))
     if len(entries) < target:
         gaps.insert(
             0,

@@ -502,6 +502,60 @@ class TestSubmission:
         assert next(r for r in data["reports"] if r["id"] == rid)["submitted"] is True
 
 
+class TestDuplicateDetection:
+    """One employer, one activity kind, twice in a week — flag, never drop."""
+
+    def _iv(self, date, logged, role="AI Native Engineer", interviewer="Venky"):
+        return {
+            "timestamp": logged, "company": "Accenture", "role": role,
+            "interview_date": date, "interview_type": "hiring_manager",
+            "interview_format": "video", "interviewer": interviewer,
+        }
+
+    def test_same_event_logged_twice_is_flagged_with_the_tell(self, workspace, monkeypatch):
+        # The real shape: two records written an hour apart, different dates.
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-23 18:57", role="AI Native Engineer / ATC"),
+            self._iv(_iso(IN_WEEK - datetime.timedelta(days=1)), "2026-07-23 19:57"),
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        out = cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+        assert "DUPLICATE?" in out and "Accenture" in out
+        assert "within 1h of each other" in out
+        # Flagged, never silently dropped — both entries still appear.
+        assert out.count("Accenture") >= 2
+
+    def test_distinct_rounds_logged_days_apart_get_no_tell(self, workspace, monkeypatch):
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-21 10:00"),
+            self._iv(_iso(IN_WEEK - datetime.timedelta(days=2)), "2026-07-23 10:00"),
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        out = cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+        assert "DUPLICATE?" in out          # still worth a human look
+        assert "logged twice" not in out    # but no false accusation
+
+    def test_distinct_employers_are_never_flagged(self, workspace, monkeypatch):
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-23 18:57"),
+            {**self._iv(_iso(IN_WEEK), "2026-07-23 18:58"), "company": "Globex"},
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        assert "DUPLICATE?" not in cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+
+
 class TestDdgFallback:
     """Keyless search fallback: company-adjacent addresses only, no network."""
 
