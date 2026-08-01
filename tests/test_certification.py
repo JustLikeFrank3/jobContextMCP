@@ -458,6 +458,35 @@ class TestSubmission:
         )
         assert out.startswith("✓") and "GA-42" in out
 
+    def test_archive_week_opens_without_a_stamp(self, http_client_noauth, monkeypatch):
+        """Reviewing a week is how you decide what to file, so an unfiled week
+        must still resolve to a report — it opens the NEWEST frozen version."""
+        _write_interviews([])
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        first = _freeze_week(monkeypatch)
+        newest = _freeze_week(monkeypatch)
+        assert newest != first
+        data = http_client_noauth.get("/dashboard/certification/data").json()
+        week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
+        assert week["submittedVersion"] is None
+        assert week["reportId"] == newest
+        assert week["openVersion"] == 2
+        assert week["versions"] == 2
+
+    def test_archive_week_opens_the_filed_version_when_stamped(
+        self, http_client_noauth, monkeypatch
+    ):
+        """Once a week is filed, it opens the FILED version, not the newest —
+        the filed record is what matters after the fact."""
+        _write_interviews([])
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        filed = _freeze_week(monkeypatch)
+        _freeze_week(monkeypatch)  # a later regeneration must not steal the link
+        cert.mark_certification_submitted(filed, "GA-9")
+        data = http_client_noauth.get("/dashboard/certification/data").json()
+        week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
+        assert week["reportId"] == filed and week["openVersion"] == 1
+
     def test_submit_endpoint_and_archive(self, http_client_noauth, monkeypatch):
         _write_interviews([])
         _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
