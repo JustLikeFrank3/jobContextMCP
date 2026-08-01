@@ -778,6 +778,53 @@ def test_save_event_append_only(monkeypatch, tmp_path):
     assert len(result["applications"][0]["events"]) == 2
 
 
+def test_save_back_dated_event_out_of_order_roundtrips(monkeypatch, tmp_path):
+    """A back-dated event appended after a newer one must survive the trip.
+
+    _save_status inserts events by COUNT offset (``events[existing:]``), so
+    the writer is order-dependent, not date-dependent: the late arrival is
+    picked up because it is LAST in the list, and the loader re-reads by row
+    id.  Nothing may sort the list by date in between, or the offset would
+    re-insert the wrong slice.
+    """
+    import lib.db as db_mod
+    import lib.config as config
+    from lib.io_sqlite import save_to_sqlite, load_from_sqlite
+
+    db = _make_db(tmp_path)
+    monkeypatch.setattr(db_mod, "db_path", lambda: db)
+    monkeypatch.setattr(config, "DATA_FOLDER", tmp_path)
+    monkeypatch.setattr(config, "STATUS_FILE", tmp_path / "status.json")
+
+    data = {
+        "last_updated": "2026-08-01",
+        "applications": [{
+            "company": "Acme", "role": "SWE", "status": "phone_screen",
+            "events": [
+                {"type": "phone_screen", "notes": "logged live", "date": "2026-08-01 09:00"},
+            ],
+        }],
+    }
+    save_to_sqlite(tmp_path / "status.json", data)
+
+    # Logged on 8/1 but it happened 7/29 — appended last despite being oldest.
+    data["applications"][0]["events"].append(
+        {"type": "follow_up_sent", "notes": "thank-you note", "date": "2026-07-29"}
+    )
+    save_to_sqlite(tmp_path / "status.json", data)
+    # A third save with no new events must not re-insert the back-dated one.
+    save_to_sqlite(tmp_path / "status.json", data)
+
+    events = load_from_sqlite(tmp_path / "status.json", {})["applications"][0]["events"]
+    assert [e["type"] for e in events] == ["phone_screen", "follow_up_sent"]
+    assert events[1]["date"] == "2026-07-29"
+
+    rows = sqlite3.connect(db).execute(
+        "SELECT date FROM application_events ORDER BY id"
+    ).fetchall()
+    assert [r[0] for r in rows] == ["2026-08-01 09:00", "2026-07-29"]
+
+
 def test_save_job_queue_sync_deletes_removed_jobs(monkeypatch, tmp_path):
     """_save_job_queue performs sync-delete — omitting a job from the payload
     removes it from the DB.  This is what makes the /pipeline/remove endpoint

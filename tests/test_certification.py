@@ -115,6 +115,27 @@ class TestDerivation:
         acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
         assert acts[0]["result"] == f"Not selected, notified {_iso(AFTER_WEEK)}"
 
+    def test_back_dated_event_files_under_the_week_it_happened(self, workspace):
+        """The reason log_application_event takes a date: an activity logged
+        days late must land in the week it actually happened, not the week it
+        was typed.  Without the back-date it would fall outside this window
+        entirely — silently, and on a state filing."""
+        srv.update_application("LateLogCo", "SWE", "applied")
+        srv.log_application_event(
+            "LateLogCo", "SWE", "follow_up_sent", "thank-you note",
+            date=_iso(IN_WEEK),
+        )
+        acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
+        assert [(a["employer"], a["date"]) for a in acts] == [("LateLogCo", _iso(IN_WEEK))]
+
+    def test_event_logged_today_is_absent_from_the_earlier_week(self, workspace):
+        """Control for the test above: same call without a date defaults to
+        now, which is outside the (past) reporting window."""
+        srv.update_application("LateLogCo", "SWE", "applied")
+        srv.log_application_event("LateLogCo", "SWE", "follow_up_sent", "thank-you note")
+        acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
+        assert acts == []
+
 
 # ── selection ────────────────────────────────────────────────────────────────
 
