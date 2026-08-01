@@ -14,10 +14,17 @@ Two table classes:
 - **upsert** tables (applications, job_queue, people, oura_readiness): identified
   by a natural key; conflicts resolve last-writer-wins by journal timestamp.
   Deletes travel as tombstone entries.
-- **append** tables (interviews, application_events, rejections, health_log,
+- **append** tables (application_events, rejections, health_log,
   linkedin_posts): rows are immutable observations; identity is the JSON of
   their identity columns and apply is insert-if-absent, so replays dedupe by
-  construction. Deletes are not synced.
+  construction. Deletes are not synced — and note the dedupe check runs
+  first, so an incoming delete for a row that still exists locally is
+  skipped as a duplicate rather than applied.
+
+``interviews`` is an **upsert** table despite reading like an append log:
+a debrief gets corrected and re-saved, and a mis-logged one has to be
+removable. TABLE_SPECS is the authority on a table's class — this list is
+prose and has been wrong before.
 
 Applying remote changes must not journal as *local* changes (echo loop): the
 apply transaction flips ``sync_state.applying`` which every trigger checks —

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, List, Row, fmtDate,
 } from './_shared.jsx'
@@ -98,6 +98,14 @@ export default function Certification() {
   const selectedMeta = reports.find((r) => r.id === reportId)
   const weekStamp = archive.find((w) => w.weekEnding === report?.weekEnding)
 
+  // The archive sits below the report it drives, so a click there would
+  // otherwise change something off-screen and read as "nothing happened".
+  const reportRef = useRef(null)
+  const openWeek = (id) => {
+    setReportId(id)
+    reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const under = progress && progress.logged < progress.target
 
   return (
@@ -167,7 +175,7 @@ export default function Certification() {
       )}
 
       {report && (
-        <>
+        <div ref={reportRef}>
           <SectionHead
             title={`Week ending ${report.weekEnding} — v${report.version}`}
             right={`generated ${report.generatedAt}`}
@@ -253,7 +261,7 @@ export default function Certification() {
               </List>
             </>
           )}
-        </>
+        </div>
       )}
       {archive.length > 0 && (
         <>
@@ -266,14 +274,14 @@ export default function Certification() {
                 subtitle={
                   w.submittedVersion != null
                     ? `filed v${w.submittedVersion} · ${w.submittedAt?.slice(0, 16) || ''}${w.confirmation ? ` · confirmation ${w.confirmation}` : ''}`
-                    : `${w.versions} frozen version${w.versions === 1 ? '' : 's'} — none marked as filed`
+                    : `${w.versions} frozen version${w.versions === 1 ? '' : 's'} — none marked as filed · open v${w.openVersion} →`
                 }
                 right={
                   w.submittedVersion != null
                     ? <Badge tone="green">★ filed</Badge>
                     : <Badge tone="warn">not filed</Badge>
                 }
-                onClick={w.reportId != null ? () => setReportId(w.reportId) : undefined}
+                onClick={w.reportId != null ? () => openWeek(w.reportId) : undefined}
               />
             ))}
           </List>

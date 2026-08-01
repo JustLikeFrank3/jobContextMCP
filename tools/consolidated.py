@@ -324,6 +324,7 @@ def applications(
     next_steps: str | None = None,
     contact: str | None = None,
     event_type: str | None = None,
+    date: str | None = None,
     auto_save: bool | None = None,
     filename: str | None = None,
     content: str | None = None,
