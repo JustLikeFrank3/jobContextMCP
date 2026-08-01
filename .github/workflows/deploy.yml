@@ -81,18 +81,41 @@ jobs:
       - name: Regenerate README badges
         run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md --resume-section templates/latex_assets/sections/experience.tex
 
+      # Several PRs merging to qa/main inside a couple of minutes put their
+      # badge jobs in a footrace for this push, and the losers used to die on
+      # "! [rejected] HEAD -> qa (fetch first)" — painting a run red whose
+      # tests and deploy both passed. So: regenerate on top of whoever won and
+      # try again. The regenerator is idempotent and rewrites only the stat
+      # fields in place, so replaying it after resetting to the new tip keeps
+      # any README prose that arrived on the winning push, and it recounts
+      # tools against that tip too. If the winner already published identical
+      # numbers there is nothing left to commit and we exit clean.
       - name: Commit badge changes if any
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
           FILES="README.md templates/latex_assets/sections/experience.tex"
-          if git diff --quiet -- $FILES; then
-            echo "README badges & resume stats already current — nothing to commit."
-            exit 0
-          fi
+          REGEN="python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md --resume-section templates/latex_assets/sections/experience.tex"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add $FILES
-          git commit -m "docs: auto-update README badges & resume stats [skip ci]"
-          git push origin HEAD:${{ github.ref_name }}
+          for attempt in 1 2 3 4 5; do
+            if git diff --quiet -- $FILES; then
+              echo "README badges & resume stats already current — nothing to commit."
+              exit 0
+            fi
+            git add $FILES
+            git commit -m "docs: auto-update README badges & resume stats [skip ci]"
+            if git push origin HEAD:"$BRANCH"; then
+              echo "Pushed badge update on attempt $attempt."
+              exit 0
+            fi
+            echo "Push rejected — another badge job reached $BRANCH first. Rebuilding on the new tip (attempt $attempt)."
+            git fetch origin "$BRANCH"
+            git reset --hard FETCH_HEAD
+            $REGEN
+          done
+          echo "::error::Could not push the badge update after 5 attempts."
+          exit 1
 
   build-and-deploy:
     needs: test
