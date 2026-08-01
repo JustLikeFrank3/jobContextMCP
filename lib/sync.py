@@ -51,9 +51,27 @@ _LOG = logging.getLogger(__name__)
 
 _TS_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
+# How long an apply may hold the journal-suppression flag before a later
+# process treats it as abandoned. Applies are one bounded transaction
+# (<= 2000 rows), so minutes is generous; the cost of guessing too low is a
+# few echoed journal entries that LWW/dedupe absorb, while guessing too high
+# leaves the partition silently unable to publish ANY change.
+_APPLY_LEASE_SECONDS = 300
+
 
 def _now_ts() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime(_TS_FMT)
+
+
+def _ts_age_seconds(ts: str) -> "float | None":
+    """Seconds since a journal timestamp, or None if it can't be parsed."""
+    try:
+        when = datetime.datetime.strptime(ts, _TS_FMT).replace(
+            tzinfo=datetime.timezone.utc
+        )
+    except (TypeError, ValueError):
+        return None
+    return (datetime.datetime.now(datetime.timezone.utc) - when).total_seconds()
 
 
 @dataclass(frozen=True)
@@ -118,6 +136,9 @@ def ensure_sync_schema(con) -> None:
     con.execute("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY CHECK (id = 1), applying INTEGER NOT NULL DEFAULT 0)")
     con.execute("INSERT OR IGNORE INTO sync_state (id, applying) VALUES (1, 0)")
     con.execute("CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    if "applying_since" not in {r[1] for r in con.execute("PRAGMA table_info(sync_state)")}:
+        con.execute("ALTER TABLE sync_state ADD COLUMN applying_since TEXT NOT NULL DEFAULT ''")
+    _release_stale_apply_lease(con)
 
     existing = {
         r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -144,6 +165,35 @@ def ensure_sync_schema(con) -> None:
                     END"""
             )
     _backfill_journal(con)
+
+
+def _release_stale_apply_lease(con) -> None:
+    """Clear ``applying`` when the process that set it never came back.
+
+    ``apply_changes`` restores the flag in a finally, which a SIGKILL skips —
+    a pod restart or crash mid-apply therefore leaves it set forever. Every
+    journal trigger is gated on ``applying = 0``, so a stuck flag silently
+    stops the partition from journaling ANY local write: exports go empty,
+    peers pull zero rows, and every status line still reads "ok". Recovering
+    on a lease expiry turns a permanent silent wedge into a bounded one.
+    """
+    row = con.execute("SELECT applying, applying_since FROM sync_state WHERE id = 1").fetchone()
+    if row is None or not row[0]:
+        return
+    age = _ts_age_seconds(row[1] or "")
+    if age is not None and age < _APPLY_LEASE_SECONDS:
+        return  # a real apply is in flight
+    con.execute("UPDATE sync_state SET applying = 0, applying_since = '' WHERE id = 1")
+    con.execute(
+        "INSERT INTO sync_meta (key, value) VALUES ('last_stale_apply_release', ?)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (_now_ts(),),
+    )
+    _LOG.warning(
+        "sync: cleared a stale apply lease (held %s) — an apply died mid-flight and "
+        "local writes since then were NOT journaled; peers may be missing them",
+        f"{int(age)}s" if age is not None else "since an unknown time",
+    )
 
 
 def _backfill_journal(con) -> None:
@@ -289,7 +339,11 @@ def apply_changes(con, changes: list[dict]) -> dict:
         (c for c in changes if c.get("tbl") in _SPECS_BY_NAME),
         key=lambda c: (order[c["tbl"]], c.get("ts") or ""),
     )
-    con.execute("UPDATE sync_state SET applying = 1 WHERE id = 1")
+    # Stamp the lease so a crash mid-apply is recoverable — without the
+    # timestamp a killed process leaves journaling off permanently.
+    con.execute(
+        "UPDATE sync_state SET applying = 1, applying_since = ? WHERE id = 1", (_now_ts(),)
+    )
     try:
         for change in batch:
             try:
@@ -298,7 +352,7 @@ def apply_changes(con, changes: list[dict]) -> dict:
                 stats.errors.append(f"{change.get('tbl')}/{change.get('nk')}: {exc}")
         con.commit()
     finally:
-        con.execute("UPDATE sync_state SET applying = 0 WHERE id = 1")
+        con.execute("UPDATE sync_state SET applying = 0, applying_since = '' WHERE id = 1")
         con.commit()
     return stats.as_dict()
 
