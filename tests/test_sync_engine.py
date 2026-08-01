@@ -652,3 +652,62 @@ def test_manual_override_propagates_over_auto_row(replicas):
         )
         assert rows == [{"street": "75 5th St NW", "manual_override": 1}]
         assert stats["applied"] >= 1
+
+
+def _set_apply_flag(applying, since):
+    with db.get_connection() as con:
+        con.execute(
+            "UPDATE sync_state SET applying = ?, applying_since = ? WHERE id = 1",
+            (applying, since),
+        )
+
+
+def _flag():
+    with db.get_connection() as con:
+        return con.execute("SELECT applying FROM sync_state WHERE id = 1").fetchone()[0]
+
+
+def test_stale_apply_lease_is_released_and_journaling_resumes(replicas):
+    """A crash mid-apply (SIGKILL skips the finally) leaves `applying` set, and
+    every journal trigger is gated on it — so the partition silently stops
+    publishing ANY local write. The lease must expire and journaling resume."""
+    desktop, _ = replicas
+    with desktop:
+        _write_job(company="Before")
+        stale = "2020-01-01T00:00:00.000Z"
+        _set_apply_flag(1, stale)
+        # Opening a connection runs ensure_sync_schema, which reaps the lease.
+        assert _flag() == 0
+        _write_job(company="After")
+        journaled = _rows(
+            "SELECT nk FROM sync_log WHERE tbl = 'job_queue' AND origin = 'local'"
+        )
+        assert any("After" in r["nk"] for r in journaled), journaled
+        assert _rows("SELECT value FROM sync_meta WHERE key='last_stale_apply_release'")
+
+
+def test_live_apply_lease_is_not_stolen(replicas):
+    """A genuinely in-flight apply keeps the flag — clearing it would let the
+    applying peer's writes journal as local and echo back."""
+    desktop, _ = replicas
+    with desktop:
+        _write_job()
+        _set_apply_flag(1, sync._now_ts())
+        assert _flag() == 1
+        _write_job(company="DuringApply")
+        assert not any(
+            "DuringApply" in r["nk"]
+            for r in _rows("SELECT nk FROM sync_log WHERE origin = 'local'")
+        )
+        _set_apply_flag(0, "")
+
+
+def test_apply_changes_stamps_and_clears_the_lease(replicas):
+    desktop, cloud = replicas
+    with desktop:
+        _write_job(company="Leased")
+        batch = _export()
+    with cloud:
+        _apply(batch["changes"])
+        row = _rows("SELECT applying, applying_since FROM sync_state WHERE id = 1")
+        assert row == [{"applying": 0, "applying_since": ""}]
