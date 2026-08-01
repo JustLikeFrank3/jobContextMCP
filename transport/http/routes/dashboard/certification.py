@@ -69,25 +69,28 @@ def _index_payload() -> dict:
             "generatedAt": row["generated_at"],
             "submitted": bool(stamp and stamp["version"] == row["version"]),
         })
-    # Archive: one line per week — what was (or wasn't) filed. The filed
-    # version is resolved back to a local report id when that row is present
-    # (sync peers may hold the stamp before the report row arrives).
+    # Archive: one line per week — what was (or wasn't) filed. Every week
+    # opens to a report: the filed version when one is stamped, otherwise the
+    # newest frozen version. Gating navigation on the stamp would mean a week
+    # could only be reviewed AFTER filing it, which is backwards — reviewing
+    # is how you decide what to file.
     weeks: dict[str, dict] = {}
-    for rep in reports:
+    for rep in reports:  # ordered week_ending DESC, version DESC
         wk = rep["weekEnding"]
         stamp = submitted.get(wk)
-        if wk not in weeks:
-            weeks[wk] = {
-                "weekEnding": wk,
-                "versions": 0,
-                "submittedVersion": stamp["version"] if stamp else None,
-                "submittedAt": stamp["submitted_at"] if stamp else "",
-                "confirmation": stamp["confirmation_number"] if stamp else "",
-                "reportId": None,
-            }
-        weeks[wk]["versions"] += 1
-        if stamp and rep["version"] == stamp["version"] and weeks[wk]["reportId"] is None:
-            weeks[wk]["reportId"] = rep["id"]
+        week = weeks.setdefault(wk, {
+            "weekEnding": wk,
+            "versions": 0,
+            "submittedVersion": stamp["version"] if stamp else None,
+            "submittedAt": stamp["submitted_at"] if stamp else "",
+            "confirmation": stamp["confirmation_number"] if stamp else "",
+            "reportId": rep["id"],       # newest version, until a stamp overrides
+            "openVersion": rep["version"],
+        })
+        week["versions"] += 1
+        if stamp and rep["version"] == stamp["version"]:
+            week["reportId"] = rep["id"]
+            week["openVersion"] = rep["version"]
     archive = sorted(weeks.values(), key=lambda w: w["weekEnding"], reverse=True)
     return {
         "configured": certification.is_configured(),
