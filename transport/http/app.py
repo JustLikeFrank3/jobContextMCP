@@ -11,6 +11,7 @@ Streamable HTTP transport at /mcp (used in http / AKS mode so VS Code
 can connect to the remote server via type:"http" in mcp.json).
 """
 
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -88,6 +89,46 @@ def _mount_spa(app: FastAPI) -> None:
     _logger.info("React SPA mounted at /app (dist=%s)", spa_dist)
 
 
+# Refresh well inside the PyJWKClient cache lifespan so the inline validation
+# path in EntraAuthProvider is always a cache hit and never makes a network
+# call on the event loop.
+_JWKS_REFRESH_SECONDS = 1800
+_JWKS_RETRY_SECONDS = 5
+
+
+def _start_jwks_warmer() -> "asyncio.Task | None":
+    """Keep Entra's signing keys cached, starting at boot.
+
+    The JWKS cache is process-local, so every new pod starts cold.  Fetching
+    it lazily on the first authenticated request meant that request paid a
+    blocking HTTPS round-trip on the event loop, and any hiccup during that
+    window surfaced to the client as a rejected credential.  Warming it here
+    — off the event loop, retrying until it lands — means the pod is simply
+    not Ready until it can verify a token (see /ready).
+
+    Returns None when Entra is not configured (local / API-key mode).
+    """
+    from lib.auth import jwks_ready, warm_jwks
+
+    if jwks_ready():  # Entra unconfigured — nothing to warm.
+        return None
+
+    async def _loop() -> None:
+        while True:
+            try:
+                # to_thread (not run_in_executor) — it copies the current
+                # context, so contextvars still propagate correctly.
+                await asyncio.to_thread(warm_jwks)
+            except Exception as exc:  # noqa: BLE001 — retry forever, stay un-Ready
+                _logger.warning("JWKS warm-up failed (%s); retrying in %ss", exc, _JWKS_RETRY_SECONDS)
+                await asyncio.sleep(_JWKS_RETRY_SECONDS)
+                continue
+            _logger.info("JWKS cached; token validation ready")
+            await asyncio.sleep(_JWKS_REFRESH_SECONDS)
+
+    return asyncio.create_task(_loop())
+
+
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Time every request; label by method + route TEMPLATE (bounded
     cardinality) + status. /metrics and /health are excluded as self-noise."""
@@ -127,7 +168,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: StarletteRequest, call_next):  # NOSONAR
-        from transport.http.security import get_auth_provider
+        from transport.http.security import AuthUnavailable, get_auth_provider
         from lib.user_context import set_data_folder, reset_data_folder, set_user_oid, reset_user_oid
         from lib.user_provisioning import provision_user_data
         import lib.config as _cfg_module
@@ -135,7 +176,18 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         provider = get_auth_provider()
         authorization = request.headers.get("Authorization")
         session = request.cookies.get("jc_session")
-        user = provider.authenticate_request(authorization, session)
+        # An AuthUnavailable means we could not CHECK the credential, which is
+        # not the same as "you are not authorised".  Remember that and decide
+        # below — after the public-path passthrough, because health, discovery
+        # and the OAuth routes must keep working during an Entra outage.  (If
+        # they didn't, liveness would fail and the kubelet would restart the
+        # pod, and a client could not re-run the OAuth flow to recover.)
+        auth_unavailable = False
+        try:
+            user = provider.authenticate_request(authorization, session)
+        except AuthUnavailable:
+            auth_unavailable = True
+            user = None
 
         # Diagnostic logging — helps trace auth failures in production.
         _logger.debug(
@@ -155,6 +207,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/setup",
             "/architecture",
             "/privacy",
+            "/ready",         # k8s readiness probe — no user data
             "/terms",            "/og-image",            "/logged-out",
             "/login",
             "/why",
@@ -199,6 +252,25 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         # so discovery and auth flows still work unauthenticated.
         if request.url.path == "/" or any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
+
+        # Protected path and we could not verify the credential: 503, not 401.
+        # A 401 + WWW-Authenticate tells a hosted MCP connector its token is
+        # dead and forces a manual reconnect; Retry-After tells it to try
+        # again with the credential it already holds.
+        if auth_unavailable:
+            _logger.warning(
+                "auth: unable to verify credential (path=%s) — returning 503",
+                request.url.path,
+            )
+            from starlette.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(
+                {
+                    "error": "service_unavailable",
+                    "message": "Unable to verify credentials right now; retry shortly.",
+                },
+                status_code=503,
+                headers={"Retry-After": "5"},
+            )
 
         # Dashboard HTML pages: redirect expired/missing sessions to the root
         # Redirect unauthenticated *browser* navigations to the landing page
@@ -257,6 +329,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         restore_gauges()
         nightly_evals_task = start_nightly_task()
         certification_task = start_weekly_task()
+        jwks_task = _start_jwks_warmer()
         try:
             if mcp_starlette is not None:
                 # The Starlette sub-app carries its own lifespan that initialises
@@ -271,6 +344,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
                 nightly_evals_task.cancel()
             if certification_task is not None:
                 certification_task.cancel()
+            if jwks_task is not None:
+                jwks_task.cancel()
             await _work.stop_dispatcher()
 
     app = FastAPI(

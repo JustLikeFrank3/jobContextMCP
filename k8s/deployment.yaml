@@ -7,6 +7,16 @@ metadata:
     app: jcmcp
 spec:
   replicas: 1
+  # Recreate is DELIBERATE and must stay. The datastore is SQLite on the
+  # ReadWriteOnce jcmcp-data PVC (Azure Disk) and, since SQLITE_ONLY=1, it is
+  # the sole source of truth. RollingUpdate with maxSurge>0 is unsafe in one
+  # direction and useless in the other: a surge pod co-scheduled on the node
+  # already holding the disk WOULD mount it and give two writers on one
+  # SQLite file, and a surge pod on any other node blocks in
+  # ContainerCreating until the disk detaches — a longer outage, not a
+  # shorter one. The connector no longer needs the server to stay up across
+  # a deploy (MCP runs stateless; see server.py), so the outage window is
+  # survivable without changing this.
   strategy:
     type: Recreate
   selector:
@@ -26,6 +36,9 @@ spec:
         prometheus.io/port: "8000"
     spec:
       serviceAccountName: jcmcp-workload-sa
+      # Let in-flight MCP calls finish instead of being cut mid-response when
+      # a deploy tears the pod down.
+      terminationGracePeriodSeconds: 45
       initContainers:
         - name: seed-workspace
           image: mcr.microsoft.com/azure-cli:2.61.0
@@ -182,18 +195,31 @@ spec:
             limits:
               cpu: "1000m"
               memory: "1Gi"
+          lifecycle:
+            preStop:
+              exec:
+                # Give the ingress time to pull this pod out of its upstream
+                # set before uvicorn stops accepting, so requests already in
+                # flight are not truncated.
+                command: ["sh", "-c", "sleep 5"]
+          # Liveness never checks a dependency: a transient Entra outage must
+          # not get the pod killed.
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
+          # Readiness DOES: /ready is 503 until the Entra JWKS is cached, so
+          # the ingress does not route to a pod that would answer a valid
+          # token with an auth error.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
           volumeMounts:
             - name: data
               mountPath: /app/data

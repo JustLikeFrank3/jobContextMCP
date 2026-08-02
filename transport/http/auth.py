@@ -7,7 +7,7 @@ single API key implementation.
 
 from fastapi import Cookie, Header, HTTPException, status
 
-from transport.http.security import User, get_auth_provider
+from transport.http.security import AuthUnavailable, User, get_auth_provider
 
 
 def require_authenticated_user(
@@ -20,7 +20,15 @@ def require_authenticated_user(
     handled by the active AuthProvider.
     """
     provider = get_auth_provider()
-    user = provider.authenticate_request(authorization=authorization, session_token=jc_session)
+    try:
+        user = provider.authenticate_request(authorization=authorization, session_token=jc_session)
+    except AuthUnavailable as exc:
+        # Could not check the credential — retryable, not a rejection.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to verify credentials right now; retry shortly.",
+            headers={"Retry-After": "5"},
+        ) from exc
     if user:
         return user
 

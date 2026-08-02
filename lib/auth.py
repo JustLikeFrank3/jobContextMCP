@@ -44,11 +44,56 @@ _PUBLIC_PATHS = frozenset({
 _jwks_client: PyJWKClient | None = None
 
 
+_JWKS_LIFESPAN = 3600
+
+# True once the JWKS has been fetched at least once.  The cache is
+# process-local, so this is False on every fresh pod until warm_jwks()
+# succeeds.  Readiness is gated on it (see transport/http/routes/health.py):
+# a pod that cannot yet verify a signature must not receive traffic, because
+# the only thing it can do with a valid token is reject it.
+_jwks_warm: bool = False
+
+
 def _get_jwks_client() -> PyJWKClient:
     global _jwks_client
     if _jwks_client is None:
-        _jwks_client = PyJWKClient(JWKS_URI, cache_jwk_set=True, lifespan=3600)
+        _jwks_client = PyJWKClient(JWKS_URI, cache_jwk_set=True, lifespan=_JWKS_LIFESPAN)
     return _jwks_client
+
+
+def jwks_ready() -> bool:
+    """Whether Entra's signing keys are cached and tokens can be verified.
+
+    Always True when Entra is not configured (local / API-key mode), where
+    there is no JWKS to fetch.
+    """
+    if not TENANT_ID or not CLIENT_ID:
+        return True
+    return _jwks_warm
+
+
+def warm_jwks() -> None:
+    """Fetch and cache Entra's signing keys.
+
+    Blocking (PyJWKClient uses urllib), so callers on the event loop must
+    hand this to a thread.  Raises on failure; the caller decides whether to
+    retry.
+
+    Always fetches (`refresh=True`) rather than accepting whatever is cached,
+    so a periodic call reliably resets the cache clock.  That is what keeps
+    the inline validation path a guaranteed cache hit — and therefore free of
+    network I/O on the event loop.
+    """
+    global _jwks_warm
+    _get_jwks_client().get_signing_keys(refresh=True)
+    _jwks_warm = True
+
+
+def _reset_jwks_state_for_tests() -> None:
+    """Drop the cached client and warm flag (tests only)."""
+    global _jwks_client, _jwks_warm
+    _jwks_client = None
+    _jwks_warm = False
 
 
 def validate_token(token: str) -> dict:
