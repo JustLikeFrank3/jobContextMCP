@@ -131,6 +131,71 @@ Three parts:
    and restarted. If Entra is genuinely down, the pod stays un-Ready and the
    ingress returns a retryable 503 instead of the pod handing out 401s.
 
+## Defect 2b — an unknown `kid` is not evidence either
+
+The fix above left one case sitting in the catch-all: a token whose `kid` is
+absent from the JWKS. PyJWT raises `PyJWKClientError` for it, which is **not**
+an `InvalidTokenError`, so it fell through to `except Exception` →
+`AuthUnavailable` → 503 on every attempt, forever. (In `server.py`'s legacy
+`EntraAuthMiddleware` path it was a 500.) Neither is right, and neither is the
+obvious alternative of calling it a 401.
+
+The case is genuinely ambiguous:
+
+- The token may be **foreign** — issued by another tenant, or forged. A 503
+  loop never tells that caller anything.
+- Entra may have just **rotated its signing keys**. `PyJWKClient` fetches over
+  plain `urllib` and Entra serves its JWKS through a CDN, so even a forced
+  re-fetch can be answered by an edge node still holding a pre-rotation copy.
+  No request we can make proves we have seen the newest key set.
+
+PyJWT's own `get_signing_key` does re-fetch on a miss before raising, so it is
+tempting to read the exception as "we looked again and it still isn't there,
+therefore it isn't ours". That inference does not hold — the second look can
+be served the same stale edge copy as the first.
+
+The costs are lopsided, which is the whole point. A wrong 401 carries
+`WWW-Authenticate`, which invalidates the MCP connector and makes the user
+reconnect by hand — the exact pain this document exists to remove. A wrong 503
+costs the client one automatic retry.
+
+### Fix — a ladder, not a verdict
+
+`lib/auth.py` resolves signing keys itself rather than calling
+`get_signing_key_from_jwt`, because it needs to know whether a fetch actually
+happened, when, and how often:
+
+1. Cache lookup. Hit → done, exactly as before.
+2. Miss → force a fetch (rate limited to one attempt per 10s, since `kid` is
+   attacker-chosen and each fetch is a blocking round-trip). Key now present →
+   the token was fine all along; the cached view was simply behind.
+3. Still missing → `SigningKeyUnavailable` → **503 + Retry-After**, and the
+   kid is recorded in a miss ledger.
+4. Same kid still missing from a freshly fetched key set **60s after its first
+   miss** → `InvalidTokenError` → **401**. A rotation self-heals inside that
+   window; a foreign token gets a definitive answer inside a minute.
+
+Freshness outranks the ladder: if the key set cannot be shown to have been
+fetched within the last 30s — the endpoint is unreachable, or nothing has ever
+been fetched successfully — the answer is 503 regardless of how long the kid
+has been missing. We do not reject on evidence we cannot date.
+
+Everything that is not a verdict stays retryable: connection errors, and
+`PyJWKClientError`s that mean "the endpoint returned no JSON object" or "no
+signing keys in the set" (issuer-side faults wearing the same exception type
+as a kid miss). A token carrying no `kid` at all is rejected immediately — no
+rotation can conjure a key for a token that names none.
+
+The ledger is deliberately small and bounded, because its keys come off an
+**unverified** token header: entries are keyed by SHA-256 digest (so one
+oversized `kid` cannot cost more than 64 bytes), capped at 256 with
+oldest-first eviction, and expire after 15 minutes. Losing an entry only costs
+that kid a fresh grace period — eviction can never manufacture a 401.
+
+Tunables live at the top of `lib/auth.py`: `_KID_PROPAGATION_GRACE`,
+`_FRESH_FETCH_WINDOW`, `_MIN_FORCED_FETCH_INTERVAL`, `_KID_MISS_TTL`,
+`_KID_MISS_MAX`.
+
 ## Why Recreate stays
 
 `replicas: 1` + `strategy: Recreate` means every deploy is a hard outage of
@@ -192,6 +257,11 @@ No reconnect.
   `JWKS warm-up failed (...); retrying` on failure.
 - A `503` with `Retry-After` in the client's logs means "could not verify" —
   look at Entra reachability. A `401` means the token really was rejected.
+- During a key rotation, `kid=… absent from a freshly fetched JWKS (Ns of 60s
+  grace)` at INFO is the ladder doing its job. The same kid reaching
+  `treating token as foreign` at WARNING means propagation took longer than
+  the grace period — raise `_KID_PROPAGATION_GRACE` if that ever happens for
+  a legitimate token.
 - `http_requests_total{route="/mcp",status="401"}` in Prometheus: any 401s on
   `/mcp` for a signed-in user are now a genuine credential problem, not
   infrastructure noise.

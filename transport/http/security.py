@@ -138,7 +138,7 @@ class EntraAuthProvider(AuthProvider):
         authorization: str | None,
         session_token: str | None,
     ) -> User | None:
-        from lib.auth import validate_token  # avoid circular at module load
+        from lib.auth import SigningKeyUnavailable, validate_token  # avoid circular at module load
 
         token = None
         if authorization:
@@ -164,6 +164,14 @@ class EntraAuthProvider(AuthProvider):
             # Could not reach Entra's JWKS endpoint — we have no idea whether
             # this token is good.  Never answer "invalid credentials" here.
             raise AuthUnavailable("Entra signing keys unreachable") from exc
+        except SigningKeyUnavailable as exc:
+            # The token's kid is not in the key set we hold.  Entra serves its
+            # JWKS through a CDN, so during a key rotation an edge can hand us
+            # a set that predates a perfectly good token's key.  lib.auth
+            # hardens a persistent miss into InvalidTokenError once it has
+            # outlasted any plausible propagation lag; until then this is
+            # "cannot check", not "invalid".
+            raise AuthUnavailable(str(exc)) from exc
         except InvalidTokenError:
             # Checked and genuinely bad: expired, malformed, wrong audience,
             # bad signature.
