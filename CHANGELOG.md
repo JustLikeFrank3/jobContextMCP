@@ -31,6 +31,7 @@ Versions through 1.4.0 predate this note; their section headings vary slightly.
 
 ### CI
 
+- **The README badge updater can no longer skip silently** -- the tools badge became `tools-12 domains · 96 actions` in a97f892 and `update_readme_badges.py` still looked for `badge/tools-<n>-`, so both the badge and its alt text stopped being generated; every run printed `::warning::... no match for: tools, tools badge alt` and the job stayed green, which is why nobody noticed for weeks. The badge had drifted: the action count moved to 96 when `certification.mark_submitted` landed in #181, while the README still said 95. The patterns now match the current form (and the TL;DR row's action count, previously unmanaged, is generated too), an unmatched pattern raises and exits 1 with `::error::` instead of warning, and `tests/test_update_readme_badges.py` runs every pattern against the real README.md and experience.tex so the next format change fails a named test before it reaches the badge job.
 - **`mcp<2` pinned** -- mcp 2.0.0 removed `mcp.server.fastmcp`, breaking test collection.
 
 ### Documentation
