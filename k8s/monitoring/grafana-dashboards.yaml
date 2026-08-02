@@ -282,7 +282,7 @@ data:
       {"id": 5, "type": "stat", "title": "Active alerts",
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 20, "y": 0, "w": 4, "h": 6},
-       "targets": [{"expr": "sum(eval_alert_count{namespace=\"jcmcp\"}) or vector(0)", "refId": "A", "instant": true}],
+       "targets": [{"expr": "sum(eval_alert_count{namespace=\"jcmcp\"}) or (0 * max(eval_last_run_timestamp_seconds{namespace=\"jcmcp\"}))", "refId": "A", "instant": true}],
        "fieldConfig": {"defaults": {"decimals": 0,
         "thresholds": {"steps": [{"color": "green", "value": null},
          {"color": "red", "value": 1}]}}}},
