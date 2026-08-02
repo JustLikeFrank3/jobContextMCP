@@ -9,8 +9,12 @@ upserts it into the appropriate SQLite table(s).
 
 Write strategy: DUAL-WRITE — _save_json() updates SQLite AND the JSON file.
 This keeps the JSON files as a human-readable audit trail and ensures unmapped
-files (scan_index.json, github_metrics.json, etc.) and singleton blobs like
-hbdi_profile are never silently lost. Phase 2 will drop the JSON write path.
+files (scan_index.json, github_metrics.json, etc.) are never silently lost.
+
+Every field of a MAPPED file must have a SQLite home, because SQLITE_ONLY=1
+(desktop, and the cloud from PR #188) skips the JSON leg entirely: a field
+that lives only in the JSON is not merely stale there, it is never written at
+all. hbdi_profile was exactly that hole until personal_profile gave it one.
 """
 from __future__ import annotations
 
@@ -272,12 +276,16 @@ def _load_personal_context(con) -> dict:
         for r in star_rows
     ]
 
-    # hbdi_profile is a singleton config blob, not a list — not yet in SQLite.
-    # Returning {} is safe: tools call data.get("hbdi_profile", {}) and handle it.
+    # hbdi_profile is a singleton blob, stored as one personal_profile row.
+    row = con.execute(
+        "SELECT value FROM personal_profile WHERE key = 'hbdi_profile'"
+    ).fetchone()
+    hbdi = _j(row["value"]) if row else {}
+
     return {
         "stories":      stories,
         "star_stories": star_stories,
-        "hbdi_profile": {},
+        "hbdi_profile": hbdi if isinstance(hbdi, dict) else {},
     }
 
 
@@ -681,6 +689,25 @@ def _save_linkedin_posts(con, data: dict) -> None:
         )
 
 
+def _prune_stale(con, table: str, id_col: str, keep: set) -> None:
+    """Delete rows of *table* whose id is absent from the incoming payload.
+
+    Ids are bound as parameters rather than interpolated into an IN clause
+    (Sonar S3649 / B608); *table* and *id_col* are call-site literals. Mirrors
+    _save_people. Without this, delete_personal_story() removed the entry from
+    the payload but left the row in SQLite — so the story came back on the next
+    read, and once these tables sync, the ghost row would be re-pushed to every
+    peer forever.
+    """
+    stale = [
+        (row[0],)
+        for row in con.execute(f"SELECT {id_col} FROM {table}")
+        if row[0] not in keep
+    ]
+    if stale:
+        con.executemany(f"DELETE FROM {table} WHERE {id_col} = ?", stale)
+
+
 def _save_personal_context(con, data: dict) -> None:
     for s in data.get("stories", []):
         con.execute(
@@ -719,8 +746,28 @@ def _save_personal_context(con, data: dict) -> None:
                 _js(s.get("framing_hints")), s.get("source"), s.get("notes"),
             ),
         )
-    # hbdi_profile is a singleton config blob — not stored in SQLite.
-    # The JSON write path in _save_json handles it via dual-write.
+
+    # Sync-delete: entries dropped from the payload must not linger.
+    story_ids = {s.get("id") for s in data.get("stories", []) if s.get("id") is not None}
+    if story_ids:
+        _prune_stale(con, "stories", "id", story_ids)
+    star_ids = {s.get("id") for s in data.get("star_stories", []) if s.get("id") is not None}
+    if star_ids:
+        _prune_stale(con, "star_stories", "id", star_ids)
+
+    # hbdi_profile — a singleton blob, one personal_profile row. Only written
+    # when the payload actually carries one: a caller that omits the key (or a
+    # legacy JSON file that predates the assessment) must not clear a profile
+    # the user already ran.
+    hbdi = data.get("hbdi_profile") or {}
+    if hbdi:
+        con.execute(
+            "INSERT INTO personal_profile (key, value, updated_at) "
+            "VALUES ('hbdi_profile', ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET "
+            "  value = excluded.value, updated_at = excluded.updated_at",
+            (_js(hbdi), str(hbdi.get("assessed_at", "") or "")),
+        )
 
 
 # ── Save dispatch table ────────────────────────────────────────────────────────

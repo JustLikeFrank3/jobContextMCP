@@ -193,6 +193,14 @@ CREATE TABLE star_stories (
     notes          TEXT
 );
 
+-- Singleton blobs from personal_context.json with no relational shape.
+CREATE TABLE personal_profile (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    key        TEXT    NOT NULL UNIQUE,   -- e.g. 'hbdi_profile'
+    value      TEXT    NOT NULL DEFAULT '{}',
+    updated_at TEXT    NOT NULL DEFAULT ''
+);
+
 -- ── Tier 3 — Reference / lookup ───────────────────────────────────────────────
 
 CREATE TABLE linkedin_connections (
@@ -523,6 +531,14 @@ def _personal_context(cur: sqlite3.Cursor) -> tuple[int, int]:
             for r in star
         ],
     )
+
+    hbdi = data.get("hbdi_profile") or {}
+    if hbdi:
+        cur.execute(
+            "INSERT OR REPLACE INTO personal_profile (key, value, updated_at) "
+            "VALUES ('hbdi_profile', ?, ?)",
+            (_j(hbdi), str(hbdi.get("assessed_at", "") or "")),
+        )
 
     return len(stories), len(star)
 

@@ -151,6 +151,11 @@ _SYNTH_DATA: dict[str, dict] = {
              "framing_hints": {"scale": "enterprise", "impact": "high"},
              "source": "direct", "notes": ""},
         ],
+        "hbdi_profile": {
+            "assessed_at": "2026-06-02 09:00",
+            "primary": "D",
+            "scores": {"A": 3, "B": 2, "C": 2, "D": 4},
+        },
     },
     "linkedin_posts.json": {
         "posts": [
@@ -229,7 +234,7 @@ def _count(con, table: str) -> int:
 EXPECTED_TABLES = [
     "applications", "application_events", "job_queue", "people",
     "interviews", "rejections", "tone_samples", "health_log",
-    "linkedin_posts", "stories", "star_stories",
+    "linkedin_posts", "stories", "star_stories", "personal_profile",
     "linkedin_connections", "contact_log", "contact_crossref",
 ]
 
@@ -603,6 +608,10 @@ def test_personal_context_stories_and_star_stories(sqlite_env, synth_dir):
     src = SYNTH["personal_context.json"]
     assert len(result["stories"]) >= len(src["stories"]) - 1
     assert len(result["star_stories"]) == len(src["star_stories"])
+    # hbdi_profile is a singleton blob — it migrates into personal_profile and
+    # must come back as a dict, not a JSON string (SQLITE_ONLY means the JSON
+    # file is not there to fall back on).
+    assert result["hbdi_profile"] == src["hbdi_profile"]
 
 
 def test_linkedin_posts_metrics_are_dicts(sqlite_env):
