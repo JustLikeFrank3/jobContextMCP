@@ -88,8 +88,13 @@ spec:
               value: "8"
             - name: USE_SQLITE
               value: "1"
+            # SQLite is the sole source of truth in the cloud. Reads already
+            # prefer it (lib/io._load_json); this stops the redundant JSON
+            # dual-write, which drifted from the tables and — because the
+            # data JSONs are ALSO file-synced — shipped that drift to peers
+            # as a second, competing channel. Desktop stays dual-write.
             - name: SQLITE_ONLY
-              value: "0"
+              value: "1"
             - name: ENABLE_REMOTE
               value: "true"
             # Required alongside ENABLE_REMOTE to disable the MCP SDK's

@@ -115,6 +115,27 @@ class TestDerivation:
         acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
         assert acts[0]["result"] == f"Not selected, notified {_iso(AFTER_WEEK)}"
 
+    def test_back_dated_event_files_under_the_week_it_happened(self, workspace):
+        """The reason log_application_event takes a date: an activity logged
+        days late must land in the week it actually happened, not the week it
+        was typed.  Without the back-date it would fall outside this window
+        entirely — silently, and on a state filing."""
+        srv.update_application("LateLogCo", "SWE", "applied")
+        srv.log_application_event(
+            "LateLogCo", "SWE", "follow_up_sent", "thank-you note",
+            date=_iso(IN_WEEK),
+        )
+        acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
+        assert [(a["employer"], a["date"]) for a in acts] == [("LateLogCo", _iso(IN_WEEK))]
+
+    def test_event_logged_today_is_absent_from_the_earlier_week(self, workspace):
+        """Control for the test above: same call without a date defaults to
+        now, which is outside the (past) reporting window."""
+        srv.update_application("LateLogCo", "SWE", "applied")
+        srv.log_application_event("LateLogCo", "SWE", "follow_up_sent", "thank-you note")
+        acts = cert.derive_activities(*cert._week_window(WEEK_END), cert.get_state_profile())
+        assert acts == []
+
 
 # ── selection ────────────────────────────────────────────────────────────────
 
@@ -458,6 +479,35 @@ class TestSubmission:
         )
         assert out.startswith("✓") and "GA-42" in out
 
+    def test_archive_week_opens_without_a_stamp(self, http_client_noauth, monkeypatch):
+        """Reviewing a week is how you decide what to file, so an unfiled week
+        must still resolve to a report — it opens the NEWEST frozen version."""
+        _write_interviews([])
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        first = _freeze_week(monkeypatch)
+        newest = _freeze_week(monkeypatch)
+        assert newest != first
+        data = http_client_noauth.get("/dashboard/certification/data").json()
+        week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
+        assert week["submittedVersion"] is None
+        assert week["reportId"] == newest
+        assert week["openVersion"] == 2
+        assert week["versions"] == 2
+
+    def test_archive_week_opens_the_filed_version_when_stamped(
+        self, http_client_noauth, monkeypatch
+    ):
+        """Once a week is filed, it opens the FILED version, not the newest —
+        the filed record is what matters after the fact."""
+        _write_interviews([])
+        _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
+        filed = _freeze_week(monkeypatch)
+        _freeze_week(monkeypatch)  # a later regeneration must not steal the link
+        cert.mark_certification_submitted(filed, "GA-9")
+        data = http_client_noauth.get("/dashboard/certification/data").json()
+        week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
+        assert week["reportId"] == filed and week["openVersion"] == 1
+
     def test_submit_endpoint_and_archive(self, http_client_noauth, monkeypatch):
         _write_interviews([])
         _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
@@ -471,6 +521,60 @@ class TestSubmission:
         week = next(w for w in data["archive"] if w["weekEnding"] == _iso(WEEK_END))
         assert week["submittedVersion"] == 1 and week["confirmation"] == "GA-1"
         assert next(r for r in data["reports"] if r["id"] == rid)["submitted"] is True
+
+
+class TestDuplicateDetection:
+    """One employer, one activity kind, twice in a week — flag, never drop."""
+
+    def _iv(self, date, logged, role="AI Native Engineer", interviewer="Venky"):
+        return {
+            "timestamp": logged, "company": "Accenture", "role": role,
+            "interview_date": date, "interview_type": "hiring_manager",
+            "interview_format": "video", "interviewer": interviewer,
+        }
+
+    def test_same_event_logged_twice_is_flagged_with_the_tell(self, workspace, monkeypatch):
+        # The real shape: two records written an hour apart, different dates.
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-23 18:57", role="AI Native Engineer / ATC"),
+            self._iv(_iso(IN_WEEK - datetime.timedelta(days=1)), "2026-07-23 19:57"),
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        out = cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+        assert "DUPLICATE?" in out and "Accenture" in out
+        assert "within 1h of each other" in out
+        # Flagged, never silently dropped — both entries still appear.
+        assert out.count("Accenture") >= 2
+
+    def test_distinct_rounds_logged_days_apart_get_no_tell(self, workspace, monkeypatch):
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-21 10:00"),
+            self._iv(_iso(IN_WEEK - datetime.timedelta(days=2)), "2026-07-23 10:00"),
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        out = cert.weekly_certification_report(week_ending=_iso(WEEK_END))
+        assert "DUPLICATE?" in out          # still worth a human look
+        assert "logged twice" not in out    # but no false accusation
+
+    def test_distinct_employers_are_never_flagged(self, workspace, monkeypatch):
+        _write_interviews([
+            self._iv(_iso(IN_WEEK), "2026-07-23 18:57"),
+            {**self._iv(_iso(IN_WEEK), "2026-07-23 18:58"), "company": "Globex"},
+        ])
+        _write_status([])
+        monkeypatch.setattr(
+            cert, "enrich_employer",
+            lambda name, website_hint="": {"canonical_name": name, "aliases": []},
+        )
+        assert "DUPLICATE?" not in cert.weekly_certification_report(week_ending=_iso(WEEK_END))
 
 
 class TestDdgFallback:

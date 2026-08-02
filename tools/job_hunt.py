@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 
 from lib import config
 from lib.io import _load_json, _save_json, _now
@@ -143,11 +143,41 @@ def update_application(
     return f"✓ {action}: {company} — {role} ({status})"
 
 
+def _normalize_event_date(raw: str) -> str:
+    """Resolve an event's stored date string, defaulting to now.
+
+    Back-dating matters because the weekly certification report (tools/
+    certification.py) buckets events into work-search weeks BY THIS FIELD —
+    an activity logged days after it happened otherwise files under the
+    wrong date, and under the wrong week entirely once the delay crosses
+    the week boundary.
+
+    Accepts 'YYYY-MM-DD' or a full ``_now()``-shaped 'YYYY-MM-DD HH:MM'
+    stamp and stores it verbatim (the report reads the first 10 chars).
+    Raises ValueError on an unparseable or future date.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return _now()
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        raise ValueError(
+            f"date must be YYYY-MM-DD (or 'YYYY-MM-DD HH:MM'), got {raw!r}."
+        ) from None
+    if parsed.date() > date.today():
+        raise ValueError(
+            f"date {raw!r} is in the future — events record what already happened."
+        )
+    return raw
+
+
 def log_application_event(
     company: str,
     role: str,
     event_type: str,
     notes: str = "",
+    date: str = "",
 ) -> str:
     """
     Append an event to a tracked application's event log.
@@ -162,10 +192,19 @@ def log_application_event(
                     'onsite', 'offer', 'rejected', 'withdrew', 'follow_up', 'note',
                     'referral_submitted', 'recruiter_contact', 'hiring_manager_contact'.
         notes:      Free-form detail about what happened.
+        date:       When it actually happened, 'YYYY-MM-DD'. Defaults to now.
+                    Pass this when logging something after the fact — the weekly
+                    certification report files activities by this date. Future
+                    dates are rejected.
 
     Returns:
         Confirmation string with the appended event.
     """
+    try:
+        event_date = _normalize_event_date(date)
+    except ValueError as e:
+        return f"✗ {e}"
+
     data = _load_json(config.STATUS_FILE, {"applications": []})
     apps: list = data.setdefault("applications", [])
 
@@ -186,14 +225,20 @@ def log_application_event(
     event = {
         "type": event_type.strip().lower(),
         "notes": notes.strip(),
-        "date": _now(),
+        "date": event_date,
     }
+    # Appended, never sorted: _save_status in lib/io_sqlite.py inserts only
+    # events past the existing row COUNT, so a back-dated event must stay at
+    # the end of the list to be picked up (the loader re-reads by row id).
     existing.setdefault("events", []).append(event)
     existing["last_updated"] = _now()
     data["last_updated"] = _now()
     _save_json(config.STATUS_FILE, data)
 
-    return f"✓ Event logged: {company} — {role} [{event_type}] {notes[:80] if notes else ''}"
+    return (
+        f"✓ Event logged: {company} — {role} [{event_type}] "
+        f"on {event_date} {notes[:80] if notes else ''}".rstrip()
+    )
 
 
 def register(mcp) -> None:

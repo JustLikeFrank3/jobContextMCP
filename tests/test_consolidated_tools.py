@@ -132,6 +132,47 @@ def test_dispatch_none_params_fall_back_to_target_defaults(monkeypatch):
     assert seen == {"num_results": 5, "auto_queue": False}
 
 
+def test_dispatch_forwards_event_date_uncoerced():
+    """applications.log_event exposes `date` — the coercion path must leave a
+    plain string alone (it only rewrites int/list/dict targets), or a
+    back-dated certification entry would arrive mangled."""
+    from tools import job_hunt
+
+    sig = inspect.signature(job_hunt.log_application_event)
+    coerced = consolidated._coerce_param("date", "2026-07-29", sig.parameters["date"].annotation)
+    assert coerced == "2026-07-29"
+
+
+def test_log_event_back_dated_through_facade(isolated_server):
+    """End-to-end through the facade: the date lands in the stored event."""
+    import json
+    import server as srv
+
+    FACADES["applications"](action="update", company="Acme", role="SWE", status="applied")
+    out = FACADES["applications"](
+        action="log_event", company="Acme", role="SWE",
+        event_type="follow_up", notes="thank-you note", date="2026-07-29",
+    )
+    assert "2026-07-29" in out
+
+    events = json.loads(srv.STATUS_FILE.read_text())["applications"][0]["events"]
+    assert events[0]["date"] == "2026-07-29"
+
+
+def test_log_event_future_date_through_facade_is_a_friendly_error(isolated_server):
+    import json
+    from datetime import date, timedelta
+    import server as srv
+
+    FACADES["applications"](action="update", company="Acme", role="SWE", status="applied")
+    out = FACADES["applications"](
+        action="log_event", company="Acme", role="SWE", event_type="onsite",
+        date=(date.today() + timedelta(days=2)).isoformat(),
+    )
+    assert "✗" in out and "future" in out
+    assert json.loads(srv.STATUS_FILE.read_text())["applications"][0]["events"] == []
+
+
 def test_end_to_end_workspace_check(tmp_path, monkeypatch):
     """One real (non-mocked) dispatch: workspace.check runs the actual tool."""
     import lib.config as cfg

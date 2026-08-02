@@ -9,6 +9,7 @@ Tests for v4 features:
 """
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import server as srv
@@ -123,6 +124,99 @@ class TestApplicationEvent:
         srv.update_application("Google", "SWE", "applied")
         data = json.loads(srv.STATUS_FILE.read_text())
         assert data["applications"][0]["events"] == []
+
+
+class TestApplicationEventDate:
+    """Back-dating: an event logged after the fact must record when it
+    HAPPENED, not when it was typed — the weekly certification report files
+    work-search activities by this field, so a stale-by-a-few-days log lands
+    on the state filing under the wrong date (and, across a week boundary,
+    in the wrong week)."""
+
+    def test_past_date_accepted_and_stored_verbatim(self, isolated_server):
+        past = (date.today() - timedelta(days=3)).isoformat()
+        srv.update_application("BackDateCo", "SWE", "applied")
+        result = srv.log_application_event(
+            "BackDateCo", "SWE", "follow_up", "thank-you note", date=past
+        )
+        assert past in result
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        events = data["applications"][0]["events"]
+        assert len(events) == 1
+        assert events[0]["date"] == past          # verbatim, no time appended
+        assert events[0]["notes"] == "thank-you note"
+
+    def test_datetime_stamp_also_accepted_verbatim(self, isolated_server):
+        stamp = f"{(date.today() - timedelta(days=1)).isoformat()} 14:30"
+        srv.update_application("StampCo", "SWE", "applied")
+        srv.log_application_event("StampCo", "SWE", "phone_screen", date=stamp)
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        assert data["applications"][0]["events"][0]["date"] == stamp
+
+    def test_today_is_accepted(self, isolated_server):
+        today = date.today().isoformat()
+        srv.update_application("TodayCo", "SWE", "applied")
+        srv.log_application_event("TodayCo", "SWE", "applied", date=today)
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        assert data["applications"][0]["events"][0]["date"] == today
+
+    def test_future_date_rejected_and_nothing_logged(self, isolated_server):
+        future = (date.today() + timedelta(days=1)).isoformat()
+        srv.update_application("FutureCo", "SWE", "applied")
+        result = srv.log_application_event(
+            "FutureCo", "SWE", "onsite", "not yet", date=future
+        )
+        assert "✗" in result and "future" in result
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        assert data["applications"][0]["events"] == []
+
+    def test_malformed_date_rejected_and_nothing_logged(self, isolated_server):
+        srv.update_application("JunkCo", "SWE", "applied")
+        result = srv.log_application_event(
+            "JunkCo", "SWE", "note", date="July 29th"
+        )
+        assert "✗" in result and "YYYY-MM-DD" in result
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        assert data["applications"][0]["events"] == []
+
+    def test_omitted_date_defaults_to_now(self, isolated_server):
+        srv.update_application("NowCo", "SWE", "applied")
+        srv.log_application_event("NowCo", "SWE", "phone_screen", "recruiter called")
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        stored = data["applications"][0]["events"][0]["date"]
+        assert stored.startswith(date.today().isoformat())
+        assert len(stored) == len("YYYY-MM-DD HH:MM")   # _now() shape, not a bare day
+
+    def test_blank_date_defaults_to_now(self, isolated_server):
+        """The facade forwards '' rather than omitting the param."""
+        srv.update_application("BlankCo", "SWE", "applied")
+        srv.log_application_event("BlankCo", "SWE", "note", date="")
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        assert data["applications"][0]["events"][0]["date"].startswith(
+            date.today().isoformat()
+        )
+
+    def test_back_dated_event_appends_after_newer_events(self, isolated_server):
+        """Out-of-chronological-order logging must stay append-ordered — the
+        SQLite writer inserts events by COUNT offset (`events[existing:]`),
+        so re-sorting the list here would drop or duplicate rows."""
+        older = (date.today() - timedelta(days=5)).isoformat()
+        srv.update_application("OrderCo", "SWE", "applied")
+        srv.log_application_event("OrderCo", "SWE", "phone_screen", "logged live")
+        srv.log_application_event("OrderCo", "SWE", "follow_up", "late entry", date=older)
+
+        data = json.loads(srv.STATUS_FILE.read_text())
+        events = data["applications"][0]["events"]
+        assert [e["type"] for e in events] == ["phone_screen", "follow_up"]
+        assert events[1]["date"] == older
+        assert events[1]["date"] < events[0]["date"]   # deliberately not sorted
 
 
 # ── get_daily_digest / weekly_summary ────────────────────────────────────────
