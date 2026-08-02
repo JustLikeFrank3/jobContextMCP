@@ -32,6 +32,7 @@ from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
+from jwt import PyJWKClient
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from starlette.testclient import TestClient
@@ -50,6 +51,7 @@ def _make_token(
     expired: bool = False,
     extra_claims: dict | None = None,
     private_key=None,
+    kid: str | None = "test-kid",
 ) -> str:
     """Mint a signed RS256 JWT for testing."""
     if private_key is None:
@@ -72,14 +74,27 @@ def _make_token(
         serialization.PrivateFormat.TraditionalOpenSSL,
         serialization.NoEncryption(),
     )
-    return jwt.encode(payload, pem, algorithm="RS256")
+    return jwt.encode(payload, pem, algorithm="RS256", headers={"kid": kid} if kid else None)
 
 
-def _mock_signing_key(token: str):
+def _mock_signing_key(kid: str = "test-kid"):
     """Return a PyJWT-compatible mock signing key backed by _PUBLIC_KEY."""
     mock = MagicMock()
     mock.key = _PUBLIC_KEY
+    mock.key_id = kid
     return mock
+
+
+def _mock_jwks_client(*keys):
+    """A stand-in PyJWKClient holding exactly `keys`.
+
+    `match_kid` is wired to the real static method so kid lookup behaves as it
+    does in production — a bare MagicMock would "match" every kid.
+    """
+    client = MagicMock()
+    client.get_signing_keys.return_value = list(keys) or [_mock_signing_key()]
+    client.match_kid.side_effect = PyJWKClient.match_kid
+    return client
 
 
 # ===========================================================================
@@ -95,8 +110,7 @@ class TestValidateToken:
 
     def _run(self, token: str, client_id: str = "test-client-id"):
         from lib import auth as auth_mod
-        mock_client = MagicMock()
-        mock_client.get_signing_key_from_jwt.return_value = _mock_signing_key(token)
+        mock_client = _mock_jwks_client()
 
         with (
             patch.object(auth_mod, "_get_jwks_client", return_value=mock_client),
@@ -239,8 +253,7 @@ class TestEntraAuthMiddleware:
     def test_expired_token_returns_401(self):
         token = _make_token(expired=True)
         from lib import auth as auth_mod
-        mock_client = MagicMock()
-        mock_client.get_signing_key_from_jwt.return_value = _mock_signing_key(token)
+        mock_client = _mock_jwks_client()
 
         with (
             patch.object(auth_mod, "TENANT_ID", "tenant"),

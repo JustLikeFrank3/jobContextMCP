@@ -53,7 +53,13 @@ commits — never tag those) → desktop-release workflow → rolling
   Corollary: auth must never answer "can't verify" with 401. A JWKS fetch
   failure raises `AuthUnavailable` → 503 + `Retry-After`; only a real
   `InvalidTokenError` is a 401. Readiness (`/ready`) gates on the JWKS
-  being warm; liveness (`/health`) never checks a dependency.
+  being warm; liveness (`/health`) never checks a dependency. An unknown
+  `kid` is not a verdict either: Entra's JWKS is CDN-served, so even a
+  forced re-fetch can miss a just-rotated key. `lib/auth.py` resolves keys
+  itself (not `get_signing_key_from_jwt`) so the fetch is dated and rate
+  limited — first miss 503, same kid still missing from a fresh key set
+  60s later 401, unproven freshness always 503. The miss ledger is keyed
+  by digest, capped and TTL'd because `kid` is attacker-chosen.
 - **Deploy strategy is `Recreate` on purpose** — SQLite is the sole
   datastore on a ReadWriteOnce Azure Disk. `maxSurge>0` either co-schedules
   two writers on the disk's node (corruption) or blocks the surge pod in
