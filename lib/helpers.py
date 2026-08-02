@@ -79,8 +79,13 @@ def _build_checkin_entry(mood: str, energy: int, notes: str, productive: bool) -
 
 
 def _build_tone_sample_entry(samples: list, text: str, source: str, context: str) -> dict:
+    # max()+1, not len()+1: samples pulled from a sync peer land on locally
+    # assigned rowids, so the count and the highest id can diverge — and
+    # _save_tone upserts ON CONFLICT(id), which would silently overwrite an
+    # existing sample. Matches _build_story_entry.
+    existing_ids = [s.get("id") for s in samples if isinstance(s.get("id"), int)]
     return {
-        "id": len(samples) + 1,
+        "id": max(existing_ids) + 1 if existing_ids else 1,
         "timestamp": datetime.datetime.now().isoformat(),
         "source": source,
         "context": context,

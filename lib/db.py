@@ -282,6 +282,17 @@ _MIGRATIONS = [
         created_at          TEXT    NOT NULL DEFAULT '',
         updated_at          TEXT    NOT NULL DEFAULT ''
     )""",
+    # v12 — singleton blobs from personal_context.json that have no relational
+    # shape (currently just hbdi_profile). Without a table they existed ONLY in
+    # the JSON leg, so under SQLITE_ONLY an assessment was written nowhere:
+    # run_hbdi_assessment reported success and get_hbdi_profile then answered
+    # "No HBDI profile found."
+    """CREATE TABLE IF NOT EXISTS personal_profile (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        key        TEXT NOT NULL UNIQUE,
+        value      TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT NOT NULL DEFAULT ''
+    )""",
 ]
 
 

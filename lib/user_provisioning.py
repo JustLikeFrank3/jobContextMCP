@@ -184,6 +184,13 @@ CREATE TABLE IF NOT EXISTS star_stories (
     notes          TEXT
 );
 
+CREATE TABLE IF NOT EXISTS personal_profile (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    key        TEXT    NOT NULL UNIQUE,
+    value      TEXT    NOT NULL DEFAULT '{}',
+    updated_at TEXT    NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS linkedin_connections (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name           TEXT,
