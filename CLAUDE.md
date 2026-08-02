@@ -43,6 +43,21 @@ commits — never tag those) → desktop-release workflow → rolling
 - **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
   facade doesn't expose — update the facade signature.
+- **Streamable HTTP runs stateless** (`stateless_http=True`, server.py).
+  Session mode keeps sessions in a process-local dict with no event store,
+  so `Recreate` deploys stranded hosted connectors on a dead session id →
+  404 → manual reconnect (2026-08-01 incident, docs/connector-resilience.md).
+  Adding anything that needs a live session — MCP `Context`, progress
+  notifications, sampling, elicitation, resource subscriptions — breaks
+  this; it needs a shared event store first, not just flipping the flag.
+  Corollary: auth must never answer "can't verify" with 401. A JWKS fetch
+  failure raises `AuthUnavailable` → 503 + `Retry-After`; only a real
+  `InvalidTokenError` is a 401. Readiness (`/ready`) gates on the JWKS
+  being warm; liveness (`/health`) never checks a dependency.
+- **Deploy strategy is `Recreate` on purpose** — SQLite is the sole
+  datastore on a ReadWriteOnce Azure Disk. `maxSurge>0` either co-schedules
+  two writers on the disk's node (corruption) or blocks the surge pod in
+  ContainerCreating until it detaches (longer outage). Don't "fix" it.
 
 ## Test & CI gotchas
 

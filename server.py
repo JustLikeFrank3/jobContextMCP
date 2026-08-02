@@ -148,9 +148,30 @@ _behind_proxy = (
 if _behind_proxy:
     _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
+# Streamable HTTP runs STATELESS: a fresh transport per request, no
+# Mcp-Session-Id issued, nothing retained between calls.
+#
+# In stateful mode the SDK keeps live sessions in a process-local dict
+# (StreamableHTTPSessionManager._server_instances) and configures no event
+# store, so sessions are neither persisted nor resumable.  The cloud
+# deployment is replicas=1 + strategy=Recreate over a ReadWriteOnce PVC —
+# every deploy destroys that dict, and the next request carrying the old
+# session id gets a 404 "Session not found" with no recovery path, which is
+# what forced hosted connectors (Claude.ai / Claude Code) to be reconnected
+# by hand after each deploy.  Stateless removes the state that was being
+# lost: a pod replacement now costs one failed request, and the client
+# retries with the bearer token it already holds.
+#
+# Safe here because no tool takes an MCP `Context` or uses progress
+# notifications, sampling, elicitation, or resource subscriptions — the
+# surface is pure request/response, so a per-request transport loses
+# nothing.  Set MCP_STATELESS_HTTP=0 to fall back to session mode.
+_stateless_http = os.getenv("MCP_STATELESS_HTTP", "1").lower() not in ("0", "false", "no")
+
 mcp = FastMCP(
     "jobContextMCP",
     transport_security=_transport_security,
+    stateless_http=_stateless_http,
     instructions=(
         "You are a tenant-scoped job search assistant. "
         "You have direct filesystem access to the current user's resume materials, job hunt status, "
