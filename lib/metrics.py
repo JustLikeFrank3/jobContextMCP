@@ -104,6 +104,26 @@ def _fmt_labels(labels: tuple[tuple[str, str], ...]) -> str:
     return "{" + inner + "}"
 
 
+def _fmt_value(value: float) -> str:
+    """Render a sample losslessly — shortest round-trip, never truncated.
+
+    Was ``{value:g}``, which caps at 6 significant digits: fine for scores
+    and rates, silently destructive for a 10-digit unix timestamp. It
+    quantized eval_last_run_timestamp_seconds to the nearest 10,000s
+    (2h47m buckets), so the wallboard's "time since last suite run" was up
+    to ~1.4h wrong in either direction — reading NEGATIVE right after a run
+    whose stamp had rounded up into the future.
+    """
+    if value != value:  # NaN — the only value not equal to itself
+        return "NaN"
+    if value in (float("inf"), float("-inf")):
+        return "+Inf" if value > 0 else "-Inf"
+    # Integral values render bare (2, not 2.0) — counters are the common case.
+    if float(value).is_integer() and abs(value) < 2**53:
+        return str(int(value))
+    return repr(float(value))
+
+
 def render_prometheus() -> str:
     """Render every series in the Prometheus text exposition format."""
     lines: list[str] = [
@@ -116,20 +136,20 @@ def render_prometheus() -> str:
             lines.append(f"# TYPE {name} counter")
             for (n, labels), value in sorted(_COUNTERS.items()):
                 if n == name:
-                    lines.append(f"{name}{_fmt_labels(labels)} {value:g}")
+                    lines.append(f"{name}{_fmt_labels(labels)} {_fmt_value(value)}")
         summary_names = sorted({name for name, _ in _SUMMARIES})
         for name in summary_names:
             lines.append(f"# TYPE {name} summary")
             for (n, labels), (count, total) in sorted(_SUMMARIES.items()):
                 if n == name:
-                    lines.append(f"{name}_count{_fmt_labels(labels)} {count:g}")
-                    lines.append(f"{name}_sum{_fmt_labels(labels)} {total:g}")
+                    lines.append(f"{name}_count{_fmt_labels(labels)} {_fmt_value(count)}")
+                    lines.append(f"{name}_sum{_fmt_labels(labels)} {_fmt_value(total)}")
         gauge_names = sorted({name for name, _ in _GAUGES})
         for name in gauge_names:
             lines.append(f"# TYPE {name} gauge")
             for (n, labels), value in sorted(_GAUGES.items()):
                 if n == name:
-                    lines.append(f"{name}{_fmt_labels(labels)} {value:g}")
+                    lines.append(f"{name}{_fmt_labels(labels)} {_fmt_value(value)}")
     return "\n".join(lines) + "\n"
 
 

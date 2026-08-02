@@ -32,6 +32,32 @@ def test_gauges_last_write_wins_and_render():
     assert metrics.snapshot()["gauges"] == []
 
 
+def test_gauge_rendering_is_lossless_for_timestamps():
+    """A unix timestamp must survive exposition intact.
+
+    ``{:g}`` capped at 6 significant digits, quantizing the stamp to the
+    nearest 10,000s — "time since last suite run" read up to ~1.4h off, and
+    negative right after a run whose stamp rounded up into the future.
+    """
+    metrics.set_gauge("eval_last_run_timestamp_seconds", 1785571200.0, kind="suite")
+    metrics.set_gauge("t_fractional_seconds", 1785571200.25)
+    text = metrics.render_prometheus()
+    assert 'eval_last_run_timestamp_seconds{kind="suite"} 1785571200\n' in text
+    assert "t_fractional_seconds 1785571200.25\n" in text
+    assert "e+09" not in text  # no 6-sig-digit exponent form
+
+
+def test_integral_values_render_without_a_decimal_point():
+    """Counters stay bare integers — 2, not 2.0."""
+    metrics.inc("widgets_total", 2)
+    metrics.set_gauge("score", 5.0)
+    metrics.set_gauge("rate_pct", 4.84)
+    text = metrics.render_prometheus()
+    assert "widgets_total 2\n" in text
+    assert "score 5\n" in text
+    assert "rate_pct 4.84\n" in text
+
+
 def test_counters_accumulate_by_label_set():
     metrics.inc("jobs_total", kind="a", status="ok")
     metrics.inc("jobs_total", kind="a", status="ok")

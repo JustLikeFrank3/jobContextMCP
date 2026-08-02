@@ -13,6 +13,17 @@
 # gauges max() across both scrape jobs since only one OS is ever up.
 # The other kiosk dashboards stay provisioned for manual viewing but are
 # out of the rotation (pi-deploy.sh wallboard owns the playlist).
+#
+# Every stat panel reading cloud series (namespace jcmcp/jcmcp-qa, which
+# reach this Prometheus only through the aks-federate job) sets
+# "instant": true. Those panels default to a RANGE query reduced by
+# lastNotNull, so when federation stops — the tunnel is Linux-only, so
+# every boot into Windows kills it — they keep rendering the last value
+# they ever saw, for the whole dashboard window. "Time since last suite
+# run" froze at 19h for a day that way while the nightly evals were in
+# fact running fine (2026-08-01). An instant query returns nothing once
+# the series goes stale, so the panel says No data and the kiosk stops
+# lying. Same failure the eval gauges hit in evals/ingest.restore_gauges.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -298,25 +309,25 @@ data:
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# \u2601\ufe0f PRODUCTION \u2014 jobcontext.ai on AKS"}},
         {"type": "stat", "title": "prod uptime", "gridPos": {"x":0,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp\"})"}],
+         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
         {"type": "stat", "title": "qa uptime", "gridPos": {"x":4,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp-qa\"})"}],
+         "targets": [{"expr": "max(process_uptime_seconds{namespace=\"jcmcp-qa\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "s"}}},
         {"type": "stat", "title": "5xx rate (prod)", "gridPos": {"x":8,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)"}],
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)", "instant": true}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
         {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
+         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)", "instant": true}]},
         {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":16,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)"}]},
+         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)", "instant": true}]},
         {"type": "stat", "title": "Gate pass rate (24h, prod)", "gridPos": {"x":20,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "100 * sum(increase(provenance_checks_total{namespace=\"jcmcp\",verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total{namespace=\"jcmcp\"}[24h])), 1)"}],
+         "targets": [{"expr": "100 * sum(increase(provenance_checks_total{namespace=\"jcmcp\",verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total{namespace=\"jcmcp\"}[24h])), 1)", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"text","value":null},{"color":"red","value":1},{"color":"orange","value":80},{"color":"green","value":99}]}}}},
         {"type": "timeseries", "title": "Request rate by route (prod)", "gridPos": {"x":0,"y":8,"w":12,"h":9},
@@ -690,29 +701,29 @@ data:
          "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · adversarial judge · N-run variance"}},
         {"type": "stat", "title": "Mean judge score (worst entry)", "gridPos": {"x": 0, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "min(eval_mean_score{namespace=\"jcmcp\"})"}],
+         "targets": [{"expr": "min(eval_mean_score{namespace=\"jcmcp\"})", "instant": true}],
          "fieldConfig": {"defaults": {"min": 1, "max": 5, "decimals": 2,
           "thresholds": {"steps": [{"color": "red", "value": null},
            {"color": "orange", "value": 3.8}, {"color": "green", "value": 4}]}}}},
         {"type": "stat", "title": "Hallucinations", "gridPos": {"x": 5, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "max(eval_hallucination_rate_pct{namespace=\"jcmcp\"})"}],
+         "targets": [{"expr": "max(eval_hallucination_rate_pct{namespace=\"jcmcp\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.001}]}}}},
         {"type": "stat", "title": "Verdict flips", "gridPos": {"x": 10, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "max(eval_verdict_flip_rate_pct{namespace=\"jcmcp\"})"}],
+         "targets": [{"expr": "max(eval_verdict_flip_rate_pct{namespace=\"jcmcp\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "orange", "value": 20}]}}}},
         {"type": "stat", "title": "Layer 1 smoke", "gridPos": {"x": 15, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "max(eval_layer1_smoke_pass_rate_pct{namespace=\"jcmcp\"})"}],
+         "targets": [{"expr": "max(eval_layer1_smoke_pass_rate_pct{namespace=\"jcmcp\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
           "thresholds": {"steps": [{"color": "red", "value": null},
            {"color": "orange", "value": 95}, {"color": "green", "value": 100}]}}}},
         {"type": "stat", "title": "Alerts", "gridPos": {"x": 20, "y": 3, "w": 4, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "sum(max by(gd_id)(eval_alert_count{namespace=\"jcmcp\"})) or vector(0)"}],
+         "targets": [{"expr": "sum(max by(gd_id)(eval_alert_count{namespace=\"jcmcp\"})) or vector(0)", "instant": true}],
          "fieldConfig": {"defaults": {"decimals": 0,
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}}},
         {"type": "timeseries", "title": "Mean judge score by golden entry", "gridPos": {"x": 0, "y": 9, "w": 12, "h": 9},
@@ -736,7 +747,7 @@ data:
            {"color": "orange", "value": 3}, {"color": "green", "value": 4}]}}}},
         {"type": "stat", "title": "Time since last suite run", "gridPos": {"x": 12, "y": 18, "w": 6, "h": 8},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "time() - max(eval_last_run_timestamp_seconds{namespace=\"jcmcp\",kind=\"suite\"})"}],
+         "targets": [{"expr": "time() - max(eval_last_run_timestamp_seconds{namespace=\"jcmcp\",kind=\"suite\"})", "instant": true}],
          "fieldConfig": {"defaults": {"unit": "s", "decimals": 0,
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "orange", "value": 604800}]}}}},
         {"type": "timeseries", "title": "Eval pushes by kind (1d)", "gridPos": {"x": 18, "y": 18, "w": 6, "h": 8},
