@@ -16,7 +16,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import lru_cache
 
+from jwt.exceptions import InvalidTokenError, PyJWKClientConnectionError
+
 from transport.http.config import get_settings
+
+
+class AuthUnavailable(Exception):
+    """Raised when a credential could not be *checked*, as distinct from
+    being checked and found invalid.
+
+    The two must not collapse into the same response.  "Your token is bad"
+    (401 + WWW-Authenticate) tells a client to discard its credential and
+    make the user re-authenticate; "I could not reach the issuer's signing
+    keys" is a server-side blip the client should simply retry.  Reporting
+    the second as the first is what turns a few seconds of downtime into a
+    manual reconnect.
+    """
 
 
 @dataclass(frozen=True)
@@ -145,11 +160,20 @@ class EntraAuthProvider(AuthProvider):
 
         try:
             claims = validate_token(token)
-            name = claims.get("name") or claims.get("preferred_username") or "user"
-            uid = claims.get("oid") or claims.get("sub") or "unknown"
-            return User(id=uid, name=name)
-        except Exception:
+        except PyJWKClientConnectionError as exc:
+            # Could not reach Entra's JWKS endpoint — we have no idea whether
+            # this token is good.  Never answer "invalid credentials" here.
+            raise AuthUnavailable("Entra signing keys unreachable") from exc
+        except InvalidTokenError:
+            # Checked and genuinely bad: expired, malformed, wrong audience,
+            # bad signature.
             return None
+        except Exception as exc:  # noqa: BLE001 — unexpected == not a verdict
+            raise AuthUnavailable("token validation failed unexpectedly") from exc
+
+        name = claims.get("name") or claims.get("preferred_username") or "user"
+        uid = claims.get("oid") or claims.get("sub") or "unknown"
+        return User(id=uid, name=name)
 
     def authenticate_login(self, credential: str) -> tuple[User, str] | None:
         # Not used — PKCE flow sets the cookie directly in the callback route.

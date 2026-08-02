@@ -99,6 +99,9 @@ jobs:
         with:
           name: suite-measurements
 
+      # Fails the job if any managed badge/stat string no longer matches its
+      # pattern — the generator's whole purpose is that these numbers cannot
+      # drift, so a skipped substitution must be loud, not a ::warning::.
       - name: Regenerate README badges
         run: python scripts/update_readme_badges.py --junit junit.xml --coverage coverage.xml --readme README.md --resume-section templates/latex_assets/sections/experience.tex
 

@@ -7,6 +7,8 @@ metadata:
     app: jcmcp-qa
 spec:
   replicas: 1
+  # Recreate is deliberate — SQLite on a ReadWriteOnce PVC must never have two
+  # writers. See k8s/deployment.yaml for the full rationale.
   strategy:
     type: Recreate
   selector:
@@ -23,6 +25,7 @@ spec:
         prometheus.io/port: "8000"
     spec:
       serviceAccountName: jcmcp-workload-sa
+      terminationGracePeriodSeconds: 45
       initContainers:
         - name: seed-workspace
           image: mcr.microsoft.com/azure-cli:2.61.0
@@ -147,6 +150,11 @@ spec:
             limits:
               cpu: "500m"   # half of prod — QA doesn't need full burst capacity
               memory: "1Gi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          # Liveness never checks a dependency; readiness does (JWKS cached).
           livenessProbe:
             httpGet:
               path: /health
@@ -155,10 +163,11 @@ spec:
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
           volumeMounts:
             - name: data
               mountPath: /app/data
