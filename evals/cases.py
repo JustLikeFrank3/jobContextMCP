@@ -51,9 +51,10 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-002", tool="materials", action="read_master_resume",
+        contains_any=("resume", "master", "source"),
         min_length=10,
         tags=("smoke", "read-only"),
-        notes="Live expectation: >500 chars and contains the candidate name.",
+        notes="Live expectation: the master resume is readable and mentions the resume content.",
     ),
     EvalCase(
         id="TC-003", tool="materials", action="search",
@@ -103,10 +104,12 @@ CASES: tuple[EvalCase, ...] = (
     # ── per-domain smoke coverage (all 11 tools) ─────────────────────────────
     EvalCase(
         id="TC-009", tool="applications", action="status",
+        contains_any=("status", "queue", "application"),
         min_length=5, tags=("smoke", "read-only"),
     ),
     EvalCase(
         id="TC-010", tool="applications", action="get_queue",
+        contains_any=("queue", "application"),
         min_length=3, tags=("smoke", "read-only"),
     ),
     EvalCase(
@@ -127,10 +130,12 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-013", tool="stories", action="tone_profile",
+        contains_any=("tone", "profile", "samples"),
         min_length=3, tags=("smoke", "read-only"),
     ),
     EvalCase(
         id="TC-014", tool="wellbeing", action="log",
+        contains_any=("wellbeing", "check-in", "energy"),
         min_length=3, tags=("smoke", "read-only"),
         notes="Must not error on empty history.",
     ),
@@ -141,6 +146,7 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-016", tool="brand", action="posts",
+        contains_any=("post", "posts", "linkedin"),
         min_length=3, tags=("smoke", "read-only"),
     ),
     EvalCase(
@@ -170,6 +176,7 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-021", tool="interviews", action="upcoming",
+        contains_any=("interview", "upcoming", "schedule"),
         min_length=3, tags=("smoke", "read-only"),
     ),
     EvalCase(
@@ -180,6 +187,7 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-023", tool="certification", action="list_reports",
+        contains_any=("report", "weekly", "certification"),
         min_length=3, tags=("smoke", "read-only"),
         notes="Must not error before any weekly report exists.",
     ),

@@ -48,6 +48,14 @@ def _record_suite_gauges(payload: dict) -> int:
                     "eval_dimension_score", float(row[key]),
                     gd_id=gd_id, dimension=dimension,
                 )
+        agreement = row.get("provenance_agreement") or {}
+        for key in ("both_flagged", "both_clean", "judge_only", "provenance_only"):
+            metrics.set_gauge(
+                "eval_provenance_agreement_count",
+                float(agreement.get(key, 0)),
+                gd_id=gd_id,
+                kind=key,
+            )
         rate = (detail.get(gd_id) or {}).get("hallucination_rate_pct")
         if rate is not None:
             metrics.set_gauge("eval_hallucination_rate_pct", float(rate), gd_id=gd_id)

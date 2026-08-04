@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "id": "FX-01",
+      "company": "FixtureCo",
+      "role": "Platform Engineer",
+      "archetype": "Synthetic baseline",
+      "eval_signal": "Baseline fixture with clean numeric claims",
+      "reference_file": "fixture_reference_clean.txt",
+      "jd_file": "fixture_jd_clean.txt",
+      "output_kind": "resume"
+    },
+    {
+      "id": "FX-02",
+      "company": "FixtureCo",
+      "role": "Platform Engineer",
+      "archetype": "Synthetic corruption",
+      "eval_signal": "Corrupted fixture with unsourced numeric claims",
+      "reference_file": "fixture_reference_corrupt.txt",
+      "jd_file": "fixture_jd_corrupt.txt",
+      "output_kind": "resume"
+    }
+  ]
+}

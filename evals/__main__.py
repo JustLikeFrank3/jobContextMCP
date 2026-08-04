@@ -40,11 +40,14 @@ def _cmd_judge(args: argparse.Namespace) -> int:
     jd = Path(args.jd).read_text(encoding="utf-8")
     output = Path(args.output).read_text(encoding="utf-8")
     if args.master:
-        master = Path(args.master).read_text(encoding="utf-8")[:6000]
+        master = Path(args.master).read_text(encoding="utf-8")
     else:
         from tools import resume
 
-        master = resume.read_master_resume()[:6000]
+        master = resume.read_master_resume()
+    from evals.runner import _master_excerpt
+
+    master = _master_excerpt(max_chars=32000, master_text=master)
     scores = []
     for i in range(args.n):
         score = judge_output(jd, master, output)

@@ -1,0 +1,1 @@
+Senior Platform Engineer with 8 years of experience building internal developer tooling and Kubernetes platforms. Delivered CI/CD automation for 3 services and improved deployment speed by 40%.

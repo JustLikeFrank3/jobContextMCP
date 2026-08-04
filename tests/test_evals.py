@@ -12,10 +12,13 @@ from types import SimpleNamespace
 import pytest
 
 from evals import cases as case_mod
+from evals import fixtures as fixtures_mod
 from evals import golden as golden_mod
 from evals import judge as judge_mod
 from evals import layer1, rubrics, variance
+from evals import runner as runner_mod
 from evals.cases import CASES, cases_by_tags
+from lib import config as config_mod
 from tools.consolidated import DOMAINS
 
 
@@ -173,6 +176,23 @@ def test_judge_messages_include_todays_date():
     assert "TODAY'S DATE: 20" in auto
 
 
+def test_judge_messages_include_rubric_anchors_and_thresholds():
+    content = judge_mod.build_judge_messages("JD", "M", "OUT", today="2026-07-29")[1]["content"]
+    assert "SCORING RUBRIC" in content
+    assert "keyword_coverage" in content
+    assert "accuracy" in content
+    assert "PASS CRITERION" in content
+    assert "average of the five dimensions" in content
+    assert "4.0" in content
+
+
+def test_parse_judge_json_uses_thresholds_for_verdict():
+    payload = json.loads(_GOOD_JUDGE_JSON)
+    payload["verdict"] = "fail"
+    score = judge_mod.parse_judge_json(json.dumps(payload))
+    assert score.verdict == "pass"
+
+
 def test_parse_judge_json_filters_clean_bill_notes():
     payload = json.loads(_GOOD_JUDGE_JSON)
     payload["hallucinations"] = [
@@ -182,6 +202,13 @@ def test_parse_judge_json_filters_clean_bill_notes():
     ]
     score = judge_mod.parse_judge_json(json.dumps(payload))
     assert score.hallucinations == ["Invented award claim"]
+
+
+def test_layer1_smoke_cases_assert_meaningful_content():
+    case = case_mod.EvalCase(id="X-3", tool="materials", action="read_master_resume",
+                            contains_all=("MASTER SOURCE",), min_length=10)
+    assert layer1.check_response(case, "Resume - MASTER SOURCE.txt") == ""
+    assert "missing expected" in layer1.check_response(case, "Resume content only")
 
 
 def test_parse_judge_json_rejects_bad_output():
@@ -277,6 +304,60 @@ def test_keyword_delta():
     base = variance.aggregate_runs([_score({"keyword_coverage": 5})])
     curr = variance.aggregate_runs([_score({"keyword_coverage": 4})])
     assert variance.keyword_delta(curr, base) == -1.0
+
+
+def test_fixture_dataset_loads_and_resolves():
+    entries = fixtures_mod.load_fixture_entries()
+    assert [entry.id for entry in entries] == ["FX-01", "FX-02"]
+    assert golden_mod.resolve_file(entries[0].jd_file) is not None
+    assert golden_mod.resolve_file(entries[0].reference_file) is not None
+    assert entries[1].eval_signal.lower().startswith("corrupted")
+
+
+def test_run_entry_tracks_numeric_provenance_agreement(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    jd_path = tmp_path / "jd.txt"
+    jd_path.write_text("JD text", encoding="utf-8")
+    monkeypatch.setattr(runner_mod, "resolve_file", lambda _name: jd_path)
+    monkeypatch.setattr(runner_mod, "_master_excerpt", lambda *args, **kwargs: "MASTER")
+    monkeypatch.setattr(
+        provenance_mod,
+        "latest_run",
+        lambda *, company="", role="", db_path=None: {
+            "claims": ["34%"],
+            "violations": ["34%"],
+        },
+    )
+
+    entry = golden_mod.GoldenEntry(
+        id="GD-01",
+        company="Acme",
+        role="Engineer",
+        archetype="x",
+        eval_signal="y",
+        reference_file="ref.txt",
+        jd_file="jd.txt",
+    )
+
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass",
+        hallucinations=["invented 34% uplift"],
+    )
+
+    result = runner_mod.run_entry(
+        entry,
+        n=1,
+        generate_fn=lambda _entry, _jd: "output",
+        judge_fn=lambda _jd, _master, _output: judge_score,
+    )
+
+    assert result.provenance_agreement["both_flagged"] == 1
+    assert result.provenance_agreement["judge_only"] == 0
+    assert result.provenance_agreement["provenance_only"] == 0
+    assert result.provenance_agreement["both_clean"] == 0
+    assert result.dashboard_row()["provenance_agreement"]["both_flagged"] == 1
 
 
 # ── ingest endpoint + metrics bridge ─────────────────────────────────────────

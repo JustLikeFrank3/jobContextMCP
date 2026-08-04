@@ -16,6 +16,8 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from evals.rubrics import THRESHOLDS, RESUME_RUBRIC
+
 # The judge scores the doc's five JSON dimensions (format_compliance stays a
 # human/Layer-2 check — the judge sees plain text, not layout).
 JUDGE_DIMENSIONS: tuple[str, ...] = (
@@ -29,8 +31,20 @@ JUDGE_SYSTEM = (
     "Score honestly and critically."
 )
 
+
+def _build_rubric_block() -> str:
+    threshold = THRESHOLDS["resume"]
+    lines = [
+        "SCORING RUBRIC:",
+        *[f"- {dim}: {RESUME_RUBRIC[dim]}" for dim in JUDGE_DIMENSIONS],
+        "",
+        f"PASS CRITERION: A score is PASS only when the average of the five dimensions is >= {threshold.min_avg:.1f} and no dimension is below {threshold.min_dimension}.",
+    ]
+    return "\n".join(lines)
+
+
 JUDGE_USER_TEMPLATE = """TODAY'S DATE: {today}. Dates on or before today are NOT future-dated; \
-do not flag employment dates as hallucinations merely because they are recent.
+ do not flag employment dates as hallucinations merely because they are recent.
 
 JOB DESCRIPTION:
 {job_description}
@@ -40,6 +54,8 @@ MASTER RESUME EXCERPT:
 
 GENERATED OUTPUT:
 {generated_output}
+
+{rubric_block}
 
 Score the output on each dimension 1-5. The "hallucinations" list must contain \
 ONLY claims from the output that cannot be traced to the master resume excerpt — \
@@ -86,6 +102,7 @@ def build_judge_messages(
             job_description=job_description,
             master_resume_excerpt=master_resume_excerpt,
             generated_output=generated_output,
+            rubric_block=_build_rubric_block(),
         )},
     ]
 
@@ -126,6 +143,9 @@ def parse_judge_json(text: str) -> JudgeScore:
     if not isinstance(hallucinations, list):
         hallucinations = [str(hallucinations)]
     hallucinations = [str(h) for h in hallucinations if not _CLEAN_BILL.search(str(h))]
+    from evals.rubrics import passes  # noqa: PLC0415
+
+    verdict = "pass" if passes(scores, "resume")[0] else "fail"
     return JudgeScore(
         scores=scores,
         rationale=str(obj.get("rationale", "")),

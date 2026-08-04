@@ -20,6 +20,7 @@ from typing import Callable
 from evals.golden import GoldenEntry, load_golden, resolve_file
 from evals.judge import JudgeScore, judge_output
 from evals.variance import RunAggregate, aggregate_runs
+from lib import provenance as provenance_mod
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -33,15 +34,26 @@ class EntryResult:
     role: str
     aggregate: RunAggregate | None = None
     error: str = ""
+    provenance_agreement: dict[str, int] = field(default_factory=lambda: {
+        "both_flagged": 0,
+        "both_clean": 0,
+        "judge_only": 0,
+        "provenance_only": 0,
+    })
 
     def dashboard_row(self) -> dict:
         """One row of the doc's results table."""
-        if self.aggregate is None:
-            return {"gd_id": self.entry_id, "role": self.role, "error": self.error}
-        dims = self.aggregate.per_dimension
-        return {
+        base = {
             "gd_id": self.entry_id,
             "role": self.role,
+            "error": self.error,
+            "provenance_agreement": dict(self.provenance_agreement),
+        }
+        if self.aggregate is None:
+            return base
+        dims = self.aggregate.per_dimension
+        return {
+            **base,
             "keyword": round(dims["keyword_coverage"]["mean"], 2),
             "relevance": round(dims["relevance"]["mean"], 2),
             "accuracy": round(dims["accuracy"]["mean"], 2),
@@ -118,10 +130,44 @@ def default_generate(entry: GoldenEntry, jd_text: str) -> str:
 # qwen3-jobcontext runs a 40K-token context; the full ~30K-char master fits.
 # Truncating to 6K made 80% of the master invisible and the judge flagged
 # real (unseen) claims as hallucinations.
-def _master_excerpt(max_chars: int = 32000) -> str:
+def _master_excerpt(max_chars: int = 32000, master_text: str | None = None) -> str:
+    if master_text is not None:
+        return master_text[:max_chars]
     from tools import resume  # noqa: PLC0415 — lazy: imports server config
 
     return resume.read_master_resume()[:max_chars]
+
+
+def _numeric_provenance_agreement(
+    judge_hallucinations: list[str],
+    provenance_row: dict | None,
+) -> dict[str, int]:
+    """Classify a run by whether judge and provenance both flagged numeric claims."""
+    judge_claims = {
+        claim
+        for text in judge_hallucinations
+        for claim in provenance_mod.extract_claims(text)
+    }
+    prov_claims = {
+        claim
+        for text in (provenance_row or {}).get("violations", [])
+        for claim in provenance_mod.extract_claims(text)
+    }
+    buckets = {
+        "both_flagged": 0,
+        "both_clean": 0,
+        "judge_only": 0,
+        "provenance_only": 0,
+    }
+    if judge_claims and prov_claims:
+        buckets["both_flagged"] = 1
+    elif judge_claims:
+        buckets["judge_only"] = 1
+    elif prov_claims:
+        buckets["provenance_only"] = 1
+    else:
+        buckets["both_clean"] = 1
+    return buckets
 
 
 def run_entry(
@@ -142,15 +188,34 @@ def run_entry(
     master = _master_excerpt()
     scores: list[JudgeScore] = []
     errors: list[str] = []
+    provenance_agreement = {
+        "both_flagged": 0,
+        "both_clean": 0,
+        "judge_only": 0,
+        "provenance_only": 0,
+    }
     for i in range(n):
         try:
             output = generate(entry, jd_text)
-            scores.append(judge(jd_text, master, output))
+            score = judge(jd_text, master, output)
+            provenance_row = provenance_mod.latest_run(
+                company=entry.company,
+                role=entry.role,
+            )
+            agreement = _numeric_provenance_agreement(score.hallucinations, provenance_row)
+            for key in provenance_agreement:
+                provenance_agreement[key] += agreement[key]
+            scores.append(score)
         except Exception as e:
             errors.append(f"run {i + 1}: {type(e).__name__}: {e}")
     if not scores:
         return EntryResult(entry.id, entry.role, error="; ".join(errors) or "no runs completed")
-    result = EntryResult(entry.id, entry.role, aggregate=aggregate_runs(scores))
+    result = EntryResult(
+        entry.id,
+        entry.role,
+        aggregate=aggregate_runs(scores),
+        provenance_agreement=provenance_agreement,
+    )
     if errors:
         result.error = "; ".join(errors)
     return result
