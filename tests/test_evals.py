@@ -246,6 +246,17 @@ def test_judge_output_with_explicit_client():
     assert score.verdict == "pass"
 
 
+def test_judge_output_preserves_model_metadata():
+    score = judge_mod.judge_output(
+        "JD",
+        "MASTER",
+        "OUTPUT",
+        client=_fake_client([_GOOD_JUDGE_JSON]),
+        model="judge-model",
+    )
+    assert score.model == "judge-model"
+
+
 def test_judge_output_retries_then_fails_cleanly():
     client = _fake_client(["garbage", "still garbage"])
     with pytest.raises(ValueError, match="unparseable"):

@@ -73,12 +73,16 @@ class SuiteResult:
     started_at: str = ""
     git_sha: str = ""
     provider: str = ""
+    judge_provider: str = ""
+    judge_model: str = ""
 
     def to_dict(self) -> dict:
         return {
             "started_at": self.started_at,
             "git_sha": self.git_sha,
             "provider": self.provider,
+            "judge_provider": self.judge_provider,
+            "judge_model": self.judge_model,
             "n_runs": self.n_runs,
             "rows": [e.dashboard_row() for e in self.entries],
             "detail": {
@@ -229,14 +233,18 @@ def run_suite(
     results_dir: Path | None = None,
 ) -> SuiteResult:
     """Run the full suite and persist a version-stamped results file."""
+    from lib import config as config_mod  # noqa: PLC0415
     from lib.config import llm_generation_status  # noqa: PLC0415
 
     provider, _ready = llm_generation_status()
+    judge_provider, judge_model = config_mod._resolve_llm_settings(task="eval_judge")
     suite = SuiteResult(
         n_runs=n,
         started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         git_sha=_git_sha(),
         provider=provider,
+        judge_provider=judge_provider,
+        judge_model=judge_model,
     )
     for entry in entries if entries is not None else load_golden():
         suite.entries.append(run_entry(entry, n=n, generate_fn=generate_fn, judge_fn=judge_fn))

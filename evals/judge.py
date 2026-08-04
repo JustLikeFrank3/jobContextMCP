@@ -72,6 +72,7 @@ class JudgeScore:
     hallucinations: list[str] = field(default_factory=list)
     verdict: str = "fail"
     raw: str = ""
+    model: str = ""
 
     @property
     def mean(self) -> float:
@@ -84,6 +85,7 @@ class JudgeScore:
             "rationale": self.rationale,
             "hallucinations": self.hallucinations,
             "verdict": self.verdict,
+            "model": self.model,
         }
 
 
@@ -190,7 +192,9 @@ def judge_output(
         )
         content = response.choices[0].message.content or ""
         try:
-            return parse_judge_json(content)
+            score = parse_judge_json(content)
+            score.model = model
+            return score
         except ValueError as e:
             last_error = e
     raise ValueError(f"judge returned unparseable output after {max_attempts} attempts: {last_error}")
