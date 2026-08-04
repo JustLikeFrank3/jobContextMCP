@@ -200,7 +200,12 @@ class TestScrapeJobUrl:
         guest_html = (
             '<h2 class="top-card-layout__title">Senior Platform Engineer</h2>'
             '<h4>at Cox Automotive</h4>'
-            '<div class="description__text">' + "Build the dealer platform. " * 20 + "</div>"
+            # Reads like an actual posting: the thin-page guard asks for the
+            # vocabulary every real job description carries, and filler text
+            # repeated 20 times is not a realistic stand-in for one.
+            '<div class="description__text">'
+            + "Build the dealer platform. You will need experience with distributed systems. " * 20
+            + "</div>"
         )
 
         def fake_get(url, *a, **kw):
@@ -288,6 +293,46 @@ class TestNonJobDetection:
         from tools import job_scraper as scraper
 
         assert scraper._non_job_reason(title, "x" * 5000) == "", title
+
+    def test_thin_page_without_job_vocabulary_is_rejected(self):
+        """Regression from qa: r.jina.ai served a cached snapshot of
+        example.com titled 'Test Document' with 320 characters of body. No
+        error phrase to match and past the length floor, so it queued —
+        exactly the class of page that produced junk assessments in prod."""
+        from tools import job_scraper as scraper
+
+        body = (
+            "## Test Article\n\nThis is a test article with some content for "
+            "Jina to extract.\n\nIt contains multiple paragraphs to test the "
+            "HTML parsing functionality.\n" * 2
+        )
+        assert len(body.strip()) > scraper._MIN_JOB_DESCRIPTION_CHARS
+        reason = scraper._non_job_reason("Test Document", body)
+        assert reason, "thin non-job page should be rejected"
+        assert "vocabulary" in reason
+
+    def test_short_but_genuine_posting_survives(self):
+        """A terse real posting is shorter than the thin-page threshold, so
+        the vocabulary check is what keeps it from being rejected."""
+        from tools import job_scraper as scraper
+
+        body = (
+            "Senior Backend Engineer\n\nWe are looking for an engineer to "
+            "join the platform team.\n\nRequirements: 5+ years of experience "
+            "with distributed systems, strong Python, and a track record of "
+            "owning services end to end. You will design APIs, run them in "
+            "production, and mentor other engineers.\n\nApply online today."
+        )
+        assert scraper._MIN_JOB_DESCRIPTION_CHARS < len(body.strip()) < scraper._THIN_BODY_CHARS
+        assert scraper._non_job_reason("Senior Backend Engineer", body) == ""
+
+    def test_long_page_without_vocabulary_is_left_alone(self):
+        """Above the thin threshold we stop guessing: an unusual posting is
+        likelier than an error body that verbose, and a false reject costs
+        more than a false accept."""
+        from tools import job_scraper as scraper
+
+        assert scraper._non_job_reason("Some Unusual Title", "lorem ipsum " * 300) == ""
 
 
 # ── search_jobs ────────────────────────────────────────────────────────────────
