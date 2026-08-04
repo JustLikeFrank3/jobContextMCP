@@ -211,6 +211,24 @@ def test_layer1_smoke_cases_assert_meaningful_content():
     assert "missing expected" in layer1.check_response(case, "Resume content only")
 
 
+def test_smoke_cases_require_specific_output_markers():
+    expectations = {
+        "TC-002": ("master source",),
+        "TC-009": ("job hunt status",),
+        "TC-010": ("queued jobs",),
+        "TC-013": ("no tone samples",),
+        "TC-014": ("mental health log",),
+        "TC-016": ("linkedin posts",),
+        "TC-021": ("upcoming interviews",),
+        "TC-023": ("certification reports",),
+    }
+    for case_id, needles in expectations.items():
+        case = next(c for c in CASES if c.id == case_id)
+        combined = " ".join(case.contains_all + case.contains_any).lower()
+        for needle in needles:
+            assert needle in combined, (case_id, combined)
+
+
 def test_parse_judge_json_rejects_bad_output():
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json("no json here")
