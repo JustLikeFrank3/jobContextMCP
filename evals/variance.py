@@ -3,7 +3,7 @@
 LLM outputs are non-deterministic; the same input can produce different
 quality on different runs. These metrics quantify that risk per the doc:
 
-    Mean score          — mean < 3.8 → flag for review
+    Mean score          — mean below the resume rubric threshold → flag for review
     CoV (%)             — std dev / mean × 100; > 20% → output unstable
     Hallucination rate  — % of runs flagging ≥1 hallucination; target 0%
     Verdict flip rate   — % of runs where the verdict flips; > 20% → add
@@ -15,8 +15,12 @@ import statistics
 from dataclasses import dataclass, field
 
 from evals.judge import JUDGE_DIMENSIONS, JudgeScore
+from evals.rubrics import THRESHOLDS
 
-MEAN_ALERT = 3.8
+# Sourced from the resume rubric so the wallboard alert and the code-derived
+# verdict cannot drift apart: 3.8 here once left a 3.8-4.0 band that failed
+# the rubric with no alert firing.
+MEAN_ALERT = THRESHOLDS["resume"].min_avg
 COV_ALERT_PCT = 20.0
 FLIP_ALERT_PCT = 20.0
 
