@@ -371,6 +371,21 @@ def test_variance_alerts():
     assert agg.to_dict()["n_runs"] == 3
 
 
+def test_dimension_floor_alert_fires_despite_strong_mean():
+    # The failure mode the harness exists for: fluent, keyword-dense, and
+    # fabricating. accuracy=2 with everything else 5 gives mean 4.4 —
+    # passes() fails it on the dimension floor, so alerts must fire too.
+    agg = variance.aggregate_runs([_score({d: 5 for d in judge_mod.JUDGE_DIMENSIONS} | {"accuracy": 2})])
+    assert agg.mean_score > variance.MEAN_ALERT  # mean clause stays silent
+    assert any("accuracy" in a and "dimension floor" in a for a in agg.alerts)
+
+
+def test_dimension_at_floor_raises_no_alert():
+    # passes() uses strict <, so a mean exactly at the floor is not a failure.
+    agg = variance.aggregate_runs([_score({"accuracy": 3})])
+    assert not any("dimension floor" in a for a in agg.alerts)
+
+
 def test_variance_math_helpers():
     assert variance.cov_percent([4.0]) == 0.0
     assert variance.cov_percent([2.0, 4.0]) == pytest.approx(47.14, abs=0.01)

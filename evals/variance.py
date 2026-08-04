@@ -21,6 +21,7 @@ from evals.rubrics import THRESHOLDS
 # verdict cannot drift apart: 3.8 here once left a 3.8-4.0 band that failed
 # the rubric with no alert firing.
 MEAN_ALERT = THRESHOLDS["resume"].min_avg
+DIMENSION_FLOOR = THRESHOLDS["resume"].min_dimension
 COV_ALERT_PCT = 20.0
 FLIP_ALERT_PCT = 20.0
 
@@ -61,6 +62,12 @@ class RunAggregate:
         found = []
         if self.mean_score < MEAN_ALERT:
             found.append(f"mean {self.mean_score:.2f} < {MEAN_ALERT} — flag for review")
+        # Second passes() clause: a strong mean can hide one fabricating dimension.
+        for dim, m in self.per_dimension.items():
+            if m["mean"] < DIMENSION_FLOOR:
+                found.append(
+                    f"{dim} {m['mean']:.2f} < {DIMENSION_FLOOR} — dimension floor"
+                )
         if self.cov_pct > COV_ALERT_PCT:
             found.append(f"CoV {self.cov_pct:.1f}% > {COV_ALERT_PCT}% — output unstable")
         if self.hallucination_rate_pct > 0:
