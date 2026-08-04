@@ -211,25 +211,57 @@ def test_layer1_smoke_cases_assert_meaningful_content():
     assert "missing expected" in layer1.check_response(case, "Resume content only")
 
 
-def test_smoke_cases_require_specific_output_markers():
-    # Markers are code-emitted literals from the tool implementations — the
-    # empty-state message or the populated-state header, never aspirational
-    # vocabulary the tools don't print (that broke the gate at 50%).
-    expectations = {
-        "TC-002": ("achievements", "peer feedback"),
-        "TC-009": ("no applications tracked", "job hunt status"),
-        "TC-010": ("no jobs in queue", "job queue"),
-        "TC-013": ("no tone samples", "tone profile"),
-        "TC-014": ("no check-ins logged", "mental health log"),
-        "TC-016": ("linkedin posts",),
-        "TC-021": ("no interviews logged", "upcoming interviews"),
-        "TC-023": ("certification reports",),
-    }
-    for case_id, needles in expectations.items():
+# Recorded real responses, one per reachable state. The empty-state strings are
+# what the isolated gate workspace actually returned (2026-08-04 run); the
+# populated-state strings are built from the emitting code in tools/. A marker
+# typo in cases.py fails HERE, in pytest, instead of first surfacing as a
+# blocked deploy — the previous version of this test only compared the strings
+# in cases.py against themselves.
+_RECORDED_SMOKE_RESPONSES = {
+    "TC-002": [
+        "[CI MASTER RESUME]\n\n──── ACHIEVEMENTS ────\n"
+        "(Peer-written quotes — use exact language in cover letters and fitment assessments)\n"
+        "[CI ACHIEVEMENTS CONTENT]\n\n──── PEER FEEDBACK (verbatim) ────\n"
+        "(Direct quotes from managers and colleagues — high-value credibility signals)\n"
+        "[CI FEEDBACK CONTENT]",
+    ],
+    "TC-009": [
+        "No applications tracked yet. Use update_application() to add one.\n\n"
+        "⚠ No check-in logged yet today. Quick check-in: "
+        "log_mental_health_checkin(mood='stable', energy=5)",
+        "═══ JOB HUNT STATUS ═══\nLast updated: 2026-08-04\n\n■ TestCo — SWE\n  Status:       applied",
+    ],
+    "TC-010": [
+        "No jobs in queue.",
+        "═══ JOB QUEUE ═══\n\n■ [PENDING] TestCo — SWE\n  ID:       1\n  Added:    2026-08-04",
+    ],
+    "TC-013": [
+        "No tone samples logged yet.\nUse log_tone_sample() to ingest writing "
+        "samples — cover letters, messages, anything you've actually written.",
+        "═══ TONE PROFILE (2 samples, 300 total words) ═══\n"
+        "Use these samples to calibrate the candidate's voice before writing anything.",
+    ],
+    "TC-014": [
+        "No check-ins logged in the past 14 days.",
+        "═══ MENTAL HEALTH LOG (last 14 days) ═══\n\n"
+        "2026-08-04  🟩  mood: good          energy: 7/10  productive: ✓\n\n"
+        "Average energy over 14 days: 7.0/10",
+    ],
+    "TC-021": [
+        "No interviews logged yet.",
+        "No interviews scheduled in the next 14 days.",
+        "# Upcoming interviews (next 14 days, 1 total)\n"
+        "- 2026-08-05 (in 1d): TestCo / SWE — recruiter_screen",
+    ],
+}
+
+
+def test_smoke_markers_replay_recorded_responses():
+    for case_id, responses in _RECORDED_SMOKE_RESPONSES.items():
         case = next(c for c in CASES if c.id == case_id)
-        combined = " ".join(case.contains_all + case.contains_any).lower()
-        for needle in needles:
-            assert needle in combined, (case_id, combined)
+        for response in responses:
+            failed = layer1.check_response(case, response)
+            assert failed == "", (case_id, failed, response[:80])
 
 
 def test_parse_judge_json_rejects_bad_output():
@@ -408,6 +440,90 @@ def test_run_entry_tracks_numeric_provenance_agreement(monkeypatch, tmp_path):
     assert result.provenance_agreement["provenance_only"] == 0
     assert result.provenance_agreement["both_clean"] == 0
     assert result.dashboard_row()["provenance_agreement"]["both_flagged"] == 1
+
+
+def _entry_and_jd(monkeypatch, tmp_path):
+    jd_path = tmp_path / "jd.txt"
+    jd_path.write_text("JD text", encoding="utf-8")
+    monkeypatch.setattr(runner_mod, "resolve_file", lambda _name: jd_path)
+    monkeypatch.setattr(runner_mod, "_master_excerpt", lambda *a, **k: "MASTER")
+    return golden_mod.GoldenEntry(
+        id="GD-01", company="Acme", role="Engineer", archetype="x",
+        eval_signal="y", reference_file="ref.txt", jd_file="jd.txt",
+    )
+
+
+def test_missing_provenance_row_is_no_record_not_both_clean():
+    buckets = runner_mod._numeric_provenance_agreement(["invented 34%"], None)
+    assert buckets["no_record"] == 1
+    assert buckets["both_clean"] == 0 and buckets["judge_only"] == 0
+
+
+def test_provenance_lookup_failure_cannot_discard_judge_score(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    def _boom(*, company="", role="", db_path=None):
+        raise RuntimeError("provenance DB unavailable")
+
+    monkeypatch.setattr(provenance_mod, "latest_run", _boom)
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: _score({}),
+    )
+    assert result.aggregate is not None, result.error  # the score survived
+    assert result.error == ""
+    assert result.provenance_agreement["no_record"] == 1
+
+
+def test_stale_provenance_row_is_fenced_out(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    # Same row id before and after generation: record_run swallowed its write,
+    # so the row predates this run and must not be counted as its verdict.
+    stale = {"id": 41, "claims": ["34%"], "violations": ["34%"]}
+    monkeypatch.setattr(
+        provenance_mod, "latest_run",
+        lambda *, company="", role="", db_path=None: dict(stale),
+    )
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.provenance_agreement["no_record"] == 1
+    assert result.provenance_agreement["both_flagged"] == 0
+
+
+def test_fresh_provenance_row_passes_the_fence(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    rows = iter([
+        {"id": 41, "claims": [], "violations": []},        # pre-generation
+        {"id": 42, "claims": ["34%"], "violations": ["34%"]},  # written by this run
+    ])
+    monkeypatch.setattr(
+        provenance_mod, "latest_run",
+        lambda *, company="", role="", db_path=None: next(rows),
+    )
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.provenance_agreement["both_flagged"] == 1
+    assert result.provenance_agreement["no_record"] == 0
 
 
 # ── ingest endpoint + metrics bridge ─────────────────────────────────────────

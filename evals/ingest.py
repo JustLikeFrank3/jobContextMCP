@@ -27,6 +27,8 @@ _DIMENSIONS = {
 
 
 def _record_suite_gauges(payload: dict) -> int:
+    from evals.runner import AGREEMENT_KEYS  # noqa: PLC0415 — lazy: runner pulls in lib.provenance
+
     detail = payload.get("detail") or {}
     scored = 0
     for row in payload.get("rows", []):
@@ -49,7 +51,7 @@ def _record_suite_gauges(payload: dict) -> int:
                     gd_id=gd_id, dimension=dimension,
                 )
         agreement = row.get("provenance_agreement") or {}
-        for key in ("both_flagged", "both_clean", "judge_only", "provenance_only"):
+        for key in AGREEMENT_KEYS:
             metrics.set_gauge(
                 "eval_provenance_agreement_count",
                 float(agreement.get(key, 0)),

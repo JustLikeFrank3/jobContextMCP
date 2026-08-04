@@ -47,7 +47,8 @@ def _cmd_judge(args: argparse.Namespace) -> int:
         master = resume.read_master_resume()
     from evals.runner import _master_excerpt
 
-    master = _master_excerpt(max_chars=32000, master_text=master)
+    # No explicit max_chars: the cap has exactly one owner, the runner default.
+    master = _master_excerpt(master_text=master)
     scores = []
     for i in range(args.n):
         score = judge_output(jd, master, output)

@@ -27,6 +27,17 @@ RESULTS_DIR = Path(__file__).parent / "results"
 GenerateFn = Callable[[GoldenEntry, str], str]      # (entry, jd_text) → output text
 JudgeFn = Callable[[str, str, str], JudgeScore]      # (jd, master_excerpt, output) → score
 
+# no_record is deliberately distinct from both_clean: a missing provenance row
+# (record_run swallows its own failures) means the comparison never happened,
+# not that both checks came back clean.
+AGREEMENT_KEYS: tuple[str, ...] = (
+    "both_flagged", "both_clean", "judge_only", "provenance_only", "no_record",
+)
+
+
+def _empty_agreement() -> dict[str, int]:
+    return dict.fromkeys(AGREEMENT_KEYS, 0)
+
 
 @dataclass
 class EntryResult:
@@ -34,12 +45,7 @@ class EntryResult:
     role: str
     aggregate: RunAggregate | None = None
     error: str = ""
-    provenance_agreement: dict[str, int] = field(default_factory=lambda: {
-        "both_flagged": 0,
-        "both_clean": 0,
-        "judge_only": 0,
-        "provenance_only": 0,
-    })
+    provenance_agreement: dict[str, int] = field(default_factory=_empty_agreement)
 
     def dashboard_row(self) -> dict:
         """One row of the doc's results table."""
@@ -147,6 +153,10 @@ def _numeric_provenance_agreement(
     provenance_row: dict | None,
 ) -> dict[str, int]:
     """Classify a run by whether judge and provenance both flagged numeric claims."""
+    buckets = _empty_agreement()
+    if provenance_row is None:
+        buckets["no_record"] = 1
+        return buckets
     judge_claims = {
         claim
         for text in judge_hallucinations
@@ -157,12 +167,6 @@ def _numeric_provenance_agreement(
         for text in (provenance_row or {}).get("violations", [])
         for claim in provenance_mod.extract_claims(text)
     }
-    buckets = {
-        "both_flagged": 0,
-        "both_clean": 0,
-        "judge_only": 0,
-        "provenance_only": 0,
-    }
     if judge_claims and prov_claims:
         buckets["both_flagged"] = 1
     elif judge_claims:
@@ -172,6 +176,31 @@ def _numeric_provenance_agreement(
     else:
         buckets["both_clean"] = 1
     return buckets
+
+
+def _fenced_provenance_row(entry: GoldenEntry, pre_row_id: int | None) -> dict | None:
+    """Provenance row written by THIS generation, or None.
+
+    record_run swallows its own failures, so latest_run can return a stale row
+    from a previous generation of the same company/role — comparing the id
+    against the pre-generation row fences that out. Never raises: a provenance
+    lookup failure must not discard the judge score it accompanies.
+    """
+    try:
+        row = provenance_mod.latest_run(company=entry.company, role=entry.role)
+    except Exception:
+        return None
+    if row is not None and pre_row_id is not None and row.get("id") == pre_row_id:
+        return None
+    return row
+
+
+def _latest_provenance_id(entry: GoldenEntry) -> int | None:
+    try:
+        row = provenance_mod.latest_run(company=entry.company, role=entry.role)
+    except Exception:
+        return None
+    return row.get("id") if row else None
 
 
 def run_entry(
@@ -192,26 +221,21 @@ def run_entry(
     master = _master_excerpt()
     scores: list[JudgeScore] = []
     errors: list[str] = []
-    provenance_agreement = {
-        "both_flagged": 0,
-        "both_clean": 0,
-        "judge_only": 0,
-        "provenance_only": 0,
-    }
+    provenance_agreement = _empty_agreement()
     for i in range(n):
+        pre_row_id = _latest_provenance_id(entry)
         try:
             output = generate(entry, jd_text)
             score = judge(jd_text, master, output)
-            provenance_row = provenance_mod.latest_run(
-                company=entry.company,
-                role=entry.role,
-            )
-            agreement = _numeric_provenance_agreement(score.hallucinations, provenance_row)
-            for key in provenance_agreement:
-                provenance_agreement[key] += agreement[key]
-            scores.append(score)
         except Exception as e:
             errors.append(f"run {i + 1}: {type(e).__name__}: {e}")
+            continue
+        # Outside the try: a provenance failure must not discard a paid score.
+        provenance_row = _fenced_provenance_row(entry, pre_row_id)
+        agreement = _numeric_provenance_agreement(score.hallucinations, provenance_row)
+        for key in provenance_agreement:
+            provenance_agreement[key] += agreement[key]
+        scores.append(score)
     if not scores:
         return EntryResult(entry.id, entry.role, error="; ".join(errors) or "no runs completed")
     result = EntryResult(
@@ -320,7 +344,7 @@ def format_dashboard(suite: SuiteResult) -> str:
             continue
         agreement = row.get("provenance_agreement", {})
         prov_text = ",".join(
-            f"{k}={agreement.get(k, 0)}" for k in ("both_flagged", "both_clean", "judge_only", "provenance_only")
+            f"{k}={agreement.get(k, 0)}" for k in AGREEMENT_KEYS
         )
         lines.append(
             f"{row['gd_id']:6} {row['role'][:28]:28} {row['keyword']:>7} "
