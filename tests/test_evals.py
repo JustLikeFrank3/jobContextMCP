@@ -212,14 +212,17 @@ def test_layer1_smoke_cases_assert_meaningful_content():
 
 
 def test_smoke_cases_require_specific_output_markers():
+    # Markers are code-emitted literals from the tool implementations — the
+    # empty-state message or the populated-state header, never aspirational
+    # vocabulary the tools don't print (that broke the gate at 50%).
     expectations = {
-        "TC-002": ("master source",),
-        "TC-009": ("job hunt status",),
-        "TC-010": ("queued jobs",),
-        "TC-013": ("no tone samples",),
-        "TC-014": ("mental health log",),
+        "TC-002": ("achievements", "peer feedback"),
+        "TC-009": ("no applications tracked", "job hunt status"),
+        "TC-010": ("no jobs in queue", "job queue"),
+        "TC-013": ("no tone samples", "tone profile"),
+        "TC-014": ("no check-ins logged", "mental health log"),
         "TC-016": ("linkedin posts",),
-        "TC-021": ("upcoming interviews",),
+        "TC-021": ("no interviews logged", "upcoming interviews"),
         "TC-023": ("certification reports",),
     }
     for case_id, needles in expectations.items():

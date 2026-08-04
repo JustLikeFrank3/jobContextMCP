@@ -51,11 +51,12 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-002", tool="materials", action="read_master_resume",
-        contains_all=("master resume",),
-        contains_any=("master source", "achievements", "peer feedback"),
+        contains_all=("achievements", "peer feedback"),
         min_length=20,
         tags=("smoke", "read-only"),
-        notes="Live expectation: the master resume is readable and includes the source/achievements context block.",
+        notes="The ACHIEVEMENTS / PEER FEEDBACK section headers are emitted by "
+              "_load_master_context when the reference files resolve — a failure "
+              "here means the enrichment block is missing, not just the resume.",
     ),
     EvalCase(
         id="TC-003", tool="materials", action="search",
@@ -105,15 +106,16 @@ CASES: tuple[EvalCase, ...] = (
     # ── per-domain smoke coverage (all 11 tools) ─────────────────────────────
     EvalCase(
         id="TC-009", tool="applications", action="status",
-        contains_all=("job hunt status",),
-        contains_any=("no applications tracked", "last updated", "follow-up"),
+        contains_any=("no applications tracked", "job hunt status"),
         min_length=10, tags=("smoke", "read-only"),
+        notes="Both alternatives are code-emitted literals: the empty-state "
+              "message or the populated-state header in tools/job_hunt.py.",
     ),
     EvalCase(
         id="TC-010", tool="applications", action="get_queue",
-        contains_all=("queued jobs",),
-        contains_any=("no queued jobs", "status", "fitment"),
+        contains_any=("no jobs in queue", "job queue"),
         min_length=10, tags=("smoke", "read-only"),
+        notes="Empty-state message or populated-state header from tools/job_queue.py.",
     ),
     EvalCase(
         id="TC-011", tool="people", action="log",
@@ -133,16 +135,16 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-013", tool="stories", action="tone_profile",
-        contains_all=("tone profile",),
-        contains_any=("no tone samples logged", "samples", "calibrate"),
+        contains_any=("no tone samples logged", "tone profile"),
         min_length=10, tags=("smoke", "read-only"),
+        notes="Empty-state message or populated-state header from tools/tone.py.",
     ),
     EvalCase(
         id="TC-014", tool="wellbeing", action="log",
-        contains_all=("mental health log",),
-        contains_any=("no check-ins", "average energy", "trend"),
+        contains_any=("no check-ins logged", "mental health log"),
         min_length=10, tags=("smoke", "read-only"),
-        notes="Must not error on empty history and should mention the health log shape.",
+        notes="Must not error on empty history. Empty-state message or "
+              "populated-state header from tools/health.py.",
     ),
     EvalCase(
         id="TC-015", tool="wellbeing", action="checkin",
@@ -182,9 +184,11 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-021", tool="interviews", action="upcoming",
-        contains_all=("upcoming interviews",),
-        contains_any=("no interviews", "next 14 days", "scheduled"),
+        contains_any=("no interviews logged", "no interviews scheduled",
+                      "upcoming interviews"),
         min_length=10, tags=("smoke", "read-only"),
+        notes="Three code-emitted states in tools/interviews.py: nothing logged, "
+              "nothing in the window, or the populated header.",
     ),
     EvalCase(
         id="TC-022", tool="job_search", action="web",

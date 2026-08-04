@@ -36,6 +36,12 @@ def build_isolated_workspace() -> dict:
     for name in ("template_format.txt", "achievements.txt",
                  "feedback_received.txt", "skills_shorter.txt"):
         (dirs["resumes"] / name).write_text(f"[CI {name}]", encoding="utf-8")
+    # _load_master_context resolves achievements/feedback from the workspace's
+    # 06-Reference-Materials/ dir — TC-002 asserts the enrichment block renders.
+    ref_dir = dirs["resumes"] / "06-Reference-Materials"
+    ref_dir.mkdir()
+    (ref_dir / "achievements.txt").write_text("[CI ACHIEVEMENTS CONTENT]", encoding="utf-8")
+    (ref_dir / "feedback_received.txt").write_text("[CI FEEDBACK CONTENT]", encoding="utf-8")
     (dirs["data"] / "status.json").write_text(
         json.dumps({"applications": [], "pipeline_summary": "CI"}), encoding="utf-8"
     )
