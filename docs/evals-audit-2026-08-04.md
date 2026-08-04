@@ -10,11 +10,36 @@ says so explicitly — the absences are the useful part.
 
 ---
 
+## Status as of this branch (2026-08-04, post-repair)
+
+The audit body below is the historical record of `c482b0d` and is left as
+written. The branch has since landed the repairs:
+
+- **Closed:** repair 2 (rubric anchors sent, pass criterion stated,
+  code-derived verdict, `model_verdict` retained), repair 3 (numeric
+  provenance agreement with `no_record` + freshness fence, raw counts,
+  wallboard panels), repair 5 (CLI truncation routed through the shared
+  cap), the Layer 1 hardening from "Missing from the plan entirely" (smoke
+  markers are now code-emitted literals over every reachable state, with a
+  recorded-response replay test), and the threshold alignment the two-bars
+  critique demanded (`MEAN_ALERT` and the dimension floor are sourced from
+  the rubric).
+- **Configured but not enabled in prod:** repair 1 — judge provider/model
+  routing works and is tested per branch, but no `JUDGE_LLM_PROVIDER` is set
+  in prod/CI, so **the judge is still the generator's model until Frank
+  picks one**.
+- **Open:** repair 4 (planted-error corpus — the committed fixtures are a
+  2-entry scaffold) and repair 6 (hand-labeled golden five — needs the
+  workspace machine).
+
+---
+
 ## Status
 
 - **Audited commit:** `c482b0d` (main).
-- **Branch:** `claude/eval-harness-audit-jmhl8m` — no commits beyond main other
-  than this document. No harness code has been changed.
+- **Branch:** `claude/eval-harness-audit-jmhl8m` — at audit time, no commits
+  beyond main other than this document and no harness code changed; the
+  repairs landed afterwards (see "Status as of this branch" above).
 - **Baseline:** 7 commits 2026-07-29 → 2026-07-30, +2,848 / −172 across 29
   files; 1,611 lines in `evals/`.
 

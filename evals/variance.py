@@ -6,8 +6,10 @@ quality on different runs. These metrics quantify that risk per the doc:
     Mean score          — mean below the resume rubric threshold → flag for review
     CoV (%)             — std dev / mean × 100; > 20% → output unstable
     Hallucination rate  — % of runs flagging ≥1 hallucination; target 0%
-    Verdict flip rate   — % of runs where the verdict flips; > 20% → add
-                          temperature constraints
+    Verdict flip rate   — % of runs whose code-derived verdict disagrees with
+                          the majority. The judge samples at temperature 0, so
+                          a flip is score variance crossing the rubric
+                          boundary — investigate the entry, not the sampler.
 """
 from __future__ import annotations
 
