@@ -71,6 +71,7 @@ class JudgeScore:
     rationale: str = ""
     hallucinations: list[str] = field(default_factory=list)
     verdict: str = "fail"
+    model_verdict: str = ""  # the model's own opinion — calibration data, never a gate
     raw: str = ""
     model: str = ""
 
@@ -85,6 +86,7 @@ class JudgeScore:
             "rationale": self.rationale,
             "hallucinations": self.hallucinations,
             "verdict": self.verdict,
+            "model_verdict": self.model_verdict,
             "model": self.model,
         }
 
@@ -138,9 +140,10 @@ def parse_judge_json(text: str) -> JudgeScore:
         if not isinstance(value, (int, float)) or not 1 <= value <= 5:
             raise ValueError(f"judge score {dim}={value!r} not in 1–5")
         scores[dim] = int(value)
-    verdict = str(obj.get("verdict", "")).lower()
-    if verdict not in ("pass", "fail"):
-        raise ValueError(f"judge verdict {obj.get('verdict')!r} not pass/fail")
+    # Kept leniently, not enforced: does the model apply the stated criterion?
+    model_verdict = str(obj.get("verdict", "")).lower()
+    if model_verdict not in ("pass", "fail"):
+        model_verdict = ""
     hallucinations = obj.get("hallucinations") or []
     if not isinstance(hallucinations, list):
         hallucinations = [str(hallucinations)]
@@ -153,6 +156,7 @@ def parse_judge_json(text: str) -> JudgeScore:
         rationale=str(obj.get("rationale", "")),
         hallucinations=[str(h) for h in hallucinations],
         verdict=verdict,
+        model_verdict=model_verdict,
         raw=text,
     )
 
@@ -188,7 +192,7 @@ def judge_output(
     for _ in range(max_attempts):
         response = create_chat_completion(
             client, label="eval_judge", model=model,
-            messages=messages, temperature=0.0,
+            messages=messages, temperature=0.0, max_tokens=2000,
         )
         content = response.choices[0].message.content or ""
         try:

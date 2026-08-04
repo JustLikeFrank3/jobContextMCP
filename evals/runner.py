@@ -46,6 +46,7 @@ class EntryResult:
     aggregate: RunAggregate | None = None
     error: str = ""
     provenance_agreement: dict[str, int] = field(default_factory=_empty_agreement)
+    judge_models: list[str] = field(default_factory=list)  # distinct, as stamped on the scores
 
     def dashboard_row(self) -> dict:
         """One row of the doc's results table."""
@@ -252,6 +253,7 @@ def run_entry(
         entry.role,
         aggregate=aggregate_runs(scores),
         provenance_agreement=provenance_agreement,
+        judge_models=list(dict.fromkeys(s.model for s in scores if s.model)),
     )
     if errors:
         result.error = "; ".join(errors)
@@ -281,6 +283,11 @@ def run_suite(
     )
     for entry in entries if entries is not None else load_golden():
         suite.entries.append(run_entry(entry, n=n, generate_fn=generate_fn, judge_fn=judge_fn))
+    # Report the judge model that actually ran, not the config's promise;
+    # the config-derived value stands only when no score carries a model.
+    ran_models = list(dict.fromkeys(m for e in suite.entries for m in e.judge_models))
+    if ran_models:
+        suite.judge_model = ", ".join(ran_models)
     save_results(suite, results_dir)
     return suite
 

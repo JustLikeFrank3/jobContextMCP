@@ -380,18 +380,22 @@ def _resolve_llm_settings(task: str = "", cfg: "dict | None" = None) -> tuple[st
         cfg = get_active_config()
 
     if task == "eval_judge":
+        # Env wins, matching the generation path — so a plain LLM_PROVIDER
+        # (AKS secrets, CI) silently overrides config judge_provider. Where
+        # LLM_PROVIDER is exported, only JUDGE_LLM_PROVIDER/JUDGE_LLM_MODEL
+        # actually split the judge.
         provider = str(cfg.get("judge_provider", cfg.get("llm_provider", "openai"))).lower()
         provider = os.environ.get("JUDGE_LLM_PROVIDER", os.environ.get("LLM_PROVIDER", provider)).lower()
-        model = str(cfg.get("judge_model", "") or "").strip()
-        if not model:
-            model = str(cfg.get("openai_model", "gpt-4o-mini")).strip()
+        judge_model = str(
+            os.environ.get("JUDGE_LLM_MODEL", "") or cfg.get("judge_model", "") or ""
+        ).strip()
         if provider == "ollama":
-            return provider, str(cfg.get("ollama_model", "llama3.1:8b")).strip() or model
+            return provider, judge_model or str(cfg.get("ollama_model", "llama3.1:8b")).strip()
         if provider == "anthropic":
-            return provider, str(cfg.get("anthropic_model", "claude-sonnet-5")).strip() or model
+            return provider, judge_model or str(cfg.get("anthropic_model", "claude-sonnet-5")).strip()
         if provider == "foundry":
-            return provider, str(cfg.get("judge_model", cfg.get("azure_foundry_deployment", "gpt-4.1-mini"))).strip() or model
-        return provider, model
+            return provider, judge_model or str(cfg.get("azure_foundry_deployment", "gpt-4.1-mini")).strip()
+        return provider, judge_model or str(cfg.get("openai_model", "gpt-4o-mini")).strip()
 
     provider = str(cfg.get("llm_provider", "openai")).lower()
     provider = os.environ.get("LLM_PROVIDER", provider).lower()

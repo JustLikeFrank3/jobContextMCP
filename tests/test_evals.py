@@ -284,8 +284,24 @@ def test_parse_judge_json_rejects_bad_output():
         judge_mod.parse_judge_json("no json here")
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json('{"keyword_coverage": 9}')
-    with pytest.raises(ValueError):
-        judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"maybe"'))
+    # A bad model verdict is no longer a parse failure — the verdict is
+    # code-derived; the model's opinion is kept leniently as model_verdict.
+    score = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"maybe"'))
+    assert score.model_verdict == ""
+    assert score.verdict == "pass"  # scores 4,5,3,4,5: mean 4.2, floor met
+
+
+def test_model_verdict_retained_as_calibration_data():
+    score = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON)
+    assert score.model_verdict == "pass"
+    assert score.to_dict()["model_verdict"] == "pass"
+    # Model disagreeing with the rubric is recorded, not corrected away.
+    dissent = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"fail"'))
+    assert dissent.model_verdict == "fail"
+    assert dissent.verdict == "pass"
+    absent = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace(', "verdict": "pass"', ""))
+    assert absent.model_verdict == ""
+    assert absent.verdict == "pass"
 
 
 def _fake_client(payloads: list[str]):
@@ -331,10 +347,125 @@ def test_judge_output_retries_then_fails_cleanly():
         judge_mod.judge_output("JD", "M", "OUT", client=client, model="m")
 
 
+def test_judge_call_caps_max_tokens():
+    captured = {}
+
+    def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=_GOOD_JUDGE_JSON))],
+            usage=None,
+        )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    judge_mod.judge_output("JD", "M", "OUT", client=client, model="m")
+    assert captured["max_tokens"] == 2000
+
+
 def test_judge_output_without_provider_raises_runtime_error():
     # conftest's autouse fixture stubs get_llm_client to (None, None)
     with pytest.raises(RuntimeError, match="No LLM provider"):
         judge_mod.judge_output("JD", "M", "OUT")
+
+
+# ── judge provider/model routing ──────────────────────────────────────────────
+# CI exports LLM_PROVIDER=foundry (deploy.yml), so every config-path test must
+# clear the env or it passes locally and fails in CI (CLAUDE.md gotcha).
+
+def _clear_llm_env(monkeypatch):
+    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_judge_model_honored_on_every_provider_branch(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    for provider in ("ollama", "anthropic", "foundry", "openai"):
+        cfg = {"judge_provider": provider, "judge_model": "judge-x"}
+        assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == (provider, "judge-x"), provider
+
+
+def test_judge_falls_back_to_provider_model_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    cases = {
+        "ollama": ({"ollama_model": "qwen3:14b"}, "qwen3:14b"),
+        "anthropic": ({}, "claude-sonnet-5"),
+        "foundry": ({"azure_foundry_deployment": "gpt-4.1"}, "gpt-4.1"),
+        "openai": ({"openai_model": "gpt-4o"}, "gpt-4o"),
+    }
+    for provider, (extra, expected) in cases.items():
+        cfg = {"judge_provider": provider, **extra}
+        assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == (provider, expected), provider
+
+
+def test_judge_env_provider_beats_config(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("JUDGE_LLM_PROVIDER", "anthropic")
+    cfg = {"judge_provider": "ollama", "judge_model": "judge-x"}
+    assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == ("anthropic", "judge-x")
+
+
+def test_plain_llm_provider_env_beats_config_judge_provider(monkeypatch):
+    # Documented precedence: config judge_provider only works where
+    # LLM_PROVIDER is unset; prod/CI must use JUDGE_LLM_PROVIDER.
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_PROVIDER", "foundry")
+    cfg = {"judge_provider": "ollama", "azure_foundry_deployment": "gpt-4.1-mini"}
+    provider, model = config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)
+    assert provider == "foundry"
+    assert model == "gpt-4.1-mini"
+
+
+def test_judge_model_env_beats_config(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("JUDGE_LLM_MODEL", "env-model")
+    cfg = {"judge_provider": "ollama", "judge_model": "cfg-model"}
+    assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)[1] == "env-model"
+
+
+def test_non_judge_tasks_ignore_judge_keys(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    cfg = {
+        "llm_provider": "openai", "openai_model": "gpt-4o-mini",
+        "judge_provider": "ollama", "judge_model": "judge-x",
+    }
+    # "" is generation; assessment/certification pass task strings today
+    # (tools/fitment.py, tools/certification.py) and must stay untouched.
+    for task in ("", "assessment", "certification"):
+        assert config_mod._resolve_llm_settings(task=task, cfg=cfg) == ("openai", "gpt-4o-mini"), task
+
+
+def _suite_entry(tmp_path):
+    jd = tmp_path / "jd.txt"
+    jd.write_text("We need Python.", encoding="utf-8")
+    return golden_mod.GoldenEntry(
+        id="GD-T1", company="TestCo", role="SWE", archetype="t", eval_signal="t",
+        reference_file="ref.txt", jd_file=str(jd),
+    )
+
+
+def test_suite_judge_model_reflects_what_ran(isolated_server, tmp_path):
+    def judge(_jd, _m, _o):
+        score = _score({})
+        score.model = "actual-judge-model"
+        return score
+
+    suite = runner_mod.run_suite(
+        entries=[_suite_entry(tmp_path)], n=2,
+        generate_fn=lambda _e, _jd: "OUT", judge_fn=judge,
+        results_dir=tmp_path / "results",
+    )
+    assert suite.judge_model == "actual-judge-model"
+    assert suite.to_dict()["judge_model"] == "actual-judge-model"
+
+
+def test_suite_judge_model_falls_back_to_config_when_unstamped(isolated_server, tmp_path):
+    suite = runner_mod.run_suite(
+        entries=[_suite_entry(tmp_path)], n=1,
+        generate_fn=lambda _e, _jd: "OUT",
+        judge_fn=lambda _jd, _m, _o: _score({}),  # model stays ""
+        results_dir=tmp_path / "results",
+    )
+    assert suite.judge_model == config_mod._resolve_llm_settings(task="eval_judge")[1]
 
 
 # ── variance analysis ─────────────────────────────────────────────────────────
