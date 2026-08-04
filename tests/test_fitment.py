@@ -243,6 +243,40 @@ class TestFitmentCoverageExtras:
         for name in names:
             assert not set('<>:"/\\|?*') & set(name), name
 
+    @pytest.mark.live_llm
+    def test_run_job_assessment_slug_is_representable_on_every_platform(
+        self, isolated_server, monkeypatch
+    ):
+        """run_job_assessment builds its own filename from company + role, so
+        a hostile role must be sanitized before it hits disk. The cloud runs
+        Linux, where these names are legal — they get written happily and then
+        skip on every desktop sync forever."""
+        from lib import config
+
+        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
+
+        fake_client = MagicMock()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content="FITMENT SCORE: 7/10"))]
+        fake_response.usage = None
+        fake_client.chat.completions.create.return_value = fake_response
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
+            out = fitment.run_job_assessment(
+                "Coke",
+                r'Senior Engineer: <html> | Home, RI ? * \ /',
+                "Build things.",
+            )
+
+        assert "Saved job assessment" in out
+        folder = fitment.config.get_active_job_assessments_dir() / "run_job_assessment"
+        names = [p.name for p in folder.glob("*.md")]
+        assert names, "assessment file was not saved"
+        for name in names:
+            assert not set('<>:"/\\|?*') & set(name), name
+        saved = folder / names[0]
+        assert saved.read_text(encoding="utf-8") == "FITMENT SCORE: 7/10"
+
     def test_run_job_assessment_handles_llm_client_boot_failure(self, isolated_server):
         with patch("lib.config.get_llm_client", side_effect=RuntimeError("boom")):
             out = fitment.run_job_assessment("Stripe", "Staff Engineer", JD)

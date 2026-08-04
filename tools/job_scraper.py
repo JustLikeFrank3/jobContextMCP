@@ -265,7 +265,11 @@ def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
     """
     Return (company, role, description) extracted from Jina Reader markdown.
 
-    Role   : first non-empty short line (likely the page title / h1).
+    Role   : first non-empty short line (likely the page title / h1). Tags are
+             stripped first — when a fetch degrades to raw HTML instead of
+             Reader markdown, the first line is markup like "<html>", and
+             taking it verbatim put literal "<html>" into the role, the
+             assessment prompt, and the saved filename.
     Company: heuristic scan of the first 30 lines for "at <Company>" patterns
              or a "<Company> |" / "<Company> •" separator; falls back to the
              URL-derived name.
@@ -275,7 +279,7 @@ def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
 
     role = ""
     for line in lines:
-        stripped = line.strip().lstrip("#").strip()
+        stripped = _strip_html(line).lstrip("#").strip()
         if stripped and len(stripped) < 120:
             role = stripped
             break
@@ -301,6 +305,72 @@ def _parse_job_from_markdown(text: str, url: str) -> tuple[str, str, str]:
     return company, role, description
 
 
+# A fetch that lands on an error body, a bot interstitial or a login wall still
+# parses fine — it just isn't a posting. Before this guard, each one was queued
+# and handed to the LLM, producing a real assessment of a job titled
+# "Bad Request" or "Just a moment...". One partition held 13 such files.
+
+# Unambiguous error/interstitial text, rejected wherever it appears in the
+# title: none of these occur in a genuine job title.
+_ERROR_TITLE_RE = re.compile(
+    r"\b(?:"
+    r"bad request|forbidden|unauthorized|access denied|access to this page"
+    r"|the request could not be satisfied"
+    r"|file or directory not found|page not found|page cannot be found"
+    r"|just a moment|attention required|checking your browser"
+    r"|are you a robot|verify you are human|security check"
+    r"|example domain"
+    r"|service unavailable|temporarily unavailable|too many requests"
+    r"|error \d{3}|http \d{3}"
+    # Jina Reader's own header fields leaking into the title.
+    r"|url source:|markdown content:|published time:"
+    # LinkedIn page chrome, and its search-results pages ("19 Luba jobs in
+    # Netherlands") which are listings, not postings.
+    r"|see who you know|jobs in\b"
+    # No trailing \b on the group: several alternatives end in ':', which is
+    # not a word character, so a trailing boundary could never match them.
+    r")",
+    re.IGNORECASE,
+)  # NOSONAR — fixed alternation over trusted page text
+
+# Residual markup in the title means extraction degraded to raw HTML. The
+# tag-stripping in _parse_job_from_markdown should prevent this; belt and
+# braces, because the failure is silent and expensive.
+_MARKUP_TITLE_RE = re.compile(r"<\s*/?\s*[a-z!]", re.IGNORECASE)
+
+# Page chrome meaning the extractor grabbed a login wall or a spinner rather
+# than the posting. Anchored to the START of the title on purpose: a real
+# posting like "Senior Engineer, Login Services" must not be rejected.
+_CHROME_PREFIX_RE = re.compile(
+    r"^(?:log ?in|sign ?in|email or phone|password|loading|please wait"
+    r"|enable javascript|javascript is required|redirecting)\b",
+    re.IGNORECASE,
+)  # NOSONAR — fixed alternation over trusted page text
+
+# A real posting runs to thousands of characters; error bodies are tiny. This
+# is the catch-all for interstitials whose wording we have not seen yet.
+_MIN_JOB_DESCRIPTION_CHARS = 300
+
+
+def _non_job_reason(role: str, description: str) -> str:
+    """Return why this page is not a job posting, or '' if it looks like one."""
+    title = role.strip()
+    if _MARKUP_TITLE_RE.search(title):
+        return f"the title still contains markup ({title!r})"
+    if _ERROR_TITLE_RE.search(title):
+        return f"the title reads as an error or interstitial page ({title!r})"
+    if _CHROME_PREFIX_RE.match(title):
+        return f"the title is page chrome, not a posting ({title!r})"
+
+    body = description.strip()
+    if len(body) < _MIN_JOB_DESCRIPTION_CHARS:
+        return (
+            f"only {len(body)} characters of content were extracted, "
+            f"too little to be a job description"
+        )
+    return ""
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def scrape_job_url(url: str, auto_queue: bool = True, page_text: str = "") -> str:
@@ -321,6 +391,10 @@ def scrape_job_url(url: str, auto_queue: bool = True, page_text: str = "") -> st
         page_text:  Optional client-supplied page content. When non-empty it
                     is trusted as the posting text and the URL is only used
                     for metadata (company-from-URL, source link).
+
+    Pages that fetch successfully but are not postings — error bodies, bot
+    interstitials, login walls — are rejected here rather than queued, so no
+    LLM assessment is spent on them.
     """
     if page_text.strip():
         text = page_text
@@ -346,6 +420,14 @@ def scrape_job_url(url: str, auto_queue: bool = True, page_text: str = "") -> st
         return (
             f"Could not extract a job title from {url}. "
             "Try queuing manually with queue_job(company, role, jd)."
+        )
+
+    non_job = _non_job_reason(role, description)
+    if non_job:
+        return (
+            f"{url} does not look like a job posting: {non_job}. "
+            "Nothing was queued and no assessment was run. "
+            "If that is wrong, add it manually with queue_job(company, role, jd)."
         )
 
     if not auto_queue:
