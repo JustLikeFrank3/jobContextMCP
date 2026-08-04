@@ -314,6 +314,24 @@ def test_fixture_dataset_loads_and_resolves():
     assert entries[1].eval_signal.lower().startswith("corrupted")
 
 
+def test_format_dashboard_shows_provenance_agreement():
+    aggregate = variance.aggregate_runs([_score({})])
+    entry = runner_mod.EntryResult(
+        "GD-01",
+        "Engineer",
+        aggregate=aggregate,
+        provenance_agreement={
+            "both_flagged": 1,
+            "both_clean": 0,
+            "judge_only": 0,
+            "provenance_only": 0,
+        },
+    )
+    text = runner_mod.format_dashboard(runner_mod.SuiteResult(n_runs=1, entries=[entry]))
+    assert "prov" in text.lower()
+    assert "both_flagged=1" in text
+
+
 def test_run_entry_tracks_numeric_provenance_agreement(monkeypatch, tmp_path):
     from lib import provenance as provenance_mod
 

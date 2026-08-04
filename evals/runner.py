@@ -302,7 +302,7 @@ def format_dashboard(suite: SuiteResult) -> str:
     """The doc's sample results table, as fixed-width text."""
     header = (
         f"{'GD-ID':6} {'Role':28} {'Keyword':>7} {'Relev.':>6} {'Accur.':>6} "
-        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5}"
+        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5} {'Prov':>8}"
     )
     lines = [header, "─" * len(header)]
     for e in suite.entries:
@@ -310,10 +310,14 @@ def format_dashboard(suite: SuiteResult) -> str:
         if "error" in row and "mean" not in row:
             lines.append(f"{row['gd_id']:6} {row['role'][:28]:28} ERROR: {row['error']}")
             continue
+        agreement = row.get("provenance_agreement", {})
+        prov_text = ",".join(
+            f"{k}={agreement.get(k, 0)}" for k in ("both_flagged", "both_clean", "judge_only", "provenance_only")
+        )
         lines.append(
             f"{row['gd_id']:6} {row['role'][:28]:28} {row['keyword']:>7} "
             f"{row['relevance']:>6} {row['accuracy']:>6} {row['impact']:>6} "
-            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5}"
+            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5} {prov_text:>8}"
         )
         for alert in row.get("alerts", []):
             lines.append(f"       ⚠ {alert}")
