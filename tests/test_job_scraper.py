@@ -100,6 +100,67 @@ class TestScrapeJobUrl:
         assert len(data["jobs"]) == 1
         assert data["jobs"][0]["source"] == "https://stripe.com/jobs/123"
 
+    def test_raw_html_does_not_become_the_role(self, isolated_server, monkeypatch):
+        """A fetch that degrades to raw HTML instead of Reader markdown must
+        not put markup into the role — that reached the assessment prompt and
+        the saved filename, producing files like 'Coke <html> - Fitment
+        Assessment.md' that can never sync to a Windows peer."""
+        from tools import job_scraper as scraper
+
+        raw_html = (
+            "<html>\n<head><title>Senior Software Engineer</title></head>\n"
+            "<body>\n<h1>Senior Software Engineer</h1>\n"
+            "<p>Build payment systems at Coke.</p>\n</body>\n</html>"
+        )
+        _company, role, _desc = scraper._parse_job_from_markdown(
+            raw_html, "https://careers.coke.com/jobs/1")
+
+        # Before the fix this was the literal string "<html>".
+        assert not set('<>:"/\\|?*') & set(role), role
+        assert role == "Senior Software Engineer"
+
+    def test_markup_only_page_yields_no_role(self, isolated_server, monkeypatch):
+        """With nothing but markup there is no title to salvage — fail loudly
+        rather than queue a job whose role is a tag."""
+        monkeypatch.setattr(
+            "httpx.get", lambda *a, **kw: _mock_response("<html><body></body></html>"))
+        result = srv.scrape_job_url("https://careers.example.com/jobs/1")
+        assert "Could not extract a job title" in result
+
+    def test_non_job_page_is_not_queued(self, isolated_server, monkeypatch):
+        """A Cloudflare interstitial fetches fine and parses fine. Before the
+        guard it was queued and assessed, producing a real fitment report for
+        a job titled 'Just a moment...'."""
+        page = "Just a moment...\n\n" + ("Enable JavaScript and cookies to continue. " * 20)
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response(page))
+
+        result = srv.scrape_job_url("https://careers.example.com/jobs/1", auto_queue=True)
+
+        assert "does not look like a job posting" in result
+        assert "queue_job" in result
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text()) if srv.JOB_QUEUE_FILE.exists() else {"jobs": []}
+        assert data.get("jobs", []) == [], "non-job page must not enter the pipeline"
+
+    def test_thin_page_is_rejected(self, isolated_server, monkeypatch):
+        """The catch-all for interstitials whose wording we have not seen."""
+        monkeypatch.setattr(
+            "httpx.get", lambda *a, **kw: _mock_response("Some Unknown Error Page\n\nnope"))
+
+        result = srv.scrape_job_url("https://careers.example.com/jobs/1")
+
+        assert "does not look like a job posting" in result
+        assert "too little to be a job description" in result
+
+    def test_real_posting_still_queues(self, isolated_server, monkeypatch):
+        """The guard must not reject genuine postings."""
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response(_SAMPLE_MARKDOWN))
+
+        result = srv.scrape_job_url("https://stripe.com/jobs/123", auto_queue=True)
+
+        assert "does not look like a job posting" not in result
+        assert "Scraped" in result
+
+
     def test_http_error_returns_friendly_message(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response(status_code=403))
         result = srv.scrape_job_url("https://boards.greenhouse.io/stripe/jobs/12345")
@@ -179,6 +240,54 @@ class TestScrapeJobUrl:
         monkeypatch.setattr("httpx.get", _raise)
         result = srv.scrape_job_url("https://example.com/jobs/1")
         assert "Failed to fetch" in result
+
+
+# ── non-job page rejection ─────────────────────────────────────────────────────
+
+class TestNonJobDetection:
+    """Driven by the titles actually found in the production partition, each of
+    which had already cost a full LLM assessment."""
+
+    @pytest.mark.parametrize("title", [
+        "Bad Request",
+        "Just a moment...",
+        "The request could not be satisfied",
+        "File or directory not found.",
+        "Example Domain",
+        "Login - FullStack Connect",
+        "Email or phone Password Show Forgot password AI GTM Developer",
+        "Access Denied",
+        "Attention Required! | Cloudflare",
+        "403 Forbidden",
+        "Error 404",
+        "Page not found",
+        "Too Many Requests",
+        "<html>",
+        "Coca Colacompany <html>",
+        "Home, Rhode Island, United States URL Source: https://jobs.cvshealth.com/us/en",
+        "19 Luba jobs in Netherlands",
+        "by 2x See who you know Full Stack Software Engineer",
+    ])
+    def test_rejects_observed_junk_titles(self, title):
+        from tools import job_scraper as scraper
+
+        assert scraper._non_job_reason(title, "x" * 5000), f"not rejected: {title!r}"
+
+    @pytest.mark.parametrize("title", [
+        "Senior Software Engineer, Payments",
+        "Senior Engineer, Login Services",
+        "Staff Engineer - Identity and Sign In Platform",
+        "Software Engineer II - CRM",
+        "Lead AI Engineer",
+        "Principal Engineer, Access Management",
+        "Senior Backend Engineer (Password Infrastructure)",
+    ])
+    def test_accepts_genuine_titles(self, title):
+        """Anchoring the chrome patterns to the START of the title is what
+        keeps 'Login Services' and 'Sign In Platform' roles alive."""
+        from tools import job_scraper as scraper
+
+        assert scraper._non_job_reason(title, "x" * 5000) == "", title
 
 
 # ── search_jobs ────────────────────────────────────────────────────────────────
