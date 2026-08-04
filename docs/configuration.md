@@ -97,6 +97,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | `generation_budgets` | see [generation.md](generation.md) | Token budgets for context packing |
 | `github_metrics` | — | `{username, repos}` for portfolio tracking |
 | `side_project_folders` | `[]` | Array of folders for the skill scanner |
+| `side_project_repos` | `[]` | Remote repos for the skill scanner (URL string or `{url, branch}`); shallow-cloned to a temp dir when no local checkout exists |
 | `latex_resume_dir` / `resume_pdfs_dir` | — / `03-Resume-PDFs` | Owner-only LaTeX assets; PDF output dir |
 
 Provider selection notes:

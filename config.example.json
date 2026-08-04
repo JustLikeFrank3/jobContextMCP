@@ -5,6 +5,11 @@
     "/path/to/your/primary-side-project",
     "/path/to/another-project"
   ],
+  "_comment_side_project_repos": "Remote repos for the skills scan when no local checkout exists — each is shallow-cloned to a temp dir and scanned. Entries are either a plain clone URL string or {\"url\": ..., \"branch\": ...}.",
+  "side_project_repos": [
+    "https://github.com/you/your-project.git",
+    {"url": "https://github.com/you/another-project.git", "branch": "main"}
+  ],
   "data_folder": "/path/to/job-search-mcp/data",
   "fb_friends_folder": "/path/to/facebook-export/friends",
 
@@ -26,6 +31,12 @@
   "openai_api_key": "sk-...your-key-here",
   "openai_model": "gpt-4o-mini",
   "serpapi_key": "",
+
+  "_comment_github_metrics": "Repos tracked by refresh_portfolio_metrics (traffic snapshots). Repo entries may be bare names (combined with username) or full owner/name slugs. Auth comes from env GITHUB_TOKEN or the gh CLI keyring — never stored here; the traffic API needs push access to each repo.",
+  "github_metrics": {
+    "username": "your-github-username",
+    "repos": ["your-project", "someone-else/shared-repo"]
+  },
 
   "_comment_llm_provider": "Set llm_provider to 'openai' (default), 'ollama' (local, no key), 'anthropic' (Claude BYOK), or 'foundry' (Azure AI Foundry). The LLM_PROVIDER env var overrides this.",
   "llm_provider": "openai",
