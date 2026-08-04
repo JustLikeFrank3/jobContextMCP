@@ -253,6 +253,21 @@ _RECORDED_SMOKE_RESPONSES = {
         "# Upcoming interviews (next 14 days, 1 total)\n"
         "- 2026-08-05 (in 1d): TestCo / SWE — recruiter_screen",
     ],
+    "TC-016": [
+        "No LinkedIn posts logged yet. Use log_linkedin_post() to add posts.",
+        "═══ LINKEDIN POSTS (1 posts) ═══\n\n"
+        "Aggregate: 12 reactions | 1 reposts | 3 comments | 400 impressions",
+    ],
+    "TC-023": [
+        "No certification reports yet. Generate the current week with "
+        'certification(action="weekly_report").',
+        "═══ CERTIFICATION REPORTS ═══\n"
+        "  #1 — week ending 2026-08-01 v1 (GA) · 4 entries · generated 2026-08-02T09:00:00",
+    ],
+    "TC-024": [
+        "═══ CERTIFICATION PROFILE (GA) ═══\n  state: GA\n"
+        "  min_activities_per_week: 3\n  week_ends_on: Saturday",
+    ],
 }
 
 
@@ -393,7 +408,9 @@ def test_format_dashboard_shows_provenance_agreement():
     )
     text = runner_mod.format_dashboard(runner_mod.SuiteResult(n_runs=1, entries=[entry]))
     assert "prov" in text.lower()
-    assert "both_flagged=1" in text
+    # Compact per-row counts in AGREEMENT_KEYS order, legend on the footer.
+    assert "1/0/0/0/0" in text
+    assert "Prov: " + "/".join(runner_mod.AGREEMENT_KEYS) in text
 
 
 def test_run_entry_tracks_numeric_provenance_agreement(monkeypatch, tmp_path):
@@ -524,6 +541,36 @@ def test_fresh_provenance_row_passes_the_fence(monkeypatch, tmp_path):
     )
     assert result.provenance_agreement["both_flagged"] == 1
     assert result.provenance_agreement["no_record"] == 0
+
+
+def test_failed_pre_read_disqualifies_post_row(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    # Pre-generation read fails, post-generation read returns a row. With no
+    # pre-read baseline the row's freshness is unprovable — it could be stale
+    # — so it must land in no_record, not be trusted as this run's verdict.
+    calls = {"n": 0}
+
+    def _flaky(*, company="", role="", db_path=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("provenance DB briefly unavailable")
+        return {"id": 41, "claims": ["34%"], "violations": ["34%"]}
+
+    monkeypatch.setattr(provenance_mod, "latest_run", _flaky)
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.aggregate is not None, result.error
+    assert result.provenance_agreement["no_record"] == 1
+    assert result.provenance_agreement["both_flagged"] == 0
 
 
 # ── ingest endpoint + metrics bridge ─────────────────────────────────────────

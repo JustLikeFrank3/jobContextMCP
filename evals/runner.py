@@ -178,14 +178,23 @@ def _numeric_provenance_agreement(
     return buckets
 
 
-def _fenced_provenance_row(entry: GoldenEntry, pre_row_id: int | None) -> dict | None:
+# Distinct from None ("no row existed yet"): the pre-read itself failed, so
+# a post-generation row's freshness cannot be proven against anything.
+_PRE_READ_FAILED = object()
+
+
+def _fenced_provenance_row(entry: GoldenEntry, pre_row_id) -> dict | None:
     """Provenance row written by THIS generation, or None.
 
     record_run swallows its own failures, so latest_run can return a stale row
     from a previous generation of the same company/role — comparing the id
-    against the pre-generation row fences that out. Never raises: a provenance
-    lookup failure must not discard the judge score it accompanies.
+    against the pre-generation row fences that out. A failed pre-read means
+    freshness is unprovable, so no row may pass the fence at all. Never
+    raises: a provenance lookup failure must not discard the judge score it
+    accompanies.
     """
+    if pre_row_id is _PRE_READ_FAILED:
+        return None
     try:
         row = provenance_mod.latest_run(company=entry.company, role=entry.role)
     except Exception:
@@ -195,11 +204,11 @@ def _fenced_provenance_row(entry: GoldenEntry, pre_row_id: int | None) -> dict |
     return row
 
 
-def _latest_provenance_id(entry: GoldenEntry) -> int | None:
+def _latest_provenance_id(entry: GoldenEntry):
     try:
         row = provenance_mod.latest_run(company=entry.company, role=entry.role)
     except Exception:
-        return None
+        return _PRE_READ_FAILED
     return row.get("id") if row else None
 
 
@@ -334,7 +343,7 @@ def format_dashboard(suite: SuiteResult) -> str:
     """The doc's sample results table, as fixed-width text."""
     header = (
         f"{'GD-ID':6} {'Role':28} {'Keyword':>7} {'Relev.':>6} {'Accur.':>6} "
-        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5} {'Prov':>8}"
+        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5} {'Prov':>11}"
     )
     lines = [header, "─" * len(header)]
     for e in suite.entries:
@@ -343,14 +352,13 @@ def format_dashboard(suite: SuiteResult) -> str:
             lines.append(f"{row['gd_id']:6} {row['role'][:28]:28} ERROR: {row['error']}")
             continue
         agreement = row.get("provenance_agreement", {})
-        prov_text = ",".join(
-            f"{k}={agreement.get(k, 0)}" for k in AGREEMENT_KEYS
-        )
+        prov_text = "/".join(str(agreement.get(k, 0)) for k in AGREEMENT_KEYS)
         lines.append(
             f"{row['gd_id']:6} {row['role'][:28]:28} {row['keyword']:>7} "
             f"{row['relevance']:>6} {row['accuracy']:>6} {row['impact']:>6} "
-            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5} {prov_text:>8}"
+            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5} {prov_text:>11}"
         )
         for alert in row.get("alerts", []):
             lines.append(f"       ⚠ {alert}")
+    lines.append("Prov: " + "/".join(AGREEMENT_KEYS))
     return "\n".join(lines)

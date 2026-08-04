@@ -752,6 +752,16 @@ data:
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "orange", "value": 604800}]}}}},
         {"type": "timeseries", "title": "Eval pushes by kind (1d)", "gridPos": {"x": 18, "y": 18, "w": 6, "h": 8},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "sum by(kind)(increase(eval_pushes_total{namespace=\"jcmcp\"}[1d]))", "legendFormat": "{{kind}}"}]}
+         "targets": [{"expr": "sum by(kind)(increase(eval_pushes_total{namespace=\"jcmcp\"}[1d]))", "legendFormat": "{{kind}}"}]},
+        {"type": "stat", "title": "Runs without provenance record", "gridPos": {"x": 0, "y": 26, "w": 6, "h": 7},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "sum(max by(gd_id)(eval_provenance_agreement_count{namespace=\"jcmcp\",kind=\"no_record\"}))", "instant": true}],
+         "fieldConfig": {"defaults": {"decimals": 0,
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}}},
+        {"type": "bargauge", "title": "Provenance agreement by bucket (raw counts)", "gridPos": {"x": 6, "y": 26, "w": 18, "h": 7},
+         "datasource": {"uid": "prometheus"},
+         "targets": [{"expr": "sum by(kind)(max by(kind,gd_id)(eval_provenance_agreement_count{namespace=\"jcmcp\"}))", "legendFormat": "{{kind}}"}],
+         "options": {"displayMode": "gradient", "orientation": "horizontal"},
+         "fieldConfig": {"defaults": {"min": 0, "decimals": 0}}}
       ]
     }
