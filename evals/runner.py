@@ -341,6 +341,8 @@ def _delta(current: dict, baseline: dict) -> dict:
         deltas[row["gd_id"]] = {
             "mean": round(row["mean"] - base["mean"], 2),
             "keyword": keyword_delta,
+            # −0.5 flag level from docs/eval-framework.md (variance-analysis
+            # table); a design value, not yet validated against data.
             "keyword_regression": keyword_delta < -0.5,
         }
     return deltas

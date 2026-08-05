@@ -51,7 +51,7 @@ class Layer1Report:
         return sum(r.ok for r in smoke) / len(smoke) if smoke else 1.0
 
     def release_blocked(self, threshold: float = 0.95) -> bool:
-        """Doc rule: <95% pass rate on smoke tests blocks release."""
+        """docs/eval-framework.md Layer 1 rule: <95% smoke pass rate blocks release."""
         return self.smoke_pass_rate() < threshold
 
     def to_dict(self) -> dict:

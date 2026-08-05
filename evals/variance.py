@@ -1,7 +1,8 @@
 """Layer 3 — variance analysis across N judge runs.
 
 LLM outputs are non-deterministic; the same input can produce different
-quality on different runs. These metrics quantify that risk per the doc:
+quality on different runs. These metrics quantify that risk per the
+variance-analysis table in docs/eval-framework.md:
 
     Mean score          — mean below the resume rubric threshold → flag for review
     CoV (%)             — std dev / mean × 100; > 20% → output unstable
@@ -24,6 +25,9 @@ from evals.rubrics import THRESHOLDS
 # the rubric with no alert firing.
 MEAN_ALERT = THRESHOLDS["resume"].min_avg
 DIMENSION_FLOOR = THRESHOLDS["resume"].min_dimension
+# Design values from docs/eval-framework.md (variance-analysis table), not
+# yet validated against data. Note: at N=5 a single dissenting run is
+# exactly 20.0% and the strict > comparison does not fire — two dissents do.
 COV_ALERT_PCT = 20.0
 FLIP_ALERT_PCT = 20.0
 

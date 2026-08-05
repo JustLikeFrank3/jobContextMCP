@@ -10,5 +10,7 @@ Layer 3 (`evals.judge` / `evals.runner`) — LLM-as-judge over a golden
     verdict flip rate) and version-stamped baseline tracking.
 
 CLI: ``python -m evals layer1 | judge | suite`` (see ``python -m evals -h``).
-Methodology doc: jobContext_Eval_Framework (July 2026).
+Methodology doc: docs/eval-framework.md (jobContext Eval Framework, July
+2026 — committed; the alert thresholds there are design values, not yet
+validated against data).
 """
