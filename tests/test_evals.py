@@ -374,7 +374,8 @@ def test_judge_output_without_provider_raises_runtime_error():
 # clear the env or it passes locally and fails in CI (CLAUDE.md gotcha).
 
 def _clear_llm_env(monkeypatch):
-    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL"):
+    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL",
+                "LLM_API_KEY", "JUDGE_LLM_API_KEY"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -421,6 +422,41 @@ def test_judge_model_env_beats_config(monkeypatch):
     monkeypatch.setenv("JUDGE_LLM_MODEL", "env-model")
     cfg = {"judge_provider": "ollama", "judge_model": "cfg-model"}
     assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)[1] == "env-model"
+
+
+# ── judge API-key split ──────────────────────────────────────────────────────────────
+# A cross-vendor judge needs its own key: LLM_API_KEY belongs to the
+# generator (foundry prefers an explicit key over workload identity, so
+# putting an Anthropic key there breaks generation).
+
+def test_judge_api_key_preferred_for_eval_judge(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "judge-key")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "judge-key"
+
+
+def test_judge_api_key_falls_back_to_llm_api_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "generator-key"
+    # Whitespace-only judge key is absent, not a key.
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "   ")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "generator-key"
+
+
+def test_generation_ignores_judge_api_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "judge-key")
+    for task in ("", "assessment", "certification"):
+        assert config_mod._llm_env_api_key(task=task) == "generator-key", task
+
+
+def test_judge_api_key_empty_when_nothing_set(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    assert config_mod._llm_env_api_key(task="eval_judge") == ""
+    assert config_mod._llm_env_api_key(task="") == ""
 
 
 def test_non_judge_tasks_ignore_judge_keys(monkeypatch):

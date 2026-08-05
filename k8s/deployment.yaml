@@ -155,6 +155,30 @@ spec:
                   name: jcmcp-app-secrets
                   key: llm_api_key
                   optional: true
+            # Eval-judge split (docs/evals.md). All three optional: while the
+            # secret keys are absent the nightly self-judges (the wallboard
+            # caveat panel states this). To flip: add judge_llm_provider /
+            # judge_llm_model / judge_llm_api_key to jcmcp-app-secrets and
+            # restart — no manifest change. Run the calibration pass against
+            # the blind labels BEFORE pointing this at a new judge model.
+            - name: JUDGE_LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: judge_llm_provider
+                  optional: true
+            - name: JUDGE_LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: judge_llm_model
+                  optional: true
+            - name: JUDGE_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-app-secrets
+                  key: judge_llm_api_key
+                  optional: true
             # SerpAPI key for employer-address enrichment (certification tool)
             # and job scraping. Optional: without it, enrichment falls back to
             # website scraping and the keyless DDG search.

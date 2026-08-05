@@ -8,6 +8,10 @@ Versions through 1.4.0 predate this note; their section headings vary slightly.
 
 ## [Unreleased]
 
+### Added
+
+- **The eval judge can carry its own API key (`JUDGE_LLM_API_KEY`)** -- the judge provider/model split (`JUDGE_LLM_PROVIDER`/`JUDGE_LLM_MODEL`) existed but was unusable for a cross-vendor judge in AKS: the Anthropic branch read its key from `LLM_API_KEY`, which belongs to the generator, and foundry prefers an explicit key over workload identity, so lending the variable an Anthropic key would break generation. `task="eval_judge"` now prefers `JUDGE_LLM_API_KEY`, falling back to `LLM_API_KEY` (local dev, same-vendor splits unchanged). Prod and qa deployments wire all three `JUDGE_*` vars as optional keys on the app secret, so flipping the split is a secret edit and a restart, no manifest change -- deliberately left unset until the candidate judge has run the reference-judging calibration pass against the blind labels (docs/evals.md).
+
 ### Documentation
 
 - **The eval methodology doc is now in the repository** -- code comments cited "jobContext_Eval_Framework (July 2026)" for the variance alert thresholds (CoV > 20%, flip > 20%, keyword delta < -0.5, N=5) and the CI gate's 95% smoke rule, but the doc itself lived only on a personal drive -- a cited-but-absent source, item #1 on the 2026-08-04 audit's cannot-defend list twice running. Committed verbatim (converted to Markdown) as `docs/eval-framework.md` with a provenance note stating the thresholds are design values not yet validated against data; every citation site now points at the file. The judge's `max_tokens=2000` (newer than the doc) gained a stated basis at the call site. Both eval wallboard dashboards also gained a self-judging caveat: prod runs with no `JUDGE_LLM_PROVIDER`, so gpt-4.1-mini grades its own output and the calibrated accuracy MAE against blind human labels is 3.0 -- the panels now say so instead of showing uncaveated green.
