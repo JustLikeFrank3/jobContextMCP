@@ -24,6 +24,20 @@
 # fact running fine (2026-08-01). An instant query returns nothing once
 # the series goes stale, so the panel says No data and the kiosk stops
 # lying. Same failure the eval gauges hit in evals/ingest.restore_gauges.
+#
+# "instant" alone was not enough for the panels that ended in `or vector(0)`:
+# vector(0) matches whether or not the feed is alive, so a dead feed read a
+# reassuring green 0 ("no alerts", "no 5xx") instead of No data. Those now
+# anchor the fallback to a series that only exists when the feed does —
+#   X or (0 * max(<anchor>))
+# with <anchor> = eval_last_run_timestamp_seconds for the eval panels and
+# process_uptime_seconds for the cloud app panels. Feed alive and genuinely
+# nothing to report still shows 0; feed gone shows No data. Verified against
+# both Prometheis (AKS live, Pi stale) before landing.
+#
+# Panels reading up/ollama_up/jobcontext_desktop_up keep `or vector(0)` on
+# purpose — there 0 maps to DOWN, which is the truthful answer when the
+# exporter is gone.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -317,14 +331,14 @@ data:
          "fieldConfig": {"defaults": {"unit": "s"}}},
         {"type": "stat", "title": "5xx rate (prod)", "gridPos": {"x":8,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or vector(0)", "instant": true}],
+         "targets": [{"expr": "sum(rate(http_requests_total{namespace=\"jcmcp\",status=~\"5..\"}[5m])) or (0 * max(process_uptime_seconds{namespace=\"jcmcp\"}))", "instant": true}],
          "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"red","value":0.01}]}}}},
         {"type": "stat", "title": "Work items (1h, prod)", "gridPos": {"x":12,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or vector(0)", "instant": true}]},
+         "targets": [{"expr": "sum(increase(work_items_total{namespace=\"jcmcp\"}[1h])) or (0 * max(process_uptime_seconds{namespace=\"jcmcp\"}))", "instant": true}]},
         {"type": "stat", "title": "LLM calls (1h, prod)", "gridPos": {"x":16,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or vector(0)", "instant": true}]},
+         "targets": [{"expr": "sum(increase(llm_calls_total{namespace=\"jcmcp\"}[1h])) or (0 * max(process_uptime_seconds{namespace=\"jcmcp\"}))", "instant": true}]},
         {"type": "stat", "title": "Gate pass rate (24h, prod)", "gridPos": {"x":20,"y":3,"w":4,"h":5},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "100 * sum(increase(provenance_checks_total{namespace=\"jcmcp\",verdict=\"passed\"}[24h])) / clamp_min(sum(increase(provenance_checks_total{namespace=\"jcmcp\"}[24h])), 1)", "instant": true}],
@@ -698,7 +712,7 @@ data:
       "time": {"from": "now-7d", "to": "now"},
       "panels": [
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · adversarial judge · N-run variance"}},
+         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · LLM-as-judge · N-run variance\n\n⚠️ Cloud series (jcmcp) is SELF-JUDGED: no JUDGE_LLM_PROVIDER in prod, so gpt-4.1-mini grades its own output — calibrated accuracy MAE vs human labels is 3.0 (docs/evals.md). Treat accuracy as directional. Workstation overlay uses a cross-family judge."}},
         {"type": "stat", "title": "Mean judge score (worst entry)", "gridPos": {"x": 0, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
          "targets": [{"expr": "min(eval_mean_score{namespace=\"jcmcp\"})", "instant": true}],
@@ -723,7 +737,7 @@ data:
            {"color": "orange", "value": 95}, {"color": "green", "value": 100}]}}}},
         {"type": "stat", "title": "Alerts", "gridPos": {"x": 20, "y": 3, "w": 4, "h": 6},
          "datasource": {"uid": "prometheus"},
-         "targets": [{"expr": "sum(max by(gd_id)(eval_alert_count{namespace=\"jcmcp\"})) or vector(0)", "instant": true}],
+         "targets": [{"expr": "sum(max by(gd_id)(eval_alert_count{namespace=\"jcmcp\"})) or (0 * max(eval_last_run_timestamp_seconds{namespace=\"jcmcp\"}))", "instant": true}],
          "fieldConfig": {"defaults": {"decimals": 0,
           "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}}},
         {"type": "timeseries", "title": "Mean judge score by golden entry", "gridPos": {"x": 0, "y": 9, "w": 12, "h": 9},
