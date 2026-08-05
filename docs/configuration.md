@@ -43,6 +43,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 |---|---|
 | `LLM_PROVIDER` | Overrides config `llm_provider`: `openai` (default), `ollama`, `anthropic`, `foundry` |
 | `LLM_API_KEY` | Provider-agnostic key override (openai/anthropic/foundry; ignored for ollama) |
+| `JUDGE_LLM_PROVIDER` / `JUDGE_LLM_MODEL` | Eval-judge split: provider/model for `task="eval_judge"` only. Required wherever `LLM_PROVIDER` is exported (AKS, CI) — see the precedence note below |
 | `OPENAI_API_KEY` | **Embeddings only** (semantic search fallback) — *not* consulted for generation; use `LLM_API_KEY` or config keys for that |
 
 ### Persistence
@@ -83,6 +84,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | Key | Default | Purpose |
 |---|---|---|
 | `llm_provider` | `openai` | `openai` \| `ollama` \| `anthropic` \| `foundry` |
+| `judge_provider` / `judge_model` | — | Eval-judge split; empty ⇒ the judge runs on the generation provider/model (it grades its own output). Read only where `LLM_PROVIDER` is unset — see the precedence note below |
 | `openai_api_key` / `openai_model` | — / `gpt-4o-mini` | OpenAI BYOK |
 | `anthropic_api_key` / `anthropic_model` | — / `claude-sonnet-5` | Claude via Anthropic's OpenAI-compatible endpoint (chat + tool calling work unchanged) |
 | `ollama_base_url` / `ollama_model` | `http://localhost:11434/v1` / `llama3.1:8b` | Local Ollama (no key needed) |
@@ -97,12 +99,14 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | `generation_budgets` | see [generation.md](generation.md) | Token budgets for context packing |
 | `github_metrics` | — | `{username, repos}` for portfolio tracking |
 | `side_project_folders` | `[]` | Array of folders for the skill scanner |
+| `side_project_repos` | `[]` | Remote repos for the skill scanner (URL string or `{url, branch}`); shallow-cloned to a temp dir when no local checkout exists |
 | `latex_resume_dir` / `resume_pdfs_dir` | — / `03-Resume-PDFs` | Owner-only LaTeX assets; PDF output dir |
 
 Provider selection notes:
 
 - `get_llm_client()` returns `(None, "")` when the chosen provider is missing its key/endpoint — callers degrade to context-package mode instead of crashing.
 - An env-pinned `LLM_PROVIDER` silently overrides whatever the desktop Settings UI saved.
+- That includes the judge: plain `LLM_PROVIDER` beats config `judge_provider` (env wins is the convention throughout). Config `judge_provider`/`judge_model` only take effect where `LLM_PROVIDER` is unset; prod and CI, which export it, must use `JUDGE_LLM_PROVIDER`/`JUDGE_LLM_MODEL`. Until one of these is configured, the eval judge is the generator's model.
 - `llm_generation_status()` mirrors the same resolution for status badges and must stay in lockstep with `get_llm_client()` (documented invariant in `lib/config.py`).
 
 ## Provenance gate

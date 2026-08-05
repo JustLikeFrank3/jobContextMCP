@@ -1,0 +1,87 @@
+{
+  "_comment": "Planted-error corpus (audit repair 4). Fully synthetic: invented person, employers, numbers — nothing derived from real workspace data. Every corrupt_/style_ file is baseline_clean.txt with the single edit described in corruption_note. Judged directly against synthetic_master.txt + synthetic_jd.txt by evals/fixtures.py; never routed through generation.",
+  "master_file": "synthetic_master.txt",
+  "jd_file": "synthetic_jd.txt",
+  "entries": [
+    {
+      "id": "FX-00",
+      "file": "baseline_clean.txt",
+      "class": "clean_baseline",
+      "expected_signal": "clean",
+      "expected_detail": "",
+      "corruption_note": "No corruption. Every claim traceable to the synthetic master. Any hallucination flag on this file is a false positive; per-class catch rates are meaningless without this control."
+    },
+    {
+      "id": "FX-01",
+      "file": "corrupt_metric_changed.txt",
+      "class": "metric_changed",
+      "expected_signal": "hallucination",
+      "expected_detail": "latency by 52%",
+      "corruption_note": "p95 latency reduction 37% -> 52%; 52% appears nowhere in the master."
+    },
+    {
+      "id": "FX-02",
+      "file": "corrupt_metric_invented.txt",
+      "class": "metric_invented",
+      "expected_signal": "hallucination",
+      "expected_detail": "saving $2M in annual integration costs",
+      "corruption_note": "Appended an invented $2M savings claim to the EDI bullet; no $2M figure exists in the master."
+    },
+    {
+      "id": "FX-03",
+      "file": "corrupt_employer.txt",
+      "class": "employer_fabricated",
+      "expected_signal": "hallucination",
+      "expected_detail": "Northwind Logistics Group",
+      "corruption_note": "Meridian Freight Systems -> Northwind Logistics Group; employer absent from the master."
+    },
+    {
+      "id": "FX-04",
+      "file": "corrupt_title.txt",
+      "class": "title_inflated",
+      "expected_signal": "hallucination",
+      "expected_detail": "Principal Engineer",
+      "corruption_note": "Senior Software Engineer -> Principal Engineer at Meridian; title absent from the master."
+    },
+    {
+      "id": "FX-05",
+      "file": "corrupt_date.txt",
+      "class": "date_shifted",
+      "expected_signal": "hallucination",
+      "expected_detail": "2019 - 2025",
+      "corruption_note": "Meridian tenure 2021-2025 -> 2019-2025, overlapping the BlueLark years; 2019 appears nowhere in the master."
+    },
+    {
+      "id": "FX-06",
+      "file": "corrupt_credential.txt",
+      "class": "credential_invented",
+      "expected_signal": "hallucination",
+      "expected_detail": "AWS Certified Solutions Architect",
+      "corruption_note": "Added an AWS Solutions Architect certification the master does not list (master has only CKA)."
+    },
+    {
+      "id": "FX-07",
+      "file": "corrupt_jd_parrot.txt",
+      "class": "jd_parrot",
+      "expected_signal": "hallucination",
+      "expected_detail": "4 billion tracking events per year",
+      "corruption_note": "Claims the JD's own '4 billion tracking events per year' as personal achievement; figure exists only in the JD. Provenance is doubly blind here: by policy (the JD is a legitimate source for its own text) and by regex form (spelled-out magnitudes like '4 billion' don't match the claim pattern's k/m/b suffix form) — this fixture measures whether the judge covers it."
+    },
+    {
+      "id": "FX-08",
+      "file": "style_voice.txt",
+      "class": "voice_drift",
+      "expected_signal": "dimension",
+      "expected_detail": "impact_language",
+      "corruption_note": "First three Meridian bullets rewritten passive and hedged ('was involved in various activities'); all numbers unchanged and traceable."
+    },
+    {
+      "id": "FX-09",
+      "file": "style_stuffing.txt",
+      "class": "keyword_stuffing",
+      "expected_signal": "dimension",
+      "expected_detail": "ats_readiness",
+      "corruption_note": "Skills section replaced with repetitive keyword spam; no new numeric claims introduced."
+    }
+  ]
+}

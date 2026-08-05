@@ -7,15 +7,19 @@ renamed action fails here before it fails in a live eval run.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from evals import cases as case_mod
+from evals import fixtures as fixtures_mod
 from evals import golden as golden_mod
 from evals import judge as judge_mod
 from evals import layer1, rubrics, variance
+from evals import runner as runner_mod
 from evals.cases import CASES, cases_by_tags
+from lib import config as config_mod
 from tools.consolidated import DOMAINS
 
 
@@ -173,6 +177,23 @@ def test_judge_messages_include_todays_date():
     assert "TODAY'S DATE: 20" in auto
 
 
+def test_judge_messages_include_rubric_anchors_and_thresholds():
+    content = judge_mod.build_judge_messages("JD", "M", "OUT", today="2026-07-29")[1]["content"]
+    assert "SCORING RUBRIC" in content
+    assert "keyword_coverage" in content
+    assert "accuracy" in content
+    assert "PASS CRITERION" in content
+    assert "average of the five dimensions" in content
+    assert "4.0" in content
+
+
+def test_parse_judge_json_uses_thresholds_for_verdict():
+    payload = json.loads(_GOOD_JUDGE_JSON)
+    payload["verdict"] = "fail"
+    score = judge_mod.parse_judge_json(json.dumps(payload))
+    assert score.verdict == "pass"
+
+
 def test_parse_judge_json_filters_clean_bill_notes():
     payload = json.loads(_GOOD_JUDGE_JSON)
     payload["hallucinations"] = [
@@ -184,13 +205,104 @@ def test_parse_judge_json_filters_clean_bill_notes():
     assert score.hallucinations == ["Invented award claim"]
 
 
+def test_layer1_smoke_cases_assert_meaningful_content():
+    case = case_mod.EvalCase(id="X-3", tool="materials", action="read_master_resume",
+                            contains_all=("MASTER SOURCE",), min_length=10)
+    assert layer1.check_response(case, "Resume - MASTER SOURCE.txt") == ""
+    assert "missing expected" in layer1.check_response(case, "Resume content only")
+
+
+# Recorded real responses, one per reachable state. The empty-state strings are
+# what the isolated gate workspace actually returned (2026-08-04 run); the
+# populated-state strings are built from the emitting code in tools/. A marker
+# typo in cases.py fails HERE, in pytest, instead of first surfacing as a
+# blocked deploy — the previous version of this test only compared the strings
+# in cases.py against themselves.
+_RECORDED_SMOKE_RESPONSES = {
+    "TC-002": [
+        "[CI MASTER RESUME]\n\n──── ACHIEVEMENTS ────\n"
+        "(Peer-written quotes — use exact language in cover letters and fitment assessments)\n"
+        "[CI ACHIEVEMENTS CONTENT]\n\n──── PEER FEEDBACK (verbatim) ────\n"
+        "(Direct quotes from managers and colleagues — high-value credibility signals)\n"
+        "[CI FEEDBACK CONTENT]",
+    ],
+    "TC-009": [
+        "No applications tracked yet. Use update_application() to add one.\n\n"
+        "⚠ No check-in logged yet today. Quick check-in: "
+        "log_mental_health_checkin(mood='stable', energy=5)",
+        "═══ JOB HUNT STATUS ═══\nLast updated: 2026-08-04\n\n■ TestCo — SWE\n  Status:       applied",
+    ],
+    "TC-010": [
+        "No jobs in queue.",
+        "═══ JOB QUEUE ═══\n\n■ [PENDING] TestCo — SWE\n  ID:       1\n  Added:    2026-08-04",
+    ],
+    "TC-013": [
+        "No tone samples logged yet.\nUse log_tone_sample() to ingest writing "
+        "samples — cover letters, messages, anything you've actually written.",
+        "═══ TONE PROFILE (2 samples, 300 total words) ═══\n"
+        "Use these samples to calibrate the candidate's voice before writing anything.",
+    ],
+    "TC-014": [
+        "No check-ins logged in the past 14 days.",
+        "═══ MENTAL HEALTH LOG (last 14 days) ═══\n\n"
+        "2026-08-04  🟩  mood: good          energy: 7/10  productive: ✓\n\n"
+        "Average energy over 14 days: 7.0/10",
+    ],
+    "TC-021": [
+        "No interviews logged yet.",
+        "No interviews scheduled in the next 14 days.",
+        "# Upcoming interviews (next 14 days, 1 total)\n"
+        "- 2026-08-05 (in 1d): TestCo / SWE — recruiter_screen",
+    ],
+    "TC-016": [
+        "No LinkedIn posts logged yet. Use log_linkedin_post() to add posts.",
+        "═══ LINKEDIN POSTS (1 posts) ═══\n\n"
+        "Aggregate: 12 reactions | 1 reposts | 3 comments | 400 impressions",
+    ],
+    "TC-023": [
+        "No certification reports yet. Generate the current week with "
+        'certification(action="weekly_report").',
+        "═══ CERTIFICATION REPORTS ═══\n"
+        "  #1 — week ending 2026-08-01 v1 (GA) · 4 entries · generated 2026-08-02T09:00:00",
+    ],
+    "TC-024": [
+        "═══ CERTIFICATION PROFILE (GA) ═══\n  state: GA\n"
+        "  min_activities_per_week: 3\n  week_ends_on: Saturday",
+    ],
+}
+
+
+def test_smoke_markers_replay_recorded_responses():
+    for case_id, responses in _RECORDED_SMOKE_RESPONSES.items():
+        case = next(c for c in CASES if c.id == case_id)
+        for response in responses:
+            failed = layer1.check_response(case, response)
+            assert failed == "", (case_id, failed, response[:80])
+
+
 def test_parse_judge_json_rejects_bad_output():
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json("no json here")
     with pytest.raises(ValueError):
         judge_mod.parse_judge_json('{"keyword_coverage": 9}')
-    with pytest.raises(ValueError):
-        judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"maybe"'))
+    # A bad model verdict is no longer a parse failure — the verdict is
+    # code-derived; the model's opinion is kept leniently as model_verdict.
+    score = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"maybe"'))
+    assert score.model_verdict == ""
+    assert score.verdict == "pass"  # scores 4,5,3,4,5: mean 4.2, floor met
+
+
+def test_model_verdict_retained_as_calibration_data():
+    score = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON)
+    assert score.model_verdict == "pass"
+    assert score.to_dict()["model_verdict"] == "pass"
+    # Model disagreeing with the rubric is recorded, not corrected away.
+    dissent = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace('"pass"', '"fail"'))
+    assert dissent.model_verdict == "fail"
+    assert dissent.verdict == "pass"
+    absent = judge_mod.parse_judge_json(_GOOD_JUDGE_JSON.replace(', "verdict": "pass"', ""))
+    assert absent.model_verdict == ""
+    assert absent.verdict == "pass"
 
 
 def _fake_client(payloads: list[str]):
@@ -219,16 +331,142 @@ def test_judge_output_with_explicit_client():
     assert score.verdict == "pass"
 
 
+def test_judge_output_preserves_model_metadata():
+    score = judge_mod.judge_output(
+        "JD",
+        "MASTER",
+        "OUTPUT",
+        client=_fake_client([_GOOD_JUDGE_JSON]),
+        model="judge-model",
+    )
+    assert score.model == "judge-model"
+
+
 def test_judge_output_retries_then_fails_cleanly():
     client = _fake_client(["garbage", "still garbage"])
     with pytest.raises(ValueError, match="unparseable"):
         judge_mod.judge_output("JD", "M", "OUT", client=client, model="m")
 
 
+def test_judge_call_caps_max_tokens():
+    captured = {}
+
+    def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=_GOOD_JUDGE_JSON))],
+            usage=None,
+        )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    judge_mod.judge_output("JD", "M", "OUT", client=client, model="m")
+    assert captured["max_tokens"] == 2000
+
+
 def test_judge_output_without_provider_raises_runtime_error():
     # conftest's autouse fixture stubs get_llm_client to (None, None)
     with pytest.raises(RuntimeError, match="No LLM provider"):
         judge_mod.judge_output("JD", "M", "OUT")
+
+
+# ── judge provider/model routing ──────────────────────────────────────────────
+# CI exports LLM_PROVIDER=foundry (deploy.yml), so every config-path test must
+# clear the env or it passes locally and fails in CI (CLAUDE.md gotcha).
+
+def _clear_llm_env(monkeypatch):
+    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_judge_model_honored_on_every_provider_branch(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    for provider in ("ollama", "anthropic", "foundry", "openai"):
+        cfg = {"judge_provider": provider, "judge_model": "judge-x"}
+        assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == (provider, "judge-x"), provider
+
+
+def test_judge_falls_back_to_provider_model_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    cases = {
+        "ollama": ({"ollama_model": "qwen3:14b"}, "qwen3:14b"),
+        "anthropic": ({}, "claude-sonnet-5"),
+        "foundry": ({"azure_foundry_deployment": "gpt-4.1"}, "gpt-4.1"),
+        "openai": ({"openai_model": "gpt-4o"}, "gpt-4o"),
+    }
+    for provider, (extra, expected) in cases.items():
+        cfg = {"judge_provider": provider, **extra}
+        assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == (provider, expected), provider
+
+
+def test_judge_env_provider_beats_config(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("JUDGE_LLM_PROVIDER", "anthropic")
+    cfg = {"judge_provider": "ollama", "judge_model": "judge-x"}
+    assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg) == ("anthropic", "judge-x")
+
+
+def test_plain_llm_provider_env_beats_config_judge_provider(monkeypatch):
+    # Documented precedence: config judge_provider only works where
+    # LLM_PROVIDER is unset; prod/CI must use JUDGE_LLM_PROVIDER.
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_PROVIDER", "foundry")
+    cfg = {"judge_provider": "ollama", "azure_foundry_deployment": "gpt-4.1-mini"}
+    provider, model = config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)
+    assert provider == "foundry"
+    assert model == "gpt-4.1-mini"
+
+
+def test_judge_model_env_beats_config(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("JUDGE_LLM_MODEL", "env-model")
+    cfg = {"judge_provider": "ollama", "judge_model": "cfg-model"}
+    assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)[1] == "env-model"
+
+
+def test_non_judge_tasks_ignore_judge_keys(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    cfg = {
+        "llm_provider": "openai", "openai_model": "gpt-4o-mini",
+        "judge_provider": "ollama", "judge_model": "judge-x",
+    }
+    # "" is generation; assessment/certification pass task strings today
+    # (tools/fitment.py, tools/certification.py) and must stay untouched.
+    for task in ("", "assessment", "certification"):
+        assert config_mod._resolve_llm_settings(task=task, cfg=cfg) == ("openai", "gpt-4o-mini"), task
+
+
+def _suite_entry(tmp_path):
+    jd = tmp_path / "jd.txt"
+    jd.write_text("We need Python.", encoding="utf-8")
+    return golden_mod.GoldenEntry(
+        id="GD-T1", company="TestCo", role="SWE", archetype="t", eval_signal="t",
+        reference_file="ref.txt", jd_file=str(jd),
+    )
+
+
+def test_suite_judge_model_reflects_what_ran(isolated_server, tmp_path):
+    def judge(_jd, _m, _o):
+        score = _score({})
+        score.model = "actual-judge-model"
+        return score
+
+    suite = runner_mod.run_suite(
+        entries=[_suite_entry(tmp_path)], n=2,
+        generate_fn=lambda _e, _jd: "OUT", judge_fn=judge,
+        results_dir=tmp_path / "results",
+    )
+    assert suite.judge_model == "actual-judge-model"
+    assert suite.to_dict()["judge_model"] == "actual-judge-model"
+
+
+def test_suite_judge_model_falls_back_to_config_when_unstamped(isolated_server, tmp_path):
+    suite = runner_mod.run_suite(
+        entries=[_suite_entry(tmp_path)], n=1,
+        generate_fn=lambda _e, _jd: "OUT",
+        judge_fn=lambda _jd, _m, _o: _score({}),  # model stays ""
+        results_dir=tmp_path / "results",
+    )
+    assert suite.judge_model == config_mod._resolve_llm_settings(task="eval_judge")[1]
 
 
 # ── variance analysis ─────────────────────────────────────────────────────────
@@ -265,6 +503,21 @@ def test_variance_alerts():
     assert agg.to_dict()["n_runs"] == 3
 
 
+def test_dimension_floor_alert_fires_despite_strong_mean():
+    # The failure mode the harness exists for: fluent, keyword-dense, and
+    # fabricating. accuracy=2 with everything else 5 gives mean 4.4 —
+    # passes() fails it on the dimension floor, so alerts must fire too.
+    agg = variance.aggregate_runs([_score({d: 5 for d in judge_mod.JUDGE_DIMENSIONS} | {"accuracy": 2})])
+    assert agg.mean_score > variance.MEAN_ALERT  # mean clause stays silent
+    assert any("accuracy" in a and "dimension floor" in a for a in agg.alerts)
+
+
+def test_dimension_at_floor_raises_no_alert():
+    # passes() uses strict <, so a mean exactly at the floor is not a failure.
+    agg = variance.aggregate_runs([_score({"accuracy": 3})])
+    assert not any("dimension floor" in a for a in agg.alerts)
+
+
 def test_variance_math_helpers():
     assert variance.cov_percent([4.0]) == 0.0
     assert variance.cov_percent([2.0, 4.0]) == pytest.approx(47.14, abs=0.01)
@@ -277,6 +530,290 @@ def test_keyword_delta():
     base = variance.aggregate_runs([_score({"keyword_coverage": 5})])
     curr = variance.aggregate_runs([_score({"keyword_coverage": 4})])
     assert variance.keyword_delta(curr, base) == -1.0
+
+
+def test_fixture_manifest_loads_and_files_exist():
+    master_file, jd_file, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    assert (fixtures_dir / master_file).exists()
+    assert (fixtures_dir / jd_file).exists()
+    assert len(entries) >= 9
+    for entry in entries:
+        assert (fixtures_dir / entry.file).exists(), entry.id
+        assert entry.expected_signal in ("hallucination", "dimension", "clean")
+        assert entry.corruption_note
+    # exactly one clean-baseline control
+    assert sum(1 for e in entries if e.expected_signal == "clean") == 1
+    # no fixture filename may shadow a golden-dataset jd file (golden.py
+    # searches the fixtures dir too)
+    assert not any(e.file.startswith("GD-") for e in entries)
+
+
+def test_fixture_planted_claims_absent_from_synthetic_master():
+    # A corrupted fixture whose planted claim is accidentally traceable
+    # measures nothing — assert genuine absence, numerically where possible.
+    from lib import provenance
+
+    master_file, _jd, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    master = (fixtures_dir / master_file).read_text(encoding="utf-8")
+    for entry in entries:
+        if entry.expected_signal != "hallucination":
+            continue
+        numeric = provenance.extract_claims(entry.expected_detail)
+        if numeric:
+            untraceable = provenance.check_claims(entry.expected_detail, [master])
+            assert untraceable, f"{entry.id}: every numeric claim in planted detail is traceable to the master"
+        else:
+            assert entry.expected_detail.casefold() not in master.casefold(), \
+                f"{entry.id}: planted text appears in the synthetic master"
+
+
+def test_fixture_baseline_is_fully_traceable():
+    from lib import provenance
+
+    master_file, jd_file, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    master = (fixtures_dir / master_file).read_text(encoding="utf-8")
+    baseline = next(e for e in entries if e.expected_signal == "clean")
+    text = (fixtures_dir / baseline.file).read_text(encoding="utf-8")
+    assert provenance.check_claims(text, [master]) == []
+
+
+def test_fixture_claim_caught_matching():
+    assert fixtures_mod.claim_caught(["Cut p95 order-ingestion latency by 52%"], "latency by 52%")
+    assert fixtures_mod.claim_caught(["52%"], "latency by 52%")  # numeric intersection
+    assert fixtures_mod.claim_caught(["the resume claims $2M in savings"], "saving $2M in annual integration costs")
+    assert fixtures_mod.claim_caught(["Northwind Logistics Group is not in the master"], "Northwind Logistics Group")
+    assert not fixtures_mod.claim_caught(["some unrelated 40% claim"], "latency by 52%")
+    assert not fixtures_mod.claim_caught([], "latency by 52%")
+
+
+def _fixture_score(scores=None, hallucinations=(), model="stub-judge"):
+    return judge_mod.JudgeScore(
+        scores=scores or {d: 5 for d in judge_mod.JUDGE_DIMENSIONS},
+        hallucinations=list(hallucinations),
+        verdict="pass",
+        model=model,
+    )
+
+
+def test_run_fixture_suite_classifies_catches(monkeypatch):
+    # Judge stub: flags the planted claim on FX-01 only, tanks
+    # impact_language always, never flags anything else.
+    def judge_fn(_jd, _master, output):
+        halls = ["latency by 52% is unsupported"] if "52%" in output else []
+        return _fixture_score(
+            scores={**{d: 5 for d in judge_mod.JUDGE_DIMENSIONS}, "impact_language": 2},
+            hallucinations=halls,
+        )
+
+    report = fixtures_mod.run_fixture_suite(n=2, judge_fn=judge_fn)
+    by_id = {r.entry.id: r for r in report.results}
+    assert by_id["FX-01"].catches == 2          # hallucination named → caught
+    assert by_id["FX-02"].catches == 0          # nothing flagged → missed
+    assert by_id["FX-08"].catches == 2          # impact_language 2 < 3 → style catch
+    assert report.baseline_false_positives == 0
+    assert report.judge_models == ["stub-judge"]
+    assert "FX-01" in report.to_text()
+
+
+def test_run_fixture_suite_counts_baseline_false_positives():
+    report = fixtures_mod.run_fixture_suite(
+        n=3, judge_fn=lambda *_a: _fixture_score(hallucinations=["everything is fake"]))
+    assert report.baseline_false_positives == 3
+
+
+def test_run_fixture_suite_never_touches_generation(monkeypatch):
+    import sys
+
+    class _Exploding:
+        def __getattr__(self, name):
+            raise AssertionError(f"fixture suite touched tools.generate.{name}")
+
+    monkeypatch.setitem(sys.modules, "tools.generate", _Exploding())
+    report = fixtures_mod.run_fixture_suite(n=1, judge_fn=lambda *_a: _fixture_score())
+    assert len(report.results) >= 9
+
+
+def test_format_dashboard_shows_provenance_agreement():
+    aggregate = variance.aggregate_runs([_score({})])
+    entry = runner_mod.EntryResult(
+        "GD-01",
+        "Engineer",
+        aggregate=aggregate,
+        provenance_agreement={
+            "both_flagged": 1,
+            "both_clean": 0,
+            "judge_only": 0,
+            "provenance_only": 0,
+        },
+    )
+    text = runner_mod.format_dashboard(runner_mod.SuiteResult(n_runs=1, entries=[entry]))
+    assert "prov" in text.lower()
+    # Compact per-row counts in AGREEMENT_KEYS order, legend on the footer.
+    assert "1/0/0/0/0" in text
+    assert "Prov: " + "/".join(runner_mod.AGREEMENT_KEYS) in text
+
+
+def test_run_entry_tracks_numeric_provenance_agreement(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    jd_path = tmp_path / "jd.txt"
+    jd_path.write_text("JD text", encoding="utf-8")
+    monkeypatch.setattr(runner_mod, "resolve_file", lambda _name: jd_path)
+    monkeypatch.setattr(runner_mod, "_master_excerpt", lambda *args, **kwargs: "MASTER")
+    monkeypatch.setattr(
+        provenance_mod,
+        "latest_run",
+        lambda *, company="", role="", db_path=None: {
+            "claims": ["34%"],
+            "violations": ["34%"],
+        },
+    )
+
+    entry = golden_mod.GoldenEntry(
+        id="GD-01",
+        company="Acme",
+        role="Engineer",
+        archetype="x",
+        eval_signal="y",
+        reference_file="ref.txt",
+        jd_file="jd.txt",
+    )
+
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass",
+        hallucinations=["invented 34% uplift"],
+    )
+
+    result = runner_mod.run_entry(
+        entry,
+        n=1,
+        generate_fn=lambda _entry, _jd: "output",
+        judge_fn=lambda _jd, _master, _output: judge_score,
+    )
+
+    assert result.provenance_agreement["both_flagged"] == 1
+    assert result.provenance_agreement["judge_only"] == 0
+    assert result.provenance_agreement["provenance_only"] == 0
+    assert result.provenance_agreement["both_clean"] == 0
+    assert result.dashboard_row()["provenance_agreement"]["both_flagged"] == 1
+
+
+def _entry_and_jd(monkeypatch, tmp_path):
+    jd_path = tmp_path / "jd.txt"
+    jd_path.write_text("JD text", encoding="utf-8")
+    monkeypatch.setattr(runner_mod, "resolve_file", lambda _name: jd_path)
+    monkeypatch.setattr(runner_mod, "_master_excerpt", lambda *a, **k: "MASTER")
+    return golden_mod.GoldenEntry(
+        id="GD-01", company="Acme", role="Engineer", archetype="x",
+        eval_signal="y", reference_file="ref.txt", jd_file="jd.txt",
+    )
+
+
+def test_missing_provenance_row_is_no_record_not_both_clean():
+    buckets = runner_mod._numeric_provenance_agreement(["invented 34%"], None)
+    assert buckets["no_record"] == 1
+    assert buckets["both_clean"] == 0 and buckets["judge_only"] == 0
+
+
+def test_provenance_lookup_failure_cannot_discard_judge_score(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    def _boom(*, company="", role="", db_path=None):
+        raise RuntimeError("provenance DB unavailable")
+
+    monkeypatch.setattr(provenance_mod, "latest_run", _boom)
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: _score({}),
+    )
+    assert result.aggregate is not None, result.error  # the score survived
+    assert result.error == ""
+    assert result.provenance_agreement["no_record"] == 1
+
+
+def test_stale_provenance_row_is_fenced_out(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    # Same row id before and after generation: record_run swallowed its write,
+    # so the row predates this run and must not be counted as its verdict.
+    stale = {"id": 41, "claims": ["34%"], "violations": ["34%"]}
+    monkeypatch.setattr(
+        provenance_mod, "latest_run",
+        lambda *, company="", role="", db_path=None: dict(stale),
+    )
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.provenance_agreement["no_record"] == 1
+    assert result.provenance_agreement["both_flagged"] == 0
+
+
+def test_fresh_provenance_row_passes_the_fence(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    rows = iter([
+        {"id": 41, "claims": [], "violations": []},        # pre-generation
+        {"id": 42, "claims": ["34%"], "violations": ["34%"]},  # written by this run
+    ])
+    monkeypatch.setattr(
+        provenance_mod, "latest_run",
+        lambda *, company="", role="", db_path=None: next(rows),
+    )
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.provenance_agreement["both_flagged"] == 1
+    assert result.provenance_agreement["no_record"] == 0
+
+
+def test_failed_pre_read_disqualifies_post_row(monkeypatch, tmp_path):
+    from lib import provenance as provenance_mod
+
+    # Pre-generation read fails, post-generation read returns a row. With no
+    # pre-read baseline the row's freshness is unprovable — it could be stale
+    # — so it must land in no_record, not be trusted as this run's verdict.
+    calls = {"n": 0}
+
+    def _flaky(*, company="", role="", db_path=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("provenance DB briefly unavailable")
+        return {"id": 41, "claims": ["34%"], "violations": ["34%"]}
+
+    monkeypatch.setattr(provenance_mod, "latest_run", _flaky)
+    entry = _entry_and_jd(monkeypatch, tmp_path)
+    judge_score = judge_mod.JudgeScore(
+        scores={dim: 4 for dim in judge_mod.JUDGE_DIMENSIONS},
+        verdict="pass", hallucinations=["invented 34% uplift"],
+    )
+    result = runner_mod.run_entry(
+        entry, n=1,
+        generate_fn=lambda _e, _jd: "output",
+        judge_fn=lambda _jd, _m, _o: judge_score,
+    )
+    assert result.aggregate is not None, result.error
+    assert result.provenance_agreement["no_record"] == 1
+    assert result.provenance_agreement["both_flagged"] == 0
 
 
 # ── ingest endpoint + metrics bridge ─────────────────────────────────────────
@@ -664,6 +1201,14 @@ def test_golden_manifest_loads():
     entries = golden_mod.load_golden()
     assert [e.id for e in entries] == ["GD-01", "GD-02", "GD-03", "GD-04", "GD-05"]
     assert all(e.output_kind == "resume" for e in entries)
+
+
+def test_golden_labels_are_valid_rubric_scores():
+    """Human calibration labels: every dimension present, integers 1-5."""
+    for entry in golden_mod.load_golden():
+        assert entry.labels is not None, f"{entry.id} missing labels"
+        assert set(entry.labels) == set(judge_mod.JUDGE_DIMENSIONS)
+        assert all(isinstance(v, int) and 1 <= v <= 5 for v in entry.labels.values())
 
 
 def test_resolve_file_literal_and_missing(tmp_path):

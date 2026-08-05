@@ -5,6 +5,11 @@
     "/path/to/your/primary-side-project",
     "/path/to/another-project"
   ],
+  "_comment_side_project_repos": "Remote repos for the skills scan when no local checkout exists — each is shallow-cloned to a temp dir and scanned. Entries are either a plain clone URL string or {\"url\": ..., \"branch\": ...}.",
+  "side_project_repos": [
+    "https://github.com/you/your-project.git",
+    {"url": "https://github.com/you/another-project.git", "branch": "main"}
+  ],
   "data_folder": "/path/to/job-search-mcp/data",
   "fb_friends_folder": "/path/to/facebook-export/friends",
 
@@ -27,6 +32,12 @@
   "openai_model": "gpt-4o-mini",
   "serpapi_key": "",
 
+  "_comment_github_metrics": "Repos tracked by refresh_portfolio_metrics (traffic snapshots). Repo entries may be bare names (combined with username) or full owner/name slugs. Auth comes from env GITHUB_TOKEN or the gh CLI keyring — never stored here; the traffic API needs push access to each repo.",
+  "github_metrics": {
+    "username": "your-github-username",
+    "repos": ["your-project", "someone-else/shared-repo"]
+  },
+
   "_comment_llm_provider": "Set llm_provider to 'openai' (default), 'ollama' (local, no key), 'anthropic' (Claude BYOK), or 'foundry' (Azure AI Foundry). The LLM_PROVIDER env var overrides this.",
   "llm_provider": "openai",
 
@@ -43,6 +54,10 @@
   "azure_foundry_api_key": "your-foundry-api-key",
   "azure_foundry_deployment": "gpt-4.1-mini",
   "azure_foundry_api_version": "2025-01-01-preview",
+
+  "_comment_judge": "Eval judge split — leave both empty and the judge runs on the generation provider/model (i.e. the model grades its own output). Prefer a cross-family judge. Read only where the LLM_PROVIDER env var is unset; where it is exported (AKS, CI), use the JUDGE_LLM_PROVIDER / JUDGE_LLM_MODEL env vars instead.",
+  "judge_provider": "",
+  "judge_model": "",
 
   "_comment_generation_budgets": "Token budgets for AI generation. personal_context_token_budget caps how many tokens of STAR stories get retrieved per request; tone_token_budget caps how much of the tone profile is included (most recent, source-diverse samples first); cover_letter_max_tokens is a hard ceiling on the whole prompt so requests can never exceed the model TPM limit as the library grows.",
   "generation_budgets": {
