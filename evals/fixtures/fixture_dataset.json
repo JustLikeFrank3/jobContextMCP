@@ -65,7 +65,7 @@
       "class": "jd_parrot",
       "expected_signal": "hallucination",
       "expected_detail": "4 billion tracking events per year",
-      "corruption_note": "Claims the JD's own '4 billion tracking events per year' as personal achievement; figure exists only in the JD. The provenance gate's documented blind spot — this fixture measures whether the judge covers it."
+      "corruption_note": "Claims the JD's own '4 billion tracking events per year' as personal achievement; figure exists only in the JD. Provenance is doubly blind here: by policy (the JD is a legitimate source for its own text) and by regex form (spelled-out magnitudes like '4 billion' don't match the claim pattern's k/m/b suffix form) — this fixture measures whether the judge covers it."
     },
     {
       "id": "FX-08",
