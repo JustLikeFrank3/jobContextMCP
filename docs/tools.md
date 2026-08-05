@@ -1,4 +1,4 @@
-# MCP Tool Reference — 12 Domain Tools, 95 Actions
+# MCP Tool Reference — 12 Domain Tools, 96 Actions
 
 The default MCP surface is **12 consolidated domain tools** (`tools/consolidated.py`). Each takes an `action` parameter plus that action's arguments; the generated docstring on every tool lists each action's required and optional parameters. Rationale: MCP clients budget tools (VS Code caps 128 across every server), and 85 near-duplicate names both hog that budget and give the model look-alike choices to fumble.
 
@@ -189,7 +189,7 @@ Workspace setup: check what's present/missing, and create or complete the worksp
 
 `workspace(action="setup")` creates the whole directory tree, seeds data files, and writes config — no manual JSON editing required.
 
-## certification — 7 actions
+## certification — 8 actions
 
 Weekly work-search certification: frozen weekly reports derived from logged events, employer address directory, portal-ready exports, and per-state rules.
 
@@ -199,6 +199,7 @@ Weekly work-search certification: frozen weekly reports derived from logged even
 | `list_reports` | History of frozen weekly reports | — | `limit` |
 | `export` | Render a frozen report for the claim portal | `report_id` | `format` (csv, portal_text, pdf, docx) |
 | `swap_entry` | Replace an entry with an alternate (new version) | `report_id`, `out_entry` | `in_entry` |
+| `mark_submitted` | Stamp a frozen report as the version filed with the state | `report_id` | `confirmation_number` |
 | `employer_lookup` | Read/refresh one employer directory row | `name` | — |
 | `employer_override` | Manually correct an employer (locks the row) | `name`, `fields` | — |
 | `state_profile` | Read/update the state's certification rules | — | `mode`, `state`, `min_activities_per_week`, `week_ends_on`, `accepted_activity_kinds`, `counts_inbound_recruiter`, `counts_materials_prep` |

@@ -156,7 +156,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 95 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 96 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
@@ -170,6 +170,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 | `wellbeing` | 7 | Mood/energy check-ins, Oura readiness, HBDI profile |
 | `brand` | 7 | LinkedIn post pipeline + metrics, GitHub/portfolio stats, skill scans |
 | `insights` | 7 | Daily/weekly digests, session context, rejection funnel, comp comparison |
+| `certification` | 8 | Weekly work-search certification reports, employer directory, portal-ready exports |
 | `workspace` | 2 | Workspace diagnosis and zero-manual-setup creation |
 
 A coverage test guarantees every capability of the historical 88-function surface is reachable through the facades; `JOBCONTEXT_LEGACY_TOOLS=1` restores the per-function surface if a client needs it.
@@ -215,7 +216,7 @@ Every tenant's data lives under `DATA_FOLDER/users/{oid}` with per-request conte
 
 **Provenance gate** — a deterministic truth check on every generated document: numeric claims (percentages, dollar amounts, multipliers, years) must trace to the master resume, stories, or JD, or the run is flagged — an LLM reviewer checks quality, this checks *truth*. Verdicts surface in the dashboard (violations modal) and Grafana; in-place master-resume edits are audit-logged so an agent can't legalize a fabricated claim by editing the source. Details: [docs/generation.md](docs/generation.md).
 
-**Eval framework** — three layers in [`evals/`](evals/): declarative tool evals through the exact MCP dispatch path (a <95% smoke pass rate blocks deploys in CI), scoring rubrics with hard thresholds, and an adversarial LLM-as-judge over a committed golden dataset with N-run variance analysis (hallucination rate, verdict flips, baseline deltas). Runs from the CLI, or server-side via the control plane on a nightly schedule. Details: [docs/evals.md](docs/evals.md).
+**Eval framework** — three layers in [`evals/`](evals/): declarative tool evals through the exact MCP dispatch path (a <95% smoke pass rate blocks deploys in CI), scoring rubrics with hard thresholds, and an adversarial LLM-as-judge over a committed golden dataset with N-run variance analysis (hallucination rate, verdict flips, baseline deltas). The judge itself is measured, not trusted: a planted-error fixture corpus records per-class catch rates against a synthetic master resume, blind human labels on the golden entries calibrate judge scores per dimension, and every run cross-checks the judge's hallucination list against the provenance gate's record. The judge can run on a separate provider/model from the generator. Runs from the CLI, or server-side via the control plane on a nightly schedule. Details: [docs/evals.md](docs/evals.md).
 
 **Observability** — a dependency-free metrics registry exposes Prometheus counters for requests, LLM calls/tokens, work items, evals, and provenance verdicts at `/metrics`; dashboards-as-code under [`k8s/monitoring/`](k8s/monitoring/) render them on an always-on wallboard (a Raspberry Pi running k3s + Prometheus + Grafana, federating the AKS cluster and scraping the workstation's local-LLM exporter).
 
@@ -310,7 +311,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 - **v1.3.x** — Desktop ⇄ cloud sync (journal-based, LWW, file manifests), workspace export/import, per-user API keys, Oura OAuth + encryption at rest.
 - **v1.2** — jobContext rebrand, React SPA dashboard, QA environment, desktop app GA (signed macOS/Windows/Linux builds, auto-update).
 - **v1.0–v1.1** — Multi-tenant AKS with Entra ID, per-user isolation, OAuth proxy for remote MCP clients, control plane P0, Prometheus/Grafana monitoring, mobile companion app.
-- **Unreleased** — Three-layer eval framework with adversarial LLM-as-judge, server-side nightly eval runs, CI eval smoke gate, wallboard GPU rotation, `mcp<2` pin.
+- **Unreleased** — Three-layer eval framework with adversarial LLM-as-judge, planted-error fixture corpus with measured per-class catch rates, blind human-label judge calibration (local + production-candidate judge tables), judge/generator model split, judge ⇄ provenance agreement tracking on the wallboard, server-side nightly eval runs, CI eval smoke gate, scraper guards against non-job pages, wallboard GPU rotation, `mcp<2` pin.
 
 ### What's next
 
