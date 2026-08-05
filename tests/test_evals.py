@@ -459,6 +459,95 @@ def test_judge_api_key_empty_when_nothing_set(monkeypatch):
     assert config_mod._llm_env_api_key(task="") == ""
 
 
+# ── calibration (reference-judging MAE) ───────────────────────────────────────
+
+def _mk_score(vals: dict[str, int], model: str = "judge-x"):
+    return judge_mod.JudgeScore(scores=vals, model=model)
+
+
+_DIMS = judge_mod.JUDGE_DIMENSIONS
+
+
+def test_calibration_mae_is_mean_abs_error_over_entries():
+    from evals.calibrate import CalibrationReport, EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e1 = EntryCalibration("GD-01", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 3))])
+    e2 = EntryCalibration("GD-02", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 5))])
+    report = CalibrationReport(judge_model="judge-x", n=1, entries=[e1, e2])
+    assert report.mae() == dict.fromkeys(_DIMS, 1.0)  # (|5-3| + |5-5|) / 2
+
+
+def test_calibration_judge_mean_averages_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 2)), _mk_score(dict.fromkeys(_DIMS, 4)),
+    ])
+    assert e.dimension_mean("accuracy") == 3.0
+
+
+def test_calibration_all_errored_entry_excluded_from_mae():
+    # An absent judge opinion must not read as a 0-error opinion.
+    from evals.calibrate import CalibrationReport, EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    ok = EntryCalibration("GD-01", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 4))])
+    dead = EntryCalibration("GD-02", labels, errors=["boom"] * 5)
+    report = CalibrationReport(judge_model="judge-x", n=5, entries=[ok, dead])
+    assert report.mae() == dict.fromkeys(_DIMS, 1.0)
+    report_all_dead = CalibrationReport(judge_model="", n=5, entries=[dead])
+    assert report_all_dead.mae() == dict.fromkeys(_DIMS, None)
+
+
+def test_run_calibration_records_errors_not_scores(monkeypatch, tmp_path):
+    from evals import calibrate as cal_mod
+
+    jd = tmp_path / "jd.txt"
+    jd.write_text("We need Python.", encoding="utf-8")
+    ref = tmp_path / "ref.txt"
+    ref.write_text("Python engineer.", encoding="utf-8")
+    entry = golden_mod.GoldenEntry(
+        id="GD-T", company="X", role="Y", archetype="", eval_signal="",
+        reference_file=str(ref), jd_file=str(jd),
+        labels=dict.fromkeys(_DIMS, 5),
+    )
+    monkeypatch.setattr(cal_mod, "load_golden", lambda: [entry])
+    monkeypatch.setattr("evals.runner._master_excerpt", lambda master_text: master_text)
+    monkeypatch.setattr("tools.resume.read_master_resume", lambda: "MASTER")
+    calls = iter([_mk_score(dict.fromkeys(_DIMS, 4)), ValueError("bad JSON")])
+
+    def fake_judge(*a, **k):
+        item = next(calls)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(cal_mod, "judge_output", fake_judge)
+    report = cal_mod.run_calibration(n=2)
+    (e,) = report.entries
+    assert len(e.scores) == 1 and len(e.errors) == 1
+    assert "ValueError" in e.errors[0]
+    assert report.judge_model == "judge-x"
+
+
+def test_run_calibration_missing_file_is_per_entry_error(monkeypatch):
+    from evals import calibrate as cal_mod
+
+    entry = golden_mod.GoldenEntry(
+        id="GD-T", company="X", role="Y", archetype="", eval_signal="",
+        reference_file="/nope/ref.txt", jd_file="/nope/jd.txt",
+        labels=dict.fromkeys(_DIMS, 5),
+    )
+    monkeypatch.setattr(cal_mod, "load_golden", lambda: [entry])
+    monkeypatch.setattr("evals.runner._master_excerpt", lambda master_text: master_text)
+    monkeypatch.setattr("tools.resume.read_master_resume", lambda: "MASTER")
+    report = cal_mod.run_calibration(n=1)
+    (e,) = report.entries
+    assert not e.scores and "file not found" in e.errors[0]
+
+
 def test_non_judge_tasks_ignore_judge_keys(monkeypatch):
     _clear_llm_env(monkeypatch)
     cfg = {

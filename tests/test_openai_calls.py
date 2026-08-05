@@ -198,3 +198,61 @@ def test_create_chat_completion_retries_empty_content_at_cap(monkeypatch):
     assert resp.choices[0].message.content == "REAL ASSESSMENT TEXT"
     assert len(client.calls) == 2
     assert client.calls[1]["max_tokens"] == 4800  # 4x bump on retry
+
+
+# ── per-model quirk memory (discovery cost paid once per process) ────────────
+
+def test_rejected_param_remembered_for_next_call(monkeypatch):
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _Rejecting400()
+    kwargs = dict(
+        model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.0, max_tokens=5,
+    )
+    oc.create_chat_completion(client, label="test", **kwargs)
+    assert len(client.calls) == 2  # discovery: 400 then retry
+    oc.create_chat_completion(client, label="test", **dict(kwargs))
+    assert len(client.calls) == 3  # second call: no 400, temperature pre-dropped
+    assert "temperature" not in client.calls[2]
+
+
+def test_learned_cap_floor_applied_to_next_call(monkeypatch):
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _EmptyAtCap()
+    kwargs = dict(
+        model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "assess"}],
+        max_tokens=1200,
+    )
+    oc.create_chat_completion(client, label="test", **kwargs)
+    assert client.calls[1]["max_tokens"] == 4800  # discovery bump
+    oc.create_chat_completion(client, label="test", **dict(kwargs))
+    assert client.calls[2]["max_tokens"] == 4800  # floor applied preemptively
+    assert len(client.calls) == 3  # no empty-at-cap retry the second time
+
+
+def test_model_memory_is_per_model(monkeypatch):
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _Rejecting400()
+    oc.create_chat_completion(
+        client, label="test", model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.0, max_tokens=5,
+    )
+    with pytest.raises(Exception):
+        # A different model gets no inherited memory — its own discovery 400
+        # (the fake rejects temperature for every model; one retry succeeds,
+        # so reaching create() WITH temperature is the assertion here).
+        oc.create_chat_completion(
+            client, label="test", model="other-model",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.0, max_tokens=5, max_attempts=1,
+        )
+    assert "temperature" in client.calls[-1]

@@ -61,6 +61,32 @@ def _retry_after_seconds(exc: Exception, fallback: float) -> float:
 # default sampling is what the provider wants us to use anyway.
 _DROPPABLE_PARAMS = ("temperature", "top_p", "presence_penalty", "frequency_penalty")
 
+# Per-model quirks learned at runtime, kept for the life of the process so
+# the discovery cost (a rejected 400 or an empty-at-cap response) is paid
+# once, not on every call — the calibration run paid 3 requests per judge
+# call rediscovering the same two claude-sonnet-5 quirks 25 times.
+_MODEL_REJECTED_PARAMS: "dict[str, set[str]]" = {}
+_MODEL_MIN_CAP: "dict[str, int]" = {}
+_RENAME_MAX_TOKENS = "max_tokens→max_completion_tokens"
+
+
+def _apply_model_memory(kwargs: dict) -> None:
+    """Preemptively apply quirks previously learned for this model."""
+    model = str(kwargs.get("model") or "")
+    if not model:
+        return
+    for param in _MODEL_REJECTED_PARAMS.get(model, ()):
+        if param == _RENAME_MAX_TOKENS:
+            if "max_tokens" in kwargs:
+                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        else:
+            kwargs.pop(param, None)
+    floor = _MODEL_MIN_CAP.get(model, 0)
+    if floor:
+        for key in ("max_tokens", "max_completion_tokens"):
+            if kwargs.get(key) and kwargs[key] < floor:
+                kwargs[key] = floor
+
 
 def _drop_rejected_param(kwargs: dict, payload: str) -> "str | None":
     """Remove the sampling param a 400 payload complains about; return its name."""
@@ -74,7 +100,7 @@ def _drop_rejected_param(kwargs: dict, payload: str) -> "str | None":
     # OpenAI reasoning models reject max_tokens in favor of max_completion_tokens.
     if "max_tokens" in kwargs and "max_completion_tokens" in lowered:
         kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
-        return "max_tokens→max_completion_tokens"
+        return _RENAME_MAX_TOKENS
     return None
 
 
@@ -86,6 +112,7 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
     do not burst into the same rolling TPM/RPM window.
     """
     global _LAST_CHAT_CALL
+    _apply_model_memory(kwargs)
     attempt = 0
     while True:
         attempt += 1
@@ -129,6 +156,9 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 if status_code == 400 and attempt < max_attempts:
                     dropped = _drop_rejected_param(kwargs, payload)
                     if dropped:
+                        model_name = str(kwargs.get("model") or "")
+                        if model_name:
+                            _MODEL_REJECTED_PARAMS.setdefault(model_name, set()).add(dropped)
                         _LOG.info(
                             "openai.chat dropped_param label=%s param=%s (provider rejected it)",
                             label,
@@ -157,6 +187,9 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 bumped = int(requested_cap) * 4
                 key = "max_tokens" if "max_tokens" in kwargs else "max_completion_tokens"
                 kwargs[key] = bumped
+                model_name = str(kwargs.get("model") or "")
+                if model_name:
+                    _MODEL_MIN_CAP[model_name] = max(_MODEL_MIN_CAP.get(model_name, 0), bumped)
                 _LOG.warning(
                     "openai.chat empty_at_cap label=%s cap=%s -> retrying with %s",
                     label, requested_cap, bumped,

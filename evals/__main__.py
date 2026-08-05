@@ -4,6 +4,7 @@
     python -m evals judge --jd FILE --output FILE [--master FILE] [-n N]
     python -m evals suite [-n 5] [--entries GD-01,GD-03]
     python -m evals fixtures [-n 5] [--json PATH]
+    python -m evals calibrate [-n 5] [--entries GD-01,GD-03] [--json PATH]
 
 ``layer1`` runs against the ACTIVE workspace. Write-tagged cases are
 excluded unless ``--include-writes`` is passed — only use that in an
@@ -14,6 +15,9 @@ isolated test-user namespace, never against live data.
 and needs a configured LLM provider plus the golden files in the workspace.
 ``fixtures`` judges the committed planted-error corpus N times per fixture
 and reports per-class catch rates — needs a live judge, nothing else.
+``calibrate`` judges the golden references N times each and computes
+per-dimension MAE against the blind human labels — the docs/evals.md
+calibration tables come from this, not from hand arithmetic.
 """
 from __future__ import annotations
 
@@ -82,6 +86,18 @@ def _cmd_fixtures(args: argparse.Namespace) -> int:
     from evals.fixtures import run_fixture_suite
 
     report = run_fixture_suite(n=args.n)
+    print(report.to_text())
+    if args.json:
+        Path(args.json).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"\nJSON report → {args.json}")
+    return 0
+
+
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    from evals.calibrate import run_calibration
+
+    wanted = set(args.entries.split(",")) if args.entries else None
+    report = run_calibration(n=args.n, entry_ids=wanted)
     print(report.to_text())
     if args.json:
         Path(args.json).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
@@ -166,6 +182,12 @@ def main(argv: list[str] | None = None) -> int:
     p5.add_argument("-n", type=int, default=5, help="judge runs per fixture")
     p5.add_argument("--json", default="", help="write JSON report to this path")
     p5.set_defaults(fn=_cmd_fixtures)
+
+    p6 = sub.add_parser("calibrate", help="judge golden references, MAE vs blind labels")
+    p6.add_argument("-n", type=int, default=5, help="judge runs per entry")
+    p6.add_argument("--entries", default="", help="comma-separated GD ids (default: all)")
+    p6.add_argument("--json", default="", help="write JSON report to this path")
+    p6.set_defaults(fn=_cmd_calibrate)
 
     args = parser.parse_args(argv)
     return args.fn(args)
