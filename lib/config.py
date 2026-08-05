@@ -369,6 +369,46 @@ def get_active_master_resume_path() -> Path:
 
 # ── LLM client factory ────────────────────────────────────────────────────────
 
+def _resolve_llm_settings(task: str = "", cfg: "dict | None" = None) -> tuple[str, str]:
+    """Resolve the provider/model tuple for a given task.
+
+    The generation path uses the standard provider settings. The eval judge can
+    opt into a separate override via ``judge_provider`` / ``judge_model`` when
+    present, otherwise it falls back to the main LLM settings.
+    """
+    if cfg is None:
+        cfg = get_active_config()
+
+    if task == "eval_judge":
+        # Env wins, matching the generation path — so a plain LLM_PROVIDER
+        # (AKS secrets, CI) silently overrides config judge_provider. Where
+        # LLM_PROVIDER is exported, only JUDGE_LLM_PROVIDER/JUDGE_LLM_MODEL
+        # actually split the judge.
+        provider = str(cfg.get("judge_provider", cfg.get("llm_provider", "openai"))).lower()
+        provider = os.environ.get("JUDGE_LLM_PROVIDER", os.environ.get("LLM_PROVIDER", provider)).lower()
+        judge_model = str(
+            os.environ.get("JUDGE_LLM_MODEL", "") or cfg.get("judge_model", "") or ""
+        ).strip()
+        if provider == "ollama":
+            return provider, judge_model or str(cfg.get("ollama_model", "llama3.1:8b")).strip()
+        if provider == "anthropic":
+            return provider, judge_model or str(cfg.get("anthropic_model", "claude-sonnet-5")).strip()
+        if provider == "foundry":
+            return provider, judge_model or str(cfg.get("azure_foundry_deployment", "gpt-4.1-mini")).strip()
+        return provider, judge_model or str(cfg.get("openai_model", "gpt-4o-mini")).strip()
+
+    provider = str(cfg.get("llm_provider", "openai")).lower()
+    provider = os.environ.get("LLM_PROVIDER", provider).lower()
+    model = str(cfg.get("openai_model", "gpt-4o-mini")).strip()
+    if provider == "ollama":
+        return provider, str(cfg.get("ollama_model", "llama3.1:8b")).strip() or model
+    if provider == "anthropic":
+        return provider, str(cfg.get("anthropic_model", "claude-sonnet-5")).strip() or model
+    if provider == "foundry":
+        return provider, str(cfg.get("azure_foundry_deployment", "gpt-4.1-mini")).strip() or model
+    return provider, model
+
+
 def llm_generation_status(cfg: "dict | None" = None) -> "tuple[str, bool]":
     """(provider, ready) — mirrors get_llm_client()'s per-provider key
     resolution WITHOUT constructing a client, for status surfaces (Settings
@@ -378,8 +418,7 @@ def llm_generation_status(cfg: "dict | None" = None) -> "tuple[str, bool]":
     """
     if cfg is None:
         cfg = get_active_config()
-    provider = str(cfg.get("llm_provider", "openai")).lower()
-    provider = os.environ.get("LLM_PROVIDER", provider).lower()
+    provider, _model = _resolve_llm_settings(task="", cfg=cfg)
     env_key = str(os.environ.get("LLM_API_KEY", "") or "").strip()
     if provider == "ollama":
         return provider, True  # local endpoint, no key needed
@@ -410,16 +449,12 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         return None, ""
 
     active_cfg = get_active_config()
-    provider = str(active_cfg.get("llm_provider", "openai")).lower()
-    # LLM_PROVIDER env var overrides config.json (used in AKS / Docker deployments)
-    provider = os.environ.get("LLM_PROVIDER", provider).lower()
-    model = active_cfg.get("openai_model", "gpt-4o-mini")
+    provider, model = _resolve_llm_settings(task=task, cfg=active_cfg)
 
     if provider == "ollama":
         ollama_base = active_cfg.get("ollama_base_url", "http://localhost:11434/v1")
-        ollama_model = active_cfg.get("ollama_model", "llama3.1:8b")
         client = OpenAI(base_url=ollama_base, api_key="ollama")
-        return client, ollama_model
+        return client, model
 
     if provider == "anthropic":
         # BYOK Claude via Anthropic's OpenAI-compatible endpoint — supports
@@ -428,9 +463,8 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("anthropic_api_key", "")
         if not api_key:
             return None, ""
-        anthropic_model = active_cfg.get("anthropic_model", "claude-sonnet-5")
         client = OpenAI(base_url="https://api.anthropic.com/v1/", api_key=api_key)
-        return client, anthropic_model
+        return client, model
 
     if provider == "foundry":
         try:
@@ -441,7 +475,6 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         endpoint = str(active_cfg.get("azure_foundry_endpoint", "")).rstrip("/")
         if endpoint.endswith("/openai/v1"):
             endpoint = endpoint[: -len("/openai/v1")]
-        deployment = active_cfg.get("azure_foundry_deployment", "gpt-4.1-mini")
         api_version = active_cfg.get("azure_foundry_api_version", "2025-01-01-preview")
         if not endpoint:
             return None, ""
@@ -467,7 +500,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
                 azure_ad_token_provider=token_provider,
                 api_version=api_version,
             )
-        return client, deployment
+        return client, model
 
     # openai (default)
     # LLM_API_KEY env var overrides config.json openai_api_key

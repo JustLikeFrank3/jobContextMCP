@@ -51,9 +51,12 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-002", tool="materials", action="read_master_resume",
-        min_length=10,
+        contains_all=("achievements", "peer feedback"),
+        min_length=20,
         tags=("smoke", "read-only"),
-        notes="Live expectation: >500 chars and contains the candidate name.",
+        notes="The ACHIEVEMENTS / PEER FEEDBACK section headers are emitted by "
+              "_load_master_context when the reference files resolve — a failure "
+              "here means the enrichment block is missing, not just the resume.",
     ),
     EvalCase(
         id="TC-003", tool="materials", action="search",
@@ -103,11 +106,16 @@ CASES: tuple[EvalCase, ...] = (
     # ── per-domain smoke coverage (all 11 tools) ─────────────────────────────
     EvalCase(
         id="TC-009", tool="applications", action="status",
-        min_length=5, tags=("smoke", "read-only"),
+        contains_any=("no applications tracked", "job hunt status"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Both alternatives are code-emitted literals: the empty-state "
+              "message or the populated-state header in tools/job_hunt.py.",
     ),
     EvalCase(
         id="TC-010", tool="applications", action="get_queue",
-        min_length=3, tags=("smoke", "read-only"),
+        contains_any=("no jobs in queue", "job queue"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Empty-state message or populated-state header from tools/job_queue.py.",
     ),
     EvalCase(
         id="TC-011", tool="people", action="log",
@@ -127,12 +135,16 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-013", tool="stories", action="tone_profile",
-        min_length=3, tags=("smoke", "read-only"),
+        contains_any=("no tone samples logged", "tone profile"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Empty-state message or populated-state header from tools/tone.py.",
     ),
     EvalCase(
         id="TC-014", tool="wellbeing", action="log",
-        min_length=3, tags=("smoke", "read-only"),
-        notes="Must not error on empty history.",
+        contains_any=("no check-ins logged", "mental health log"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Must not error on empty history. Empty-state message or "
+              "populated-state header from tools/health.py.",
     ),
     EvalCase(
         id="TC-015", tool="wellbeing", action="checkin",
@@ -141,7 +153,9 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-016", tool="brand", action="posts",
-        min_length=3, tags=("smoke", "read-only"),
+        contains_all=("linkedin posts",),
+        contains_any=("no linkedin posts", "aggregate", "reactions"),
+        min_length=10, tags=("smoke", "read-only"),
     ),
     EvalCase(
         id="TC-017", tool="insights", action="daily_digest",
@@ -170,7 +184,11 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-021", tool="interviews", action="upcoming",
-        min_length=3, tags=("smoke", "read-only"),
+        contains_any=("no interviews logged", "no interviews scheduled",
+                      "upcoming interviews"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Three code-emitted states in tools/interviews.py: nothing logged, "
+              "nothing in the window, or the populated header.",
     ),
     EvalCase(
         id="TC-022", tool="job_search", action="web",
@@ -180,12 +198,14 @@ CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         id="TC-023", tool="certification", action="list_reports",
-        min_length=3, tags=("smoke", "read-only"),
-        notes="Must not error before any weekly report exists.",
+        contains_all=("certification reports",),
+        contains_any=("no reports", "weekly", "report"),
+        min_length=10, tags=("smoke", "read-only"),
+        notes="Must not error before any weekly report exists and should explain the empty state.",
     ),
     EvalCase(
         id="TC-024", tool="certification", action="state_profile",
-        contains_all=("CERTIFICATION PROFILE",), tags=("smoke", "read-only"),
+        contains_all=("certification profile",), tags=("smoke", "read-only"),
         notes="GA defaults render without a saved state_profile.json.",
     ),
 )

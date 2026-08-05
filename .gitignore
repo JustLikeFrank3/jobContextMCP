@@ -105,3 +105,5 @@ desktop/src-tauri/icons/
 
 # Eval results — version-stamped local runs, never committed
 /evals/results/
+# Blind scoring sheet — contains personal JDs/resumes, never committed
+/evals/golden_labels_sheet.md

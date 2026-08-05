@@ -16,6 +16,8 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from evals.rubrics import THRESHOLDS, RESUME_RUBRIC
+
 # The judge scores the doc's five JSON dimensions (format_compliance stays a
 # human/Layer-2 check — the judge sees plain text, not layout).
 JUDGE_DIMENSIONS: tuple[str, ...] = (
@@ -29,8 +31,20 @@ JUDGE_SYSTEM = (
     "Score honestly and critically."
 )
 
+
+def _build_rubric_block() -> str:
+    threshold = THRESHOLDS["resume"]
+    lines = [
+        "SCORING RUBRIC:",
+        *[f"- {dim}: {RESUME_RUBRIC[dim]}" for dim in JUDGE_DIMENSIONS],
+        "",
+        f"PASS CRITERION: A score is PASS only when the average of the five dimensions is >= {threshold.min_avg:.1f} and no dimension is below {threshold.min_dimension}.",
+    ]
+    return "\n".join(lines)
+
+
 JUDGE_USER_TEMPLATE = """TODAY'S DATE: {today}. Dates on or before today are NOT future-dated; \
-do not flag employment dates as hallucinations merely because they are recent.
+ do not flag employment dates as hallucinations merely because they are recent.
 
 JOB DESCRIPTION:
 {job_description}
@@ -40,6 +54,8 @@ MASTER RESUME EXCERPT:
 
 GENERATED OUTPUT:
 {generated_output}
+
+{rubric_block}
 
 Score the output on each dimension 1-5. The "hallucinations" list must contain \
 ONLY claims from the output that cannot be traced to the master resume excerpt — \
@@ -55,7 +71,9 @@ class JudgeScore:
     rationale: str = ""
     hallucinations: list[str] = field(default_factory=list)
     verdict: str = "fail"
+    model_verdict: str = ""  # the model's own opinion — calibration data, never a gate
     raw: str = ""
+    model: str = ""
 
     @property
     def mean(self) -> float:
@@ -68,6 +86,8 @@ class JudgeScore:
             "rationale": self.rationale,
             "hallucinations": self.hallucinations,
             "verdict": self.verdict,
+            "model_verdict": self.model_verdict,
+            "model": self.model,
         }
 
 
@@ -86,6 +106,7 @@ def build_judge_messages(
             job_description=job_description,
             master_resume_excerpt=master_resume_excerpt,
             generated_output=generated_output,
+            rubric_block=_build_rubric_block(),
         )},
     ]
 
@@ -119,18 +140,23 @@ def parse_judge_json(text: str) -> JudgeScore:
         if not isinstance(value, (int, float)) or not 1 <= value <= 5:
             raise ValueError(f"judge score {dim}={value!r} not in 1–5")
         scores[dim] = int(value)
-    verdict = str(obj.get("verdict", "")).lower()
-    if verdict not in ("pass", "fail"):
-        raise ValueError(f"judge verdict {obj.get('verdict')!r} not pass/fail")
+    # Kept leniently, not enforced: does the model apply the stated criterion?
+    model_verdict = str(obj.get("verdict", "")).lower()
+    if model_verdict not in ("pass", "fail"):
+        model_verdict = ""
     hallucinations = obj.get("hallucinations") or []
     if not isinstance(hallucinations, list):
         hallucinations = [str(hallucinations)]
     hallucinations = [str(h) for h in hallucinations if not _CLEAN_BILL.search(str(h))]
+    from evals.rubrics import passes  # noqa: PLC0415
+
+    verdict = "pass" if passes(scores, "resume")[0] else "fail"
     return JudgeScore(
         scores=scores,
         rationale=str(obj.get("rationale", "")),
         hallucinations=[str(h) for h in hallucinations],
         verdict=verdict,
+        model_verdict=model_verdict,
         raw=text,
     )
 
@@ -166,11 +192,13 @@ def judge_output(
     for _ in range(max_attempts):
         response = create_chat_completion(
             client, label="eval_judge", model=model,
-            messages=messages, temperature=0.0,
+            messages=messages, temperature=0.0, max_tokens=2000,
         )
         content = response.choices[0].message.content or ""
         try:
-            return parse_judge_json(content)
+            score = parse_judge_json(content)
+            score.model = model
+            return score
         except ValueError as e:
             last_error = e
     raise ValueError(f"judge returned unparseable output after {max_attempts} attempts: {last_error}")

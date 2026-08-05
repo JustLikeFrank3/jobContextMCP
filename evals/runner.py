@@ -20,11 +20,23 @@ from typing import Callable
 from evals.golden import GoldenEntry, load_golden, resolve_file
 from evals.judge import JudgeScore, judge_output
 from evals.variance import RunAggregate, aggregate_runs
+from lib import provenance as provenance_mod
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
 GenerateFn = Callable[[GoldenEntry, str], str]      # (entry, jd_text) → output text
 JudgeFn = Callable[[str, str, str], JudgeScore]      # (jd, master_excerpt, output) → score
+
+# no_record is deliberately distinct from both_clean: a missing provenance row
+# (record_run swallows its own failures) means the comparison never happened,
+# not that both checks came back clean.
+AGREEMENT_KEYS: tuple[str, ...] = (
+    "both_flagged", "both_clean", "judge_only", "provenance_only", "no_record",
+)
+
+
+def _empty_agreement() -> dict[str, int]:
+    return dict.fromkeys(AGREEMENT_KEYS, 0)
 
 
 @dataclass
@@ -33,15 +45,22 @@ class EntryResult:
     role: str
     aggregate: RunAggregate | None = None
     error: str = ""
+    provenance_agreement: dict[str, int] = field(default_factory=_empty_agreement)
+    judge_models: list[str] = field(default_factory=list)  # distinct, as stamped on the scores
 
     def dashboard_row(self) -> dict:
         """One row of the doc's results table."""
-        if self.aggregate is None:
-            return {"gd_id": self.entry_id, "role": self.role, "error": self.error}
-        dims = self.aggregate.per_dimension
-        return {
+        base = {
             "gd_id": self.entry_id,
             "role": self.role,
+            "error": self.error,
+            "provenance_agreement": dict(self.provenance_agreement),
+        }
+        if self.aggregate is None:
+            return base
+        dims = self.aggregate.per_dimension
+        return {
+            **base,
             "keyword": round(dims["keyword_coverage"]["mean"], 2),
             "relevance": round(dims["relevance"]["mean"], 2),
             "accuracy": round(dims["accuracy"]["mean"], 2),
@@ -61,12 +80,16 @@ class SuiteResult:
     started_at: str = ""
     git_sha: str = ""
     provider: str = ""
+    judge_provider: str = ""
+    judge_model: str = ""
 
     def to_dict(self) -> dict:
         return {
             "started_at": self.started_at,
             "git_sha": self.git_sha,
             "provider": self.provider,
+            "judge_provider": self.judge_provider,
+            "judge_model": self.judge_model,
             "n_runs": self.n_runs,
             "rows": [e.dashboard_row() for e in self.entries],
             "detail": {
@@ -118,10 +141,76 @@ def default_generate(entry: GoldenEntry, jd_text: str) -> str:
 # qwen3-jobcontext runs a 40K-token context; the full ~30K-char master fits.
 # Truncating to 6K made 80% of the master invisible and the judge flagged
 # real (unseen) claims as hallucinations.
-def _master_excerpt(max_chars: int = 32000) -> str:
+def _master_excerpt(max_chars: int = 32000, master_text: str | None = None) -> str:
+    if master_text is not None:
+        return master_text[:max_chars]
     from tools import resume  # noqa: PLC0415 — lazy: imports server config
 
     return resume.read_master_resume()[:max_chars]
+
+
+def _numeric_provenance_agreement(
+    judge_hallucinations: list[str],
+    provenance_row: dict | None,
+) -> dict[str, int]:
+    """Classify a run by whether judge and provenance both flagged numeric claims."""
+    buckets = _empty_agreement()
+    if provenance_row is None:
+        buckets["no_record"] = 1
+        return buckets
+    judge_claims = {
+        claim
+        for text in judge_hallucinations
+        for claim in provenance_mod.extract_claims(text)
+    }
+    prov_claims = {
+        claim
+        for text in (provenance_row or {}).get("violations", [])
+        for claim in provenance_mod.extract_claims(text)
+    }
+    if judge_claims and prov_claims:
+        buckets["both_flagged"] = 1
+    elif judge_claims:
+        buckets["judge_only"] = 1
+    elif prov_claims:
+        buckets["provenance_only"] = 1
+    else:
+        buckets["both_clean"] = 1
+    return buckets
+
+
+# Distinct from None ("no row existed yet"): the pre-read itself failed, so
+# a post-generation row's freshness cannot be proven against anything.
+_PRE_READ_FAILED = object()
+
+
+def _fenced_provenance_row(entry: GoldenEntry, pre_row_id) -> dict | None:
+    """Provenance row written by THIS generation, or None.
+
+    record_run swallows its own failures, so latest_run can return a stale row
+    from a previous generation of the same company/role — comparing the id
+    against the pre-generation row fences that out. A failed pre-read means
+    freshness is unprovable, so no row may pass the fence at all. Never
+    raises: a provenance lookup failure must not discard the judge score it
+    accompanies.
+    """
+    if pre_row_id is _PRE_READ_FAILED:
+        return None
+    try:
+        row = provenance_mod.latest_run(company=entry.company, role=entry.role)
+    except Exception:
+        return None
+    if row is not None and pre_row_id is not None and row.get("id") == pre_row_id:
+        return None
+    return row
+
+
+def _latest_provenance_id(entry: GoldenEntry):
+    try:
+        row = provenance_mod.latest_run(company=entry.company, role=entry.role)
+    except Exception:
+        return _PRE_READ_FAILED
+    return row.get("id") if row else None
 
 
 def run_entry(
@@ -142,15 +231,30 @@ def run_entry(
     master = _master_excerpt()
     scores: list[JudgeScore] = []
     errors: list[str] = []
+    provenance_agreement = _empty_agreement()
     for i in range(n):
+        pre_row_id = _latest_provenance_id(entry)
         try:
             output = generate(entry, jd_text)
-            scores.append(judge(jd_text, master, output))
+            score = judge(jd_text, master, output)
         except Exception as e:
             errors.append(f"run {i + 1}: {type(e).__name__}: {e}")
+            continue
+        # Outside the try: a provenance failure must not discard a paid score.
+        provenance_row = _fenced_provenance_row(entry, pre_row_id)
+        agreement = _numeric_provenance_agreement(score.hallucinations, provenance_row)
+        for key in provenance_agreement:
+            provenance_agreement[key] += agreement[key]
+        scores.append(score)
     if not scores:
         return EntryResult(entry.id, entry.role, error="; ".join(errors) or "no runs completed")
-    result = EntryResult(entry.id, entry.role, aggregate=aggregate_runs(scores))
+    result = EntryResult(
+        entry.id,
+        entry.role,
+        aggregate=aggregate_runs(scores),
+        provenance_agreement=provenance_agreement,
+        judge_models=list(dict.fromkeys(s.model for s in scores if s.model)),
+    )
     if errors:
         result.error = "; ".join(errors)
     return result
@@ -164,17 +268,26 @@ def run_suite(
     results_dir: Path | None = None,
 ) -> SuiteResult:
     """Run the full suite and persist a version-stamped results file."""
+    from lib import config as config_mod  # noqa: PLC0415
     from lib.config import llm_generation_status  # noqa: PLC0415
 
     provider, _ready = llm_generation_status()
+    judge_provider, judge_model = config_mod._resolve_llm_settings(task="eval_judge")
     suite = SuiteResult(
         n_runs=n,
         started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         git_sha=_git_sha(),
         provider=provider,
+        judge_provider=judge_provider,
+        judge_model=judge_model,
     )
     for entry in entries if entries is not None else load_golden():
         suite.entries.append(run_entry(entry, n=n, generate_fn=generate_fn, judge_fn=judge_fn))
+    # Report the judge model that actually ran, not the config's promise;
+    # the config-derived value stands only when no score carries a model.
+    ran_models = list(dict.fromkeys(m for e in suite.entries for m in e.judge_models))
+    if ran_models:
+        suite.judge_model = ", ".join(ran_models)
     save_results(suite, results_dir)
     return suite
 
@@ -237,7 +350,7 @@ def format_dashboard(suite: SuiteResult) -> str:
     """The doc's sample results table, as fixed-width text."""
     header = (
         f"{'GD-ID':6} {'Role':28} {'Keyword':>7} {'Relev.':>6} {'Accur.':>6} "
-        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5}"
+        f"{'Impact':>6} {'ATS':>5} {'Mean':>5} {'CoV%':>5} {'Flip%':>5} {'Prov':>11}"
     )
     lines = [header, "─" * len(header)]
     for e in suite.entries:
@@ -245,11 +358,14 @@ def format_dashboard(suite: SuiteResult) -> str:
         if "error" in row and "mean" not in row:
             lines.append(f"{row['gd_id']:6} {row['role'][:28]:28} ERROR: {row['error']}")
             continue
+        agreement = row.get("provenance_agreement", {})
+        prov_text = "/".join(str(agreement.get(k, 0)) for k in AGREEMENT_KEYS)
         lines.append(
             f"{row['gd_id']:6} {row['role'][:28]:28} {row['keyword']:>7} "
             f"{row['relevance']:>6} {row['accuracy']:>6} {row['impact']:>6} "
-            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5}"
+            f"{row['ats']:>5} {row['mean']:>5} {row['cov_pct']:>5} {row['flip_rate_pct']:>5} {prov_text:>11}"
         )
         for alert in row.get("alerts", []):
             lines.append(f"       ⚠ {alert}")
+    lines.append("Prov: " + "/".join(AGREEMENT_KEYS))
     return "\n".join(lines)

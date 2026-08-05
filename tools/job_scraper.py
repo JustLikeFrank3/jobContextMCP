@@ -347,9 +347,27 @@ _CHROME_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )  # NOSONAR — fixed alternation over trusted page text
 
-# A real posting runs to thousands of characters; error bodies are tiny. This
-# is the catch-all for interstitials whose wording we have not seen yet.
+# A real posting runs to thousands of characters; error bodies are tiny.
 _MIN_JOB_DESCRIPTION_CHARS = 300
+
+# Matching only known error wordings catches only what we have already seen.
+# qa proved the gap: r.jina.ai served a cached snapshot of example.com titled
+# "Test Document" with 320 characters of body — past the length floor, and no
+# error phrase to match, so it queued. The generalisable signal is the
+# absence of job-posting vocabulary, not the presence of error vocabulary.
+#
+# Applied only to thin pages: a long page without these words is more likely
+# a posting written in a way we did not anticipate than an error body, and
+# rejecting it would cost more than letting it through.
+_THIN_BODY_CHARS = 1500
+_JOB_VOCAB_RE = re.compile(
+    r"\b(?:responsibilit|qualificat|requirement|experience|skill"
+    r"|you will|we are looking|who you are|what you.ll do"
+    r"|apply|salary|compensation|benefit|equal opportunity"
+    r"|role|position|candidate|hiring|employment|full[- ]time"
+    r")",
+    re.IGNORECASE,
+)  # NOSONAR — fixed alternation over trusted page text
 
 
 def _non_job_reason(role: str, description: str) -> str:
@@ -367,6 +385,11 @@ def _non_job_reason(role: str, description: str) -> str:
         return (
             f"only {len(body)} characters of content were extracted, "
             f"too little to be a job description"
+        )
+    if len(body) < _THIN_BODY_CHARS and not _JOB_VOCAB_RE.search(body):
+        return (
+            f"{len(body)} characters of content with none of the vocabulary a "
+            f"job posting always carries (requirements, experience, apply, ...)"
         )
     return ""
 

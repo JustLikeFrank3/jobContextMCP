@@ -24,6 +24,8 @@ class GoldenEntry:
     reference_file: str
     jd_file: str
     output_kind: str = "resume"
+    labels: dict[str, int] | None = None
+    """Blind human rubric scores on the reference output (judge calibration)."""
 
 
 def load_golden(manifest_path: Path | None = None) -> list[GoldenEntry]:
@@ -35,14 +37,20 @@ def _candidate_dirs() -> list[Path]:
     """Workspace folders a golden file may live in, best-first."""
     from lib import config  # noqa: PLC0415 — lazy: importing config resolves the active workspace
 
-    dirs = [Path(".")]
+    evals_dir = Path(__file__).resolve().parent
+    dirs = [Path("."), evals_dir, evals_dir / "golden", evals_dir / "fixtures"]
     try:
         dirs.insert(0, config.get_active_optimized_resumes_dir())
     except Exception:
         pass
     try:
         workspace = config.get_active_workspace_folder()
-        dirs[1:1] = [workspace, workspace / "jd", workspace / "evals" / "golden"]
+        dirs[1:1] = [
+            workspace,
+            workspace / "jd",
+            workspace / "evals" / "golden",
+            workspace / "evals" / "fixtures",
+        ]
     except Exception:
         pass
     return dirs

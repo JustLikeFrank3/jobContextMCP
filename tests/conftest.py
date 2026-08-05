@@ -69,6 +69,12 @@ def isolated_server(tmp_path: Path):
     _write(res_dir / "achievements.txt",      "[TEST ACHIEVEMENTS]")
     _write(res_dir / "feedback_received.txt",   "[TEST FEEDBACK]")
     _write(res_dir / "skills_shorter.txt",      "[TEST SKILLS]")
+    # _load_master_context reads achievements/feedback from the workspace's
+    # 06-Reference-Materials/ dir; providing them exercises the enrichment block.
+    _write(res_dir / "06-Reference-Materials" / "achievements.txt",
+           "[TEST ACHIEVEMENTS CONTENT]")
+    _write(res_dir / "06-Reference-Materials" / "feedback_received.txt",
+           "[TEST FEEDBACK CONTENT]")
 
     # Minimal status so get_job_hunt_status() has something to read
     _write_json(data_dir / "status.json", {"applications": [], "pipeline_summary": "TEST"})

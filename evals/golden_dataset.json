@@ -1,5 +1,6 @@
 {
-  "_comment": "Golden dataset manifest — hand-curated (JD, 5/5 reference output) pairs. reference_file resolves against the workspace optimized-resumes folder; jd_file against workspace/evals/golden (see evals/golden.py). The files themselves are personal data and are NOT committed. JD provenance: recovered verbatim from the application queue (2026-07-29), except GD-02 which is the condensed JD preserved in the Agent 365 cover-letter args — replace with the full posting if recovered.",
+  "_comment": "Golden dataset manifest — hand-curated (JD, reference output) pairs; references are the strongest material actually sent, not verified-5/5 outputs (see _labels_note). reference_file resolves against the workspace optimized-resumes folder; jd_file against workspace/evals/golden (see evals/golden.py). The files themselves are personal data and are NOT committed. JD provenance: recovered verbatim from the application queue (2026-07-29), except GD-02 which is the condensed JD preserved in the Agent 365 cover-letter args — replace with the full posting if recovered.",
+  "_labels_note": "labels = human rubric scores on the reference outputs, scored blind (before seeing any judge output for these files) by the resume owner against the master resume, 2026-08-04. Single rater, one sitting, RESUME_RUBRIC anchors verbatim. These calibrate the judge (compare judge means to labels per dimension); they do not validate suite scores on newly generated outputs. Note the accuracy labels: the owner found hallucinations in four of five references — 'golden' here means best-available application material, not hallucination-free ground truth.",
   "entries": [
     {
       "id": "GD-01",
@@ -9,7 +10,14 @@
       "eval_signal": "Company specificity; AI stack accuracy; consulting tone",
       "reference_file": "Frank Vladmir MacBride III Resume - Accenture AI Native Engineer Resume.txt",
       "jd_file": "GD-01-accenture-jd.txt",
-      "output_kind": "resume"
+      "output_kind": "resume",
+      "labels": {
+        "keyword_coverage": 5,
+        "relevance": 5,
+        "accuracy": 1,
+        "impact_language": 5,
+        "ats_readiness": 5
+      }
     },
     {
       "id": "GD-02",
@@ -19,7 +27,14 @@
       "eval_signal": "Keyword coverage: agents, LLM, Azure; no hallucinations on MS internals",
       "reference_file": "Frank MacBride Resume - Microsoft SWE II Agent 365.txt",
       "jd_file": "GD-02-microsoft-jd.txt",
-      "output_kind": "resume"
+      "output_kind": "resume",
+      "labels": {
+        "keyword_coverage": 5,
+        "relevance": 5,
+        "accuracy": 2,
+        "impact_language": 5,
+        "ats_readiness": 4
+      }
     },
     {
       "id": "GD-03",
@@ -29,7 +44,14 @@
       "eval_signal": "Retail domain relevance; innovation framing; ATS readiness",
       "reference_file": "Frank Vladmir MacBride III Resume - The Home Depot SR SOFTWARE ENGINEER AI Innovation Resume.txt",
       "jd_file": "GD-03-homedepot-jd.txt",
-      "output_kind": "resume"
+      "output_kind": "resume",
+      "labels": {
+        "keyword_coverage": 5,
+        "relevance": 5,
+        "accuracy": 1,
+        "impact_language": 5,
+        "ats_readiness": 4
+      }
     },
     {
       "id": "GD-04",
@@ -39,7 +61,14 @@
       "eval_signal": "Domain adaptation; safety-conscious framing",
       "reference_file": "Frank Vladmir MacBride III Resume - Delta Air Lines Senior Digital Experience Developer Artificial Intelligence Resume.txt",
       "jd_file": "GD-04-delta-jd.txt",
-      "output_kind": "resume"
+      "output_kind": "resume",
+      "labels": {
+        "keyword_coverage": 5,
+        "relevance": 5,
+        "accuracy": 1,
+        "impact_language": 5,
+        "ats_readiness": 4
+      }
     },
     {
       "id": "GD-05",
@@ -49,7 +78,14 @@
       "eval_signal": "Technical depth; agentic architecture vocabulary",
       "reference_file": "Frank Vladmir MacBride III Resume - Sema4ai Staff Backend Engineer Agent Platform Resume.txt",
       "jd_file": "GD-05-sema4-jd.txt",
-      "output_kind": "resume"
+      "output_kind": "resume",
+      "labels": {
+        "keyword_coverage": 3,
+        "relevance": 3,
+        "accuracy": 4,
+        "impact_language": 3,
+        "ats_readiness": 4
+      }
     }
   ]
 }

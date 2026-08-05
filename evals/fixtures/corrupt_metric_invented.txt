@@ -1,0 +1,67 @@
+JORDAN REYES
+Senior Software Engineer
+Portland, OR | jordan.reyes@example.com | (555) 014-7723 | linkedin.com/in/jordanreyes-example
+
+SUMMARY
+
+Senior software engineer with 11 years of experience building and
+operating high-throughput logistics platforms. Led the decomposition of
+a 250,000 line freight-management monolith into 18 Spring Boot services
+on Kubernetes while holding a contractual 99.7% uptime SLA. Deep Kafka,
+PostgreSQL, and AWS experience, with the operational habits that come
+from owning an ingestion tier through two peak seasons.
+
+SKILLS
+
+Java (8-17) | Spring Boot | Kafka | PostgreSQL | Redis | Kubernetes |
+Docker | Terraform | AWS (ECS, Lambda, S3, RDS, SQS) | GitHub Actions |
+TDD | SLO-driven alerting | Incident command
+
+EXPERIENCE
+
+MERIDIAN FREIGHT SYSTEMS — Portland, OR
+Senior Software Engineer, Dispatch Platform | 2021 - 2025
+
+- Led the decomposition of the legacy dispatch monolith (250,000 lines
+  of Java 8) into 18 Spring Boot services on Kubernetes, delivered as a
+  14-week phased migration with zero customer-facing downtime.
+- Scaled the ingestion tier to 120,000 shipment events per day while
+  holding the platform's contractual 99.7% uptime SLA.
+- Cut p95 order-ingestion latency by 37% by replacing a synchronous
+  carrier-notification chain with a Kafka-backed outbox pattern.
+- Tripled reconciliation throughput (3x) by re-partitioning the Kafka
+  topic layout around carrier ID and batching PostgreSQL writes.
+- Reduced annual infrastructure spend by $1.4M by right-sizing the ECS
+  fleet and eliminating a shadow read path that doubled database IOPS.
+- Raised line coverage to a consistent 85% enforced in CI, with
+  mutation testing on the money-path modules.
+- Cut after-hours incidents by 40% year over year through SLO-based
+  alerting; led a team of 6 engineers and rotating incident command.
+- Integrated 4 regional carriers through a unified EDI adapter layer
+  on a network moving $60M in annual freight volume, saving $2M in
+  annual integration costs.
+
+BLUELARK ANALYTICS — Seattle, WA
+Software Engineer II, Data Products | 2017 - 2021
+
+- Built the tenant-aware query compiler translating dashboard
+  definitions into parameterized SQL across 30+ REST endpoints.
+- Achieved 92% on-time dispatch of scheduled report deliveries by
+  rewriting the scheduler around a priority queue with per-tenant
+  rate limits.
+- Introduced contract tests between the query compiler and rendering
+  tier, catching schema drift before customers three times in the
+  first year.
+
+COBALT RIDGE SOFTWARE — Boise, ID
+Software Engineer | 2014 - 2017
+
+- Developed purchase-order and receiving modules in Java and
+  PostgreSQL used daily by store back offices.
+- Maintained the nightly sync between store-local databases and the
+  central warehouse system.
+
+EDUCATION & CERTIFICATIONS
+
+B.S. Computer Science — Lakewood State University, 2014
+Certified Kubernetes Administrator (CKA), 2022

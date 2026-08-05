@@ -55,6 +55,10 @@
   "azure_foundry_deployment": "gpt-4.1-mini",
   "azure_foundry_api_version": "2025-01-01-preview",
 
+  "_comment_judge": "Eval judge split — leave both empty and the judge runs on the generation provider/model (i.e. the model grades its own output). Prefer a cross-family judge. Read only where the LLM_PROVIDER env var is unset; where it is exported (AKS, CI), use the JUDGE_LLM_PROVIDER / JUDGE_LLM_MODEL env vars instead.",
+  "judge_provider": "",
+  "judge_model": "",
+
   "_comment_generation_budgets": "Token budgets for AI generation. personal_context_token_budget caps how many tokens of STAR stories get retrieved per request; tone_token_budget caps how much of the tone profile is included (most recent, source-diverse samples first); cover_letter_max_tokens is a hard ceiling on the whole prompt so requests can never exceed the model TPM limit as the library grows.",
   "generation_budgets": {
     "personal_context_token_budget": 1500,
