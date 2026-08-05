@@ -70,6 +70,24 @@ Per-dimension MAE: keyword_coverage 0.24, relevance 0.4, **accuracy 3.0**, impac
 
 Same claim discipline: N=5 per entry, five entries, one day, one rater's labels. These numbers earn `gpt-4.1-mini` consideration as the judge split target, not a conclusion that accuracy scoring is solved.
 
+**Production-candidate judge (`claude-sonnet-5`).** Same reference-judging pass, same labels, same rubric and master excerpt, N=5 per entry, judge `claude-sonnet-5` via Anthropic's OpenAI-compatible endpoint (2026-08-05). **Configuration differs from the two tables above and that difference is load-bearing, not incidental**: this model rejects the `temperature` param outright (400 "deprecated for this model" — dropped, not tuned) and is a thinking model whose `max_tokens` budget covers reasoning before output, so every call in this pass was floored to `max_tokens=8000` rather than the `temperature=0.0` / cap-2000 configuration `llama3.1:8b` and `gpt-4.1-mini` ran under. A mixed-budget first attempt at this pass was discarded before scoring anything, specifically to avoid measuring six calls that reasoned inside 2000 tokens against nineteen that got bumped to 8000 mid-run:
+
+| entry | human labels | judge means | hallucinations flagged |
+|---|---|---|---|
+| GD-01 | 5/5/**1**/5/5 | 3.2/3.8/**2.0**/4.0/5.0 | 5/5 |
+| GD-02 | 5/5/**2**/5/4 | 3.8/4.0/**1.8**/3.8/3.6 | 5/5 |
+| GD-03 | 5/5/**1**/5/4 | 3.6/4.0/**4.8**/4.8/3.2 | 1/5 |
+| GD-04 | 5/5/**1**/5/4 | 3.6/3.2/**2.8**/4.0/4.0 | 5/5 |
+| GD-05 | 3/3/4/3/4 | 2.4/2.0/3.0/2.6/3.6 | 5/5 |
+
+Per-dimension MAE: keyword_coverage 1.28, relevance 1.20, **accuracy 1.56**, impact_language 0.76, ats_readiness 0.32 — accuracy MAE roughly halves versus both prior judges (3.2 for `llama3.1:8b`, 3.0 for `gpt-4.1-mini`).
+
+The improvement is genuine calibration, not coincidental pessimism — `evals/calibrate.py` now persists the actual flagged claim strings (`hallucination_claims`), not just a count, and on GD-01/02/04/05 they consistently name the real conflicting numbers rather than generic complaints: "'931 passing tests' (master resume states 1,481 passing tests)", "'80 MCP tools across domains' ... master resume states 85 actions across 11 consolidated domain tools", "'52 tools' ... contradicts master resume's stated 85 actions", "Honcho long-term memory (technology never mentioned anywhere in master resume)", "'77 MCP tools' ... not 77 tools". These are the same tool-count and test-count conflicts the fixture corpus and the two prior calibration passes already established as real, cross-document contradictions — this judge names them by number on sight, every run, rather than needing them pointed out.
+
+**GD-03 is the exception and it matters.** Hallucinations flagged only 1/5 runs there (a title claim and a project rename, neither the real conflict), and accuracy landed at 4.8 against a human label of 1 — the worst single-entry miss in this table, on par with the prior judges' blanket 5.0s. Whatever numeric contradiction GD-03 carries evidently reads as less salient to this judge than the same class of conflict in GD-01/02/04. One entry out of five failing this way means the anti-correlation problem is reduced, not eliminated — this judge is calibrated on four of five entries in this sample, not proven calibrated in general.
+
+Same claim discipline as the two tables above: N=5 per entry, five entries, one day, one rater's labels — evidence for flipping `JUDGE_LLM_PROVIDER` to `anthropic`, not proof the accuracy dimension is solved.
+
 
 ## Running the evals
 

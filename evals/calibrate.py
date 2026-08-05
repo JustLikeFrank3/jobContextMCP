@@ -26,6 +26,22 @@ class EntryCalibration:
         vals = [s.scores[dim] for s in self.scores if dim in s.scores]
         return sum(vals) / len(vals) if vals else None
 
+    def hallucination_rate(self) -> str:
+        """Fraction of successful runs that flagged at least one hallucination."""
+        if not self.scores:
+            return "0/0"
+        flagged = sum(1 for s in self.scores if s.hallucinations)
+        return f"{flagged}/{len(self.scores)}"
+
+    def all_hallucinations(self) -> list[str]:
+        """Deduplicated hallucination claims flagged across runs, first-seen order."""
+        seen: list[str] = []
+        for s in self.scores:
+            for h in s.hallucinations:
+                if h not in seen:
+                    seen.append(h)
+        return seen
+
     def to_dict(self) -> dict:
         return {
             "entry_id": self.entry_id,
@@ -36,6 +52,8 @@ class EntryCalibration:
             },
             "runs_ok": len(self.scores),
             "errors": self.errors,
+            "hallucinations_flagged": self.hallucination_rate(),
+            "hallucination_claims": self.all_hallucinations(),
         }
 
 
@@ -77,7 +95,8 @@ class CalibrationReport:
             for d in JUDGE_DIMENSIONS:
                 m = e.dimension_mean(d)
                 cells += f"{e.labels.get(d, '?')!s:>7}/" + (f"{m:<6.2f}" if m is not None else "  --  ")
-            lines.append(f"{e.entry_id:8}" + cells + f"{len(e.scores):>4}/{self.n}")
+            lines.append(f"{e.entry_id:8}" + cells + f"{len(e.scores):>4}/{self.n}"
+                         + f"  hallucinations {e.hallucination_rate()}")
             for err in e.errors:
                 lines.append(f"         error: {err[:100]}")
         lines.append("")

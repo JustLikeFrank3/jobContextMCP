@@ -461,8 +461,8 @@ def test_judge_api_key_empty_when_nothing_set(monkeypatch):
 
 # ── calibration (reference-judging MAE) ───────────────────────────────────────
 
-def _mk_score(vals: dict[str, int], model: str = "judge-x"):
-    return judge_mod.JudgeScore(scores=vals, model=model)
+def _mk_score(vals: dict[str, int], model: str = "judge-x", hallucinations: "list[str] | None" = None):
+    return judge_mod.JudgeScore(scores=vals, model=model, hallucinations=hallucinations or [])
 
 
 _DIMS = judge_mod.JUDGE_DIMENSIONS
@@ -530,6 +530,41 @@ def test_run_calibration_records_errors_not_scores(monkeypatch, tmp_path):
     assert len(e.scores) == 1 and len(e.errors) == 1
     assert "ValueError" in e.errors[0]
     assert report.judge_model == "judge-x"
+
+
+def test_calibration_hallucination_rate_counts_flagged_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+        _mk_score(dict.fromkeys(_DIMS, 3)),
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["931 passing tests"]),
+    ])
+    assert e.hallucination_rate() == "2/3"
+
+
+def test_calibration_all_hallucinations_dedups_across_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools", "931 tests"]),
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+    ])
+    assert e.all_hallucinations() == ["80 MCP tools", "931 tests"]
+
+
+def test_calibration_to_dict_includes_hallucination_fields():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+    ])
+    d = e.to_dict()
+    assert d["hallucinations_flagged"] == "1/1"
+    assert d["hallucination_claims"] == ["80 MCP tools"]
 
 
 def test_run_calibration_missing_file_is_per_entry_error(monkeypatch):
