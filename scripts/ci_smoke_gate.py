@@ -2,7 +2,7 @@
 
 Runs every non-network eval case (writes land in a tmp dir, mirroring
 tests/conftest.py's isolated_server fixture) with fully verbose per-case
-logging, then applies the release rule from the eval framework doc:
+logging, then applies the release rule from docs/eval-framework.md:
 **smoke pass rate < 95% exits non-zero**, failing the CI job and blocking
 the deploy jobs behind it.
 

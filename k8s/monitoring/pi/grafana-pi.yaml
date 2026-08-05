@@ -712,7 +712,7 @@ data:
       "time": {"from": "now-7d", "to": "now"},
       "panels": [
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · adversarial judge · N-run variance"}},
+         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · LLM-as-judge · N-run variance\n\n⚠️ Cloud series (jcmcp) is SELF-JUDGED: no JUDGE_LLM_PROVIDER in prod, so gpt-4.1-mini grades its own output — calibrated accuracy MAE vs human labels is 3.0 (docs/evals.md). Treat accuracy as directional. Workstation overlay uses a cross-family judge."}},
         {"type": "stat", "title": "Mean judge score (worst entry)", "gridPos": {"x": 0, "y": 3, "w": 5, "h": 6},
          "datasource": {"uid": "prometheus"},
          "targets": [{"expr": "min(eval_mean_score{namespace=\"jcmcp\"})", "instant": true}],
