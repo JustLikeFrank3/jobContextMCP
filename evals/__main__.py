@@ -3,6 +3,7 @@
     python -m evals layer1 [--tags smoke] [--include-writes] [--json PATH]
     python -m evals judge --jd FILE --output FILE [--master FILE] [-n N]
     python -m evals suite [-n 5] [--entries GD-01,GD-03]
+    python -m evals fixtures [-n 5] [--json PATH]
 
 ``layer1`` runs against the ACTIVE workspace. Write-tagged cases are
 excluded unless ``--include-writes`` is passed — only use that in an
@@ -11,6 +12,8 @@ isolated test-user namespace, never against live data.
 ``judge`` scores an existing output file N times (judge-stability check).
 ``suite`` is the full generate→judge→variance loop over the golden dataset
 and needs a configured LLM provider plus the golden files in the workspace.
+``fixtures`` judges the committed planted-error corpus N times per fixture
+and reports per-class catch rates — needs a live judge, nothing else.
 """
 from __future__ import annotations
 
@@ -72,6 +75,17 @@ def _cmd_suite(args: argparse.Namespace) -> int:
     print(format_dashboard(suite))
     if args.push:
         return _push_payload(suite.to_dict(), args.push_url, args.api_key)
+    return 0
+
+
+def _cmd_fixtures(args: argparse.Namespace) -> int:
+    from evals.fixtures import run_fixture_suite
+
+    report = run_fixture_suite(n=args.n)
+    print(report.to_text())
+    if args.json:
+        Path(args.json).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"\nJSON report → {args.json}")
     return 0
 
 
@@ -147,6 +161,11 @@ def main(argv: list[str] | None = None) -> int:
     p4.add_argument("--file", default="", help="results JSON (default: newest in evals/results/)")
     _add_push_args(p4)
     p4.set_defaults(fn=_cmd_push)
+
+    p5 = sub.add_parser("fixtures", help="judge the planted-error fixture corpus")
+    p5.add_argument("-n", type=int, default=5, help="judge runs per fixture")
+    p5.add_argument("--json", default="", help="write JSON report to this path")
+    p5.set_defaults(fn=_cmd_fixtures)
 
     args = parser.parse_args(argv)
     return args.fn(args)

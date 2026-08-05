@@ -1,0 +1,56 @@
+HARBORLINE TECHNOLOGIES
+Senior Backend Engineer, Logistics Platform
+Remote (US) | Full-time
+
+ABOUT HARBORLINE
+
+Harborline Technologies builds the freight-visibility platform used by
+shippers and 3PLs to track containerized cargo across ocean, rail, and
+road. Our event pipeline processes 4 billion tracking events per year
+from carrier EDI feeds, IoT sensors, and port APIs, and we hold
+ourselves to a 99.99% availability target for the tracking API our
+customers embed in their own products.
+
+THE ROLE
+
+We are hiring a Senior Backend Engineer for the Logistics Platform
+team. You will own services in the ingestion and normalization tier:
+the systems that take raw carrier events in a dozen formats and turn
+them into the clean, deduplicated timeline our customers see.
+
+WHAT YOU WILL DO
+
+- Design and operate high-throughput event-processing services in
+  Java and Spring Boot on Kubernetes.
+- Evolve our Kafka topology as event volume grows, including
+  partitioning strategy and consumer-group design.
+- Lead incremental decomposition of remaining monolith components
+  into independently deployable services.
+- Set the bar for testing and observability on the team: coverage
+  gates in CI, SLO-based alerting, actionable runbooks.
+- Mentor mid-level engineers through design review and pairing.
+
+WHAT WE ARE LOOKING FOR
+
+- 7+ years building backend services in Java; Spring Boot in
+  production at scale.
+- Hands-on Kafka experience: partitioning, consumer rebalancing,
+  exactly-once semantics and their limits.
+- A track record of monolith-to-services migrations that shipped
+  without customer-facing downtime.
+- Cost consciousness: you have measurably reduced infrastructure
+  spend without trading away reliability.
+- Experience holding a contractual SLA and the operational habits
+  that come with it: on-call, incident command, blameless reviews.
+- PostgreSQL depth: query planning, partitioning, connection
+  pooling under load.
+- Kubernetes in production; Terraform or equivalent IaC.
+
+NICE TO HAVE
+
+- Experience with EDI or other legacy B2B integration formats.
+- Prior work in freight, logistics, or supply-chain software.
+- Open-source contributions or self-hosted side projects.
+
+Harborline is an equal opportunity employer. Compensation range for
+this role is $165,000 - $205,000 base plus equity.

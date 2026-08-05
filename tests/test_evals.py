@@ -7,6 +7,7 @@ renamed action fails here before it fails in a live eval run.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -531,12 +532,108 @@ def test_keyword_delta():
     assert variance.keyword_delta(curr, base) == -1.0
 
 
-def test_fixture_dataset_loads_and_resolves():
-    entries = fixtures_mod.load_fixture_entries()
-    assert [entry.id for entry in entries] == ["FX-01", "FX-02"]
-    assert golden_mod.resolve_file(entries[0].jd_file) is not None
-    assert golden_mod.resolve_file(entries[0].reference_file) is not None
-    assert entries[1].eval_signal.lower().startswith("corrupted")
+def test_fixture_manifest_loads_and_files_exist():
+    master_file, jd_file, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    assert (fixtures_dir / master_file).exists()
+    assert (fixtures_dir / jd_file).exists()
+    assert len(entries) >= 9
+    for entry in entries:
+        assert (fixtures_dir / entry.file).exists(), entry.id
+        assert entry.expected_signal in ("hallucination", "dimension", "clean")
+        assert entry.corruption_note
+    # exactly one clean-baseline control
+    assert sum(1 for e in entries if e.expected_signal == "clean") == 1
+    # no fixture filename may shadow a golden-dataset jd file (golden.py
+    # searches the fixtures dir too)
+    assert not any(e.file.startswith("GD-") for e in entries)
+
+
+def test_fixture_planted_claims_absent_from_synthetic_master():
+    # A corrupted fixture whose planted claim is accidentally traceable
+    # measures nothing — assert genuine absence, numerically where possible.
+    from lib import provenance
+
+    master_file, _jd, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    master = (fixtures_dir / master_file).read_text(encoding="utf-8")
+    for entry in entries:
+        if entry.expected_signal != "hallucination":
+            continue
+        numeric = provenance.extract_claims(entry.expected_detail)
+        if numeric:
+            untraceable = provenance.check_claims(entry.expected_detail, [master])
+            assert untraceable, f"{entry.id}: every numeric claim in planted detail is traceable to the master"
+        else:
+            assert entry.expected_detail.casefold() not in master.casefold(), \
+                f"{entry.id}: planted text appears in the synthetic master"
+
+
+def test_fixture_baseline_is_fully_traceable():
+    from lib import provenance
+
+    master_file, jd_file, entries = fixtures_mod.load_fixture_manifest()
+    fixtures_dir = Path(fixtures_mod.__file__).parent / "fixtures"
+    master = (fixtures_dir / master_file).read_text(encoding="utf-8")
+    baseline = next(e for e in entries if e.expected_signal == "clean")
+    text = (fixtures_dir / baseline.file).read_text(encoding="utf-8")
+    assert provenance.check_claims(text, [master]) == []
+
+
+def test_fixture_claim_caught_matching():
+    assert fixtures_mod.claim_caught(["Cut p95 order-ingestion latency by 52%"], "latency by 52%")
+    assert fixtures_mod.claim_caught(["52%"], "latency by 52%")  # numeric intersection
+    assert fixtures_mod.claim_caught(["the resume claims $2M in savings"], "saving $2M in annual integration costs")
+    assert fixtures_mod.claim_caught(["Northwind Logistics Group is not in the master"], "Northwind Logistics Group")
+    assert not fixtures_mod.claim_caught(["some unrelated 40% claim"], "latency by 52%")
+    assert not fixtures_mod.claim_caught([], "latency by 52%")
+
+
+def _fixture_score(scores=None, hallucinations=(), model="stub-judge"):
+    return judge_mod.JudgeScore(
+        scores=scores or {d: 5 for d in judge_mod.JUDGE_DIMENSIONS},
+        hallucinations=list(hallucinations),
+        verdict="pass",
+        model=model,
+    )
+
+
+def test_run_fixture_suite_classifies_catches(monkeypatch):
+    # Judge stub: flags the planted claim on FX-01 only, tanks
+    # impact_language always, never flags anything else.
+    def judge_fn(_jd, _master, output):
+        halls = ["latency by 52% is unsupported"] if "52%" in output else []
+        return _fixture_score(
+            scores={**{d: 5 for d in judge_mod.JUDGE_DIMENSIONS}, "impact_language": 2},
+            hallucinations=halls,
+        )
+
+    report = fixtures_mod.run_fixture_suite(n=2, judge_fn=judge_fn)
+    by_id = {r.entry.id: r for r in report.results}
+    assert by_id["FX-01"].catches == 2          # hallucination named → caught
+    assert by_id["FX-02"].catches == 0          # nothing flagged → missed
+    assert by_id["FX-08"].catches == 2          # impact_language 2 < 3 → style catch
+    assert report.baseline_false_positives == 0
+    assert report.judge_models == ["stub-judge"]
+    assert "FX-01" in report.to_text()
+
+
+def test_run_fixture_suite_counts_baseline_false_positives():
+    report = fixtures_mod.run_fixture_suite(
+        n=3, judge_fn=lambda *_a: _fixture_score(hallucinations=["everything is fake"]))
+    assert report.baseline_false_positives == 3
+
+
+def test_run_fixture_suite_never_touches_generation(monkeypatch):
+    import sys
+
+    class _Exploding:
+        def __getattr__(self, name):
+            raise AssertionError(f"fixture suite touched tools.generate.{name}")
+
+    monkeypatch.setitem(sys.modules, "tools.generate", _Exploding())
+    report = fixtures_mod.run_fixture_suite(n=1, judge_fn=lambda *_a: _fixture_score())
+    assert len(report.results) >= 9
 
 
 def test_format_dashboard_shows_provenance_agreement():

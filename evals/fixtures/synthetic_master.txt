@@ -1,0 +1,136 @@
+JORDAN REYES
+Senior Software Engineer
+Portland, OR | jordan.reyes@example.com | (555) 014-7723 | linkedin.com/in/jordanreyes-example
+
+=====================================================================
+PROFESSIONAL SUMMARY
+=====================================================================
+
+Senior software engineer with 11 years of experience building and
+operating high-throughput logistics and analytics platforms. Led the
+modernization of a 250,000 line freight-management monolith into 18
+independently deployable services while holding a 99.7% uptime SLA for
+paying customers. Comfortable owning systems end to end: architecture,
+implementation, CI/CD, observability, and the 2 a.m. pager. Known for
+pragmatic technical leadership, mentoring, and writing code that the
+next engineer can read.
+
+=====================================================================
+CORE SKILLS
+=====================================================================
+
+Languages: Java (8 through 17), Python, TypeScript, SQL, Bash
+Frameworks: Spring Boot, Spring Cloud, Angular (9 through 16), Flask
+Cloud & Infra: AWS (ECS, Lambda, S3, RDS, SQS), Docker, Kubernetes,
+Terraform, GitHub Actions, Jenkins
+Data: PostgreSQL, Redis, Kafka, DynamoDB, Elasticsearch
+Practices: Domain-driven design, trunk-based development, TDD,
+blue/green deploys, incident command, SLO-driven alerting
+
+=====================================================================
+PROFESSIONAL EXPERIENCE
+=====================================================================
+
+MERIDIAN FREIGHT SYSTEMS — Portland, OR
+Senior Software Engineer, Dispatch Platform          2021 – 2025
+
+Meridian builds routing and dispatch software for mid-market trucking
+fleets. I was the technical lead for the dispatch platform team, a
+team of 6 engineers responsible for the core order-to-dispatch
+pipeline.
+
+- Led the decomposition of the legacy dispatch monolith (250,000 lines
+  of Java 8) into 18 Spring Boot services on Kubernetes, completed as
+  a 14-week phased migration with zero customer-facing downtime.
+- Cut p95 order-ingestion latency by 37% by replacing a synchronous
+  carrier-notification chain with a Kafka-backed outbox pattern and
+  request coalescing on the hot path.
+- Reduced annual infrastructure spend by $1.4M by right-sizing the
+  ECS fleet, moving batch reconciliation to spot capacity, and
+  eliminating a shadow read path that doubled database IOPS.
+- Scaled the ingestion tier to 120,000 shipment events per day while
+  holding the platform's contractual 99.7% uptime SLA across two
+  peak seasons.
+- Tripled reconciliation throughput (3x) by re-partitioning the Kafka
+  topic layout around carrier ID and batching writes to PostgreSQL.
+- Drove test discipline across the team: raised line coverage from a
+  patchwork to a consistent 85% enforced in CI, with mutation testing
+  on the money-path modules.
+- Cut after-hours incidents by 40% year over year by introducing
+  SLO-based alerting and deleting three chronically flapping alerts
+  that had trained the team to ignore pages.
+- Integrated 4 regional carriers onto the platform through a unified
+  EDI adapter layer, expanding the addressable dispatch network that
+  moved $60M in annual freight volume.
+- Mentored two mid-level engineers to senior through weekly design
+  reviews and rotating incident-command shifts.
+
+BLUELARK ANALYTICS — Seattle, WA
+Software Engineer II, Data Products                  2017 – 2021
+
+BlueLark sells embedded analytics dashboards to SaaS companies. I
+worked on the query and rendering pipeline that turned customer event
+streams into white-labeled dashboards.
+
+- Built the tenant-aware query compiler that translated dashboard
+  definitions into parameterized SQL, serving 30+ REST endpoints
+  consumed by customer integrations.
+- Achieved 92% on-time dispatch of scheduled report deliveries by
+  rewriting the report scheduler around a priority queue with
+  per-tenant rate limits, up from a best-effort cron design.
+- Migrated the dashboard frontend from Angular 9 to Angular 16 across
+  four incremental upgrades, keeping feature work unblocked the whole
+  time.
+- Introduced contract tests between the query compiler and the
+  rendering tier, which caught schema drift before it reached
+  customers three separate times in the first year.
+- Served in the on-call rotation for the ingestion pipeline and wrote
+  the team's first structured runbooks, cutting mean time to
+  acknowledge for pageable incidents.
+
+COBALT RIDGE SOFTWARE — Boise, ID
+Software Engineer                                    2014 – 2017
+
+Cobalt Ridge built inventory management software for regional
+hardware-store chains.
+
+- Developed purchase-order and receiving modules in Java and
+  PostgreSQL used daily by store back offices.
+- Built a barcode-driven cycle-count workflow that replaced paper
+  counts at pilot stores.
+- Maintained the nightly sync between store-local databases and the
+  central warehouse system, and fixed the replication bug that had
+  caused weekly manual reconciliations.
+
+=====================================================================
+SELECTED PROJECTS
+=====================================================================
+
+TRAILHEAD (open source) — Maintainer
+A self-hosted GPS track aggregator for backpacking trips. Go backend,
+SQLite storage, OpenStreetMap tiles. Runs on a single Raspberry Pi.
+
+FREIGHTSIM — Personal project
+A discrete-event simulator for truckload dispatch strategies, used at
+Meridian to sanity-check routing heuristics before production trials.
+
+=====================================================================
+EDUCATION
+=====================================================================
+
+B.S. Computer Science — Lakewood State University, 2014
+
+=====================================================================
+CERTIFICATIONS
+=====================================================================
+
+Certified Kubernetes Administrator (CKA), 2022
+
+=====================================================================
+AWARDS & RECOGNITION
+=====================================================================
+
+- Meridian Engineering Excellence Award, 2023, for the dispatch
+  platform migration.
+- BlueLark "Customer Shield" award, 2020, for the contract-test work
+  that kept schema drift out of customer dashboards.
