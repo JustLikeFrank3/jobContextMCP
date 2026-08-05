@@ -374,7 +374,8 @@ def test_judge_output_without_provider_raises_runtime_error():
 # clear the env or it passes locally and fails in CI (CLAUDE.md gotcha).
 
 def _clear_llm_env(monkeypatch):
-    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL"):
+    for var in ("LLM_PROVIDER", "JUDGE_LLM_PROVIDER", "JUDGE_LLM_MODEL",
+                "LLM_API_KEY", "JUDGE_LLM_API_KEY"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -421,6 +422,165 @@ def test_judge_model_env_beats_config(monkeypatch):
     monkeypatch.setenv("JUDGE_LLM_MODEL", "env-model")
     cfg = {"judge_provider": "ollama", "judge_model": "cfg-model"}
     assert config_mod._resolve_llm_settings(task="eval_judge", cfg=cfg)[1] == "env-model"
+
+
+# ── judge API-key split ──────────────────────────────────────────────────────────────
+# A cross-vendor judge needs its own key: LLM_API_KEY belongs to the
+# generator (foundry prefers an explicit key over workload identity, so
+# putting an Anthropic key there breaks generation).
+
+def test_judge_api_key_preferred_for_eval_judge(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "judge-key")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "judge-key"
+
+
+def test_judge_api_key_falls_back_to_llm_api_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "generator-key"
+    # Whitespace-only judge key is absent, not a key.
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "   ")
+    assert config_mod._llm_env_api_key(task="eval_judge") == "generator-key"
+
+
+def test_generation_ignores_judge_api_key(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "generator-key")
+    monkeypatch.setenv("JUDGE_LLM_API_KEY", "judge-key")
+    for task in ("", "assessment", "certification"):
+        assert config_mod._llm_env_api_key(task=task) == "generator-key", task
+
+
+def test_judge_api_key_empty_when_nothing_set(monkeypatch):
+    _clear_llm_env(monkeypatch)
+    assert config_mod._llm_env_api_key(task="eval_judge") == ""
+    assert config_mod._llm_env_api_key(task="") == ""
+
+
+# ── calibration (reference-judging MAE) ───────────────────────────────────────
+
+def _mk_score(vals: dict[str, int], model: str = "judge-x", hallucinations: "list[str] | None" = None):
+    return judge_mod.JudgeScore(scores=vals, model=model, hallucinations=hallucinations or [])
+
+
+_DIMS = judge_mod.JUDGE_DIMENSIONS
+
+
+def test_calibration_mae_is_mean_abs_error_over_entries():
+    from evals.calibrate import CalibrationReport, EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e1 = EntryCalibration("GD-01", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 3))])
+    e2 = EntryCalibration("GD-02", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 5))])
+    report = CalibrationReport(judge_model="judge-x", n=1, entries=[e1, e2])
+    assert report.mae() == dict.fromkeys(_DIMS, 1.0)  # (|5-3| + |5-5|) / 2
+
+
+def test_calibration_judge_mean_averages_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 2)), _mk_score(dict.fromkeys(_DIMS, 4)),
+    ])
+    assert e.dimension_mean("accuracy") == 3.0
+
+
+def test_calibration_all_errored_entry_excluded_from_mae():
+    # An absent judge opinion must not read as a 0-error opinion.
+    from evals.calibrate import CalibrationReport, EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    ok = EntryCalibration("GD-01", labels, scores=[_mk_score(dict.fromkeys(_DIMS, 4))])
+    dead = EntryCalibration("GD-02", labels, errors=["boom"] * 5)
+    report = CalibrationReport(judge_model="judge-x", n=5, entries=[ok, dead])
+    assert report.mae() == dict.fromkeys(_DIMS, 1.0)
+    report_all_dead = CalibrationReport(judge_model="", n=5, entries=[dead])
+    assert report_all_dead.mae() == dict.fromkeys(_DIMS, None)
+
+
+def test_run_calibration_records_errors_not_scores(monkeypatch, tmp_path):
+    from evals import calibrate as cal_mod
+
+    jd = tmp_path / "jd.txt"
+    jd.write_text("We need Python.", encoding="utf-8")
+    ref = tmp_path / "ref.txt"
+    ref.write_text("Python engineer.", encoding="utf-8")
+    entry = golden_mod.GoldenEntry(
+        id="GD-T", company="X", role="Y", archetype="", eval_signal="",
+        reference_file=str(ref), jd_file=str(jd),
+        labels=dict.fromkeys(_DIMS, 5),
+    )
+    monkeypatch.setattr(cal_mod, "load_golden", lambda: [entry])
+    monkeypatch.setattr("evals.runner._master_excerpt", lambda master_text: master_text)
+    monkeypatch.setattr("tools.resume.read_master_resume", lambda: "MASTER")
+    calls = iter([_mk_score(dict.fromkeys(_DIMS, 4)), ValueError("bad JSON")])
+
+    def fake_judge(*a, **k):
+        item = next(calls)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(cal_mod, "judge_output", fake_judge)
+    report = cal_mod.run_calibration(n=2)
+    (e,) = report.entries
+    assert len(e.scores) == 1 and len(e.errors) == 1
+    assert "ValueError" in e.errors[0]
+    assert report.judge_model == "judge-x"
+
+
+def test_calibration_hallucination_rate_counts_flagged_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+        _mk_score(dict.fromkeys(_DIMS, 3)),
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["931 passing tests"]),
+    ])
+    assert e.hallucination_rate() == "2/3"
+
+
+def test_calibration_all_hallucinations_dedups_across_runs():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools", "931 tests"]),
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+    ])
+    assert e.all_hallucinations() == ["80 MCP tools", "931 tests"]
+
+
+def test_calibration_to_dict_includes_hallucination_fields():
+    from evals.calibrate import EntryCalibration
+
+    labels = dict.fromkeys(_DIMS, 5)
+    e = EntryCalibration("GD-01", labels, scores=[
+        _mk_score(dict.fromkeys(_DIMS, 3), hallucinations=["80 MCP tools"]),
+    ])
+    d = e.to_dict()
+    assert d["hallucinations_flagged"] == "1/1"
+    assert d["hallucination_claims"] == ["80 MCP tools"]
+
+
+def test_run_calibration_missing_file_is_per_entry_error(monkeypatch):
+    from evals import calibrate as cal_mod
+
+    entry = golden_mod.GoldenEntry(
+        id="GD-T", company="X", role="Y", archetype="", eval_signal="",
+        reference_file="/nope/ref.txt", jd_file="/nope/jd.txt",
+        labels=dict.fromkeys(_DIMS, 5),
+    )
+    monkeypatch.setattr(cal_mod, "load_golden", lambda: [entry])
+    monkeypatch.setattr("evals.runner._master_excerpt", lambda master_text: master_text)
+    monkeypatch.setattr("tools.resume.read_master_resume", lambda: "MASTER")
+    report = cal_mod.run_calibration(n=1)
+    (e,) = report.entries
+    assert not e.scores and "file not found" in e.errors[0]
 
 
 def test_non_judge_tasks_ignore_judge_keys(monkeypatch):

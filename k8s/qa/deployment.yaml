@@ -120,6 +120,25 @@ spec:
                   name: jcmcp-qa-app-secrets
                   key: llm_api_key
                   optional: true
+            # Eval-judge split — same optional pattern as prod (k8s/deployment.yaml).
+            - name: JUDGE_LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: judge_llm_provider
+                  optional: true
+            - name: JUDGE_LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: judge_llm_model
+                  optional: true
+            - name: JUDGE_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-qa-app-secrets
+                  key: judge_llm_api_key
+                  optional: true
             # Oura Ring OAuth client credentials. Optional: when absent the
             # connect flow shows "not enabled" instead of erroring. Add the
             # keys to jcmcp-qa-app-secrets and restart to turn it on.

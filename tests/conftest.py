@@ -213,6 +213,9 @@ def _mock_llm(request, monkeypatch):
     """
     import lib.openai_calls as _oc
     monkeypatch.setattr(_oc, "_LAST_CHAT_CALL", 0.0)
+    # Learned per-model quirks must not leak between tests.
+    monkeypatch.setattr(_oc, "_MODEL_REJECTED_PARAMS", {})
+    monkeypatch.setattr(_oc, "_MODEL_MIN_CAP", {})
 
     if request.node.get_closest_marker("live_llm"):
         yield
