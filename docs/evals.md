@@ -16,7 +16,22 @@ The generation pipeline has a regression harness in [`evals/`](../evals/). Three
 
 **Provenance agreement.** Every eval generation runs through the production single-shot path, which writes a `generation_provenance` row — so each run joins the two hallucination checks, restricted to numeric claims, the only territory both cover (the provenance gate's claim regex sees only numbers; the judge sees everything, so its non-numeric findings are out of scope for the comparison, not disagreements). Five buckets per entry, reported as **raw counts** — 5 entries × N runs yields single-digit comparable events, and a percentage would flatter the sample: `both_flagged`, `both_clean`, `judge_only`, `provenance_only`, `no_record`. `no_record` means the comparison never happened — deliberately distinct from `both_clean`, because `record_run` swallows its own write failures. A freshness fence backs it: the provenance row's id is compared against a pre-generation read, so a stale row from an earlier generation of the same company/role can't stand in for this run's verdict, and a failed pre-read makes freshness unprovable — the run lands in `no_record` rather than trusting an unproven row. The buckets surface as the `Prov` column in the CLI dashboard and the `eval_provenance_agreement_count` gauge on the wallboard, where `no_record` gets its own red-at-≥1 stat.
 
-**Synthetic fixtures.** `evals/fixtures/` is a two-entry *scaffold* (FX-01 clean, FX-02 corrupted), not a fixture corpus: no synthetic master resume is committed, nothing asserts catch rates, and nothing wires it into the runner. The planted-error corpus (8–12 error classes, each with its expected catch, reported x/N per class) is open work that needs a live judge — see `docs/evals-audit-2026-08-04.md`, repair 4.
+**Synthetic fixtures.** `evals/fixtures/` is a planted-error corpus built on a fully synthetic master resume (invented person, employers, numbers — nothing from real workspace data): one clean control whose every numeric claim is provenance-traceable, plus nine variants that are the control with exactly one surgical corruption each, documented in the manifest's `corruption_note`. `python -m evals fixtures -n 5` judges each fixture N times directly against the synthetic master (no generation involved). A fabrication counts as caught only when the judge's hallucinations array overlaps the planted claim; style classes count on the target dimension scoring below 3; any flag on the clean control is a false positive. Measured catch rates — judge `llama3.1:8b` (Ollama, cross-family from the qwen3 generator), N=5 per fixture, 2026-08-04:
+
+| id | class | signal | result |
+|---|---|---|---|
+| FX-00 | clean_baseline | clean control | **0/5 false positives** |
+| FX-01 | metric_changed (37%→52%) | hallucination | caught 5/5 |
+| FX-02 | metric_invented (+$2M savings) | hallucination | caught 0/5 |
+| FX-03 | employer_fabricated | hallucination | caught 1/5 |
+| FX-04 | title_inflated (Senior→Principal) | hallucination | caught 0/5 |
+| FX-05 | date_shifted (2021→2019) | hallucination | caught 5/5 |
+| FX-06 | credential_invented (AWS cert) | hallucination | caught 0/5 |
+| FX-07 | jd_parrot (JD-only metric) | hallucination | caught 5/5 |
+| FX-08 | voice_drift | dimension (impact_language) | caught 5/5 |
+| FX-09 | keyword_stuffing | dimension (ats_readiness) | caught 0/5 |
+
+Two findings, reported as measured. First, this judge reliably catches **contradictions** of the master (changed metric, shifted date, parroted JD metric) but almost never catches **unsupported additions** (invented metric, invented credential, inflated title, fabricated employer: 1/20 combined) — additions read as plausible resume content unless they collide with something the master states. Second, every corrupted fixture still *passed* on aggregate scores (means 4.2–4.8): fabrication shows up in the hallucinations array or not at all, never in the average — which is why the harness alerts on any hallucination rather than on score thresholds alone. Keyword stuffing not moving `ats_readiness` below 3 (0/5) is a known soft spot of this judge model at this rubric. Catch rates are properties of the named judge model on the named date, not of the harness; a judge model change invalidates this table until re-run.
 
 ## Running the evals
 
@@ -24,6 +39,7 @@ The generation pipeline has a regression harness in [`evals/`](../evals/). Three
 python -m evals layer1 --tags smoke          # functional cases against the active workspace
 python -m evals layer1 --verbose             # all non-network, non-write cases
 python -m evals judge --jd jd.txt --output resume.txt -n 5
+python -m evals fixtures -n 5                # planted-error corpus against the synthetic master
 python -m evals suite -n 5 --push            # full golden suite + push results to the server
 python -m evals push                         # re-push the newest results file
 ```
