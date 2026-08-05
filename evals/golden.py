@@ -24,6 +24,8 @@ class GoldenEntry:
     reference_file: str
     jd_file: str
     output_kind: str = "resume"
+    labels: dict[str, int] | None = None
+    """Blind human rubric scores on the reference output (judge calibration)."""
 
 
 def load_golden(manifest_path: Path | None = None) -> list[GoldenEntry]:

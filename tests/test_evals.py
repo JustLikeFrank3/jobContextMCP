@@ -1203,6 +1203,14 @@ def test_golden_manifest_loads():
     assert all(e.output_kind == "resume" for e in entries)
 
 
+def test_golden_labels_are_valid_rubric_scores():
+    """Human calibration labels: every dimension present, integers 1-5."""
+    for entry in golden_mod.load_golden():
+        assert entry.labels is not None, f"{entry.id} missing labels"
+        assert set(entry.labels) == set(judge_mod.JUDGE_DIMENSIONS)
+        assert all(isinstance(v, int) and 1 <= v <= 5 for v in entry.labels.values())
+
+
 def test_resolve_file_literal_and_missing(tmp_path):
     real = tmp_path / "jd.txt"
     real.write_text("x", encoding="utf-8")
