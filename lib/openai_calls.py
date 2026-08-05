@@ -113,6 +113,13 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
     """
     global _LAST_CHAT_CALL
     _apply_model_memory(kwargs)
+    model_name = str(kwargs.get("model") or "")
+    # Collected locally and committed to the shared per-model memory only on
+    # eventual success — a 400 whose retry then ALSO fails (wrong diagnosis,
+    # or a second unrelated problem) must not permanently poison every future
+    # call to this model with a dropped param it never needed dropping.
+    learned_rejected: set[str] = set()
+    learned_cap = 0
     attempt = 0
     while True:
         attempt += 1
@@ -156,9 +163,7 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 if status_code == 400 and attempt < max_attempts:
                     dropped = _drop_rejected_param(kwargs, payload)
                     if dropped:
-                        model_name = str(kwargs.get("model") or "")
-                        if model_name:
-                            _MODEL_REJECTED_PARAMS.setdefault(model_name, set()).add(dropped)
+                        learned_rejected.add(dropped)
                         _LOG.info(
                             "openai.chat dropped_param label=%s param=%s (provider rejected it)",
                             label,
@@ -187,9 +192,7 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 bumped = int(requested_cap) * 4
                 key = "max_tokens" if "max_tokens" in kwargs else "max_completion_tokens"
                 kwargs[key] = bumped
-                model_name = str(kwargs.get("model") or "")
-                if model_name:
-                    _MODEL_MIN_CAP[model_name] = max(_MODEL_MIN_CAP.get(model_name, 0), bumped)
+                learned_cap = max(learned_cap, bumped)
                 _LOG.warning(
                     "openai.chat empty_at_cap label=%s cap=%s -> retrying with %s",
                     label, requested_cap, bumped,
@@ -220,4 +223,8 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 completion_tokens,
                 total_tokens,
             )
+            if learned_rejected and model_name:
+                _MODEL_REJECTED_PARAMS.setdefault(model_name, set()).update(learned_rejected)
+            if learned_cap and model_name:
+                _MODEL_MIN_CAP[model_name] = max(_MODEL_MIN_CAP.get(model_name, 0), learned_cap)
             return response

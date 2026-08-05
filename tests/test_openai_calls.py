@@ -256,3 +256,48 @@ def test_model_memory_is_per_model(monkeypatch):
             temperature=0.0, max_tokens=5, max_attempts=1,
         )
     assert "temperature" in client.calls[-1]
+
+
+class _AlwaysRejects400:
+    """400s on every call, temperature dropped or not — the retry never
+    actually succeeds because of it (misattributed diagnosis)."""
+
+    def __init__(self):
+        self.calls = []
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        exc = Exception('{"error":{"message":"`temperature` is deprecated for this model.","type":"invalid_request_error"}}')
+        exc.body = {"error": {"message": "`temperature` is deprecated for this model."}}
+        response = type("R", (), {"status_code": 400, "headers": {}})()
+        exc.response = response
+        raise exc
+
+
+def test_rejected_param_not_remembered_when_retry_never_succeeds(monkeypatch):
+    """A 400 diagnosis that turns out wrong (the retry also fails) must not
+    permanently drop the param for every future call to this model —
+    otherwise one misattributed error silently stops sending it forever."""
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _AlwaysRejects400()
+    with pytest.raises(Exception):
+        oc.create_chat_completion(
+            client, label="test", model="claude-sonnet-5",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.0, max_tokens=5, max_attempts=3,
+        )
+    assert oc._MODEL_REJECTED_PARAMS.get("claude-sonnet-5", set()) == set()
+
+    # A later call to the SAME model still sends temperature — nothing was
+    # learned from the failed attempt.
+    client2 = _Rejecting400()
+    oc.create_chat_completion(
+        client2, label="test", model="claude-sonnet-5",
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.0, max_tokens=5,
+    )
+    assert "temperature" in client2.calls[0]
