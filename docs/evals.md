@@ -51,6 +51,25 @@ A prediction was pre-registered before these numbers existed (PR #204): the judg
 
 Two further calibration notes. GD-03 lost 4 of 5 judge calls to prose-instead-of-JSON with an *identical* opening sentence each time — JSON non-compliance is content-dependent, not random (the suite's overall rate was 1/25), so per-entry failure counts belong next to any mean derived from the survivors. And the claim discipline for all of the above: these labels calibrate the judge — they do not validate suite scores on newly generated outputs; they are a single rater's blind pass, and at five entries any pattern beyond the accuracy split is consistent with expectation at a sample size that cannot distinguish it from chance. All numbers above are properties of `llama3.1:8b` on 2026-08-04.
 
+**Production-candidate judge (`gpt-4.1-mini`).** The same reference-judging pass, same labels, same rubric and master excerpt, N=5 per entry, judge `gpt-4.1-mini` via Azure AI Foundry (2026-08-04) — run before any decision to point `JUDGE_LLM_PROVIDER` at it, so the production candidate carries its own table rather than inheriting `llama3.1:8b`'s calibration:
+
+| entry | human labels | judge means | failed judge calls |
+|---|---|---|---|
+| GD-01 | 5/5/**1**/5/5 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-02 | 5/5/**2**/5/4 | 5.0/4.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-03 | 5/5/**1**/5/4 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-04 | 5/5/**1**/5/4 | 5.0/5.0/**4.0**/4.0/5.0 | 0/5 |
+| GD-05 | 3/3/4/3/4 | 4.2/4.0/5.0/4.0/5.0 | 0/5 |
+
+Per-dimension MAE: keyword_coverage 0.24, relevance 0.4, **accuracy 3.0**, impact_language 1.0, ats_readiness 0.8. Three differences from `llama3.1:8b` are real and one non-difference matters:
+
+- **JSON compliance: 25/25.** Zero prose failures, including on GD-03 where `llama3.1:8b` failed 4/5 with an identical opening. The content-dependent non-compliance is a property of the local model, not of the rubric prompt.
+- **It caught the genuine cross-document contradiction — partially.** On GD-04, `gpt-4.1-mini` flagged the "80+ MCP tools … 931 passing tests" claim against the master's 85 actions / 1,481 tests as a hallucination in 3/5 runs and scored accuracy 4 in 5/5. That is the first cross-document numeric catch by any judge at production document sizes (0/21 for `llama3.1:8b`). The scale finding softens from "effectively provenance-only" to "partial, inconsistent detection" for this judge.
+- **Determinism.** Per-entry score vectors were identical across all 5 runs for GD-01 through GD-04 (GD-05 varied on one dimension in one run). N-run variance against this judge measures generator drift, not judge noise.
+- **The accuracy anti-correlation stands.** MAE 3.0 vs 3.2 — the catch shows up as one docked point on one entry, while the labels say 1s and 2s across four entries. GD-01, GD-02, GD-03 contain the same class of conflict and scored accuracy 5.0 with zero flags in 15/15 runs. A judge that finds the identical contradiction on one document and misses it on three others is not calibrated on this dimension; it is merely no longer blind.
+
+Same claim discipline: N=5 per entry, five entries, one day, one rater's labels. These numbers earn `gpt-4.1-mini` consideration as the judge split target, not a conclusion that accuracy scoring is solved.
+
 
 ## Running the evals
 
