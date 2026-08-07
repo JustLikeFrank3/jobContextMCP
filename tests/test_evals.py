@@ -360,7 +360,10 @@ def test_judge_call_caps_max_tokens():
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     judge_mod.judge_output("JD", "M", "OUT", client=client, model="m")
-    assert captured["max_tokens"] == 2000
+    # One cap for every judge model: on a reasoning judge the budget covers
+    # internal reasoning before the answer, so a cap that fits some documents
+    # and not others mixes reasoning budgets inside a single N-run pass.
+    assert captured["max_tokens"] == 8000
 
 
 def test_judge_output_without_provider_raises_runtime_error():
