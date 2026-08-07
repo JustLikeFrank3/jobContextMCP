@@ -253,7 +253,7 @@ data:
      "panels": [
       {"id": 13, "type": "text", "title": "", "transparent": true,
        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-       "options": {"mode": "markdown", "content": "⚠️ **Self-judging:** the nightly runs with no JUDGE_LLM_PROVIDER set, so gpt-4.1-mini grades its own output. Calibrated accuracy MAE vs blind human labels is 3.0 (docs/evals.md) — treat accuracy scores as directional, not ground truth."}},
+       "options": {"mode": "markdown", "content": "⚠️ **Judge: claude-sonnet-5** (JUDGE_LLM_PROVIDER=anthropic) — cross-vendor, no longer grading its own output. Calibrated accuracy MAE vs blind human labels 1.48 / 1.56 across two N=5 passes, against 3.0 self-judged. **Calibrated on 4 of 5 golden entries, not 5:** on GD-03 it scores accuracy 5.0 against a human label of 1 with zero hallucination flags, in both passes. Treat GD-03 accuracy as unreliable and the rest as directional (docs/evals.md)."}},
       {"id": 1, "type": "stat", "title": "Mean judge score (worst entry)",
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 0, "y": 3, "w": 5, "h": 6},
