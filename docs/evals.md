@@ -88,6 +88,42 @@ The improvement is genuine calibration, not coincidental pessimism — `evals/ca
 
 Same claim discipline as the two tables above: N=5 per entry, five entries, one day, one rater's labels — evidence for flipping `JUDGE_LLM_PROVIDER` to `anthropic`, not proof the accuracy dimension is solved.
 
+**Replication (2026-08-07).** The `claude-sonnet-5` pass was repeated two days later, same labels, same rubric, same master excerpt, N=5 — this time under the uniform `max_tokens=8000` the judge path now sets unconditionally rather than reaching by mid-run bump, so no call in this pass discovered its budget. 25/25 calls returned parseable JSON.
+
+| entry | human labels | judge means | hallucinations flagged |
+|---|---|---|---|
+| GD-01 | 5/5/**1**/5/5 | 3.0/3.6/**2.0**/4.0/5.0 | 5/5 |
+| GD-02 | 5/5/**2**/5/4 | 3.8/3.8/**2.0**/4.0/3.4 | 5/5 |
+| GD-03 | 5/5/**1**/5/4 | 3.2/4.2/**5.0**/4.6/3.2 | 0/5 |
+| GD-04 | 5/5/**1**/5/4 | 3.2/3.4/**2.4**/4.0/3.4 | 5/5 |
+| GD-05 | 3/3/4/3/4 | 2.8/2.4/**3.0**/3.0/3.2 | 5/5 |
+
+Per-dimension MAE: keyword_coverage 1.40, relevance 1.12, **accuracy 1.48**, impact_language 0.68, ats_readiness 0.56 — against 1.28 / 1.20 / **1.56** / 0.76 / 0.32 on 08-05. The largest single-cell drift across all 25 cells is 0.6 and most are ≤ 0.2; at N=5 one run differing by one point moves a mean by 0.2, so the typical drift is one or two run-points out of five. Two passes days apart put accuracy MAE at 1.56 and 1.48.
+
+**GD-03's miss reproduced and got worse:** accuracy 4.8 → **5.0**, hallucinations 1/5 → **0/5**. The judge is now unanimously and silently wrong on that document. That entry alone contributes 4.0 of the 7.4 accuracy diff total — **54% of the accuracy MAE is one entry**, and excluding it the other four average 0.85. The single-entry failure named above is a stable property of this judge on this file, not sampling noise.
+
+**The MAE conflates offset with disagreement, and only accuracy is disagreement.** On keyword_coverage, relevance, impact_language and ats_readiness every entry's judge mean sits at or below the human label, in both passes — so MAE equals |mean signed error| exactly on those four, which is the signature of a constant offset rather than a dispute. The judge also preserves the rater's ordering there: the rater scored GD-05 lowest on kw/rel/imp and the judge puts GD-05 lowest on all three. Different zero point, same ranking. Accuracy is the only dimension whose per-entry errors change sign (+1.0, 0.0, +4.0, +1.4, −1.0), i.e. the only one where judge and rater disagree about which document is worse — on exactly one of the five.
+
+**GD-05 is a case where the label is the weaker artifact.** The rater gave it accuracy 4, the highest in the set; the judge scored 3.0 and flagged `'77 MCP tools' — master resume specifies 85 actions across 11 consolidated domain tools` in 5/5 runs, the same checkable cross-document contradiction class the fixture corpus established as real. Roughly 1.0 of the 7.4 accuracy total is therefore the judge being charged for a catch the blind rater missed. The label stands as recorded — amending it after seeing judge output would destroy the blind protocol that makes it worth anything — but the number should be read knowing this.
+
+**Reading `hallucination_claims` counts.** `all_hallucinations()` (`evals/calibrate.py:39-46`) deduplicates by exact string, so five runs phrasing the same claim four ways yield four entries. GD-01's twenty strings are roughly five distinct fabrications; GD-02 ≈ 10, GD-04 ≈ 4, GD-05 = 1. The list length is a phrasing count, not a fabrication count.
+
+**Cross-judge confound, resolved (`gpt-4.1-mini` re-run at 8000, 2026-08-07).** The uniform `max_tokens=8000` applies to every judge call now, but the `llama3.1:8b` and `gpt-4.1-mini` tables were both produced beforehand at cap 2000 — so "accuracy MAE roughly halves versus both prior judges" varied model and token budget together. `gpt-4.1-mini` was re-run at 8000 against the same labels to separate them:
+
+| entry | human labels | judge means | hallucinations flagged |
+|---|---|---|---|
+| GD-01 | 5/5/**1**/5/5 | 5.0/5.0/**5.0**/4.6/5.0 | 0/5 |
+| GD-02 | 5/5/**2**/5/4 | 5.0/4.4/**5.0**/4.0/5.0 | 0/5 |
+| GD-03 | 5/5/**1**/5/4 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-04 | 5/5/**1**/5/4 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-05 | 3/3/4/3/4 | 4.0/4.0/**5.0**/4.0/5.0 | 0/5 |
+
+Per-dimension MAE: keyword_coverage 0.20, relevance 0.32, **accuracy 3.2**, impact_language 0.88, ats_readiness 0.80. **The budget is not the explanation.** At 8000 `gpt-4.1-mini`'s accuracy MAE is 3.2 against 3.0 at cap 2000 — marginally worse, not better. `claude-sonnet-5`'s 1.48/1.56 is therefore a property of the model, and the halving can be quoted as a model comparison.
+
+Two sharper readings follow from the same table. **On accuracy this judge is a constant.** It returns 5.0 on all five entries, so it does not rank them at all — a constant function carries no information, which is a stronger statement than "anti-correlated." Every accuracy error is positive (+4.0, +3.0, +4.0, +4.0, +1.0); it never scores below the rater. And **the one catch that ever existed does not reproduce**: the cap-2000 table credits it with flagging GD-04's tool-count and test-count contradiction in 3/5 runs at accuracy 4, the only cross-document numeric catch by any judge at production document sizes; at 8000 it is accuracy 5.0 unanimously with 0/5 flags, and zero hallucinations flagged across all 25 runs. The "partial, inconsistent detection" softening recorded above for this judge is in doubt on this evidence.
+
+One limit on that last point: the cap-2000 table predates `evals/calibrate.py` and was tabulated by hand from the `python -m evals judge` path, so 2000 → 8000 spans a tooling change as well as a cap change. That is enough to stop the claim "more budget destroyed the catch" being asserted as mechanism. It is not enough to rescue the budget explanation, since under no reading is `gpt-4.1-mini` at 8000 better than at 2000 — which is the only question the re-run was asked to settle.
+
 
 ## Running the evals
 
