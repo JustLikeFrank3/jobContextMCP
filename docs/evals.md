@@ -108,7 +108,21 @@ Per-dimension MAE: keyword_coverage 1.40, relevance 1.12, **accuracy 1.48**, imp
 
 **Reading `hallucination_claims` counts.** `all_hallucinations()` (`evals/calibrate.py:39-46`) deduplicates by exact string, so five runs phrasing the same claim four ways yield four entries. GD-01's twenty strings are roughly five distinct fabrications; GD-02 ≈ 10, GD-04 ≈ 4, GD-05 = 1. The list length is a phrasing count, not a fabrication count.
 
-**Outstanding confound in the cross-judge comparison.** The uniform `max_tokens=8000` above applies to every judge call now, but the `llama3.1:8b` and `gpt-4.1-mini` tables were both produced beforehand at cap 2000. "Accuracy MAE roughly halves versus both prior judges" therefore varies model and token budget together. Two replicated passes and the claim strings naming specific conflicting numbers are enough to support the judge split on their own; they are not enough to attribute the improvement to the model. Decomposing it needs a `gpt-4.1-mini` re-run at 8000 — 25 calls — and until that exists the halving should be quoted as a configuration result, not a model comparison.
+**Cross-judge confound, resolved (`gpt-4.1-mini` re-run at 8000, 2026-08-07).** The uniform `max_tokens=8000` applies to every judge call now, but the `llama3.1:8b` and `gpt-4.1-mini` tables were both produced beforehand at cap 2000 — so "accuracy MAE roughly halves versus both prior judges" varied model and token budget together. `gpt-4.1-mini` was re-run at 8000 against the same labels to separate them:
+
+| entry | human labels | judge means | hallucinations flagged |
+|---|---|---|---|
+| GD-01 | 5/5/**1**/5/5 | 5.0/5.0/**5.0**/4.6/5.0 | 0/5 |
+| GD-02 | 5/5/**2**/5/4 | 5.0/4.4/**5.0**/4.0/5.0 | 0/5 |
+| GD-03 | 5/5/**1**/5/4 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-04 | 5/5/**1**/5/4 | 5.0/5.0/**5.0**/4.0/5.0 | 0/5 |
+| GD-05 | 3/3/4/3/4 | 4.0/4.0/**5.0**/4.0/5.0 | 0/5 |
+
+Per-dimension MAE: keyword_coverage 0.20, relevance 0.32, **accuracy 3.2**, impact_language 0.88, ats_readiness 0.80. **The budget is not the explanation.** At 8000 `gpt-4.1-mini`'s accuracy MAE is 3.2 against 3.0 at cap 2000 — marginally worse, not better. `claude-sonnet-5`'s 1.48/1.56 is therefore a property of the model, and the halving can be quoted as a model comparison.
+
+Two sharper readings follow from the same table. **On accuracy this judge is a constant.** It returns 5.0 on all five entries, so it does not rank them at all — a constant function carries no information, which is a stronger statement than "anti-correlated." Every accuracy error is positive (+4.0, +3.0, +4.0, +4.0, +1.0); it never scores below the rater. And **the one catch that ever existed does not reproduce**: the cap-2000 table credits it with flagging GD-04's tool-count and test-count contradiction in 3/5 runs at accuracy 4, the only cross-document numeric catch by any judge at production document sizes; at 8000 it is accuracy 5.0 unanimously with 0/5 flags, and zero hallucinations flagged across all 25 runs. The "partial, inconsistent detection" softening recorded above for this judge is in doubt on this evidence.
+
+One limit on that last point: the cap-2000 table predates `evals/calibrate.py` and was tabulated by hand from the `python -m evals judge` path, so 2000 → 8000 spans a tooling change as well as a cap change. That is enough to stop the claim "more budget destroyed the catch" being asserted as mechanism. It is not enough to rescue the budget explanation, since under no reading is `gpt-4.1-mini` at 8000 better than at 2000 — which is the only question the re-run was asked to settle.
 
 
 ## Running the evals
