@@ -87,6 +87,20 @@ def apply_results(payload: dict, *, restored: bool = False) -> tuple[str, int]:
     """
     if "rows" in payload:
         kind, scored = "suite", _record_suite_gauges(payload)
+        # Which judge actually produced these scores, exposed so a dashboard
+        # can READ the live judge instead of asserting one in static panel
+        # text — the panels were previously wrong for the whole window
+        # between a config change and someone remembering to edit them.
+        # Stamped only when something scored: with every run errored,
+        # payload["judge_model"] falls back to the config's promise, and a
+        # promise is not an observation. set_only_gauge drops the previous
+        # judge's series so a flip leaves one identity exposed, not two.
+        judge = str(payload.get("judge_model") or "").strip()
+        if scored and judge:
+            metrics.set_only_gauge(
+                "eval_judge_info", 1.0,
+                judge=judge, provider=str(payload.get("judge_provider") or ""),
+            )
     elif "pass_rate" in payload:
         _record_layer1_gauges(payload)
         kind, scored = "layer1", 0
