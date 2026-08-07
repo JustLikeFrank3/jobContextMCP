@@ -156,11 +156,19 @@ spec:
                   key: llm_api_key
                   optional: true
             # Eval-judge split (docs/evals.md). All three optional: while the
-            # secret keys are absent the nightly self-judges (the wallboard
-            # caveat panel states this). To flip: add judge_llm_provider /
-            # judge_llm_model / judge_llm_api_key to jcmcp-app-secrets and
-            # restart — no manifest change. Run the calibration pass against
-            # the blind labels BEFORE pointing this at a new judge model.
+            # secret keys are absent the nightly self-judges. Flipping is a
+            # secret edit plus a restart — judge_llm_provider / judge_llm_model
+            # / judge_llm_api_key on jcmcp-app-secrets, no manifest change.
+            # Run the calibration pass against the blind labels BEFORE
+            # pointing this at a new judge model.
+            #
+            # The wallboard no longer asserts which judge is live: the
+            # eval_judge_info gauge (evals/ingest.py) stamps the judge that
+            # actually produced the last SCORED run, and the panels read it.
+            # So this secret can be flipped on its own schedule without a
+            # matching dashboard edit, and a dashboard edit cannot outrun the
+            # cluster. The panels carry the per-judge calibration table
+            # instead, which is true whoever is running.
             - name: JUDGE_LLM_PROVIDER
               valueFrom:
                 secretKeyRef:
