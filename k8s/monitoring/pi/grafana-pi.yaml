@@ -35,9 +35,27 @@
 # nothing to report still shows 0; feed gone shows No data. Verified against
 # both Prometheis (AKS live, Pi stale) before landing.
 #
-# Panels reading up/ollama_up/jobcontext_desktop_up keep `or vector(0)` on
-# purpose — there 0 maps to DOWN, which is the truthful answer when the
-# exporter is gone.
+# The up/ollama_up/jobcontext_desktop_up panels previously kept `or vector(0)`
+# on the theory that 0 -> DOWN is truthful when the exporter is gone. It is
+# not, and the fallback only ever fires in the case where it lies:
+#
+#   up{job=X} is Prometheus-synthesised. A scrape that is attempted and fails
+#   already yields 0 with no fallback at all. The series is ABSENT only when
+#   Prometheus is not scraping that target — a monitoring gap, not a host
+#   outage — and that is precisely when `or vector(0)` painted a red DOWN.
+#
+#   ollama_up / jobcontext_desktop_up are relayed through the workstation
+#   exporter, which always emits them as 0 or 1 while it is alive
+#   (scripts/ollama-exporter.py: ollama_lines emits 0 on a failed poll,
+#   desktop_lines emits 0 when no sidecar port answers). So absent means the
+#   exporter itself is gone — we have lost the observer, and claiming its
+#   subjects are DOWN asserts something we cannot see.
+#
+# All four now carry no fallback and an explicit noValue, giving three
+# distinguishable states: 1 UP, 0 DOWN (observed), absent NOT SCRAPED /
+# NO EXPORTER. Unknown is not a verdict — same doctrine as no_record vs
+# both_clean in the eval agreement buckets, and 503 vs 401 on an unverifiable
+# JWKS in lib/auth.py.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -91,8 +109,8 @@ data:
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🦙 LOCAL LLM — Ollama · qwen3-jobcontext (from qwen2.5-coder:1.5b-base) · RTX 5060 Ti"}},
         {"type": "stat", "title": "Ollama", "gridPos": {"x":0,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(ollama_up{job=\"ollama-workstation\"}) or vector(0)"}],
-         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+         "targets": [{"expr": "max(ollama_up{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"noValue": "NO EXPORTER", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
         {"type": "stat", "title": "Model in VRAM", "gridPos": {"x":3,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum by(model)(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "{{model}}", "instant": true}],
@@ -118,8 +136,8 @@ data:
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":85},{"color":"red","value":95}]}}}},
         {"type": "stat", "title": "Desktop app", "gridPos": {"x":21,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(jobcontext_desktop_up{job=\"ollama-workstation\"}) or vector(0)"}],
-         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+         "targets": [{"expr": "max(jobcontext_desktop_up{job=\"ollama-workstation\"})"}],
+         "fieldConfig": {"defaults": {"noValue": "NO EXPORTER", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
         {"type": "timeseries", "title": "LLM calls (1h) by model/outcome", "gridPos": {"x":0,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "sum(increase(llm_calls_total{job=\"ollama-workstation\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
@@ -168,14 +186,11 @@ data:
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🛩️ FLIGHT SIM RIG — RTX 5060 Ti · Windows"}},
-        {"type": "stat", "title": "Flight-sim rig (Windows)", "gridPos": {"x":0,"y":3,"w":4,"h":6},
+        {"type": "stat", "title": "Workstation boot", "gridPos": {"x":0,"y":3,"w":8,"h":6},
+         "description": "The workstation dual-boots; exactly one of the two exporters can be up. 1=Linux (:9105 over the direct link), 2=Windows (:9106 over the LAN lease), 0=neither reachable, 3=impossible and means a stale target. No data = a job is missing from the scrape config, so the boot state is unknowable.",
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(up{job=\"gpu-windows\"}) or vector(0)"}],
-         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
-        {"type": "stat", "title": "Workstation (Linux)", "gridPos": {"x":4,"y":3,"w":4,"h":6},
-         "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(up{job=\"ollama-workstation\"}) or vector(0)"}],
-         "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
+         "targets": [{"expr": "sum(up{job=\"ollama-workstation\"}) + 2 * sum(up{job=\"gpu-windows\"})"}],
+         "fieldConfig": {"defaults": {"noValue": "NOT SCRAPED", "mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "text"}, "1": {"text": "LINUX", "color": "green"}, "2": {"text": "WINDOWS", "color": "blue"}, "3": {"text": "BOTH?! stale target", "color": "red"}}}]}}},
         {"type": "gauge", "title": "GPU util", "gridPos": {"x":8,"y":3,"w":6,"h":6},
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "max(gpu_utilization_percent{job=~\"ollama-workstation|gpu-windows\"})"}],

@@ -192,11 +192,17 @@ def judge_output(
     for _ in range(max_attempts):
         response = create_chat_completion(
             client, label="eval_judge", model=model,
-            # 2000 = headroom cap, not a tuned value: the largest observed
-            # judge JSON (10 dims + rationales + hallucination list) is
-            # well under 1K tokens; the cap exists so a rambling judge is
-            # truncated at bounded cost instead of running to the provider max.
-            messages=messages, temperature=0.0, max_tokens=2000,
+            # 8000 = headroom cap, not a tuned value. The judge JSON itself
+            # (5 dims + rationale + hallucination list) is well under 1K
+            # tokens, but on a reasoning model the budget covers internal
+            # reasoning FIRST and the answer second: at 2000, claude-sonnet-5
+            # spent the whole budget thinking and returned empty on some
+            # documents and not others, so a single N-run pass mixed 2000- and
+            # 8000-token reasoning budgets — an uncontrolled variable inside
+            # one measurement. 8000 clears that for every document. Non-
+            # reasoning judges are unaffected: they never approached 2000, and
+            # billing is on tokens generated, not requested.
+            messages=messages, temperature=0.0, max_tokens=8000,
         )
         content = response.choices[0].message.content or ""
         try:
