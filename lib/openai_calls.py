@@ -61,31 +61,58 @@ def _retry_after_seconds(exc: Exception, fallback: float) -> float:
 # default sampling is what the provider wants us to use anyway.
 _DROPPABLE_PARAMS = ("temperature", "top_p", "presence_penalty", "frequency_penalty")
 
-# Per-model quirks learned at runtime, kept for the life of the process so
-# the discovery cost (a rejected 400 or an empty-at-cap response) is paid
-# once, not on every call — the calibration run paid 3 requests per judge
-# call rediscovering the same two claude-sonnet-5 quirks 25 times.
+# Quirks learned at runtime, kept for the life of the process so the
+# discovery cost (a rejected 400 or an empty-at-cap response) is paid once,
+# not on every call — the calibration run paid 3 requests per judge call
+# rediscovering the same two claude-sonnet-5 quirks 25 times.
+#
+# Keyed by endpoint AND model, never model alone: the judge split routinely
+# puts the same model name behind two different providers (generator on
+# foundry, judge on openai or anthropic), and those endpoints do not accept
+# the same params. A quirk observed at one is not evidence about the other,
+# so a model-only key would let the judge's discovery silently reshape every
+# generator request — the wrong direction for a param the generator needs.
 _MODEL_REJECTED_PARAMS: "dict[str, set[str]]" = {}
-_MODEL_MIN_CAP: "dict[str, int]" = {}
+# Additionally keyed by label. The empty-at-cap floor is a property of the
+# prompt as much as the model: an eval_judge call reasons its way through a
+# 30KB master resume and needs 8000, while a short summarize call is fine at
+# 2000. Keying by model alone let one big call site raise the floor for every
+# small one, quietly multiplying their budgets.
+_MODEL_MIN_CAP: "dict[tuple[str, str], int]" = {}
 _RENAME_MAX_TOKENS = "max_tokens→max_completion_tokens"
 
 
-def _apply_model_memory(kwargs: dict) -> None:
-    """Preemptively apply quirks previously learned for this model."""
+def _memory_key(client: Any, kwargs: dict) -> str:
+    """Endpoint-qualified model identity for the quirk caches.
+
+    Returns "" when the model is unknown, which disables memory entirely
+    rather than lumping every unnamed call under one shared key.
+    """
     model = str(kwargs.get("model") or "")
     if not model:
+        return ""
+    try:
+        endpoint = str(getattr(client, "base_url", "") or "")
+    except Exception:  # a client whose base_url property raises is not fatal
+        endpoint = ""
+    return f"{endpoint}|{model}"
+
+
+def _apply_model_memory(kwargs: dict, key: str, label: str) -> None:
+    """Preemptively apply quirks previously learned for this endpoint+model."""
+    if not key:
         return
-    for param in _MODEL_REJECTED_PARAMS.get(model, ()):
+    for param in _MODEL_REJECTED_PARAMS.get(key, ()):
         if param == _RENAME_MAX_TOKENS:
             if "max_tokens" in kwargs:
                 kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
         else:
             kwargs.pop(param, None)
-    floor = _MODEL_MIN_CAP.get(model, 0)
+    floor = _MODEL_MIN_CAP.get((key, label), 0)
     if floor:
-        for key in ("max_tokens", "max_completion_tokens"):
-            if kwargs.get(key) and kwargs[key] < floor:
-                kwargs[key] = floor
+        for cap_key in ("max_tokens", "max_completion_tokens"):
+            if kwargs.get(cap_key) and kwargs[cap_key] < floor:
+                kwargs[cap_key] = floor
 
 
 def _drop_rejected_param(kwargs: dict, payload: str) -> "str | None":
@@ -112,8 +139,8 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
     do not burst into the same rolling TPM/RPM window.
     """
     global _LAST_CHAT_CALL
-    _apply_model_memory(kwargs)
-    model_name = str(kwargs.get("model") or "")
+    memory_key = _memory_key(client, kwargs)
+    _apply_model_memory(kwargs, memory_key, label)
     # Collected locally and committed to the shared per-model memory only on
     # eventual success — a 400 whose retry then ALSO fails (wrong diagnosis,
     # or a second unrelated problem) must not permanently poison every future
@@ -223,8 +250,9 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 completion_tokens,
                 total_tokens,
             )
-            if learned_rejected and model_name:
-                _MODEL_REJECTED_PARAMS.setdefault(model_name, set()).update(learned_rejected)
-            if learned_cap and model_name:
-                _MODEL_MIN_CAP[model_name] = max(_MODEL_MIN_CAP.get(model_name, 0), learned_cap)
+            if learned_rejected and memory_key:
+                _MODEL_REJECTED_PARAMS.setdefault(memory_key, set()).update(learned_rejected)
+            if learned_cap and memory_key:
+                cap_key = (memory_key, label)
+                _MODEL_MIN_CAP[cap_key] = max(_MODEL_MIN_CAP.get(cap_key, 0), learned_cap)
             return response

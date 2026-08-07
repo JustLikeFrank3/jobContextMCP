@@ -290,7 +290,9 @@ def test_rejected_param_not_remembered_when_retry_never_succeeds(monkeypatch):
             messages=[{"role": "user", "content": "hi"}],
             temperature=0.0, max_tokens=5, max_attempts=3,
         )
-    assert oc._MODEL_REJECTED_PARAMS.get("claude-sonnet-5", set()) == set()
+    assert oc._MODEL_REJECTED_PARAMS.get(
+        oc._memory_key(client, {"model": "claude-sonnet-5"}), set()
+    ) == set()
 
     # A later call to the SAME model still sends temperature — nothing was
     # learned from the failed attempt.
@@ -301,3 +303,94 @@ def test_rejected_param_not_remembered_when_retry_never_succeeds(monkeypatch):
         temperature=0.0, max_tokens=5,
     )
     assert "temperature" in client2.calls[0]
+
+
+class _EmptyBelowFloor:
+    """Returns an empty message that consumed the whole cap whenever the cap
+    is under 4000 and not yet seen — so a bumped retry succeeds."""
+
+    def __init__(self):
+        self.calls = []
+        self.chat = self
+        self.completions = self
+        self._seen: set[int] = set()
+
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        cap = kwargs.get("max_tokens") or kwargs.get("max_completion_tokens")
+        empty = cap not in self._seen and cap is not None and cap < 4000
+        self._seen.add(cap)
+        content = None if empty else "ok"
+        return type("R", (), {
+            "choices": [type("C", (), {"message": type("M", (), {"content": content})()})()],
+            "usage": type("U", (), {
+                "prompt_tokens": 1, "completion_tokens": cap, "total_tokens": cap + 1})(),
+        })()
+
+
+def _client_at(url):
+    c = _Rejecting400()
+    c.base_url = url
+    return c
+
+
+def test_quirk_memory_is_not_shared_across_endpoints(monkeypatch):
+    """The same model name behind two providers must not share learned
+    quirks -- the judge split routinely does exactly this, and the two
+    endpoints do not accept the same params. A model-only cache key let one
+    provider's 400 silently strip a param from the other's requests."""
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    first = _client_at("https://api.anthropic.com/v1/")
+    oc.create_chat_completion(
+        first, label="test", model="shared-name",
+        messages=[{"role": "user", "content": "hi"}], temperature=0.0, max_tokens=5,
+    )
+    # Learned there, and applied there: a second call skips the discovery 400.
+    oc.create_chat_completion(
+        first, label="test", model="shared-name",
+        messages=[{"role": "user", "content": "hi"}], temperature=0.0, max_tokens=5,
+    )
+    assert "temperature" not in first.calls[-1]
+
+    # Same model name, different endpoint: nothing inherited, so it still
+    # sends temperature and pays its own discovery cost.
+    other = _client_at("https://other.example/v1/")
+    oc.create_chat_completion(
+        other, label="test", model="shared-name",
+        messages=[{"role": "user", "content": "hi"}], temperature=0.0, max_tokens=5,
+    )
+    assert "temperature" in other.calls[0]
+
+
+def test_min_cap_floor_is_per_label(monkeypatch):
+    """The empty-at-cap floor is a property of the prompt as much as the
+    model: a judge call reasoning over a 30KB master needs a big budget, a
+    short call does not. Keying the floor by model alone let one call site
+    quietly multiply every other call site's token budget."""
+    import lib.openai_calls as oc
+
+    monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+    client = _EmptyBelowFloor()
+    client.base_url = "https://api.example/v1/"
+    oc.create_chat_completion(
+        client, label="eval_judge", model="thinky",
+        messages=[{"role": "user", "content": "hi"}], max_tokens=2000,
+    )
+    assert client.calls[-1]["max_tokens"] == 8000  # discovered the floor
+
+    # Same label reuses it without re-discovering.
+    oc.create_chat_completion(
+        client, label="eval_judge", model="thinky",
+        messages=[{"role": "user", "content": "hi"}], max_tokens=2000,
+    )
+    assert client.calls[-1]["max_tokens"] == 8000
+    judge_calls = len(client.calls)
+
+    # A different call site is unaffected -- it asks for what it asked for.
+    oc.create_chat_completion(
+        client, label="summarize", model="thinky",
+        messages=[{"role": "user", "content": "hi"}], max_tokens=6000,
+    )
+    assert client.calls[judge_calls]["max_tokens"] == 6000
