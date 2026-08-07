@@ -192,6 +192,10 @@ def judge_output(
     for _ in range(max_attempts):
         response = create_chat_completion(
             client, label="eval_judge", model=model,
+            # 2000 = headroom cap, not a tuned value: the largest observed
+            # judge JSON (10 dims + rationales + hallucination list) is
+            # well under 1K tokens; the cap exists so a rambling judge is
+            # truncated at bounded cost instead of running to the provider max.
             messages=messages, temperature=0.0, max_tokens=2000,
         )
         content = response.choices[0].message.content or ""

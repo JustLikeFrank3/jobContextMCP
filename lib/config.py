@@ -431,6 +431,18 @@ def llm_generation_status(cfg: "dict | None" = None) -> "tuple[str, bool]":
     return provider, bool(env_key or str(cfg.get("openai_api_key", "") or "").strip())
 
 
+def _llm_env_api_key(task: str = "") -> str:
+    """Env API key for the provider client. The eval judge prefers
+    JUDGE_LLM_API_KEY so a cross-vendor judge carries its own key: the
+    generator's LLM_API_KEY can't be shared because foundry prefers an
+    explicit key over workload identity (setting it to an Anthropic key
+    would break generation)."""
+    key = str(os.environ.get("LLM_API_KEY", "") or "").strip()
+    if task == "eval_judge":
+        return str(os.environ.get("JUDGE_LLM_API_KEY", "") or "").strip() or key
+    return key
+
+
 def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     """Return (openai_client, model_name) for the configured LLM provider.
 
@@ -450,6 +462,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
 
     active_cfg = get_active_config()
     provider, model = _resolve_llm_settings(task=task, cfg=active_cfg)
+    env_key = _llm_env_api_key(task)
 
     if provider == "ollama":
         ollama_base = active_cfg.get("ollama_base_url", "http://localhost:11434/v1")
@@ -460,7 +473,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         # BYOK Claude via Anthropic's OpenAI-compatible endpoint — supports
         # chat completions incl. tool calling, so the whole existing call
         # surface (chat agent loop, generation) works unchanged.
-        api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("anthropic_api_key", "")
+        api_key = env_key or active_cfg.get("anthropic_api_key", "")
         if not api_key:
             return None, ""
         client = OpenAI(base_url="https://api.anthropic.com/v1/", api_key=api_key)
@@ -481,7 +494,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         # Prefer explicit key (local dev / non-Azure CI). If absent, fall back to
         # DefaultAzureCredential — works automatically in AKS via workload identity
         # and locally via `az login`. No secret needed in production.
-        api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("azure_foundry_api_key", "")
+        api_key = env_key or active_cfg.get("azure_foundry_api_key", "")
         if api_key:
             client = AzureOpenAI(
                 azure_endpoint=endpoint,
@@ -504,7 +517,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
 
     # openai (default)
     # LLM_API_KEY env var overrides config.json openai_api_key
-    api_key = os.environ.get("LLM_API_KEY") or active_cfg.get("openai_api_key", "")
+    api_key = env_key or active_cfg.get("openai_api_key", "")
     if not api_key:
         return None, ""
     client = OpenAI(api_key=api_key)

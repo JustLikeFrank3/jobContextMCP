@@ -44,6 +44,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | `LLM_PROVIDER` | Overrides config `llm_provider`: `openai` (default), `ollama`, `anthropic`, `foundry` |
 | `LLM_API_KEY` | Provider-agnostic key override (openai/anthropic/foundry; ignored for ollama) |
 | `JUDGE_LLM_PROVIDER` / `JUDGE_LLM_MODEL` | Eval-judge split: provider/model for `task="eval_judge"` only. Required wherever `LLM_PROVIDER` is exported (AKS, CI) — see the precedence note below |
+| `JUDGE_LLM_API_KEY` | API key for the judge's provider (`task="eval_judge"` only). Falls back to `LLM_API_KEY` when unset. Needed for a cross-vendor judge: `LLM_API_KEY` belongs to the generator, and foundry prefers an explicit key over workload identity, so the two cannot share |
 | `OPENAI_API_KEY` | **Embeddings only** (semantic search fallback) — *not* consulted for generation; use `LLM_API_KEY` or config keys for that |
 
 ### Persistence
@@ -106,7 +107,7 @@ Provider selection notes:
 
 - `get_llm_client()` returns `(None, "")` when the chosen provider is missing its key/endpoint — callers degrade to context-package mode instead of crashing.
 - An env-pinned `LLM_PROVIDER` silently overrides whatever the desktop Settings UI saved.
-- That includes the judge: plain `LLM_PROVIDER` beats config `judge_provider` (env wins is the convention throughout). Config `judge_provider`/`judge_model` only take effect where `LLM_PROVIDER` is unset; prod and CI, which export it, must use `JUDGE_LLM_PROVIDER`/`JUDGE_LLM_MODEL`. Until one of these is configured, the eval judge is the generator's model.
+- That includes the judge: plain `LLM_PROVIDER` beats config `judge_provider` (env wins is the convention throughout). Config `judge_provider`/`judge_model` only take effect where `LLM_PROVIDER` is unset; prod and CI, which export it, must use `JUDGE_LLM_PROVIDER`/`JUDGE_LLM_MODEL` (and `JUDGE_LLM_API_KEY` for a provider whose key differs from the generator's). Until one of these is configured, the eval judge is the generator's model.
 - `llm_generation_status()` mirrors the same resolution for status badges and must stay in lockstep with `get_llm_client()` (documented invariant in `lib/config.py`).
 
 ## Provenance gate

@@ -1,7 +1,7 @@
 """Layer 1 eval case definitions.
 
 Each case invokes one consolidated-tool action and asserts on the response
-string. Cases follow the schema from the eval framework doc (id, tool,
+string. Cases follow the schema from docs/eval-framework.md (id, tool,
 action, inputs, expectations, tags); expectations are substring/length
 checks because every tool returns a formatted string, never a dict.
 
