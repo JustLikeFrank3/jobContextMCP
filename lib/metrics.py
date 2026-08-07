@@ -58,6 +58,23 @@ def set_gauge(name: str, value: float, **labels: str) -> None:
         _GAUGES[key] = value
 
 
+def set_only_gauge(name: str, value: float, **labels: str) -> None:
+    """Set a gauge and drop every other label set under the same name.
+
+    For gauges whose labels carry the *identity* of a singleton — which judge
+    model produced the last eval run, say. A plain set_gauge leaves the
+    previous identity exposed at its old value forever, so a dashboard reading
+    "the judge" would see two, with no way to tell which is current. Same
+    doctrine as the wallboard's absent-vs-zero handling: better to show one
+    truth or nothing than two states that cannot be told apart.
+    """
+    key = _key(name, labels)
+    with _LOCK:
+        for existing in [k for k in _GAUGES if k[0] == name and k != key]:
+            del _GAUGES[existing]
+        _GAUGES[key] = value
+
+
 def observe(name: str, value: float, **labels: str) -> None:
     """Record one observation into a summary (exposed as _count and _sum)."""
     key = _key(name, labels)

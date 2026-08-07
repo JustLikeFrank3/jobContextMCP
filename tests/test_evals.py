@@ -1484,3 +1484,47 @@ def test_suite_runner_with_stubbed_generation(isolated_server, tmp_path):
     assert "baseline_delta" in payload
     assert payload["baseline_delta"]["GD-T1"]["keyword"] == -1.0
     assert payload["baseline_delta"]["GD-T1"]["keyword_regression"] is True
+
+
+def test_judge_info_gauge_reports_the_judge_that_ran(monkeypatch):
+    """The wallboard reads the live judge instead of asserting one in static
+    panel text -- panels asserting a judge were wrong for the whole window
+    between a config change and someone editing them."""
+    from lib import metrics
+    from evals import ingest
+
+    metrics.reset()
+    ingest.apply_results({
+        "rows": [{"gd_id": "GD-01", "mean": 4.0}],
+        "judge_model": "claude-sonnet-5", "judge_provider": "anthropic",
+    })
+    gauges = {g["name"]: g for g in metrics.snapshot()["gauges"]}
+    assert gauges["eval_judge_info"]["labels"]["judge"] == "claude-sonnet-5"
+
+    # A later run on a different judge replaces the identity rather than
+    # adding a second one -- two judges exposed at once is unreadable.
+    ingest.apply_results({
+        "rows": [{"gd_id": "GD-01", "mean": 4.0}],
+        "judge_model": "gpt-4.1-mini", "judge_provider": "foundry",
+    })
+    judges = [g["labels"]["judge"] for g in metrics.snapshot()["gauges"]
+              if g["name"] == "eval_judge_info"]
+    assert judges == ["gpt-4.1-mini"]
+    metrics.reset()
+
+
+def test_judge_info_gauge_absent_when_nothing_scored(monkeypatch):
+    """With every run errored, the payload's judge_model falls back to the
+    config's promise. A promise is not an observation, so the gauge stays
+    absent and the panel says NO SCORED RUN rather than naming a judge that
+    produced no scores."""
+    from lib import metrics
+    from evals import ingest
+
+    metrics.reset()
+    ingest.apply_results({
+        "rows": [{"gd_id": "GD-01", "error": "all runs failed"}],
+        "judge_model": "configured-but-never-ran",
+    })
+    assert not [g for g in metrics.snapshot()["gauges"] if g["name"] == "eval_judge_info"]
+    metrics.reset()

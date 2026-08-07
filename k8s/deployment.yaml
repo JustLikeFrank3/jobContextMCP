@@ -162,13 +162,13 @@ spec:
             # Run the calibration pass against the blind labels BEFORE
             # pointing this at a new judge model.
             #
-            # No metric exposes the judge that actually ran, so the wallboard
-            # caveat panels are static text asserting which judge is live.
-            # They are therefore WRONG in the window between merging a panel
-            # change and applying the secret — apply both together, in either
-            # order, but do not leave the gap open. (The durable fix is an
-            # eval_judge_info gauge stamped from the results payload, which
-            # already carries judge_model; not built yet.)
+            # The wallboard no longer asserts which judge is live: the
+            # eval_judge_info gauge (evals/ingest.py) stamps the judge that
+            # actually produced the last SCORED run, and the panels read it.
+            # So this secret can be flipped on its own schedule without a
+            # matching dashboard edit, and a dashboard edit cannot outrun the
+            # cluster. The panels carry the per-judge calibration table
+            # instead, which is true whoever is running.
             - name: JUDGE_LLM_PROVIDER
               valueFrom:
                 secretKeyRef:
