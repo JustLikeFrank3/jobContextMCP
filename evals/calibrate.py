@@ -9,7 +9,10 @@ errors — never as scores.
 """
 from __future__ import annotations
 
+import sys
+import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 from evals.golden import load_golden, resolve_file
 from evals.judge import JUDGE_DIMENSIONS, JudgeScore, judge_output
@@ -108,35 +111,67 @@ class CalibrationReport:
         return "\n".join(lines)
 
 
-def run_calibration(n: int = 5, entry_ids: "set[str] | None" = None) -> CalibrationReport:
+def _progress(message: str) -> None:
+    """Per-call progress to stderr, flushed.
+
+    A judge pass is minutes of silence otherwise: run_calibration emits
+    nothing until it returns, the CLI configures no logging so the wrapper's
+    per-call INFO never surfaces, and the JSON is written only on completion.
+    The operator was left inferring liveness from the absence of warnings.
+    stderr keeps stdout clean for the report; flush=True because a redirected
+    stdout would otherwise buffer the whole run into one burst at the end.
+    """
+    print(message, file=sys.stderr, flush=True)
+
+
+def run_calibration(
+    n: int = 5,
+    entry_ids: "set[str] | None" = None,
+    progress: "Callable[[str], None] | None" = _progress,
+) -> CalibrationReport:
     from evals.runner import _master_excerpt  # noqa: PLC0415
     from tools import resume  # noqa: PLC0415
 
+    say = progress or (lambda _m: None)
     master = _master_excerpt(master_text=resume.read_master_resume())
     report = CalibrationReport(judge_model="", n=n)
-    for entry in load_golden():
-        if entry_ids and entry.id not in entry_ids:
-            continue
-        if not entry.labels:
-            continue
+    planned = [
+        e for e in load_golden()
+        if (not entry_ids or e.id in entry_ids) and e.labels
+    ]
+    total = len(planned) * n
+    say(f"calibrating {len(planned)} entries x {n} runs = {total} judge calls")
+    done = 0
+    for entry in planned:
         cal = EntryCalibration(entry_id=entry.id, labels=dict(entry.labels))
         jd_path = resolve_file(entry.jd_file)
         ref_path = resolve_file(entry.reference_file)
         if jd_path is None or ref_path is None:
             missing = entry.jd_file if jd_path is None else entry.reference_file
             cal.errors.append(f"file not found: {missing}")
+            say(f"  {entry.id}  SKIPPED — file not found: {missing}")
             report.entries.append(cal)
+            done += n
             continue
         jd = jd_path.read_text(encoding="utf-8")
         reference = ref_path.read_text(encoding="utf-8")
-        for _ in range(n):
+        for run in range(1, n + 1):
+            started = time.monotonic()
             try:
                 score = judge_output(jd, master, reference)
             except Exception as exc:  # error is data here, never a score
                 cal.errors.append(f"{type(exc).__name__}: {exc}")
+                done += 1
+                say(f"  {entry.id}  run {run}/{n}  [{done}/{total}]  "
+                    f"ERROR {type(exc).__name__}: {exc}")
                 continue
             cal.scores.append(score)
             if score.model:
                 report.judge_model = score.model
+            done += 1
+            say(f"  {entry.id}  run {run}/{n}  [{done}/{total}]  "
+                f"{time.monotonic() - started:.0f}s  mean {score.mean:.1f}  "
+                f"hallucinations {len(score.hallucinations)}")
         report.entries.append(cal)
+    say(f"done — {done}/{total} calls, judge {report.judge_model or 'unstamped'}")
     return report
