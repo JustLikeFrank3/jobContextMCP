@@ -196,6 +196,84 @@ Tunables live at the top of `lib/auth.py`: `_KID_PROPAGATION_GRACE`,
 `_FRESH_FETCH_WINDOW`, `_MIN_FORCED_FETCH_INTERVAL`, `_KID_MISS_TTL`,
 `_KID_MISS_MAX`.
 
+## Defect 3 — the refresh never worked, and nothing above could have saved it
+
+Reported 2026-08-10: *"claude continues to drop connections periodically."*
+Everything the earlier defects predict was absent. The pod had been up 2d19h
+with `restartCount` 0, so no deploy, no pod replacement, no cold JWKS cache.
+No `AuthUnavailable`, no 503s, no lines from the unknown-kid ladder. Defects 1,
+2 and 2b were all fixed and all irrelevant.
+
+The ingress access log showed the shape immediately. Per session: exactly one
+`POST /mcp` 401 followed by a burst of 200s — that first 401 is *correct*, it
+is the MCP client probing unauthenticated to collect the `WWW-Authenticate`
+challenge. The failures are the hours holding a 401 with **no** 200s after it.
+On 2026-08-08 there were three of those and not one successful call all day.
+
+`POST /oauth/token` explains why, and it alternates with grim regularity:
+
+```
+06/Aug 21:00  200      <- manual reconnect: authorization_code
+06/Aug 22:39  400      <- refresh, 1h39m later. connector dead
+07/Aug 18:59  200      <- manual reconnect
+07/Aug 20:21  400      <- refresh, 1h22m later. connector dead
+09/Aug 16:53  200
+09/Aug 21:31  400
+```
+
+The gap is one access-token lifetime. **Every** refresh this deployment has
+ever attempted has failed; the connector only ever worked on the freshly
+minted token from a hand-driven sign-in.
+
+The proxy logs the body it forwards, and the failing one is:
+
+```
+grant_type=refresh_token   refresh_token=1.AVIAbr…   client_id=e4d85b54-…
+```
+
+No `scope`. RFC 6749 §6 makes it OPTIONAL on a refresh — omit it and you get
+the originally granted scope — so the client is correct to leave it out, and
+Claude's connector does. Entra v2.0 does not implement that default. With no
+scope it cannot resolve a resource, falls back to the calling application, and
+returns:
+
+```
+400 AADSTS90009: Application 'e4d85b54-…' (api://e4d85b54-…) is requesting
+a token for itself. This scenario is supported only if resource is specified
+using the GUID based App Identifier.
+```
+
+Self-reference is unavoidable here — one app registration is both the OAuth
+client and the protected API — so the request has to name the resource
+explicitly. The authorization_code exchange sends no scope either and works
+fine, because the code already carries what was consented to at
+`/oauth/authorize`; only the refresh has nothing to inherit from.
+
+### Fix
+
+`/oauth/token` already rewrites the body for Entra (it strips `resource`).
+It now also supplies `scope` when a `refresh_token` grant arrives without one,
+using the exact string `/oauth/register` advertises —
+`api://<client_id>/access openid profile offline_access` — because Entra
+matches a refresh against the scopes actually consented to. Both now come from
+`_granted_scope()`, and a test asserts they are equal, since a drift between
+them fails the same way with a different error.
+
+`authorization_code` is deliberately untouched: it works, and the code carries
+its own scope.
+
+### Still to confirm
+
+AADSTS90009's own advice is to name the resource "using the GUID based App
+Identifier" — i.e. `<client_id>/access` rather than `api://<client_id>/access`.
+This fix sends the `api://` form because that is what was consented to, but
+that reasoning is not the same as a verification. Entra validates the refresh
+token before it resolves scope, so a probe with a dummy token returns
+`invalid_grant` for every scope form and cannot discriminate between them.
+**The first real refresh after this deploys is the test.** If it still returns
+AADSTS90009, switch `_granted_scope` to the GUID form — the plumbing is
+unchanged either way.
+
 ## Why Recreate stays
 
 `replicas: 1` + `strategy: Recreate` means every deploy is a hard outage of
@@ -255,6 +333,13 @@ No reconnect.
 - `GET /ready` — is the pod actually ready, or stuck warming the JWKS?
 - `jwks_warm` log lines: `JWKS cached; token validation ready` on success,
   `JWKS warm-up failed (...); retrying` on failure.
+- **`POST /oauth/token` in the ingress log is the first place to look for a
+  periodic drop.** A `200` followed hours later by a `400` is a failing
+  refresh, and the interval between them is the access-token lifetime. Pair it
+  with the `oauth/token proxy payload:` line in the app log, which shows the
+  grant type and whether a scope was present. A `POST /mcp` 401 on its own is
+  not a fault — clients probe unauthenticated to get the challenge; the fault
+  is a 401 with no 200s after it.
 - A `503` with `Retry-After` in the client's logs means "could not verify" —
   look at Entra reachability. A `401` means the token really was rejected.
 - During a key rotation, `kid=… absent from a freshly fetched JWKS (Ns of 60s

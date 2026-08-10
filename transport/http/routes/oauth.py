@@ -39,6 +39,44 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 router = APIRouter(tags=["oauth-discovery"])
 
 
+def _granted_scope(client_id: str) -> str:
+    """The scope this deployment issues tokens for.
+
+    Single source of truth: /oauth/register advertises it, and a refresh that
+    arrives without a scope is re-issued against it (see `_scope_for_refresh`).
+    If those two ever disagree, Entra rejects the refresh as a scope the user
+    never consented to.
+    """
+    return f"api://{client_id}/access openid profile offline_access"
+
+
+def _scope_for_refresh() -> str:
+    """Scope to attach to a refresh_token grant that arrived without one.
+
+    RFC 6749 §6 makes `scope` OPTIONAL on a refresh — omit it and you get the
+    originally granted scope — so clients legitimately leave it out, and
+    Claude's connector does.  Entra v2.0 does not implement that default: with
+    no scope it cannot resolve a resource, falls back to the calling app
+    itself, and answers
+
+        400 AADSTS90009: Application '<client_id>' (api://<client_id>) is
+        requesting a token for itself.
+
+    which is fatal in a way nothing upstream can retry around.  The access
+    token simply expires, the refresh fails, and the connector is dead until
+    someone reconnects it by hand — observed on every token lifetime between
+    2026-08-05 and 2026-08-10 (docs/connector-resilience.md, "Defect 3").
+
+    The authorization_code exchange is unaffected and deliberately left alone:
+    the code already carries the scope consented to at /oauth/authorize.
+
+    Returns "" when ENTRA_CLIENT_ID is unset, so local/API-key deployments
+    forward the body untouched.
+    """
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    return _granted_scope(client_id) if client_id else ""
+
+
 def _base_url(request: Request) -> str:
     """Return the canonical server URL, respecting reverse-proxy headers."""
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -147,7 +185,7 @@ async def oauth_dynamic_register(request: Request) -> JSONResponse:
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",  # public client / PKCE
-            "scope": f"api://{client_id}/access openid profile offline_access",
+            "scope": _granted_scope(client_id),
         },
         status_code=201,
     )
@@ -182,11 +220,16 @@ async def oauth_authorize_proxy(request: Request) -> RedirectResponse:
 
 @router.post("/oauth/token", include_in_schema=False)
 async def oauth_token_proxy(request: Request):
-    """Strip 'resource' from the token exchange POST and forward to Entra.
+    """Reshape the token exchange POST for Entra v2.0 and forward it.
 
-    mcp-remote sends resource=<server-origin> in the token exchange body.
-    Entra v2.0 throws AADSTS9010010 when 'resource' and 'scope' reference
-    different application identifiers.  We strip it here before forwarding.
+    Two fixups, both for the same reason: the MCP client speaks RFC 6749 and
+    Entra v2.0 does not accept it verbatim.
+
+    1. Strip 'resource'.  mcp-remote sends resource=<server-origin> in the
+       body; Entra throws AADSTS9010010 when 'resource' and 'scope' reference
+       different application identifiers.
+
+    2. Supply 'scope' on a refresh.  See `_scope_for_refresh`.
     """
     import httpx
 
@@ -201,6 +244,12 @@ async def oauth_token_proxy(request: Request):
     # Parse the form body and strip 'resource'
     form = await request.form()
     payload = {k: v for k, v in form.multi_items() if k != "resource"}
+
+    if payload.get("grant_type") == "refresh_token" and not payload.get("scope"):
+        scope = _scope_for_refresh()
+        if scope:
+            payload["scope"] = scope
+            _log.info("oauth/token: supplied scope for a refresh that omitted it")
 
     # Debug: log what the client sent (mask secrets)
     safe = {k: (str(v)[:8] + "…" if k in ("code", "client_secret", "refresh_token") and len(str(v)) > 8 else str(v))

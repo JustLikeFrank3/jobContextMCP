@@ -685,6 +685,113 @@ class TestOauthTokenProxy:
         assert captured["timeout"] == 30
 
 
+class TestRefreshScopeInjection:
+    """A refresh that omits `scope` must not reach Entra that way.
+
+    RFC 6749 §6 makes `scope` optional on a refresh (it defaults to the
+    originally granted scope) and Claude's connector omits it. Entra v2.0 has
+    no such default: it falls back to the calling app itself and answers
+    AADSTS90009 "requesting a token for itself". The refresh fails, the
+    connector is invalidated, and the user has to reconnect by hand — once per
+    access-token lifetime, indefinitely.
+    """
+
+    def _capture(self, monkeypatch, oauth_client, data: dict) -> dict:
+        import httpx
+
+        captured: dict = {}
+
+        class FakeResponse:
+            status_code = 200
+            text = "{}"
+            content = b"{}"
+            headers = {"Content-Type": "application/json"}
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, data, headers, timeout):
+                captured.update(data)
+                return FakeResponse()
+
+        monkeypatch.setattr(httpx, "AsyncClient", lambda: FakeAsyncClient())
+        oauth_client.post("/oauth/token", data=data)
+        return captured
+
+    def test_refresh_without_scope_gets_the_granted_scope(self, monkeypatch, oauth_client):
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "test-client-id")
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {"grant_type": "refresh_token", "refresh_token": "rt", "client_id": "test-client-id"},
+        )
+        assert sent["scope"] == (
+            "api://test-client-id/access openid profile offline_access"
+        )
+
+    def test_injected_scope_matches_what_register_advertises(self, monkeypatch, oauth_client):
+        """If these drift, Entra rejects the refresh as unconsented scope."""
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "test-client-id")
+        advertised = oauth_client.post("/oauth/register", json={}).json()["scope"]
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {"grant_type": "refresh_token", "refresh_token": "rt"},
+        )
+        assert sent["scope"] == advertised
+
+    def test_client_supplied_scope_is_left_alone(self, monkeypatch, oauth_client):
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "test-client-id")
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": "rt",
+                "scope": "api://other/access",
+            },
+        )
+        assert sent["scope"] == "api://other/access"
+
+    def test_authorization_code_exchange_is_untouched(self, monkeypatch, oauth_client):
+        """It already works — the code carries the consented scope."""
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "test-client-id")
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {"grant_type": "authorization_code", "code": "abc", "code_verifier": "v"},
+        )
+        assert "scope" not in sent
+
+    def test_resource_is_still_stripped_on_a_refresh(self, monkeypatch, oauth_client):
+        monkeypatch.setenv("ENTRA_CLIENT_ID", "test-client-id")
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": "rt",
+                "resource": "https://app.jobcontext.ai",
+            },
+        )
+        assert "resource" not in sent
+        assert sent["scope"].startswith("api://test-client-id/access")
+
+    def test_no_injection_when_entra_is_not_configured(self, monkeypatch, oauth_client):
+        """Local / API-key deployments forward the body untouched."""
+        monkeypatch.delenv("ENTRA_CLIENT_ID", raising=False)
+        sent = self._capture(
+            monkeypatch,
+            oauth_client,
+            {"grant_type": "refresh_token", "refresh_token": "rt"},
+        )
+        assert "scope" not in sent
+
+
 class TestLogoutEndpoints:
     def test_logout_redirects_to_entra(self, oauth_client):
         r = oauth_client.get("/logout", follow_redirects=False)
