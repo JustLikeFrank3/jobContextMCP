@@ -40,7 +40,7 @@ An executor that raises fails the row with the traceback attached; success
 stores its returned dict as artifacts. Pushes/notifications are signals the
 executor sends; **the row is the system of record**.
 
-Kinds registered today: `capture_url` (mobile share → import → assess → push), `run_evals` (server-side golden-suite eval runs, incl. the nightly schedule — see [evals.md](evals.md)), `certification.weekly` (Sunday-morning work-search report snapshots — `tools/certification_work.py`), and `generate.resume` / `generate.cover_letter` (document generation — `tools/generate_work.py`; these run via `run_now` rather than the dispatcher, see P1 below).
+Kinds registered today: `capture_url` (mobile share → import → assess → push), `run_evals` (server-side golden-suite eval runs, incl. the nightly schedule — see [evals.md](evals.md)), `certification.weekly` (Sunday-morning work-search report snapshots — `tools/certification_work.py`), and `generate.resume` / `generate.cover_letter` / `generate.assessment` (document generation — `tools/generate_work.py`; these run via `run_now` rather than the dispatcher, see P1 below).
 
 `enqueue` hands the row to the dispatcher for work nobody is waiting on. **`run_now` creates the same row and executes it in the caller's thread** — for interactive work where the caller blocks for the answer regardless, so the queue would only add latency. Same lifecycle, same artifacts, same orphan sweep; only the dispatcher is skipped.
 
@@ -65,9 +65,9 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
 
 ## Roadmap
 
-- **P1 — document generation (shipped 2026-08-10, partially)**: resume and
-  cover-letter generation now run as `generate.resume` / `generate.cover_letter`
-  rows for every caller — the MCP facade, the dashboard service, and the agent
+- **P1 — document generation (shipped 2026-08-10)**: resume, cover-letter, and
+  assessment generation now run as `generate.resume` / `generate.cover_letter` /
+  `generate.assessment` rows for every caller — the MCP facade, the dashboard service, and the agent
   fallback alike. Artifacts carry the stamp P1 asked for: the row *is* the work
   id, plus `prompt_version` (a digest of the system prompt, not a
   hand-maintained constant that would silently go stale) and the `model` that
@@ -79,8 +79,19 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
   either way. And **the interception is a decorator** (`tools/generate_work.tracked`)
   rather than edits at each call site: there were three callers and a fourth
   that quietly bypassed the control plane would have been an easy mistake.
-  Still outstanding: assessment and interview-prep generation, whose shapes
-  differ enough to want their own pass.
+  `model` is resolved per kind — assessment reads `task="assessment"`, not the
+  generator's model, and stamping one with the other's would be worse than not
+  stamping at all.
+
+  **The entry named more than it should have.** Of the three surfaces it
+  listed, only assessment turned out to be a generator: `assess_job_fitment`
+  and `generate_interview_prep_context` are context *packers* — they read the
+  master resume and return a formatted prompt for the orchestrating agent to
+  act on. No model is called and no document is produced, so there is no
+  artifact to stamp and nothing to attribute; a row recording "we assembled a
+  string" would be noise in the exact table you query to attribute a
+  regression. They are deliberately untracked, and a test pins that so a later
+  change doesn't wrap them by reflex.
 - **P2 — policy**: per-kind model routing, token budgets, fallbacks, retries
   as data; per-tenant quotas; token/cost accounting on the row.
 - **P3 — scheduler**: cron-style enqueuers (Oura autosync, weekly digest,

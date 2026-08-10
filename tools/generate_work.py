@@ -34,6 +34,22 @@ _log = logging.getLogger(__name__)
 
 KIND_RESUME = "generate.resume"
 KIND_COVER_LETTER = "generate.cover_letter"
+KIND_ASSESSMENT = "generate.assessment"
+
+# Deliberately NOT tracked, despite being named in the P1 roadmap entry:
+# tools.fitment.assess_job_fitment and tools.interview.generate_interview_prep_context
+# are context *packers* — they read the master resume and return a formatted
+# prompt for the orchestrating agent to act on. No model is called and no
+# document is produced, so there is no artifact to stamp and no prompt/model
+# pair to attribute. A row recording "we assembled a string" would be noise in
+# the exact table you query to attribute a regression. The roadmap entry
+# conflated them with run_job_assessment, which does call a model.
+
+
+def _default_model() -> str:
+    from tools import generate  # noqa: PLC0415 — lazy: avoids import cycle
+
+    return generate._model()
 
 
 def prompt_version(system_prompt: str) -> str:
@@ -59,7 +75,13 @@ def _bind_inputs(fn: Callable, args: tuple, kwargs: dict) -> dict:
         v, (str, int, float, bool, type(None)))}
 
 
-def tracked(kind: str, *, system_prompt: Callable[[], str], origin: str = "generate"):
+def tracked(
+    kind: str,
+    *,
+    system_prompt: Callable[[], str],
+    model: "Callable[[], str] | None" = None,
+    origin: str = "generate",
+):
     """Route a generator through the control plane without changing its callers.
 
     The wrapped function keeps its name, signature, and docstring (the MCP tool
@@ -67,20 +89,36 @@ def tracked(kind: str, *, system_prompt: Callable[[], str], origin: str = "gener
     unaffected. The *undecorated* function is what the executor runs, so there
     is no recursion.
 
+    ``model`` is per-kind because kinds do not share a model: generation reads
+    ``generate._model()`` while assessment resolves its own via
+    ``get_llm_client(task="assessment")``, and stamping one with the other's
+    model would be worse than not stamping at all.
+
+    ``system_prompt`` is the *base* prompt. Where a caller composes onto it —
+    assessment prepends a persona block — the persona is a parameter and is
+    therefore already recorded in the row's inputs, so base version + recorded
+    persona reconstructs the effective prompt. Taking the composed prompt here
+    instead would mean duplicating the composition logic inside the decorator.
+
     A failed row returns a readable error string rather than raising: these
     generators already report failure in their return value ("✗ OpenAI API
     error: …") and callers render that text directly, so raising here would
     turn a handled failure into an unhandled one.
     """
     def decorate(fn: Callable[..., str]) -> Callable[..., str]:
-        def _executor(inputs: dict) -> dict:
-            from tools import generate  # noqa: PLC0415 — lazy: avoids import cycle
+        resolve_model = model or _default_model
 
+        def _executor(inputs: dict) -> dict:
             text = fn(**inputs)
+            try:
+                stamped_model = resolve_model()
+            except Exception:  # noqa: BLE001 — an unstampable model is not a
+                # reason to fail a document that was produced successfully
+                stamped_model = ""
             return {
                 "result": text,
                 "prompt_version": prompt_version(system_prompt()),
-                "model": generate._model(),
+                "model": stamped_model,
             }
 
         work.register_kind(kind, _executor)
