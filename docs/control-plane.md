@@ -40,7 +40,9 @@ An executor that raises fails the row with the traceback attached; success
 stores its returned dict as artifacts. Pushes/notifications are signals the
 executor sends; **the row is the system of record**.
 
-Kinds registered today: `capture_url` (mobile share → import → assess → push), `run_evals` (server-side golden-suite eval runs, incl. the nightly schedule — see [evals.md](evals.md)), and `certification.weekly` (Sunday-morning work-search report snapshots — `tools/certification_work.py`).
+Kinds registered today: `capture_url` (mobile share → import → assess → push), `run_evals` (server-side golden-suite eval runs, incl. the nightly schedule — see [evals.md](evals.md)), `certification.weekly` (Sunday-morning work-search report snapshots — `tools/certification_work.py`), and `generate.resume` / `generate.cover_letter` (document generation — `tools/generate_work.py`; these run via `run_now` rather than the dispatcher, see P1 below).
+
+`enqueue` hands the row to the dispatcher for work nobody is waiting on. **`run_now` creates the same row and executes it in the caller's thread** — for interactive work where the caller blocks for the answer regardless, so the queue would only add latency. Same lifecycle, same artifacts, same orphan sweep; only the dispatcher is skipped.
 
 ## Telemetry (P0, shipped alongside)
 
@@ -63,9 +65,22 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
 
 ## Roadmap
 
-- **P1 — document generation**: route assessment / interview-prep /
-  cover-letter generation (MCP tools, dashboard, chat) through `enqueue`;
-  stamp artifacts with work id + prompt/template version + model (provenance).
+- **P1 — document generation (shipped 2026-08-10, partially)**: resume and
+  cover-letter generation now run as `generate.resume` / `generate.cover_letter`
+  rows for every caller — the MCP facade, the dashboard service, and the agent
+  fallback alike. Artifacts carry the stamp P1 asked for: the row *is* the work
+  id, plus `prompt_version` (a digest of the system prompt, not a
+  hand-maintained constant that would silently go stale) and the `model` that
+  produced the text. Two deviations from the original entry, both deliberate:
+  **`run_now`, not `enqueue`** — the caller is waiting for the document, so the
+  row is created and executed inline; queueing it behind `MAX_CONCURRENCY=2`
+  background work would add latency and buy nothing, and durability is
+  identical because the row is written before execution and swept on restart
+  either way. And **the interception is a decorator** (`tools/generate_work.tracked`)
+  rather than edits at each call site: there were three callers and a fourth
+  that quietly bypassed the control plane would have been an easy mistake.
+  Still outstanding: assessment and interview-prep generation, whose shapes
+  differ enough to want their own pass.
 - **P2 — policy**: per-kind model routing, token budgets, fallbacks, retries
   as data; per-tenant quotas; token/cost accounting on the row.
 - **P3 — scheduler**: cron-style enqueuers (Oura autosync, weekly digest,

@@ -92,6 +92,34 @@ def enqueue(kind: str, inputs: dict, origin: str = "", max_attempts: int = 1) ->
     return item_id
 
 
+def run_now(kind: str, inputs: dict, origin: str = "") -> dict:
+    """Create a work row and execute it INLINE, in the caller's thread.
+
+    The interactive counterpart to :func:`enqueue`. Both produce the same
+    durable row with the same lifecycle, artifacts, and failure capture — the
+    difference is only who runs it and when.
+
+    Use this when the caller is waiting for the result. Routing an interactive
+    generation through the dispatcher would add latency without buying
+    anything: MAX_CONCURRENCY is 2, so a user-facing request could sit behind
+    two background evals, and the caller has to block for the answer either
+    way. Use :func:`enqueue` for work nobody is waiting on (share capture,
+    nightly evals, weekly reports).
+
+    Durability is unaffected: the row is written before execution starts, so a
+    process death mid-run leaves a 'running' row that the startup sweep fails
+    as abandoned, exactly as for a dispatched item.
+
+    Returns the finished row. Callers must check ``status`` — an executor that
+    raises produces a 'failed' row with the traceback in ``error`` rather than
+    propagating, so a caller that assumes success reads ``artifacts`` as None.
+    """
+    item_id = enqueue(kind, inputs, origin=origin)
+    _execute(get_data_folder_override(), item_id)
+    return get_item(item_id) or {"id": item_id, "status": "failed",
+                                 "error": "work row vanished after execution"}
+
+
 def _row_to_dict(row) -> dict:
     d = dict(row)
     d["inputs"] = json.loads(d.pop("inputs_json") or "{}")

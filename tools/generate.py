@@ -30,6 +30,8 @@ from tools.interviews import get_interview_context
 from tools.context import get_personal_context
 from tools.tone import get_tone_profile, get_tone_profile_budgeted, get_cover_letter_tone_profile_budgeted
 from tools.resume import save_resume_txt, save_cover_letter_txt
+from tools import generate_work as _work
+from tools.generate_work import tracked as _tracked
 from tools.generate_prompts import (
     COVER_LETTER_HOOK_TAGS,
     COMPANY_HOOK_TAGS,
@@ -1272,6 +1274,11 @@ def _provenance_note(
         return f"Provenance: ⚠ check skipped — {exc}"
 
 
+@_tracked(
+    _work.KIND_RESUME,
+    system_prompt=lambda: _RESUME_SYSTEM,
+    origin="generate_resume",
+)
 def generate_resume(
     company: str,
     role: str,
@@ -1364,6 +1371,11 @@ def generate_resume(
     ])
 
 
+@_tracked(
+    _work.KIND_COVER_LETTER,
+    system_prompt=lambda: _COVER_LETTER_SYSTEM,
+    origin="generate_cover_letter",
+)
 def generate_cover_letter(
     company: str,
     role: str,
