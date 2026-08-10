@@ -394,3 +394,62 @@ def test_min_cap_floor_is_per_label(monkeypatch):
         messages=[{"role": "user", "content": "hi"}], max_tokens=6000,
     )
     assert client.calls[judge_calls]["max_tokens"] == 6000
+
+
+class TestCollectUsage:
+    """Per-unit-of-work token attribution (control plane P2). The sink exists
+    because `llm_tokens_total` is cumulative across a process's whole life —
+    useful for rates, useless for "what did this job cost"."""
+
+    def _client(self, prompt=7, completion=3):
+        response = types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="ok"))],
+            usage=types.SimpleNamespace(
+                prompt_tokens=prompt, completion_tokens=completion,
+                total_tokens=prompt + completion),
+        )
+        return types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=types.SimpleNamespace(create=lambda **_k: response)))
+
+    def test_collects_each_call(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client()
+        with oc.collect_usage() as usage:
+            oc.create_chat_completion(client, label="a", model="m1", max_tokens=10)
+            oc.create_chat_completion(client, label="b", model="m2", max_tokens=10)
+        assert usage == [
+            {"model": "m1", "prompt": 7, "completion": 3},
+            {"model": "m2", "prompt": 7, "completion": 3},
+        ]
+
+    def test_sink_is_cleared_on_exit(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        with oc.collect_usage():
+            pass
+        assert oc._USAGE_SINK.get() is None
+
+    def test_nested_blocks_attribute_to_the_inner_unit(self, monkeypatch):
+        """One work item spawning another: the inner item's calls belong to the
+        inner row, and the outer resumes collecting afterwards."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client()
+        with oc.collect_usage() as outer:
+            oc.create_chat_completion(client, label="outer", model="m1", max_tokens=10)
+            with oc.collect_usage() as inner:
+                oc.create_chat_completion(client, label="inner", model="m2", max_tokens=10)
+            oc.create_chat_completion(client, label="outer", model="m3", max_tokens=10)
+        assert [u["model"] for u in inner] == ["m2"]
+        assert [u["model"] for u in outer] == ["m1", "m3"]
+
+    def test_failed_call_contributes_nothing(self, monkeypatch):
+        """No usage is reported for a request that never completed; the row's
+        `error` is where that shows up, not a phantom zero-token entry."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        bad = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(
+                create=lambda **_k: (_ for _ in ()).throw(_FakeExc(msg="down")))))
+        with oc.collect_usage() as usage:
+            with pytest.raises(Exception):
+                oc.create_chat_completion(bad, label="x", model="m", max_tokens=10)
+        assert usage == []

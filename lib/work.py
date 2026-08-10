@@ -32,6 +32,7 @@ from typing import Any, Callable
 
 from lib import metrics
 from lib.db import get_connection
+from lib.openai_calls import collect_usage
 from lib.user_context import (
     get_data_folder_override,
     reset_data_folder,
@@ -66,10 +67,29 @@ def register_kind(kind: str, fn: Callable[[dict], dict]) -> None:
     _KINDS[kind] = fn
 
 
+# Columns added after work_items shipped. Applied here rather than through
+# lib.db._MIGRATIONS on purpose: that ledger tolerates an ALTER whose target
+# table doesn't exist yet and marks it applied anyway, and work_items is
+# created lazily on first use — so a partition that had no work_items when the
+# migration ran would burn the ledger entry and never get the column. A
+# PRAGMA-guarded add here runs whenever the table is touched and cannot be
+# skipped.
+_ADDED_COLUMNS = {
+    "llm_calls": "INTEGER NOT NULL DEFAULT 0",
+    "tokens_prompt": "INTEGER NOT NULL DEFAULT 0",
+    "tokens_completion": "INTEGER NOT NULL DEFAULT 0",
+    "models_json": "TEXT",
+}
+
+
 def _ensure_schema() -> None:
     """Create work_items in the current partition's DB (idempotent)."""
     with get_connection() as con:
         con.execute(_SCHEMA)
+        have = {r[1] for r in con.execute("PRAGMA table_info(work_items)")}
+        for name, decl in _ADDED_COLUMNS.items():
+            if name not in have:
+                con.execute(f"ALTER TABLE work_items ADD COLUMN {name} {decl}")
         con.commit()
 
 
@@ -124,6 +144,7 @@ def _row_to_dict(row) -> dict:
     d = dict(row)
     d["inputs"] = json.loads(d.pop("inputs_json") or "{}")
     d["artifacts"] = json.loads(d.pop("artifacts_json") or "null")
+    d["models"] = json.loads(d.pop("models_json") or "[]")
     return d
 
 
@@ -202,14 +223,32 @@ def _execute(partition: "str | None", item_id: int) -> None:
     kind, inputs = claimed
     fn = _KINDS.get(kind)
 
-    def _finish(status: str, error: str = "", artifacts: "dict | None" = None) -> None:
+    def _finish(
+        status: str,
+        error: str = "",
+        artifacts: "dict | None" = None,
+        usage: "list[dict] | None" = None,
+    ) -> None:
+        # Tokens, not dollars. Prices move — Sonnet 5's introductory rate ends
+        # 2026-08-31 — so a cost baked into a row is wrong the moment pricing
+        # changes, and silently so. Tokens are the durable fact; dollars are a
+        # view computed at read time against whatever the rate is then.
+        calls = usage or []
+        models = sorted({str(u.get("model") or "") for u in calls if u.get("model")})
+
         def _write() -> None:
             with get_connection() as con:
                 con.execute(
                     "UPDATE work_items SET status=?, error=?, artifacts_json=?, "
+                    "llm_calls=?, tokens_prompt=?, tokens_completion=?, models_json=?, "
                     "finished_at=datetime('now') WHERE id = ?",
                     (status, error or None,
-                     json.dumps(artifacts) if artifacts is not None else None, item_id),
+                     json.dumps(artifacts) if artifacts is not None else None,
+                     len(calls),
+                     sum(int(u.get("prompt") or 0) for u in calls),
+                     sum(int(u.get("completion") or 0) for u in calls),
+                     json.dumps(models) if models else None,
+                     item_id),
                 )
                 con.commit()
         _in_partition(partition, _write)
@@ -218,15 +257,21 @@ def _execute(partition: "str | None", item_id: int) -> None:
         _finish("failed", error=f"no executor registered for kind '{kind}'")
         metrics.inc("work_items_total", kind=kind, status="failed")
         return
-    try:
-        with metrics.timed("work_item_seconds", kind=kind):
-            artifacts = _in_partition(partition, lambda: fn(inputs))
-        _finish("succeeded", artifacts=artifacts if isinstance(artifacts, dict) else None)
-        metrics.inc("work_items_total", kind=kind, status="succeeded")
-    except Exception as exc:  # noqa: BLE001 — outcome is the record, never a crash
-        _log.exception("work item %s (%s) failed", item_id, kind)
-        _finish("failed", error=f"{exc}\n{traceback.format_exc(limit=8)}")
-        metrics.inc("work_items_total", kind=kind, status="failed")
+    # `usage` is bound before the try so the failure path can record it too: a
+    # run that burned 40k tokens and then blew up is exactly the spend you want
+    # attributed, and it is the spend a cumulative counter hides.
+    with collect_usage() as usage:
+        try:
+            with metrics.timed("work_item_seconds", kind=kind):
+                artifacts = _in_partition(partition, lambda: fn(inputs))
+            _finish("succeeded",
+                    artifacts=artifacts if isinstance(artifacts, dict) else None,
+                    usage=usage)
+            metrics.inc("work_items_total", kind=kind, status="succeeded")
+        except Exception as exc:  # noqa: BLE001 — outcome is the record, never a crash
+            _log.exception("work item %s (%s) failed", item_id, kind)
+            _finish("failed", error=f"{exc}\n{traceback.format_exc(limit=8)}", usage=usage)
+            metrics.inc("work_items_total", kind=kind, status="failed")
 
 
 async def _worker_loop() -> None:

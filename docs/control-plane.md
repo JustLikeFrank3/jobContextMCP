@@ -60,8 +60,11 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
   ama-metrics-settings-configmap to activate collection).
 - **`GET /api/work/stats`** — per-tenant JSON aggregates straight off the
   work_items table (counts + avg duration by kind/status, recent failures
-  with error heads): the control plane doubling as its own telemetry source,
-  consumable by the dashboard, mobile, or Claude in chat.
+  with error heads, and — since P2 — `tokens_by_kind`): the control plane
+  doubling as its own telemetry source, consumable by the dashboard, mobile,
+  or Claude in chat. Note the division of labour with `/metrics`: the
+  Prometheus counters are cumulative and answer "what rate", the work rows are
+  per-unit and answer "what did this job cost".
 
 ## Roadmap
 
@@ -92,8 +95,33 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
   string" would be noise in the exact table you query to attribute a
   regression. They are deliberately untracked, and a test pins that so a later
   change doesn't wrap them by reflex.
-- **P2 — policy**: per-kind model routing, token budgets, fallbacks, retries
-  as data; per-tenant quotas; token/cost accounting on the row.
+- **P2 — accounting (shipped 2026-08-10)**: every row now carries what it
+  spent — `llm_calls`, `tokens_prompt`, `tokens_completion`, and the set of
+  models it called. Collection is a contextvar sink (`openai_calls.collect_usage`)
+  wrapped around the executor, so LLM calls several frames down are attributed
+  without threading a parameter through every generator; the sink is set and
+  read in the same thread, so it does *not* depend on contextvar propagation
+  across an offload (the 2026-07-09 trap). Aggregates surface at
+  `GET /api/work/stats` as `tokens_by_kind`.
+
+  Three deliberate choices. **Tokens, not dollars**: prices move — Sonnet 5's
+  introductory rate ends 2026-08-31 — so a cost stored on a row is wrong the
+  moment pricing changes, and wrong silently. Tokens are the durable fact;
+  dollars are a view computed at read time. **Failed rows are counted too**:
+  a run that burned 40k tokens and then blew up is exactly the spend worth
+  seeing. And **the columns are added by a PRAGMA-guarded ALTER in
+  `_ensure_schema`, not through `lib.db._MIGRATIONS`**: that ledger tolerates
+  an ALTER whose target table doesn't exist and marks it applied anyway, and
+  `work_items` is created lazily — so a partition with no work_items at
+  migration time would burn the ledger entry and never get the columns.
+
+  This exists because of a concrete misread: `llm_tokens_total` is cumulative
+  since process start, and reading it as one night's spend overstated the
+  nightly eval cost threefold. A per-row total cannot be misread that way.
+
+  Still open in P2: per-kind model routing, token budgets, retries and
+  fallbacks as data, per-tenant quotas. Those are policy engines and want
+  their own design pass.
 - **P3 — scheduler**: cron-style enqueuers (Oura autosync, weekly digest,
   follow-up nudges) so recurring work gets the same durability and audit.
 - **Deferred**: journaling work rows through sync (cross-device status),

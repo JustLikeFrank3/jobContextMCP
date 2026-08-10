@@ -1,6 +1,8 @@
 """OpenAI call helpers with usage logging and local rate smoothing."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import logging
 import threading
 import time
@@ -10,6 +12,40 @@ from typing import Any
 from lib import metrics
 
 _LOG = logging.getLogger(__name__)
+
+# Per-context sink for token usage, so a caller can attribute spend to the unit
+# of work that caused it. Set by lib.work while an executor runs; None
+# everywhere else, which makes collection free for every other call site.
+#
+# A contextvar rather than a parameter threaded through every generator: LLM
+# calls happen several frames below the executor, through code paths that have
+# no reason to know they're inside a work item. Note this does NOT rely on
+# contextvar propagation across an offload (the trap from the 2026-07-09
+# incident) — the sink is set inside the thread that runs the executor and read
+# in the same frame.
+_USAGE_SINK: "contextvars.ContextVar[list | None]" = contextvars.ContextVar(
+    "llm_usage_sink", default=None
+)
+
+
+@contextlib.contextmanager
+def collect_usage():
+    """Collect per-call token usage for the duration of the block.
+
+    Yields the list that accumulates ``{model, prompt, completion}`` entries —
+    one per successful call. Nesting is safe: an inner block collects its own
+    calls and the outer resumes on exit (the inner's calls are attributed to
+    the inner unit of work, which is what you want when one work item spawns
+    another).
+    """
+    entries: list[dict] = []
+    token = _USAGE_SINK.set(entries)
+    try:
+        yield entries
+    finally:
+        _USAGE_SINK.reset(token)
+
+
 # Cryptographically-seeded RNG used only for retry-backoff jitter. Avoids the
 # non-secure global PRNG so static analysers don't flag it (Sonar S2245 / B311).
 _RNG = SystemRandom()
@@ -250,6 +286,13 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 completion_tokens,
                 total_tokens,
             )
+            sink = _USAGE_SINK.get()
+            if sink is not None:
+                sink.append({
+                    "model": model,
+                    "prompt": int(prompt_tokens or 0),
+                    "completion": int(completion_tokens or 0),
+                })
             if learned_rejected and memory_key:
                 _MODEL_REJECTED_PARAMS.setdefault(memory_key, set()).update(learned_rejected)
             if learned_cap and memory_key:
