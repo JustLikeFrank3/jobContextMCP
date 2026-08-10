@@ -41,6 +41,23 @@ _CLAIM_PATTERNS = [
     r"\b\d+(?:\.\d+)?x\b",                          # 3x, 2.5x multipliers
     r"\b\d{1,3}(?:,\d{3})+\b",                      # 10,000 (comma-grouped)
     r"\b(?:19|20)\d{2}\b",                          # years (fabricated dates ARE claims)
+    # Bare counts: "85 actions", "1481 tests", "11 domains". Until 2026-08-10
+    # nothing here matched an unadorned integer, so the single most common
+    # fabrication in a resume — an invented tool or test count — was never
+    # extracted and therefore never checked. Measured on the golden corpus:
+    # "931 passing tests" and "277 tests" sailed through a gate reporting the
+    # documents clean while the LLM judge named both against the master.
+    #
+    # Two guards make it safe, and both are load-bearing:
+    #   lookahead  — whitespace then a letter, so the integer is counting
+    #                something. Without it every resume's contact header
+    #                contributed three violations of pure noise.
+    #   lookbehind — not preceded by a digit separator, so a trailing phone
+    #                group can't qualify just because prose follows it
+    #                ("call 305-490-1262 today" would otherwise yield 1262),
+    #                and no fragment of an already-matched grouped number
+    #                ("1,200 total" -> 200) can re-match.
+    r"(?<![-.,\d])\b\d{2,}(?=\s+[A-Za-z])",         # 85 actions, 1481 tests
 ]
 _CLAIM_RE = re.compile("|".join(f"(?:{p})" for p in _CLAIM_PATTERNS), re.IGNORECASE)
 
