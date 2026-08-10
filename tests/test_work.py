@@ -319,3 +319,7 @@ def test_stats_reports_tokens_by_kind(app_client, monkeypatch):
     # Tokens, never a dollar figure: prices change and a stored cost goes stale
     # silently (Sonnet 5's introductory rate ends 2026-08-31).
     assert not any("cost" in k or "usd" in k for k in row)
+
+    quota = stats["quota"]
+    assert quota["tokens_used_today"] >= 260
+    assert quota["daily_token_quota"] == 0 and quota["remaining"] is None

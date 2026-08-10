@@ -72,10 +72,16 @@ async def work_stats(
                 "FROM work_items WHERE llm_calls > 0 GROUP BY kind ORDER BY kind"
             ).fetchall()
         ]
+    from lib import work_policy
+
     return {
         "by_kind_status": by_kind_status,
         "recent_failures": recent_failures,
         "tokens_by_kind": tokens_by_kind,
+        # Where the tenant stands against its daily quota. `daily_token_quota`
+        # 0 means unlimited, and `remaining` is null rather than a number, so a
+        # dashboard cannot render "0 left" for an install that has no quota.
+        "quota": work_policy.quota_status(),
     }
 
 

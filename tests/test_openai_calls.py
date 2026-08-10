@@ -453,3 +453,52 @@ class TestCollectUsage:
             with pytest.raises(Exception):
                 oc.create_chat_completion(bad, label="x", model="m", max_tokens=10)
         assert usage == []
+
+    def test_budget_stops_the_next_call_before_it_is_sent(self, monkeypatch):
+        """A stop-loss on the funnel itself: the request that would cross the
+        ceiling is never issued, so an executor cannot spend past its policy by
+        looping."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        sent = []
+        response = types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="ok"))],
+            usage=types.SimpleNamespace(prompt_tokens=40, completion_tokens=10, total_tokens=50))
+
+        def _create(**kwargs):
+            sent.append(kwargs)
+            return response
+
+        client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=_create)))
+
+        with oc.collect_usage(budget=120) as usage:
+            for _ in range(3):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+            with pytest.raises(oc.TokenBudgetExceeded):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+
+        assert len(sent) == 3          # the 4th was never issued
+        assert len(usage) == 3
+        # It bounds a runaway, it does not bound a single call: spend lands just
+        # past the ceiling because a request's cost is only known once it returns.
+        assert sum(u["prompt"] + u["completion"] for u in usage) == 150
+
+    def test_zero_budget_is_unlimited(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client(prompt=1000, completion=1000)
+        with oc.collect_usage(budget=0) as usage:
+            for _ in range(4):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+        assert len(usage) == 4
+
+    def test_budget_does_not_leak_to_the_next_block(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client(prompt=100, completion=100)
+        with oc.collect_usage(budget=50):
+            with pytest.raises(oc.TokenBudgetExceeded):
+                oc.create_chat_completion(client, label="a", model="m", max_tokens=10)
+                oc.create_chat_completion(client, label="a", model="m", max_tokens=10)
+        assert oc._USAGE_BUDGET.get() == 0
+        with oc.collect_usage() as usage:
+            oc.create_chat_completion(client, label="b", model="m", max_tokens=10)
+        assert len(usage) == 1

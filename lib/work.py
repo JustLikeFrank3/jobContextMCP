@@ -26,11 +26,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from lib import metrics
+from lib import config, metrics, work_policy
 from lib.db import get_connection
 from lib.openai_calls import collect_usage
 from lib.user_context import (
@@ -95,16 +96,24 @@ def _ensure_schema() -> None:
 
 # ── enqueue / read (run inside a request's partition context) ─────────────────
 
-def enqueue(kind: str, inputs: dict, origin: str = "", max_attempts: int = 1) -> int:
-    """Insert a queued row in the CURRENT partition and wake the dispatcher."""
+def enqueue(kind: str, inputs: dict, origin: str = "", max_attempts: int = 0) -> int:
+    """Insert a queued row in the CURRENT partition and wake the dispatcher.
+
+    *max_attempts* defaults to the kind's policy (1 unless configured). It is
+    stamped on the row rather than read at execution time so the startup sweep
+    and the executor agree on the budget even if the policy changes between
+    enqueue and run — an item that has already burned two of its two attempts
+    must not become eligible again because someone edited a config file.
+    """
     if kind not in _KINDS:
         raise ValueError(f"unknown work kind: {kind}")
     _ensure_schema()
+    attempts = max_attempts if max_attempts > 0 else work_policy.for_kind(kind).max_attempts
     with get_connection() as con:
         cur = con.execute(
             "INSERT INTO work_items (kind, inputs_json, origin, max_attempts) "
             "VALUES (?, ?, ?, ?)",
-            (kind, json.dumps(inputs), origin, max(1, max_attempts)),
+            (kind, json.dumps(inputs), origin, max(1, attempts)),
         )
         con.commit()
         item_id = int(cur.lastrowid)
@@ -198,9 +207,35 @@ def _in_partition(partition: "str | None", fn: Callable[[], Any]) -> Any:
         reset_data_folder(token)
 
 
+def _tokens(usage: "list[dict]") -> int:
+    return sum(int(u.get("prompt") or 0) + int(u.get("completion") or 0) for u in usage)
+
+
+def _bump_attempt(item_id: int) -> int:
+    """Record a retry on the row and return the new attempt number.
+
+    Written before the retry runs, not after it finishes, so a process death
+    mid-retry leaves the sweep an accurate attempt count instead of one that
+    lets the item run more times than its policy allows.
+    """
+    with get_connection() as con:
+        con.execute(
+            "UPDATE work_items SET attempt = attempt + 1, status='running' WHERE id = ?",
+            (item_id,),
+        )
+        con.commit()
+        row = con.execute("SELECT attempt FROM work_items WHERE id = ?", (item_id,)).fetchone()
+    return int(row["attempt"]) if row else 0
+
+
 def _execute(partition: "str | None", item_id: int) -> None:
-    """Blocking: claim, run the kind's executor, persist the outcome."""
-    def _claim() -> "tuple[str, dict] | None":
+    """Blocking: claim, run the kind's executor, persist the outcome.
+
+    Retries, model routing, per-run token budgets, and the tenant's daily quota
+    all come from the kind's policy (lib/work_policy.py). Every default
+    reproduces pre-P2 behavior: one attempt, no routing, no ceilings.
+    """
+    def _claim() -> "tuple[str, dict, int, int] | None":
         _ensure_schema()
         with get_connection() as con:
             row = con.execute(
@@ -215,13 +250,15 @@ def _execute(partition: "str | None", item_id: int) -> None:
                 (item_id,),
             )
             con.commit()
-            return row["kind"], json.loads(row["inputs_json"] or "{}")
+            return (row["kind"], json.loads(row["inputs_json"] or "{}"),
+                    int(row["attempt"]) + 1, int(row["max_attempts"]))
 
     claimed = _in_partition(partition, _claim)
     if claimed is None:
         return
-    kind, inputs = claimed
+    kind, inputs, attempt, max_attempts = claimed
     fn = _KINDS.get(kind)
+    policy = _in_partition(partition, lambda: work_policy.for_kind(kind))
 
     def _finish(
         status: str,
@@ -257,21 +294,65 @@ def _execute(partition: "str | None", item_id: int) -> None:
         _finish("failed", error=f"no executor registered for kind '{kind}'")
         metrics.inc("work_items_total", kind=kind, status="failed")
         return
-    # `usage` is bound before the try so the failure path can record it too: a
-    # run that burned 40k tokens and then blew up is exactly the spend you want
-    # attributed, and it is the spend a cumulative counter hides.
-    with collect_usage() as usage:
+
+    # Quota is checked once, before the first attempt: an exhausted tenant
+    # should cost nothing at all, not one more call. Retries of an already
+    # admitted run are not re-checked — the run was admitted.
+    try:
+        _in_partition(partition, lambda: work_policy.check_quota(policy))
+    except Exception as exc:  # noqa: BLE001 — quota_exceeded is an outcome, not a crash
+        _log.warning("work item %s (%s) blocked: %s", item_id, kind, exc)
+        _finish("failed", error=str(exc))
+        metrics.inc("work_items_total", kind=kind, status="blocked")
+        return
+
+    # Spend accumulates ACROSS attempts: the row's totals are what this unit of
+    # work cost, and a retry that burns another 40k is part of that cost. It is
+    # also why the budget passed to each attempt is the remainder — otherwise
+    # `max_attempts` would quietly multiply `token_budget`.
+    spent: list[dict] = []
+    while True:
+        remaining = policy.token_budget - _tokens(spent) if policy.token_budget else 0
+        route = policy.model_for_attempt(attempt)
+        route_token = config.route_llm_model(route) if route else None
         try:
-            with metrics.timed("work_item_seconds", kind=kind):
-                artifacts = _in_partition(partition, lambda: fn(inputs))
-            _finish("succeeded",
-                    artifacts=artifacts if isinstance(artifacts, dict) else None,
-                    usage=usage)
-            metrics.inc("work_items_total", kind=kind, status="succeeded")
-        except Exception as exc:  # noqa: BLE001 — outcome is the record, never a crash
-            _log.exception("work item %s (%s) failed", item_id, kind)
-            _finish("failed", error=f"{exc}\n{traceback.format_exc(limit=8)}", usage=usage)
-            metrics.inc("work_items_total", kind=kind, status="failed")
+            with collect_usage(budget=max(remaining, 0) if policy.token_budget else 0) as usage:
+                try:
+                    with metrics.timed("work_item_seconds", kind=kind):
+                        artifacts = _in_partition(partition, lambda: fn(inputs))
+                    spent.extend(usage)
+                    _finish("succeeded",
+                            artifacts=artifacts if isinstance(artifacts, dict) else None,
+                            usage=spent)
+                    metrics.inc("work_items_total", kind=kind, status="succeeded")
+                    return
+                except Exception as exc:  # noqa: BLE001 — outcome is the record, never a crash
+                    spent.extend(usage)
+                    retry = attempt < max_attempts and policy.is_retryable(exc)
+                    _log.warning(
+                        "work item %s (%s) attempt %s/%s failed (retry=%s): %s",
+                        item_id, kind, attempt, max_attempts, retry, exc,
+                    )
+                    if not retry:
+                        _log.exception("work item %s (%s) failed", item_id, kind)
+                        _finish("failed",
+                                error=f"{exc}\n{traceback.format_exc(limit=8)}", usage=spent)
+                        metrics.inc("work_items_total", kind=kind, status="failed")
+                        return
+        finally:
+            if route_token is not None:
+                config.reset_llm_model_route(route_token)
+
+        metrics.inc("work_items_total", kind=kind, status="retried")
+        backoff = policy.backoff_for_attempt(attempt)
+        if backoff:
+            # Slept in this thread, holding a dispatcher slot (there are two).
+            # A scheduler that re-queued the row instead would be the right
+            # answer for minute-scale waits; it is P3's job, and until it
+            # exists a policy with long backoffs starves the queue. Keep them
+            # in seconds.
+            time.sleep(backoff)
+        attempt = _in_partition(partition, lambda: _bump_attempt(item_id))
 
 
 async def _worker_loop() -> None:

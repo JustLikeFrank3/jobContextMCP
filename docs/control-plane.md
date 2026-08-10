@@ -119,9 +119,63 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
   since process start, and reading it as one night's spend overstated the
   nightly eval cost threefold. A per-row total cannot be misread that way.
 
-  Still open in P2: per-kind model routing, token budgets, retries and
-  fallbacks as data, per-tenant quotas. Those are policy engines and want
-  their own design pass.
+- **P2 — policy (shipped 2026-08-10)**: per-kind model routing, retries and
+  fallbacks as data, per-run token budgets, and per-tenant daily quotas, all
+  resolved from configuration at execution time (`lib/work_policy.py`).
+
+  **Every default reproduces pre-P2 behavior** — one attempt, no backoff, no
+  routing, no ceilings. That is the load-bearing property: a policy engine
+  whose defaults change how work runs is indistinguishable from a rewrite, and
+  there would be no way to tell a policy bug from a regression in the work it
+  governs.
+
+  ```json
+  "work_policy": {
+    "defaults": {"max_attempts": 2, "backoff_seconds": [2, 8],
+                 "daily_token_quota": 2000000},
+    "kinds": {
+      "generate.resume": {"model": "gpt-4.1",
+                          "fallback_models": ["gpt-4o-mini"],
+                          "token_budget": 60000}
+    }
+  }
+  ```
+
+  Layering is defaults → per-kind → env (`WORK_DAILY_TOKEN_QUOTA` only, for the
+  cloud knob that must be settable without editing a tenant file). A malformed
+  block degrades field by field instead of raising: a typo must not be able to
+  stop work from running, only to fail to change how it runs.
+
+  - **Routing** is a contextvar the executor sets and `_resolve_llm_settings`
+    reads, so a generator several frames down needs no parameter. It reroutes
+    the **model only, never the provider** — swapping vendors swaps which
+    credential is required and who receives the prompt, which is a deployment
+    change and should look like one. `task="eval_judge"` is exempt entirely:
+    which model grades the golden suite has an MAE table behind it, and a
+    tenant-editable file that could retarget it would invalidate that table
+    silently.
+  - **Retries** are classified, not blanket. Transient shapes (429, timeouts,
+    5xx, dropped connections) retry; a `KeyError` or a bad prompt fails once,
+    because it will fail identically on attempt two and retrying only doubles
+    the cost of a bug. `max_attempts` is stamped on the row at enqueue, so an
+    item cannot become eligible again because a config file changed while it
+    sat in the queue. Backoff sleeps in the worker thread, which holds one of
+    two dispatcher slots — fine for seconds, which is why the docs say seconds;
+    minute-scale waits want P3's scheduler.
+  - **Fallback models** advance with the attempt and stay on the last entry
+    rather than snapping back to a primary that has already failed twice.
+  - **Token budget** is a per-run stop-loss enforced in the call funnel: once a
+    run has spent its budget the next request is not sent. It bounds a runaway
+    loop, not a single oversized call — a request's cost is only knowable after
+    it returns. Retries share the remainder, so `max_attempts` cannot quietly
+    multiply the ceiling.
+  - **Daily quota** is checked once, before a run is admitted, against the P2
+    accounting columns (so it counts failed runs too). A run already in flight
+    is never interrupted: that is the budget's job, and killing work mid-flight
+    would leave a half-written document for a limit something else reached.
+    Status at `GET /api/work/stats` → `quota`.
+  Deliberately still absent: a *cost* figure anywhere. Tokens are the durable
+  fact; dollars are a view computed at read time.
 - **P3 — scheduler**: cron-style enqueuers (Oura autosync, weekly digest,
   follow-up nudges) so recurring work gets the same durability and audit.
 - **Deferred**: journaling work rows through sync (cross-device status),
