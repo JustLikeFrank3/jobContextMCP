@@ -10,6 +10,10 @@ data:
     {
      "uid": "jobcontext-overview",
      "title": "jobContext Overview",
+     "links": [
+      {"type": "link", "title": "⚙ Work stats — tokens, durations, quota", "icon": "external link",
+       "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}
+     ],
      "schemaVersion": 39,
      "refresh": "30s",
      "time": {
@@ -247,6 +251,12 @@ data:
     {
      "uid": "jobcontext-evals",
      "title": "jobContext Evals — resume quality",
+     "links": [
+      {"type": "link", "title": "📋 Run detail — alerts, flips, flagged claims", "icon": "external link",
+       "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true},
+      {"type": "link", "title": "⚙ Work stats — tokens, durations, quota", "icon": "external link",
+       "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}
+     ],
      "schemaVersion": 39,
      "refresh": "1m",
      "time": {"from": "now-7d", "to": "now"},
