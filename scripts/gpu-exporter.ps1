@@ -17,8 +17,17 @@ $listener.Start()
 while ($true) {
     $client = $listener.AcceptTcpClient()
     try {
+        # BOTH directions get timeouts. The read timeout was here from day
+        # one; the missing WRITE timeout wedged the exporter on 2026-08-11: a
+        # scrape connection went half-dead during a LAN renumbering, Write()
+        # blocked forever on a full send buffer, and — this loop being
+        # single-threaded — every later connection (including localhost)
+        # timed out in the backlog while the task still showed "Running".
+        $client.ReceiveTimeout = 3000
+        $client.SendTimeout = 3000
         $stream = $client.GetStream()
         $stream.ReadTimeout = 3000
+        $stream.WriteTimeout = 3000
         $reader = New-Object System.IO.StreamReader($stream)
         while (($line = $reader.ReadLine()) -and $line -ne '') { }  # drain request
 
