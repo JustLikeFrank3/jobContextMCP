@@ -34,11 +34,30 @@ class AuthUnavailable(Exception):
     """
 
 
+# Path prefixes a badge-scoped credential may reach.  Everything else — the
+# MCP surface, the dashboard, sync, the rest of /api — is closed to it.
+# Enforced in two places on purpose: the partition middleware (which sees
+# every request, including MCP, before routing) and require_authenticated_user
+# (which still guards routes exercised directly in tests).
+BADGE_ALLOWED_PREFIXES = ("/api/badge",)
+
+
 @dataclass(frozen=True)
 class User:
     id: str
     name: str
     roles: tuple[str, ...] = ("admin",)
+    # Credential reach.  "full" is every pre-existing caller (Entra sessions,
+    # unscoped API keys, the API-key system user); "badge" is the conference
+    # badge, which may only touch BADGE_ALLOWED_PREFIXES.
+    scope: str = "full"
+
+
+def scope_permits(scope: str, path: str) -> bool:
+    """Return True if a credential with *scope* may reach *path*."""
+    if scope != "badge":
+        return True
+    return path.startswith(BADGE_ALLOWED_PREFIXES)
 
 
 def _system_user() -> User:
@@ -152,10 +171,11 @@ class EntraAuthProvider(AuthProvider):
 
         # Per-user API keys (jcmcp_…) bypass Entra JWT validation.
         if token.startswith("jcmcp_"):
-            from lib.api_keys import lookup_key
-            oid = lookup_key(token)
-            if oid:
-                return User(id=oid, name="api-key")
+            from lib.api_keys import resolve_key
+            resolved = resolve_key(token)
+            if resolved:
+                name = "badge-key" if resolved.scope == "badge" else "api-key"
+                return User(id=resolved.oid, name=name, scope=resolved.scope)
             return None
 
         try:

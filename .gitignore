@@ -107,3 +107,6 @@ desktop/src-tauri/icons/
 /evals/results/
 # Blind scoring sheet — contains personal JDs/resumes, never committed
 /evals/golden_labels_sheet.md
+
+# Badge credentials — WiFi password + API token in plain text on the device
+badge/jobcontext/secrets.py
