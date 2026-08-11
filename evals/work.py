@@ -70,6 +70,47 @@ def enqueue_run(n: int = 5, entries: "list[str] | None" = None, origin: str = "a
 
 # ── nightly schedule ──────────────────────────────────────────────────────────
 
+# EVALS_NIGHTLY_DAYS_UTC values, UTC weekdays (datetime.weekday(): Mon=0).
+_DAY_NAMES = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def parse_run_days(raw: str) -> "set[int] | None":
+    """Parse EVALS_NIGHTLY_DAYS_UTC ("mon,wed,fri" or "0,2,4"); None = daily.
+
+    An unparseable value degrades to DAILY with a warning, not to disabled:
+    the failure mode of a typo should be "the suite ran more often than
+    intended", never "the drift baseline silently stopped". Disabling stays
+    what it always was — unsetting EVALS_NIGHTLY_HOUR_UTC.
+    """
+    raw = (raw or "").strip().lower()
+    if not raw:
+        return None
+    days: set[int] = set()
+    for token in raw.replace(";", ",").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token[:3] in _DAY_NAMES:
+            days.add(_DAY_NAMES[token[:3]])
+        elif token.isdigit() and 0 <= int(token) <= 6:
+            days.add(int(token))
+        else:
+            _log.warning(
+                "EVALS_NIGHTLY_DAYS_UTC=%r has unparseable entry %r; running daily",
+                raw, token,
+            )
+            return None
+    return days or None
+
+
+def runs_today(days: "set[int] | None", now: "datetime.datetime | None" = None) -> bool:
+    """Whether the schedule fires on *now*'s UTC weekday (None = every day)."""
+    if days is None:
+        return True
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return now.weekday() in days
+
+
 def seconds_until_utc_hour(hour: int, now: "datetime.datetime | None" = None) -> float:
     """Seconds from *now* until the next HH:00 UTC (never 0; a full day when
     called exactly on the hour)."""
@@ -110,9 +151,15 @@ def _enqueue_nightly() -> "int | None":
             reset_data_folder(token)
 
 
-async def _nightly_loop(hour: int) -> None:
+async def _nightly_loop(hour: int, days: "set[int] | None" = None) -> None:
     while True:
         await asyncio.sleep(seconds_until_utc_hour(hour))
+        # Checked after the sleep, against the day the run would happen on —
+        # a filter applied at scheduling time would use the previous day's
+        # weekday when the sleep crosses midnight (it always does for a
+        # morning hour).
+        if not runs_today(days):
+            continue
         try:
             item_id = await asyncio.to_thread(_enqueue_nightly)
             if item_id is not None:
@@ -122,7 +169,15 @@ async def _nightly_loop(hour: int) -> None:
 
 
 def start_nightly_task() -> "asyncio.Task | None":
-    """Start the nightly loop when EVALS_NIGHTLY_HOUR_UTC is set (0–23)."""
+    """Start the nightly loop when EVALS_NIGHTLY_HOUR_UTC is set (0–23).
+
+    EVALS_NIGHTLY_DAYS_UTC ("mon,wed,fri" or "0,2,4", UTC weekdays) restricts
+    which days fire; unset runs every day. Cadence is a deployment-env choice,
+    not a code change: regression signal only exists when something deployed,
+    and drift is slow enough that the variance math (computed WITHIN a run,
+    N=5) loses nothing at a lower frequency. The wallboard staleness panel
+    tolerates up to 7 days before going amber.
+    """
     raw = str(os.environ.get("EVALS_NIGHTLY_HOUR_UTC", "") or "").strip()
     if not raw:
         return None
@@ -133,5 +188,9 @@ def start_nightly_task() -> "asyncio.Task | None":
     except ValueError:
         _log.warning("EVALS_NIGHTLY_HOUR_UTC=%r is not an hour 0-23; nightly evals disabled", raw)
         return None
-    _log.info("nightly evals scheduled at %02d:00 UTC", hour)
-    return asyncio.get_running_loop().create_task(_nightly_loop(hour))
+    days = parse_run_days(os.environ.get("EVALS_NIGHTLY_DAYS_UTC", ""))
+    _log.info(
+        "nightly evals scheduled at %02d:00 UTC (days=%s)",
+        hour, "daily" if days is None else sorted(days),
+    )
+    return asyncio.get_running_loop().create_task(_nightly_loop(hour, days))

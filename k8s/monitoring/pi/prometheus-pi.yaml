@@ -100,9 +100,13 @@ data:
       # ("workstation" vs "flight-sim rig"). Target is the wired NIC's
       # DHCP-by-MAC lease, identical under either OS; the direct-link IP
       # (101.1) is Linux-only config, so it can't be used here.
+      # 2026-08-11: RockMesh re-subnetted the LAN 192.168.68.x -> 192.168.71.x
+      # (reservations kept their host octet). If this target ever reads down
+      # while the rig is verifiably up, check `ipconfig` on the rig FIRST —
+      # this address has now drifted once and can drift again.
       - job_name: gpu-windows
         static_configs:
-          - targets: ["192.168.68.50:9106"]
+          - targets: ["192.168.71.50:9106"]
       - job_name: cadvisor
         kubernetes_sd_configs:
           - role: node

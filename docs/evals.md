@@ -156,12 +156,14 @@ python -m evals push                         # re-push the newest results file
 The suite also runs inside the server via the control plane (work kind `run_evals`) — partition data and provider credentials already live there:
 
 - `POST /api/evals/run` (`{n?: 1–10, entries?: ["GD-01", …]}`) enqueues a run and returns the work id.
-- `EVALS_NIGHTLY_HOUR_UTC=<0–23>` schedules one run per day in the owner's partition from the always-on pod — a fixed-model drift baseline, with workstation runs as a comparison overlay.
+- `EVALS_NIGHTLY_HOUR_UTC=<0–23>` schedules runs in the owner's partition from the always-on pod — a fixed-model drift baseline, with workstation runs as a comparison overlay. `EVALS_NIGHTLY_DAYS_UTC` (`mon,wed,fri` or `0,2,4`) restricts which UTC weekdays fire; unset = daily. Cadence is a deployment choice, not a quality one: regression signal exists only when something deployed, drift is slow enough for weekly detection, and the variance stats (CoV, verdict flips) are computed *within* a run at N=5, so they are identical at any frequency. The wallboard staleness panel tolerates 7 days before going amber. Nightly earns its cost while generation or the judge is being actively changed; MWF or weekly + a run after each deploy is the steady state.
 - Results history lands under `<partition>/eval_runs/`.
 
 ## Metrics & dashboard
 
 Results push into `eval_*` Prometheus gauges (`eval_mean_score`, `eval_cov_pct`, `eval_hallucination_rate_pct`, `eval_verdict_flip_rate_pct`, `eval_dimension_score`, `eval_layer1_pass_rate_pct`, `eval_last_run_timestamp_seconds`, …), restored from stored results at startup so a pod restart doesn't blank the wallboard. A `kiosk-evals` Grafana dashboard renders them; its queries are source-agnostic, so the board keeps showing scores when the workstation is off.
+
+The gauges are aggregates **by design** — the per-run detail (alert strings, per-entry flip rates, the exact flagged hallucination claims) includes text lifted from real generated resumes and must never appear in Prometheus labels. The detail lives in the stored results payload instead, served authenticated at `GET /api/evals/results`. The eval panels on both Grafana boards carry data links to that endpoint — click the value — which works from any browser holding a logged-in dashboard session (same-origin cookie). There is no Loki behind the eval numbers, deliberately.
 
 ## CI gate
 
