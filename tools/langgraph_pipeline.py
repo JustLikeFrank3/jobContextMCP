@@ -333,17 +333,15 @@ def revise_node(state: ResumeAgentState) -> dict:
 # No LLM involved — deterministic routing based on state values.
 
 def _provenance_feedback(state: ResumeAgentState) -> str:
-    """Render provenance violations as a prompt section for revise_node."""
-    violations = state.get("provenance_violations") or []
-    if not violations:
-        return ""
-    listed = "\n".join(f"  - {v}" for v in violations)
-    return (
-        "PROVENANCE VIOLATIONS (these numbers appear in NO source material — "
-        "each one MUST be removed or replaced with a claim that exists in the "
-        "master resume or STAR stories; do not reword them into surviving):\n"
-        + listed
-    )
+    """Render provenance violations as a prompt section for revise_node.
+
+    Wording lives in lib.provenance so the single-shot correction pass asks
+    for the same thing in the same words — a draft shouldn't be corrected
+    differently depending on which path generated it.
+    """
+    from lib.provenance import format_violation_feedback  # noqa: PLC0415
+
+    return format_violation_feedback(state.get("provenance_violations") or [])
 
 
 def route_after_review(state: ResumeAgentState) -> str:

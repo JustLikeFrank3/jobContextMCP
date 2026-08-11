@@ -41,6 +41,23 @@ _CLAIM_PATTERNS = [
     r"\b\d+(?:\.\d+)?x\b",                          # 3x, 2.5x multipliers
     r"\b\d{1,3}(?:,\d{3})+\b",                      # 10,000 (comma-grouped)
     r"\b(?:19|20)\d{2}\b",                          # years (fabricated dates ARE claims)
+    # Bare counts: "85 actions", "1481 tests", "11 domains". Until 2026-08-10
+    # nothing here matched an unadorned integer, so the single most common
+    # fabrication in a resume — an invented tool or test count — was never
+    # extracted and therefore never checked. Measured on the golden corpus:
+    # "931 passing tests" and "277 tests" sailed through a gate reporting the
+    # documents clean while the LLM judge named both against the master.
+    #
+    # Two guards make it safe, and both are load-bearing:
+    #   lookahead  — whitespace then a letter, so the integer is counting
+    #                something. Without it every resume's contact header
+    #                contributed three violations of pure noise.
+    #   lookbehind — not preceded by a digit separator, so a trailing phone
+    #                group can't qualify just because prose follows it
+    #                ("call 305-490-1262 today" would otherwise yield 1262),
+    #                and no fragment of an already-matched grouped number
+    #                ("1,200 total" -> 200) can re-match.
+    r"(?<![-.,\d])\b\d{2,}(?=\s+[A-Za-z])",         # 85 actions, 1481 tests
 ]
 _CLAIM_RE = re.compile("|".join(f"(?:{p})" for p in _CLAIM_PATTERNS), re.IGNORECASE)
 
@@ -120,6 +137,29 @@ def format_provenance_line(claims: list[str], violations: list[str]) -> str:
         return f"Provenance: ⚠ {len(violations)} unsourced — {shown}"
     return (
         f"Provenance: ✓ PASS — {len(claims)} claims traced to source, 0 unsourced"
+    )
+
+
+def format_violation_feedback(violations: list[str]) -> str:
+    """Render violations as a prompt section instructing their removal.
+
+    Shared by both generation paths so a revision is asked for in the same
+    words regardless of which one produced the draft — the agent pipeline's
+    revise node and the single-shot correction pass.
+
+    The "do not reword them into surviving" clause is load-bearing: the
+    obvious failure mode is a model that keeps the fabricated number and
+    hedges the sentence around it ("roughly 40k users"), which reads as
+    compliance and still ships the invented figure.
+    """
+    if not violations:
+        return ""
+    listed = "\n".join(f"  - {v}" for v in violations)
+    return (
+        "PROVENANCE VIOLATIONS (these numbers appear in NO source material — "
+        "each one MUST be removed or replaced with a claim that exists in the "
+        "master resume or STAR stories; do not reword them into surviving):\n"
+        + listed
     )
 
 

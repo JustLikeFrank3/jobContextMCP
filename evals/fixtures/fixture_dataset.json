@@ -82,6 +82,14 @@
       "expected_signal": "dimension",
       "expected_detail": "ats_readiness",
       "corruption_note": "Skills section replaced with repetitive keyword spam; no new numeric claims introduced."
+    },
+    {
+      "id": "FX-10",
+      "file": "corrupt_double_counted.txt",
+      "class": "claim_double_counted",
+      "expected_signal": "hallucination",
+      "expected_detail": "Dispatch Platform Decomposition",
+      "corruption_note": "The Meridian dispatch role is repeated as a standalone SELECTED PROJECTS entry, restating its headline metrics (250,000 lines, 18 services, 99.7% SLA, 120,000 events/day, 37%). No claim is false and every number is traceable to the master -- the fabrication is structural: one body of work presented as two, so a reader counts it twice. Added 2026-08-10 after GD-03 showed all three judges scoring a real resume 5.0 on accuracy across 15 runs while it double-counted a project this way. The deterministic gate cannot see it either (zero violations), because the duplicated numbers are traceable precisely by virtue of being real."
     }
   ]
 }

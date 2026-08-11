@@ -59,6 +59,12 @@
   "judge_provider": "",
   "judge_model": "",
 
+  "_comment_work_policy": "Control-plane execution policy (docs/control-plane.md, P2). Every key is optional and every default reproduces pre-policy behavior: one attempt, no backoff, no model override, no ceilings. 'defaults' applies to all kinds, 'kinds' overrides per work kind (generate.resume, generate.cover_letter, generate.assessment, capture_url, run_evals, certification.weekly). model/fallback_models reroute the MODEL only — the provider stays as configured, since swapping vendors also swaps which credential is required — and the eval judge is never rerouted. Retries apply only to transient failures (429/timeout/5xx/dropped connection); a deterministic error fails once. backoff_seconds sleeps in a dispatcher worker, so keep it in seconds. token_budget is a per-run stop-loss shared across retries; daily_token_quota is per tenant, counts failed runs too, resets 00:00 UTC, and can be set from the WORK_DAILY_TOKEN_QUOTA env var instead.",
+  "work_policy": {
+    "defaults": {},
+    "kinds": {}
+  },
+
   "_comment_generation_budgets": "Token budgets for AI generation. personal_context_token_budget caps how many tokens of STAR stories get retrieved per request; tone_token_budget caps how much of the tone profile is included (most recent, source-diverse samples first); cover_letter_max_tokens is a hard ceiling on the whole prompt so requests can never exceed the model TPM limit as the library grows.",
   "generation_budgets": {
     "personal_context_token_budget": 1500,

@@ -39,6 +39,27 @@ class TestExtractClaims:
     def test_duplicates_collapse_by_normalized_form(self):
         assert extract_claims("34% then again 34% and 34 %") == ["34%"]
 
+    def test_bare_counts_are_claims(self):
+        """An unadorned integer counting something is the commonest resume
+        fabrication (tool counts, test counts) and went unextracted until
+        2026-08-10 — so the gate reported documents clean while the judge
+        named "931 passing tests" against a master stating 1,481."""
+        claims = extract_claims("85 actions across 11 domains, 1481 passing tests")
+        assert claims == ["85", "11", "1481"]
+
+    def test_phone_numbers_are_not_counts(self):
+        """The bare-count pattern requires whitespace then a letter, so the
+        integer must be counting something. Without that, every resume's
+        contact header contributed three violations of pure noise."""
+        assert extract_claims("phone: +1.305.490.1262") == []
+        assert extract_claims("call 305-490-1262 today") == []
+        assert extract_claims("Frank MacBride | 305-490-1262 | Miami FL") == []
+
+    def test_single_digits_are_not_counts(self):
+        """Two-digit floor: bare 1-9 appear constantly in prose ('3 phases')
+        and match almost any source, so they cost noise without adding signal."""
+        assert extract_claims("delivered in 3 phases across 2 teams") == []
+
     def test_plain_prose_has_no_claims(self):
         assert extract_claims("Led a team and shipped the platform reliably") == []
 
@@ -60,6 +81,15 @@ class TestCheckClaims:
     def test_sourced_claims_pass(self):
         draft = "Cut latency 34% and saved $1.2M between 2019 and 2022."
         assert check_claims(draft, self.SOURCES) == []
+
+    def test_invented_count_caught_against_real_source(self):
+        """The GD-01/GD-04 failure, reduced: a resume claiming a test count
+        the master contradicts. Both numbers are bare integers, so before
+        2026-08-10 neither was extracted and the gate passed the document."""
+        master = ["Implemented 85 actions across 11 domain tools, "
+                  "backed by 1481 passing tests at 82% line coverage."]
+        assert check_claims("Built 85 actions with 1481 passing tests", master) == []
+        assert check_claims("Built 80 actions with 931 passing tests", master) == ["80", "931"]
 
     def test_fabricated_claim_caught(self):
         draft = "Cut latency 34% and improved uptime 99.99% serving 40k users."
