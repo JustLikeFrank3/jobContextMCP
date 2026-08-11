@@ -1,7 +1,8 @@
 """Work-item status API — the read side of the control plane (lib/work.py).
 
   GET /api/work           — recent work items for the caller's partition
-  GET /api/work/{id}      — one item: status, error, artifacts, timings
+  GET /api/work/stats     — aggregates: counts, durations, failures, tokens
+  GET /api/work/{id}      — one item: status, error, artifacts, timings, tokens
 
 Auth matches the rest of the tenant API; the partition middleware scopes
 every read to the caller's own rows.
@@ -57,7 +58,31 @@ async def work_stats(
                 "ORDER BY id DESC LIMIT 5"
             ).fetchall()
         ]
-    return {"by_kind_status": by_kind_status, "recent_failures": recent_failures}
+        # Tokens are reported, dollars are not: a rate baked in here goes stale
+        # the moment a provider changes pricing (Sonnet 5's introductory rate
+        # ends 2026-08-31), and it would go stale silently. Failed rows are
+        # included deliberately — spend that produced nothing is the spend most
+        # worth seeing.
+        tokens_by_kind = [
+            dict(r)
+            for r in con.execute(
+                "SELECT kind, SUM(llm_calls) AS llm_calls, "
+                "SUM(tokens_prompt) AS tokens_prompt, "
+                "SUM(tokens_completion) AS tokens_completion "
+                "FROM work_items WHERE llm_calls > 0 GROUP BY kind ORDER BY kind"
+            ).fetchall()
+        ]
+    from lib import work_policy
+
+    return {
+        "by_kind_status": by_kind_status,
+        "recent_failures": recent_failures,
+        "tokens_by_kind": tokens_by_kind,
+        # Where the tenant stands against its daily quota. `daily_token_quota`
+        # 0 means unlimited, and `remaining` is null rather than a number, so a
+        # dashboard cannot render "0 left" for an install that has no quota.
+        "quota": work_policy.quota_status(),
+    }
 
 
 @router.get("/{item_id}")

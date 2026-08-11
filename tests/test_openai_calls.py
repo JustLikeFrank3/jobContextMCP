@@ -394,3 +394,111 @@ def test_min_cap_floor_is_per_label(monkeypatch):
         messages=[{"role": "user", "content": "hi"}], max_tokens=6000,
     )
     assert client.calls[judge_calls]["max_tokens"] == 6000
+
+
+class TestCollectUsage:
+    """Per-unit-of-work token attribution (control plane P2). The sink exists
+    because `llm_tokens_total` is cumulative across a process's whole life —
+    useful for rates, useless for "what did this job cost"."""
+
+    def _client(self, prompt=7, completion=3):
+        response = types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="ok"))],
+            usage=types.SimpleNamespace(
+                prompt_tokens=prompt, completion_tokens=completion,
+                total_tokens=prompt + completion),
+        )
+        return types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=types.SimpleNamespace(create=lambda **_k: response)))
+
+    def test_collects_each_call(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client()
+        with oc.collect_usage() as usage:
+            oc.create_chat_completion(client, label="a", model="m1", max_tokens=10)
+            oc.create_chat_completion(client, label="b", model="m2", max_tokens=10)
+        assert usage == [
+            {"model": "m1", "prompt": 7, "completion": 3},
+            {"model": "m2", "prompt": 7, "completion": 3},
+        ]
+
+    def test_sink_is_cleared_on_exit(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        with oc.collect_usage():
+            pass
+        assert oc._USAGE_SINK.get() is None
+
+    def test_nested_blocks_attribute_to_the_inner_unit(self, monkeypatch):
+        """One work item spawning another: the inner item's calls belong to the
+        inner row, and the outer resumes collecting afterwards."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client()
+        with oc.collect_usage() as outer:
+            oc.create_chat_completion(client, label="outer", model="m1", max_tokens=10)
+            with oc.collect_usage() as inner:
+                oc.create_chat_completion(client, label="inner", model="m2", max_tokens=10)
+            oc.create_chat_completion(client, label="outer", model="m3", max_tokens=10)
+        assert [u["model"] for u in inner] == ["m2"]
+        assert [u["model"] for u in outer] == ["m1", "m3"]
+
+    def test_failed_call_contributes_nothing(self, monkeypatch):
+        """No usage is reported for a request that never completed; the row's
+        `error` is where that shows up, not a phantom zero-token entry."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        bad = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(
+                create=lambda **_k: (_ for _ in ()).throw(_FakeExc(msg="down")))))
+        with oc.collect_usage() as usage:
+            with pytest.raises(Exception):
+                oc.create_chat_completion(bad, label="x", model="m", max_tokens=10)
+        assert usage == []
+
+    def test_budget_stops_the_next_call_before_it_is_sent(self, monkeypatch):
+        """A stop-loss on the funnel itself: the request that would cross the
+        ceiling is never issued, so an executor cannot spend past its policy by
+        looping."""
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        sent = []
+        response = types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="ok"))],
+            usage=types.SimpleNamespace(prompt_tokens=40, completion_tokens=10, total_tokens=50))
+
+        def _create(**kwargs):
+            sent.append(kwargs)
+            return response
+
+        client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=_create)))
+
+        with oc.collect_usage(budget=120) as usage:
+            for _ in range(3):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+            with pytest.raises(oc.TokenBudgetExceeded):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+
+        assert len(sent) == 3          # the 4th was never issued
+        assert len(usage) == 3
+        # It bounds a runaway, it does not bound a single call: spend lands just
+        # past the ceiling because a request's cost is only known once it returns.
+        assert sum(u["prompt"] + u["completion"] for u in usage) == 150
+
+    def test_zero_budget_is_unlimited(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client(prompt=1000, completion=1000)
+        with oc.collect_usage(budget=0) as usage:
+            for _ in range(4):
+                oc.create_chat_completion(client, label="loop", model="m", max_tokens=10)
+        assert len(usage) == 4
+
+    def test_budget_does_not_leak_to_the_next_block(self, monkeypatch):
+        monkeypatch.setattr(oc, "_MIN_CHAT_INTERVAL_SECONDS", 0.0)
+        client = self._client(prompt=100, completion=100)
+        with oc.collect_usage(budget=50):
+            with pytest.raises(oc.TokenBudgetExceeded):
+                oc.create_chat_completion(client, label="a", model="m", max_tokens=10)
+                oc.create_chat_completion(client, label="a", model="m", max_tokens=10)
+        assert oc._USAGE_BUDGET.get() == 0
+        with oc.collect_usage() as usage:
+            oc.create_chat_completion(client, label="b", model="m", max_tokens=10)
+        assert len(usage) == 1

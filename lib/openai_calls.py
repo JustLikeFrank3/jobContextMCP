@@ -1,6 +1,8 @@
 """OpenAI call helpers with usage logging and local rate smoothing."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import logging
 import threading
 import time
@@ -10,6 +12,73 @@ from typing import Any
 from lib import metrics
 
 _LOG = logging.getLogger(__name__)
+
+# Per-context sink for token usage, so a caller can attribute spend to the unit
+# of work that caused it. Set by lib.work while an executor runs; None
+# everywhere else, which makes collection free for every other call site.
+#
+# A contextvar rather than a parameter threaded through every generator: LLM
+# calls happen several frames below the executor, through code paths that have
+# no reason to know they're inside a work item. Note this does NOT rely on
+# contextvar propagation across an offload (the trap from the 2026-07-09
+# incident) — the sink is set inside the thread that runs the executor and read
+# in the same frame.
+_USAGE_SINK: "contextvars.ContextVar[list | None]" = contextvars.ContextVar(
+    "llm_usage_sink", default=None
+)
+
+
+# Token ceiling for the current sink, 0 = unlimited (P2 policy).
+_USAGE_BUDGET: "contextvars.ContextVar[int]" = contextvars.ContextVar(
+    "llm_usage_budget", default=0
+)
+
+
+class TokenBudgetExceeded(RuntimeError):
+    """A unit of work asked for another call after spending its budget."""
+
+
+@contextlib.contextmanager
+def collect_usage(budget: int = 0):
+    """Collect per-call token usage for the duration of the block.
+
+    Yields the list that accumulates ``{model, prompt, completion}`` entries —
+    one per successful call. Nesting is safe: an inner block collects its own
+    calls and the outer resumes on exit (the inner's calls are attributed to
+    the inner unit of work, which is what you want when one work item spawns
+    another).
+
+    *budget*, when positive, is a stop-loss: once the calls in this block have
+    consumed that many tokens, the next one raises :class:`TokenBudgetExceeded`
+    instead of being sent. It bounds a runaway, not a single call — a request's
+    cost is only knowable after it returns, so the ceiling can be overshot by
+    the call that crosses it. An agent loop that would otherwise spin for a
+    thousand calls stops after the budget instead; a single oversized prompt
+    still goes out once.
+    """
+    entries: list[dict] = []
+    token = _USAGE_SINK.set(entries)
+    budget_token = _USAGE_BUDGET.set(max(0, int(budget or 0)))
+    try:
+        yield entries
+    finally:
+        _USAGE_SINK.reset(token)
+        _USAGE_BUDGET.reset(budget_token)
+
+
+def _check_budget(label: str) -> None:
+    budget = _USAGE_BUDGET.get()
+    sink = _USAGE_SINK.get()
+    if not budget or sink is None:
+        return
+    spent = sum(int(u.get("prompt") or 0) + int(u.get("completion") or 0) for u in sink)
+    if spent >= budget:
+        raise TokenBudgetExceeded(
+            f"token budget exhausted before '{label}': {spent} of {budget} "
+            f"tokens across {len(sink)} call(s)"
+        )
+
+
 # Cryptographically-seeded RNG used only for retry-backoff jitter. Avoids the
 # non-secure global PRNG so static analysers don't flag it (Sonar S2245 / B311).
 _RNG = SystemRandom()
@@ -139,6 +208,7 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
     do not burst into the same rolling TPM/RPM window.
     """
     global _LAST_CHAT_CALL
+    _check_budget(label)
     memory_key = _memory_key(client, kwargs)
     _apply_model_memory(kwargs, memory_key, label)
     # Collected locally and committed to the shared per-model memory only on
@@ -250,6 +320,13 @@ def create_chat_completion(client: Any, *, label: str = "chat", max_attempts: in
                 completion_tokens,
                 total_tokens,
             )
+            sink = _USAGE_SINK.get()
+            if sink is not None:
+                sink.append({
+                    "model": model,
+                    "prompt": int(prompt_tokens or 0),
+                    "completion": int(completion_tokens or 0),
+                })
             if learned_rejected and memory_key:
                 _MODEL_REJECTED_PARAMS.setdefault(memory_key, set()).update(learned_rejected)
             if learned_cap and memory_key:

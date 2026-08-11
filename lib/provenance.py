@@ -140,6 +140,29 @@ def format_provenance_line(claims: list[str], violations: list[str]) -> str:
     )
 
 
+def format_violation_feedback(violations: list[str]) -> str:
+    """Render violations as a prompt section instructing their removal.
+
+    Shared by both generation paths so a revision is asked for in the same
+    words regardless of which one produced the draft — the agent pipeline's
+    revise node and the single-shot correction pass.
+
+    The "do not reword them into surviving" clause is load-bearing: the
+    obvious failure mode is a model that keeps the fabricated number and
+    hedges the sentence around it ("roughly 40k users"), which reads as
+    compliance and still ships the invented figure.
+    """
+    if not violations:
+        return ""
+    listed = "\n".join(f"  - {v}" for v in violations)
+    return (
+        "PROVENANCE VIOLATIONS (these numbers appear in NO source material — "
+        "each one MUST be removed or replaced with a claim that exists in the "
+        "master resume or STAR stories; do not reword them into surviving):\n"
+        + listed
+    )
+
+
 def record_run(
     *,
     kind: str,

@@ -246,3 +246,94 @@ def test_generate_cover_letter_returns_context_fallback_when_no_client(isolated_
     out = generate.generate_cover_letter("Acme", "Engineer", "JD")
     assert "No openai_api_key found" in out
     assert "GENERATE_COVER_LETTER" in out
+
+
+# ── single-shot correction pass (provenance violations re-drafted) ──────────
+
+class TestCorrectUnsourcedClaims:
+    """The gate used to run AFTER save_resume_txt and the PDF export, so a
+    violation was a report line on an already-shipped document. These pin the
+    correction pass and — more importantly — that every failure mode falls
+    back to the original draft rather than losing it."""
+
+    SYSTEM = "sys"
+    USER = "Master resume says 34% latency cut and $1.2M saved."
+
+    def _client(self):
+        return object()
+
+    def test_clean_draft_makes_no_second_call(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(generate, "_chat_completion_create",
+                            lambda *a, **k: calls.append(k) or _FakeResponse("x"))
+        out, n = generate._correct_unsourced_claims(
+            self._client(), label="resume_generate", system=self.SYSTEM,
+            user_msg=self.USER, content="Cut latency 34%, saved $1.2M.",
+        )
+        assert (out, n) == ("Cut latency 34%, saved $1.2M.", 0)
+        assert calls == [], "clean draft must not pay for a correction call"
+
+    def test_fabricated_number_triggers_one_correction(self, monkeypatch):
+        seen = {}
+
+        def _fake(_client, **kwargs):
+            seen.update(kwargs)
+            return _FakeResponse("Cut latency 34%.")
+
+        monkeypatch.setattr(generate, "_chat_completion_create", _fake)
+        out, n = generate._correct_unsourced_claims(
+            self._client(), label="resume_generate", system=self.SYSTEM,
+            user_msg=self.USER, content="Cut latency 34% and uptime 99.99%.",
+        )
+        assert (out, n) == ("Cut latency 34%.", 1)
+        assert seen["label"] == "resume_generate_correct"
+        msgs = seen["messages"]
+        assert "99.99%" in msgs[-1]["content"], "the violation must be named"
+        # The draft is replayed as history, NOT as a trailing assistant prefill
+        # (which 400s on Claude 4.6+ and would break the anthropic provider).
+        assert msgs[-1]["role"] == "user"
+        assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+
+    def test_correction_api_failure_keeps_the_original_draft(self, monkeypatch):
+        monkeypatch.setattr(generate, "_chat_completion_create",
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("429")))
+        draft = "Cut latency 34% and uptime 99.99%."
+        assert generate._correct_unsourced_claims(
+            self._client(), label="l", system=self.SYSTEM,
+            user_msg=self.USER, content=draft,
+        ) == (draft, 0)
+
+    def test_empty_correction_keeps_the_original_draft(self, monkeypatch):
+        """A truncated or empty correction must not be saved over a real
+        document — losing the draft is worse than shipping it with a ⚠."""
+        monkeypatch.setattr(generate, "_chat_completion_create",
+                            lambda *a, **k: _FakeResponse("   "))
+        draft = "Cut latency 34% and uptime 99.99%."
+        assert generate._correct_unsourced_claims(
+            self._client(), label="l", system=self.SYSTEM,
+            user_msg=self.USER, content=draft,
+        ) == (draft, 0)
+
+
+def test_generate_resume_corrects_before_saving(isolated_server, monkeypatch):
+    """The whole point: what reaches save_resume_txt is the corrected text."""
+    monkeypatch.setattr(generate, "_build_resume_user_message",
+                        lambda *_: "Master says 34% latency cut.")
+    monkeypatch.setattr(generate, "_openai_client", lambda: object())
+    monkeypatch.setattr(generate, "_safe_filename", lambda *_: "out.txt")
+    monkeypatch.setattr(generate, "_model", lambda: "gpt-test")
+
+    saved = {}
+    monkeypatch.setattr(generate, "save_resume_txt",
+                        lambda _f, c: saved.setdefault("content", c) or "saved")
+    import tools.export as export_mod
+    monkeypatch.setattr(export_mod, "export_resume_pdf", lambda *_, **__: "pdf")
+
+    bodies = iter(["Cut latency 34% and uptime 99.99%.", "Cut latency 34%."])
+    monkeypatch.setattr(generate, "_chat_completion_create",
+                        lambda *a, **k: _FakeResponse(next(bodies)))
+
+    out = generate.generate_resume("Acme", "Engineer", "JD")
+    assert saved["content"] == "Cut latency 34%.", "the fabricated draft was saved"
+    assert "99.99%" not in out
+    assert "Provenance: ✓ PASS" in out

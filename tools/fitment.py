@@ -7,6 +7,8 @@ from lib import config
 from lib.helpers import sanitize_filename
 from lib.openai_calls import create_chat_completion
 from tools.interviews import get_interview_context
+from tools import generate_work as _work
+from tools.generate_work import tracked as _tracked
 
 _ASSESSMENT_SYSTEM = textwrap.dedent("""\
     You are a brutally honest senior engineering hiring advisor. Your job is to
@@ -240,6 +242,24 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     return f"\u2713 Saved job assessment: {relative}"
 
 
+def _assessment_model() -> str:
+    """The model the assessment path actually resolves — not the generator's.
+
+    Assessment has its own task key, so stamping it with generate._model()
+    would attribute the output to whatever model happens to be configured for
+    resume generation.
+    """
+    from lib.config import _resolve_llm_settings  # noqa: PLC0415
+
+    return _resolve_llm_settings(task="assessment")[1]
+
+
+@_tracked(
+    _work.KIND_ASSESSMENT,
+    system_prompt=lambda: _ASSESSMENT_SYSTEM,
+    model=_assessment_model,
+    origin="run_job_assessment",
+)
 def run_job_assessment(company: str, role: str, job_description: str, persona: str = "", auto_save: bool = True) -> str:
     """
     Run a real LLM-powered fitment assessment for a job posting.

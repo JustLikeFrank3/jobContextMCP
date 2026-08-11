@@ -369,6 +369,28 @@ def get_active_master_resume_path() -> Path:
 
 # ── LLM client factory ────────────────────────────────────────────────────────
 
+# Per-kind model routing for the control plane (docs/control-plane.md, P2). The
+# work executor sets this from the kind's policy; every other caller sees None
+# and resolves exactly as before.
+#
+# MODEL ONLY, never provider. A policy file that could retarget the provider
+# would silently change which vendor receives your prompts *and* which
+# credential is required — foundry prefers an explicit key over workload
+# identity, anthropic reads a different one, and the mismatch surfaces as an
+# auth error three layers down. Changing deployment names is configuration;
+# changing vendors is a deployment change, and should look like one.
+_LLM_MODEL_ROUTE_CTX: ContextVar[str] = ContextVar("llm_model_route_ctx", default="")
+
+
+def route_llm_model(model: str):
+    """Set the routed model for this context; returns a reset token."""
+    return _LLM_MODEL_ROUTE_CTX.set(str(model or ""))
+
+
+def reset_llm_model_route(token) -> None:
+    _LLM_MODEL_ROUTE_CTX.reset(token)
+
+
 def _resolve_llm_settings(task: str = "", cfg: "dict | None" = None) -> tuple[str, str]:
     """Resolve the provider/model tuple for a given task.
 
@@ -399,6 +421,14 @@ def _resolve_llm_settings(task: str = "", cfg: "dict | None" = None) -> tuple[st
 
     provider = str(cfg.get("llm_provider", "openai")).lower()
     provider = os.environ.get("LLM_PROVIDER", provider).lower()
+    # A routed model wins over config for the generation path only. The judge
+    # is deliberately exempt (handled above and returned already): which model
+    # grades the golden suite is a calibrated decision with its own MAE table,
+    # and a work policy that could retarget it would invalidate that table
+    # without anything saying so.
+    routed = _LLM_MODEL_ROUTE_CTX.get()
+    if routed:
+        return provider, routed
     model = str(cfg.get("openai_model", "gpt-4o-mini")).strip()
     if provider == "ollama":
         return provider, str(cfg.get("ollama_model", "llama3.1:8b")).strip() or model

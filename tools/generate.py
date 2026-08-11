@@ -30,6 +30,8 @@ from tools.interviews import get_interview_context
 from tools.context import get_personal_context
 from tools.tone import get_tone_profile, get_tone_profile_budgeted, get_cover_letter_tone_profile_budgeted
 from tools.resume import save_resume_txt, save_cover_letter_txt
+from tools import generate_work as _work
+from tools.generate_work import tracked as _tracked
 from tools.generate_prompts import (
     COVER_LETTER_HOOK_TAGS,
     COMPANY_HOOK_TAGS,
@@ -1159,6 +1161,70 @@ def _expand_cover_letter_if_short(
 
 # ── PUBLIC TOOLS ───────────────────────────────────────────────────────────────
 
+def _correct_unsourced_claims(
+    client,
+    *,
+    label: str,
+    system: str,
+    user_msg: str,
+    content: str,
+    **create_kwargs,
+) -> "tuple[str, int]":
+    """One bounded correction pass when the truth gate flags fabricated numbers.
+
+    Returns ``(content, revisions)``. Until 2026-08-10 the single-shot paths
+    detected violations *after* the document was already saved and rendered to
+    PDF, so the gate was a report line on a shipped artifact: the 2026-08-10
+    nightly flagged fabricated numbers in 92% of runs and every one of them
+    shipped. The agent path already re-drafts on violations
+    (langgraph_pipeline.route_after_review); this gives single-shot the same
+    correction step, at a budget of one rather than the agent's two — a
+    dashboard-triggered generation is latency-sensitive and the second pass
+    there is the one that rarely changes the verdict.
+
+    Deliberately non-blocking on failure. Every exit that isn't a clean
+    correction returns the ORIGINAL content: the gate must never be the reason
+    a generation produces nothing, and a document with a ⚠ marker is more
+    useful than an error string. Callers re-check the returned content, so a
+    correction that fails to fix everything is still reported honestly.
+
+    The draft is replayed as an assistant turn followed by the correction as a
+    user turn — ordinary conversation history, not a trailing-assistant prefill
+    (which 400s on Claude 4.6+ and would break the anthropic provider).
+    """
+    try:
+        from lib.provenance import check_claims, format_violation_feedback  # noqa: PLC0415
+
+        violations = check_claims(content, [user_msg])
+        if not violations:
+            return content, 0
+        feedback = format_violation_feedback(violations)
+        response = _chat_completion_create(
+            client,
+            label=f"{label}_correct",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{feedback}\n\nReturn the corrected document in full, in the "
+                        "same format. Change nothing except what is required to remove "
+                        "the unsourced claims listed above."
+                    ),
+                },
+            ],
+            **create_kwargs,
+        )
+        revised = (response.choices[0].message.content or "").strip()
+        # An empty or truncated correction is worse than the original draft —
+        # keep what we had rather than saving a stub over it.
+        return (revised, 1) if revised else (content, 0)
+    except Exception:  # noqa: BLE001 — correction is best-effort, never fatal
+        return content, 0
+
+
 def _provenance_note(
     kind: str,
     company: str,
@@ -1166,15 +1232,21 @@ def _provenance_note(
     job_description: str,
     content: str,
     source_text: str,
+    revisions: int = 0,
 ) -> str:
-    """Run the deterministic truth gate over a single-shot generation.
+    """Record the deterministic truth gate's verdict for a single-shot run.
 
-    Single-shot paths have no revise loop, so the gate observes and reports
-    rather than blocks: the verdict is recorded (generation_provenance) and
-    surfaced in the confirmation string — the ⚠ marker is picked up by
-    ResumeService.notes. Sources = the full prompt (master context, tone,
-    stories, JD): a numeric claim absent from everything the model was shown
-    is fabricated by definition.
+    Runs over the FINAL content — after any correction pass — so the recorded
+    verdict and the confirmation string describe what was actually saved, not
+    the first draft. The ⚠ marker is picked up by ResumeService.notes.
+    Sources = the full prompt (master context, tone, stories, JD): a numeric
+    claim absent from everything the model was shown is fabricated by
+    definition.
+
+    ``revisions`` distinguishes a draft that was clean on the first pass from
+    one that needed correcting — without it a corrected run is indistinguishable
+    from a clean one in generation_provenance, which is the row you would want
+    when asking how often the generator fabricates.
     """
     try:
         from lib.provenance import (
@@ -1195,13 +1267,18 @@ def _provenance_note(
             claims=claims,
             violations=violations,
             verdict="failed" if violations else "passed",
-            revisions=0,
+            revisions=revisions,
         )
         return format_provenance_line(claims, violations)
     except Exception as exc:  # noqa: BLE001 — the gate must never break generation
         return f"Provenance: ⚠ check skipped — {exc}"
 
 
+@_tracked(
+    _work.KIND_RESUME,
+    system_prompt=lambda: _RESUME_SYSTEM,
+    origin="generate_resume",
+)
 def generate_resume(
     company: str,
     role: str,
@@ -1253,6 +1330,19 @@ def generate_resume(
     except Exception as exc:
         return f"✗ OpenAI API error: {exc}\n\nFalling back to context package:\n\n{_context_fallback(_RESUME_SYSTEM, user_msg, 'generate_resume')}"
 
+    # Correct fabricated numbers BEFORE the document is written and rendered —
+    # a violation found after save_resume_txt is a report on a shipped artifact.
+    content, revisions = _correct_unsourced_claims(
+        client,
+        label="resume_generate",
+        system=_RESUME_SYSTEM,
+        user_msg=user_msg,
+        content=content,
+        model=_model(),
+        temperature=0.3,
+        max_tokens=2800,
+    )
+
     save_result = save_resume_txt(filename, content)
 
     try:
@@ -1269,7 +1359,7 @@ def generate_resume(
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
     prov_note = _provenance_note(
-        "resume", company, role, job_description, content, user_msg
+        "resume", company, role, job_description, content, user_msg, revisions
     )
 
     return "\n".join([
@@ -1281,6 +1371,11 @@ def generate_resume(
     ])
 
 
+@_tracked(
+    _work.KIND_COVER_LETTER,
+    system_prompt=lambda: _COVER_LETTER_SYSTEM,
+    origin="generate_cover_letter",
+)
 def generate_cover_letter(
     company: str,
     role: str,
@@ -1337,6 +1432,19 @@ def generate_cover_letter(
     # resume + cover-letter calls back-to-back; resending the full cover-letter
     # prompt for expansion was the main TPM-rate-limit trigger.
     content = _sanitize_cover_letter_output(content)
+    # Correct before saving, as in generate_resume. Sanitize first so the
+    # correction sees the same text the gate will check and the file will hold.
+    content, revisions = _correct_unsourced_claims(
+        client,
+        label="cover_letter_generate",
+        system=_COVER_LETTER_SYSTEM,
+        user_msg=user_msg,
+        content=content,
+        model=_model(),
+        temperature=0.3,
+        max_tokens=2000,
+    )
+    content = _sanitize_cover_letter_output(content)
     save_result = save_cover_letter_txt(filename, content)
 
     try:
@@ -1363,7 +1471,7 @@ def generate_cover_letter(
         cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
 
     prov_note = _provenance_note(
-        "cover_letter", company, role, job_description, content, user_msg
+        "cover_letter", company, role, job_description, content, user_msg, revisions
     )
 
     return "\n".join([
