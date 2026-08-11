@@ -727,7 +727,7 @@ data:
       "time": {"from": "now-7d", "to": "now"},
       "panels": [
         {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 19, "h": 3},
-         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · LLM-as-judge · N-run variance\n\n⚠️ Accuracy is the weak dimension. Calibrated accuracy MAE vs blind human labels, all at max_tokens=8000 — claude-sonnet-5 **1.48 / 1.56** over two N=5 passes but calibrated on 4 of 5 entries (GD-03: accuracy 5.0 against a human 1, zero flags, both passes) · gpt-4.1-mini **3.2**, a constant 5.0 on every entry so it ranks nothing · llama3.1:8b **3.2**. A judge not listed has no calibration table (docs/evals.md)."}},
+         "options": {"mode": "markdown", "content": "# 🧪 EVALS — golden dataset · LLM-as-judge · N-run variance\n\n⚠️ Accuracy is the weak dimension. Calibrated accuracy MAE vs blind human labels, all at max_tokens=8000 — claude-sonnet-5 **1.48 / 1.56** over two N=5 passes but calibrated on 4 of 5 entries (GD-03: accuracy 5.0 against a human 1, zero flags, both passes) · gpt-4.1-mini **3.2**, a constant 5.0 on every entry so it ranks nothing · llama3.1:8b **3.2**. A judge not listed has no calibration table (docs/evals.md).\n\n### [📋 Run detail — alerts, flips, flagged claims](https://jobcontext.ai/api/evals/results) &nbsp;·&nbsp; [⚙ Work stats](https://jobcontext.ai/api/work/stats)"}},
         {"type": "stat", "title": "Judge (last scored run)", "gridPos": {"x": 19, "y": 0, "w": 5, "h": 3},
          "datasource": {"uid": "prometheus"},
          "targets": [{"expr": "eval_judge_info{namespace=\"jcmcp\"}", "instant": true, "legendFormat": "{{judge}}"}],
