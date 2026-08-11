@@ -117,7 +117,7 @@ data:
        },
        "fieldConfig": {
         "defaults": {
-         "unit": "short"
+         "links": [{"title": "Per-kind detail \u2014 tokens, durations, failures, quota (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}], "unit": "short"
         },
         "overrides": []
        },
@@ -145,7 +145,7 @@ data:
        },
        "fieldConfig": {
         "defaults": {
-         "unit": "s"
+         "links": [{"title": "Per-kind detail \u2014 tokens, durations, failures, quota (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}], "unit": "s"
         },
         "overrides": []
        },
@@ -173,7 +173,7 @@ data:
        },
        "fieldConfig": {
         "defaults": {
-         "unit": "short"
+         "links": [{"title": "Per-kind detail \u2014 tokens, durations, failures, quota (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}], "unit": "short"
         },
         "overrides": []
        },
@@ -201,7 +201,7 @@ data:
        },
        "fieldConfig": {
         "defaults": {
-         "unit": "short"
+         "links": [{"title": "Per-kind detail \u2014 tokens, durations, failures, quota (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/work/stats", "targetBlank": true}], "unit": "short"
         },
         "overrides": []
        },
@@ -271,14 +271,14 @@ data:
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 5, "y": 3, "w": 5, "h": 6},
        "targets": [{"expr": "max(eval_hallucination_rate_pct{namespace=\"jcmcp\"})", "refId": "A", "instant": true}],
-       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "unit": "percent", "decimals": 0,
         "thresholds": {"steps": [{"color": "green", "value": null},
          {"color": "red", "value": 0.001}]}}}},
       {"id": 3, "type": "stat", "title": "Verdict flip rate (max)",
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 10, "y": 3, "w": 5, "h": 6},
        "targets": [{"expr": "max(eval_verdict_flip_rate_pct{namespace=\"jcmcp\"})", "refId": "A", "instant": true}],
-       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0,
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "unit": "percent", "decimals": 0,
         "thresholds": {"steps": [{"color": "green", "value": null},
          {"color": "orange", "value": 20}]}}}},
       {"id": 4, "type": "stat", "title": "Layer 1 smoke pass rate",
@@ -292,21 +292,21 @@ data:
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 20, "y": 3, "w": 4, "h": 6},
        "targets": [{"expr": "sum(eval_alert_count{namespace=\"jcmcp\"}) or (0 * max(eval_last_run_timestamp_seconds{namespace=\"jcmcp\"}))", "refId": "A", "instant": true}],
-       "fieldConfig": {"defaults": {"decimals": 0,
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "decimals": 0,
         "thresholds": {"steps": [{"color": "green", "value": null},
          {"color": "red", "value": 1}]}}}},
       {"id": 6, "type": "timeseries", "title": "Mean judge score by golden entry",
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 0, "y": 9, "w": 12, "h": 9},
        "targets": [{"expr": "eval_mean_score{namespace=\"jcmcp\"}", "legendFormat": "{{gd_id}}", "refId": "A"}],
-       "fieldConfig": {"defaults": {"min": 1, "max": 5, "custom": {"thresholdsStyle": {"mode": "line"}},
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "min": 1, "max": 5, "custom": {"thresholdsStyle": {"mode": "line"}},
         "thresholds": {"steps": [{"color": "transparent", "value": null},
          {"color": "red", "value": 4}]}}}},
       {"id": 7, "type": "timeseries", "title": "CoV % by golden entry (instability)",
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 12, "y": 9, "w": 12, "h": 9},
        "targets": [{"expr": "eval_cov_pct{namespace=\"jcmcp\"}", "legendFormat": "{{gd_id}}", "refId": "A"}],
-       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "custom": {"thresholdsStyle": {"mode": "line"}},
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "unit": "percent", "min": 0, "custom": {"thresholdsStyle": {"mode": "line"}},
         "thresholds": {"steps": [{"color": "transparent", "value": null},
          {"color": "orange", "value": 20}]}}}},
       {"id": 8, "type": "bargauge", "title": "Per-dimension mean (across entries)",
@@ -315,7 +315,7 @@ data:
        "targets": [{"expr": "avg by(dimension)(eval_dimension_score{namespace=\"jcmcp\"})",
         "legendFormat": "{{dimension}}", "refId": "A"}],
        "options": {"displayMode": "gradient", "orientation": "horizontal"},
-       "fieldConfig": {"defaults": {"min": 1, "max": 5, "decimals": 2,
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "min": 1, "max": 5, "decimals": 2,
         "thresholds": {"steps": [{"color": "red", "value": null},
          {"color": "orange", "value": 3}, {"color": "green", "value": 4}]}}}},
       {"id": 9, "type": "stat", "title": "Time since last suite run",
@@ -335,7 +335,7 @@ data:
        "datasource": {"type": "prometheus", "uid": "prometheus"},
        "gridPos": {"x": 0, "y": 26, "w": 6, "h": 7},
        "targets": [{"expr": "sum(eval_provenance_agreement_count{namespace=\"jcmcp\",kind=\"no_record\"})", "refId": "A", "instant": true}],
-       "fieldConfig": {"defaults": {"decimals": 0,
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "decimals": 0,
         "thresholds": {"steps": [{"color": "green", "value": null},
          {"color": "red", "value": 1}]}}}},
       {"id": 12, "type": "bargauge", "title": "Provenance agreement by bucket (raw counts)",
@@ -344,6 +344,6 @@ data:
        "targets": [{"expr": "sum by(kind)(eval_provenance_agreement_count{namespace=\"jcmcp\"})",
         "legendFormat": "{{kind}}", "refId": "A"}],
        "options": {"displayMode": "gradient", "orientation": "horizontal"},
-       "fieldConfig": {"defaults": {"min": 0, "decimals": 0}}}
+       "fieldConfig": {"defaults": {"links": [{"title": "Run detail \u2014 alerts, flips, flagged claims (JSON; needs dashboard login)", "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}], "min": 0, "decimals": 0}}}
      ]
     }
