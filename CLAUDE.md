@@ -60,6 +60,15 @@ commits — never tag those) → desktop-release workflow → rolling
   limited — first miss 503, same kid still missing from a fresh key set
   60s later 401, unproven freshness always 503. The miss ledger is keyed
   by digest, capped and TTL'd because `kid` is attacker-chosen.
+- **`/oauth/token` must inject `scope` on a refresh** — RFC 6749 makes it
+  optional (defaults to the granted scope) and MCP clients omit it, but
+  Entra v2.0 then resolves the resource to the calling app and returns
+  AADSTS90009 "requesting a token for itself" (one app registration is both
+  client and API here). Every refresh failed this way until 2026-08-10;
+  the connector only ever worked until the first token expiry. Keep
+  `_granted_scope()` as the single source for both the injected scope and
+  what `/oauth/register` advertises — Entra matches a refresh against
+  consented scopes, so drift between them breaks it again.
 - **Deploy strategy is `Recreate` on purpose** — SQLite is the sole
   datastore on a ReadWriteOnce Azure Disk. `maxSurge>0` either co-schedules
   two writers on the disk's node (corruption) or blocks the surge pod in
