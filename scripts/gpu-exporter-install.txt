@@ -1,0 +1,43 @@
+# gpu-exporter install/update block (Windows, ELEVATED PowerShell).
+#
+# This file is referenced by scripts/gpu-exporter.ps1 but lived only in a
+# terminal scrollback until 2026-08-11 — the day the exporter wedged and the
+# task/firewall names had to be reverse-engineered from the live machine.
+# Names below match what is actually registered on the rig:
+#   scheduled task : jobcontext-gpu-exporter
+#   firewall rule  : jobcontext gpu exporter
+#   install path   : C:\ProgramData\jobcontext\gpu-exporter.ps1
+#
+# Idempotent: safe to re-run for UPDATES too — copies the current script over
+# the installed one and restarts the task. Run from the repo root.
+#
+# The task runs the ProgramData COPY, not the repo checkout. Pulling a fixed
+# script into the repo does nothing until this block is re-run.
+
+$dst = 'C:\ProgramData\jobcontext'
+New-Item -ItemType Directory -Force -Path $dst | Out-Null
+Copy-Item .\scripts\gpu-exporter.ps1 (Join-Path $dst 'gpu-exporter.ps1') -Force
+
+if (-not (Get-NetFirewallRule -DisplayName 'jobcontext gpu exporter' -ErrorAction SilentlyContinue)) {
+    # -Profile Any on purpose: Windows re-classifies networks (Private/Public)
+    # after updates, and a Private-scoped rule silently drops the Pi's scrapes.
+    New-NetFirewallRule -DisplayName 'jobcontext gpu exporter' -Direction Inbound `
+        -Action Allow -Protocol TCP -LocalPort 9106 -Profile Any | Out-Null
+}
+
+$action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\ProgramData\jobcontext\gpu-exporter.ps1'
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName 'jobcontext-gpu-exporter' -Action $action -Trigger $trigger -Force | Out-Null
+
+# Restart so an update takes effect (and so a wedged instance dies). A wedged
+# PowerShell can survive Stop-ScheduledTask; the CIM sweep catches it.
+Stop-ScheduledTask -TaskName 'jobcontext-gpu-exporter' -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object CommandLine -match 'gpu-exporter' |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-ScheduledTask -TaskName 'jobcontext-gpu-exporter'
+
+Start-Sleep 2
+curl.exe -s --max-time 3 http://localhost:9106/metrics | Select-Object -First 1
+# Expected: "# TYPE gpu_utilization_percent gauge". Anything else = not serving.

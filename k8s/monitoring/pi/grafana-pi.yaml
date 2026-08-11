@@ -723,6 +723,10 @@ data:
   kiosk-evals.json: |
     {
       "uid": "kiosk-evals", "title": "Evals — resume quality (LLM-as-judge)", "tags": ["kiosk"],
+      "links": [
+        {"type": "link", "title": "📋 Run detail — alerts, flips, flagged claims", "icon": "external link",
+         "url": "https://jobcontext.ai/api/evals/results", "targetBlank": true}
+      ],
       "timezone": "browser", "refresh": "1m", "schemaVersion": 39,
       "time": {"from": "now-7d", "to": "now"},
       "panels": [
