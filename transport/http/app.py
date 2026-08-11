@@ -28,6 +28,7 @@ from starlette.requests import Request as StarletteRequest
 from lib.app_dirs import resource_root
 from lib.version import __version__ as _APP_VERSION
 from transport.http.config import get_settings
+from transport.http.routes import badge as badge_routes
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
 from transport.http.routes import jobs as jobs_routes
@@ -168,7 +169,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: StarletteRequest, call_next):  # NOSONAR
-        from transport.http.security import AuthUnavailable, get_auth_provider
+        from transport.http.security import AuthUnavailable, get_auth_provider, scope_permits
         from lib.user_context import set_data_folder, reset_data_folder, set_user_oid, reset_user_oid
         from lib.user_provisioning import provision_user_data
         import lib.config as _cfg_module
@@ -218,6 +219,25 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/favicon",
             "/apple-touch-icon",
         )
+
+        # Scope gate, before any partition is entered.  A badge-scoped key is
+        # a real credential for a real tenant, so every check below would let
+        # it through — including the MCP mount, which never sees the route
+        # dependencies.  This is the only place that sees both the identity
+        # and the path for every request, so scope has to be enforced here or
+        # it is decoration.
+        if user and not scope_permits(user.scope, request.url.path):
+            _logger.warning(
+                "auth: scope '%s' refused path=%s", user.scope, request.url.path
+            )
+            from starlette.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(
+                {
+                    "error": "forbidden",
+                    "message": f"This credential is scoped to '{user.scope}'.",
+                },
+                status_code=403,
+            )
 
         if user and user.id and user.id != "admin":
             _logger.debug("auth: routing to tenant path=%s", request.url.path)
@@ -395,6 +415,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
     app.include_router(work_routes.router)  # control-plane work-item status
+    app.include_router(badge_routes.router)  # conference badge (badge-scoped keys)
     app.include_router(evals_routes.router)  # eval results ingest → eval_* gauges
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)

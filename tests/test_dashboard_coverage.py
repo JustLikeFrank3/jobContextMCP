@@ -1595,13 +1595,15 @@ class TestDashboardApiKeysCoverage:
                     label="CLI Key",
                     created_at="2026-06-28T20:00:00",
                     last_used_at="2026-06-28T21:00:00",
+                    scope="full",
                 )
             ],
         )
         monkeypatch.setattr(
             api_keys_routes,
             "create_key",
-            lambda oid, label: calls.update({"create": (oid, label)}) or (11, "jcmcp_new_secret"),
+            lambda oid, label, scope="full": calls.update({"create": (oid, label, scope)})
+            or (11, "jcmcp_new_secret"),
         )
         monkeypatch.setattr(
             api_keys_routes,
@@ -1624,7 +1626,7 @@ class TestDashboardApiKeysCoverage:
         assert "New API key generated" in generate_response.text
         assert "jcmcp_new_secret" in generate_response.text
         assert "CLI Key" in generate_response.text
-        assert calls["create"] == ("admin", "Home Mac CLI")
+        assert calls["create"] == ("admin", "Home Mac CLI", "full")
         assert revoke_response.status_code == 303
         assert revoke_response.headers["location"] == "/dashboard/api-keys"
         assert calls["revoke"] == (11, "admin")
