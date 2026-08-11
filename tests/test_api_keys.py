@@ -338,3 +338,70 @@ class TestEntraAuthProviderApiKey:
         )
         assert user is not None
         assert user.id == "oid-alice"
+
+
+# ── Scopes ────────────────────────────────────────────────────────────────────
+
+class TestKeyScopes:
+    """A key's scope decides how much of the API it can reach (see
+    transport/http/security.scope_permits). These tests cover the storage and
+    resolution half; enforcement lives in tests/test_badge_api.py."""
+
+    def test_default_scope_is_full(self, global_db):
+        from lib.api_keys import SCOPE_FULL, create_key, resolve_key
+
+        _, plaintext = create_key("oid-alice")
+        assert resolve_key(plaintext).scope == SCOPE_FULL
+
+    def test_badge_scope_round_trips(self, global_db):
+        from lib.api_keys import SCOPE_BADGE, create_key, list_keys, resolve_key
+
+        _, plaintext = create_key("oid-alice", label="Universe badge", scope=SCOPE_BADGE)
+        resolved = resolve_key(plaintext)
+        assert resolved.oid == "oid-alice" and resolved.scope == SCOPE_BADGE
+        assert [k.scope for k in list_keys("oid-alice")] == [SCOPE_BADGE]
+
+    def test_unknown_scope_is_refused(self, global_db):
+        """Minting is the one place a typo could silently widen reach."""
+        from lib.api_keys import create_key
+
+        with pytest.raises(ValueError, match="unknown API key scope"):
+            create_key("oid-alice", scope="superuser")
+
+    def test_pre_scope_rows_read_as_full(self, global_db, monkeypatch):
+        """Keys written before the scope column existed must keep working with
+        exactly the reach they already had — not silently become restricted."""
+        import lib.api_keys as api_keys
+
+        # The migrate_to_sqlite schema this fixture builds from predates the
+        # scope column, so writing through it *is* the legacy shape — the row
+        # exists before anything has had a chance to add the column.
+        with api_keys._global_conn() as con:
+            cols = {r[1] for r in con.execute("PRAGMA table_info(user_api_keys)").fetchall()}
+        assert "scope" not in cols, "fixture no longer reproduces a pre-scope DB"
+        _, plaintext = create_legacy_row(api_keys, "oid-legacy")
+
+        resolved = api_keys.resolve_key(plaintext)
+        assert resolved.oid == "oid-legacy"
+        assert resolved.scope == api_keys.SCOPE_FULL
+
+    def test_lookup_key_still_returns_the_oid(self, global_db):
+        """Back-compat: the scope-blind helper keeps its old contract."""
+        from lib.api_keys import create_key, lookup_key
+
+        _, plaintext = create_key("oid-alice", scope="badge")
+        assert lookup_key(plaintext) == "oid-alice"
+        assert lookup_key("jcmcp_bogus") is None
+
+
+def create_legacy_row(api_keys, oid: str):
+    """Insert a key row the pre-scope way (no scope column in the INSERT)."""
+    import secrets
+
+    plaintext = "jcmcp_" + secrets.token_urlsafe(24)
+    with api_keys._global_conn() as con:
+        cur = con.execute(
+            "INSERT INTO user_api_keys (key_hash, oid, label, created_at) VALUES (?, ?, ?, ?)",
+            (api_keys._hash(plaintext), oid, "legacy", api_keys._now_iso()),
+        )
+    return cur.lastrowid, plaintext

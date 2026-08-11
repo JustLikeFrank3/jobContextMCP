@@ -110,3 +110,6 @@ desktop/src-tauri/icons/
 
 # Customer-discovery session notes and transcripts (docs/discovery.md) — private
 /data/discovery/
+
+# Badge credentials — WiFi password + API token in plain text on the device
+badge/jobcontext/secrets.py
