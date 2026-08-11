@@ -1243,6 +1243,32 @@ def test_seconds_until_utc_hour():
     assert seconds_until_utc_hour(8, on_the_hour) == 24 * 3600  # never 0
 
 
+def test_parse_run_days():
+    """EVALS_NIGHTLY_DAYS_UTC: names, numbers, mixed; a typo degrades to DAILY
+    (running more than intended), never to silently disabled."""
+    from evals.work import parse_run_days
+
+    assert parse_run_days("") is None
+    assert parse_run_days("mon,wed,fri") == {0, 2, 4}
+    assert parse_run_days("Monday, Wednesday, Friday") == {0, 2, 4}  # 3-char prefix
+    assert parse_run_days("0,2,4") == {0, 2, 4}
+    assert parse_run_days("sun") == {6}
+    assert parse_run_days("mon,notaday") is None  # typo → daily, with a warning
+    assert parse_run_days("7") is None            # out of range → daily
+    assert parse_run_days(",,") is None
+
+
+def test_runs_today_checks_the_utc_weekday():
+    import datetime as dt
+
+    from evals.work import runs_today
+
+    wed = dt.datetime(2026, 8, 12, 8, 0, tzinfo=dt.timezone.utc)  # a Wednesday
+    assert runs_today(None, wed)                                  # daily
+    assert runs_today({0, 2, 4}, wed)                             # MWF fires
+    assert not runs_today({1, 3}, wed)                            # TuTh skips
+
+
 def test_nightly_enqueue_skips_when_pending(isolated_server, monkeypatch):
     from evals import work as evals_work
 
