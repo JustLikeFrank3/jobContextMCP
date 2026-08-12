@@ -63,6 +63,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | `EVALS_NIGHTLY_HOUR_UTC` | Hour 0–23 → scheduled golden-suite run via the control plane (prod sets `8`). Unset = disabled |
 | `EVALS_NIGHTLY_DAYS_UTC` | Restrict scheduled runs to UTC weekdays: `mon,wed,fri` or `0,2,4` (Mon=0). Unset = every day. A typo degrades to daily with a warning — never to silently disabled |
 | `JOBCONTEXT_EVAL_URL` / `JOBCONTEXT_API_KEY` | Defaults for `python -m evals … --push-url / --api-key` |
+| `WALLBOARD_EVALS_URL` / `WALLBOARD_EVALS_PAT` | Both set → `GET /wallboard/evals` serves a **login-free** human-readable eval-detail page, fetched from the cloud with the PAT (Pi kiosk only; set via `PI_WALLBOARD_EVALS_*` in `.env.pi`). Either unset → the route 404s. Never set these on cloud/desktop |
 | `JOBCONTEXT_EXTRA_METRICS_PORTS` | Extra loopback ports for the workstation ollama-exporter to scrape/merge |
 
 ### Integrations

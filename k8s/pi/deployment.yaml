@@ -75,6 +75,23 @@ spec:
                   name: jcmcp-pi-app-secrets
                   key: api_key
                   optional: true
+            # Kiosk eval-detail page (/wallboard/evals): the app fetches the
+            # owner's stored eval results from the cloud with this PAT and
+            # renders them login-free for the touchscreen. Both unset = the
+            # route 404s. The PAT is minted by the owner in the dashboard's
+            # API Keys tab and travels only via .env.pi -> this secret.
+            - name: WALLBOARD_EVALS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: wallboard_evals_url
+                  optional: true
+            - name: WALLBOARD_EVALS_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: jcmcp-pi-app-secrets
+                  key: wallboard_evals_pat
+                  optional: true
             # Display name for the API-key identity ("Admin" when unset).
             - name: API_KEY_USER_NAME
               valueFrom:
