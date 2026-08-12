@@ -155,3 +155,17 @@ def test_fetches_are_cached(client, monkeypatch):
     client.get("/wallboard/evals")
     # 2 endpoints, 2 page loads, but each endpoint fetched once within the TTL.
     assert len(calls) == 2
+
+
+def test_back_link_uses_the_request_host(client, monkeypatch):
+    """The kiosk browser has no back button; the page carries its own escape
+    hatch, pointed at the Grafana on the SAME host the page was reached by —
+    no configured IP to drift."""
+    _configure(monkeypatch, {"/api/evals/results": PAYLOAD, "/api/work/stats": WORK})
+    body = client.get("/wallboard/evals").text
+    assert "href='http://testserver:3000/d/kiosk-evals?kiosk'" in body
+    assert "back to the board" in body
+
+    wallboard._CACHE.clear()
+    _configure(monkeypatch, fail=RuntimeError("down"))
+    assert "back to the board" in client.get("/wallboard/evals").text  # error page too

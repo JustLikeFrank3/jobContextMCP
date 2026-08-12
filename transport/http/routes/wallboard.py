@@ -35,7 +35,7 @@ import threading
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 _LOG = logging.getLogger(__name__)
@@ -104,23 +104,42 @@ th { color:#9aa0a6; font-weight:600; font-size:.95rem; }
 .clean { color:#5bb974; }
 .err { background:#3c1e1e; border:1px solid #f28b82; padding:1rem; border-radius:8px; }
 .num { font-variant-numeric: tabular-nums; }
+.back { display:inline-block; background:#3274d9; color:#fff; text-decoration:none;
+        padding:.5rem 1.1rem; border-radius:8px; font-weight:700; margin-bottom:1rem; }
+a { color:#8ab4f8; }
 """
 
 
-def _render_error(reason: str) -> str:
+def _back_link(request: "Request | None") -> str:
+    """A '← board' escape hatch, sized for fingers.
+
+    The kiosk browser has no visible chrome and no back button, so without
+    this the page is a one-way door (the only exit is Doug's own tab bar).
+    The Grafana host is derived from the request's own hostname rather than a
+    configured address — the page and Grafana live on the same box, and that
+    box's LAN address has already drifted once this week.
+    """
+    host = (request.url.hostname if request is not None else "") or ""
+    if not host:
+        return ""
+    return (f"<a class='back' href='http://{_e(host)}:3000/d/kiosk-evals?kiosk'>"
+            "← back to the board</a>")
+
+
+def _render_error(reason: str, request: "Request | None" = None) -> str:
     return (
-        f"<style>{_CSS}</style><h1>\U0001F9EA Eval detail</h1>"
+        f"<style>{_CSS}</style>{_back_link(request)}<h1>\U0001F9EA Eval detail</h1>"
         f"<div class='err'><b>Couldn't fetch from the cloud:</b> {_e(reason)}"
         "<br>The wallboard gauges are unaffected; this page just couldn't "
         "load the run detail. It retries on refresh.</div>"
     )
 
 
-def _render(evals: dict, work: "dict | None") -> str:  # noqa: PLR0912 — one page, one pass
+def _render(evals: dict, work: "dict | None", request: "Request | None" = None) -> str:  # noqa: PLR0912 — one page, one pass
     suite = evals.get("suite") or {}
     rows = suite.get("rows") or []
     detail = suite.get("detail") or {}
-    parts = [f"<style>{_CSS}</style>"]
+    parts = [f"<style>{_CSS}</style>", _back_link(request)]
     parts.append("<h1>\U0001F9EA Eval run detail</h1>")
     parts.append(
         f"<div class='meta'>judge: <b>{_e(suite.get('judge_model') or 'unknown')}</b>"
@@ -191,7 +210,7 @@ def _render(evals: dict, work: "dict | None") -> str:  # noqa: PLR0912 — one p
 
 
 @router.get("/evals")
-def wallboard_evals() -> HTMLResponse:
+def wallboard_evals(request: Request) -> HTMLResponse:
     base, pat = _settings()
     if not (base and pat):
         # Unconfigured = the route does not exist. 404, not 403: nothing
@@ -201,10 +220,10 @@ def wallboard_evals() -> HTMLResponse:
         evals = _fetch("/api/evals/results")
     except Exception as exc:  # noqa: BLE001 — render the failure, never a traceback
         _LOG.warning("wallboard evals fetch failed: %s", type(exc).__name__)
-        return HTMLResponse(_render_error(f"{type(exc).__name__}: {exc}"), status_code=502)
+        return HTMLResponse(_render_error(f"{type(exc).__name__}: {exc}", request), status_code=502)
     work: "dict | None" = None
     try:
         work = _fetch("/api/work/stats")
     except Exception as exc:  # noqa: BLE001 — evals still render without work stats
         _LOG.warning("wallboard work-stats fetch failed: %s", type(exc).__name__)
-    return HTMLResponse(_render(evals, work))
+    return HTMLResponse(_render(evals, work, request))
