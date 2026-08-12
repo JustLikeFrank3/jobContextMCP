@@ -208,6 +208,13 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/architecture",
             "/privacy",
             "/ready",         # k8s readiness probe — no user data
+            # Kiosk eval-detail page. Public prefix is safe everywhere because
+            # the route 404s unless WALLBOARD_EVALS_URL + _PAT are BOTH set —
+            # which no cloud/desktop deployment does. Only a LAN box whose
+            # operator explicitly configures the pair (the Pi, via .env.pi)
+            # serves content here, and that operator is choosing login-free
+            # LAN readability of eval detail on purpose.
+            "/wallboard",
             "/terms",            "/og-image",            "/logged-out",
             "/login",
             "/why",
@@ -390,12 +397,14 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     from transport.http.routes import evals as evals_routes
     from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
+    from transport.http.routes import wallboard as wallboard_routes
     from transport.http.routes import work as work_routes
 
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
     app.include_router(work_routes.router)  # control-plane work-item status
     app.include_router(evals_routes.router)  # eval results ingest → eval_* gauges
+    app.include_router(wallboard_routes.router)  # kiosk eval-detail page (404 unless WALLBOARD_EVALS_* set)
     app.include_router(jobs_routes.router)
     app.include_router(resumes_routes.router)
     app.include_router(context_routes.router)

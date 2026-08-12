@@ -94,6 +94,10 @@ apply_all() {
     printf 'oura_client_id=%s\n' "${PI_OURA_CLIENT_ID:-}"
     printf 'oura_client_secret=%s\n' "${PI_OURA_CLIENT_SECRET:-}"
     printf 'app_encryption_key=%s\n' "${PI_APP_ENCRYPTION_KEY:-}"
+    # Kiosk eval-detail page: owner-minted PAT + cloud base URL. Optional —
+    # absent means /wallboard/evals 404s and the kiosk links go nowhere useful.
+    printf 'wallboard_evals_url=%s\n' "${PI_WALLBOARD_EVALS_URL:-https://jobcontext.ai}"
+    printf 'wallboard_evals_pat=%s\n' "${PI_WALLBOARD_EVALS_PAT:-}"
   } | ssh "${PI}" "sudo k3s kubectl --namespace ${NS} create secret generic jcmcp-pi-app-secrets \
     --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo k3s kubectl apply -f -"
 
