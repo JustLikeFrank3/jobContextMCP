@@ -238,6 +238,20 @@ RESUME_SYSTEM = textwrap.dedent("""\
     achievements, and company names must come verbatim from the master resume —
     do not invent or embellish anything.
 
+    NUMERIC INTEGRITY — these rules override brevity, style, and completeness:
+    1. Copy every number VERBATIM from the sources, keeping its unit AND the noun
+       it measures. A number may never migrate to a different claim: if a source
+       says a corpus indexes for under $0.10 in total, that figure cannot become
+       a per-query cost. If a source says 1,481 tests, the resume says 1,481 —
+       never a rounded, recalled, or recomputed variant.
+    2. If the exact number is not in your sources, write the claim WITHOUT a
+       number. Never estimate, combine two figures, or reconstruct one from
+       memory. A bullet with no metric is acceptable; a bullet with an invented
+       metric is the single worst failure this document can have.
+    3. Each metric appears in EXACTLY ONE place. One body of work is listed once,
+       in one section — never as both an employment bullet and a separate project
+       entry, and never with its headline numbers restated in a summary line.
+
     The PROJECTS section is REQUIRED — do not omit it. Include 2–3 side projects
     from the master resume that are most relevant to the target role. Select based
     on what the JD emphasizes — all project names and metrics must come verbatim
@@ -275,6 +289,12 @@ COVER_LETTER_SYSTEM = textwrap.dedent("""\
     - Metrics live in the ownership paragraphs; every claim there is specific and
       uses numbers verbatim from the master resume. Do not stuff a metric into
       every sentence, and do not pad to hit a length.
+    - NUMERIC INTEGRITY overrides everything above: a number is copied verbatim
+      with its unit and the noun it measures, never moved onto a different claim,
+      never estimated or reconstructed. If the exact figure is not in your
+      sources, make the point without a number — a sentence with no metric is
+      fine; a sentence with an invented one is disqualifying. Each metric
+      appears at most once in the letter.
     - Conversational but not casual; no filler phrases, no corporate speak.
     - A side project earns a place only when it is the strongest match to the job
       description, not as a mandatory section. Use metrics verbatim from the
