@@ -337,3 +337,27 @@ def test_generate_resume_corrects_before_saving(isolated_server, monkeypatch):
     assert saved["content"] == "Cut latency 34%.", "the fabricated draft was saved"
     assert "99.99%" not in out
     assert "Provenance: ✓ PASS" in out
+
+
+class TestNumericIntegrityRules:
+    """The 2026-08-12 nightly flagged hallucinations in every run AFTER the
+    correction loop -- all in classes the regex gate cannot see (scope-shifted
+    numbers, double-counted metrics, reconstructed figures). These rules are
+    the prompt-side countermeasure; pin them so a later prompt edit doesn't
+    silently drop the constraints the eval trend depends on."""
+
+    def test_resume_prompt_carries_the_three_rules(self):
+        from tools.generate_prompts import RESUME_SYSTEM
+
+        assert "NUMERIC INTEGRITY" in RESUME_SYSTEM
+        assert "never migrate to a different claim" in RESUME_SYSTEM   # scope-shift
+        assert "WITHOUT a\n   number" in RESUME_SYSTEM.replace("    ", "   ") or \
+               "WITHOUT a" in RESUME_SYSTEM                            # verbatim-or-omit
+        assert "EXACTLY ONE place" in RESUME_SYSTEM                    # anti-double-count
+
+    def test_cover_letter_prompt_carries_the_rules(self):
+        from tools.generate_prompts import COVER_LETTER_SYSTEM
+
+        assert "NUMERIC INTEGRITY" in COVER_LETTER_SYSTEM
+        assert "never moved onto a different claim" in COVER_LETTER_SYSTEM
+        assert "at most once" in COVER_LETTER_SYSTEM
