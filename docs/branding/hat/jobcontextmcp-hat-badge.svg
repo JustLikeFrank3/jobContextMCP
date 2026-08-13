@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-label="jobContext badge">
+  <title>jobContext badge</title>
+  <circle cx="160" cy="160" r="153" fill="#0A0F1C"></circle>
+  <circle cx="160" cy="160" r="153" fill="none" stroke="#00B5C8" stroke-width="9"></circle>
+  <circle cx="160" cy="160" r="139" fill="none" stroke="#00B5C8" stroke-width="2" stroke-opacity="0.35"></circle>
+  <path d="M205 90 A 48 48 0 1 0 205 170" fill="none" stroke="#00B5C8" stroke-width="30" stroke-linecap="round"></path>
+  <circle cx="120" cy="90" r="17" fill="#FFFFFF"></circle>
+  <path d="M120 118 L120 176 Q120 197 97 197" fill="none" stroke="#FFFFFF" stroke-width="27" stroke-linecap="round"></path>
+  <path id="bnd" d="M44 168 A 116 116 0 0 0 276 168" fill="none"></path>
+  <text fill="#FFFFFF" font-family="'JetBrains Mono',ui-monospace,monospace" font-weight="700" font-size="30" letter-spacing="9"><textPath href="#bnd" startOffset="50%" text-anchor="middle">00100100</textPath></text>
+</svg>
