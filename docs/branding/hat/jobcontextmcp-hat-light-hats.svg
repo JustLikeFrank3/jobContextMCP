@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="jobContext">
+  <title>jobContext</title>
+  <!-- j: dot + stem + hook (dark, for light backgrounds) -->
+  <circle cx="27" cy="21" r="7" fill="#0F172A"/>
+  <path d="M27 31 L27 61 Q27 73 16 73" fill="none" stroke="#0F172A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- C -->
+  <path d="M77 27 A24 24 0 1 0 77 67" fill="none" stroke="#00B5C8" stroke-width="9" stroke-linecap="round"/>
+</svg>
