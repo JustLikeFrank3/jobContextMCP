@@ -94,9 +94,18 @@ def test_build_resume_user_message_trims_stories_not_the_format_spec(isolated_se
     captured: list = []
 
     def fake_bundle(stories_token_budget=None):
+        # Fill the granted budget exactly as production does: measured with the
+        # SAME estimator the builder uses (tiktoken in CI, chars/4 without it).
+        # A chars-imply-tokens shortcut here failed on CI's tiktoken while
+        # passing on the fallback estimator — the bug it caught was real and
+        # is now fixed in _format_personal_stories, which shares the estimator.
         captured.append(stories_token_budget)
-        stories = "S" * (4 * (stories_token_budget or 0))
-        return "MASTER\n" + stories
+        if not stories_token_budget:
+            return "MASTER"
+        words: list = []
+        while generate.estimate_tokens(" ".join([*words, "story"])) <= stories_token_budget:
+            words.append("story")
+        return "MASTER\n" + " ".join(words)
 
     monkeypatch.setattr(generate.config, "get_generation_budgets", lambda: {
         "resume_max_tokens": 2000,
