@@ -109,33 +109,74 @@ def _git_sha() -> str:
         return ""
 
 
+def _cleanup_eval_artifacts(output_filename: str) -> None:
+    """Delete the workspace files one eval generation left behind.
+
+    Eval outputs are measurements, not application materials: everything the
+    suite needs (scores, flagged claims, provenance verdicts) is persisted in
+    the results payload before this runs. Leaving the files in place meant
+    every nightly run parked five EVAL resumes + PDFs in the user's real
+    materials directories, sync mirrored them onto every desktop (and sync has
+    no delete propagation, so they never left), and build_index ingested them
+    into the RAG corpus. Set EVALS_KEEP_ARTIFACTS=1 to keep the files for a
+    debugging session. Never raises — cleanup must not eat a paid run.
+    """
+    import os  # noqa: PLC0415
+
+    if os.environ.get("EVALS_KEEP_ARTIFACTS", "").strip().lower() in ("1", "true", "yes"):
+        return
+    from lib import config  # noqa: PLC0415
+
+    try:
+        dirs = [
+            config.get_active_optimized_resumes_dir(),
+            config.get_active_cover_letters_dir(),
+            config.get_active_resume_pdfs_dir(),
+            config.get_active_cover_letter_pdfs_dir(),
+        ]
+    except Exception:
+        return
+    for d in dirs:
+        try:
+            for path in d.glob(f"{output_filename}.*"):
+                path.unlink(missing_ok=True)
+        except Exception:
+            continue
+
+
 def default_generate(entry: GoldenEntry, jd_text: str) -> str:
     """Generate through the real production path (tools.generate).
 
     Outputs are saved under an EVAL-prefixed filename so eval artifacts are
-    recognizable in the workspace and never overwrite real application
-    materials.
+    recognizable and can never overwrite real application materials — and are
+    deleted again once read, so the workspace, sync, and the RAG index never
+    see them (see _cleanup_eval_artifacts).
     """
     from lib import config  # noqa: PLC0415 — lazy: imports server config + LLM client
     from tools import generate  # noqa: PLC0415
 
     output_filename = f"EVAL {entry.id} {entry.company} {entry.role}"
-    if entry.output_kind == "cover_letter":
-        status = generate.generate_cover_letter(
-            entry.company, entry.role, jd_text, output_filename=output_filename
-        )
-        out_dir = config.get_active_cover_letters_dir()
-    else:
-        status = generate.generate_resume(
-            entry.company, entry.role, jd_text, output_filename=output_filename
-        )
-        out_dir = config.get_active_optimized_resumes_dir()
-    # generate_* returns a status report; the document itself is saved to the
-    # workspace. A missing ✓ means generation fell back or errored — fail the
-    # run rather than judging a status message.
-    if not status.lstrip().startswith("✓"):
-        raise RuntimeError(f"generation did not complete: {status[:300]}")
-    return (out_dir / f"{output_filename}.txt").read_text(encoding="utf-8")
+    try:
+        if entry.output_kind == "cover_letter":
+            status = generate.generate_cover_letter(
+                entry.company, entry.role, jd_text, output_filename=output_filename
+            )
+            out_dir = config.get_active_cover_letters_dir()
+        else:
+            status = generate.generate_resume(
+                entry.company, entry.role, jd_text, output_filename=output_filename
+            )
+            out_dir = config.get_active_optimized_resumes_dir()
+        # generate_* returns a status report; the document itself is saved to
+        # the workspace. A missing ✓ means generation fell back or errored —
+        # fail the run rather than judging a status message.
+        if not status.lstrip().startswith("✓"):
+            raise RuntimeError(f"generation did not complete: {status[:300]}")
+        return (out_dir / f"{output_filename}.txt").read_text(encoding="utf-8")
+    finally:
+        # Runs on the error path too: a failed generation can still have
+        # saved a .txt or exported a PDF before its status went sideways.
+        _cleanup_eval_artifacts(output_filename)
 
 
 # Truncation here is a measurement bug, not a cost control: every char cut is

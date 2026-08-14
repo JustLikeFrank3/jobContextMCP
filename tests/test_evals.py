@@ -1554,3 +1554,81 @@ def test_judge_info_gauge_absent_when_nothing_scored(monkeypatch):
     })
     assert not [g for g in metrics.snapshot()["gauges"] if g["name"] == "eval_judge_info"]
     metrics.reset()
+
+
+# ===========================================================================
+# Eval artifacts must not persist in the workspace (2026-08-14)
+# ===========================================================================
+# The runner generates through the real production path, which saves .txt and
+# PDF artifacts into the user's actual materials directories. Left in place,
+# they synced to every desktop (sync has no delete propagation) and were
+# ingested by build_index into the RAG corpus. The measurement lives in the
+# results payload; the files are debris.
+
+def _artifact_entry() -> "golden_mod.GoldenEntry":
+    return golden_mod.GoldenEntry(
+        id="GD-T", company="X", role="Y", archetype="", eval_signal="",
+        reference_file="ref.txt", jd_file="jd.txt",
+    )
+
+
+def _plant_artifacts(output_filename: str) -> "tuple[Path, Path]":
+    from lib import config
+
+    out_dir = config.get_active_optimized_resumes_dir()
+    pdf_dir = config.get_active_resume_pdfs_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / f"{output_filename}.txt").write_text("RESUME BODY", encoding="utf-8")
+    (pdf_dir / f"{output_filename}.pdf").write_bytes(b"%PDF-fake")
+    return out_dir, pdf_dir
+
+
+def test_default_generate_cleans_workspace_artifacts(isolated_server, monkeypatch):
+    from tools import generate
+
+    def fake_generate(company, role, jd, output_filename=""):
+        _plant_artifacts(output_filename)
+        return "✓ Resume generated"
+
+    monkeypatch.setattr(generate, "generate_resume", fake_generate)
+    monkeypatch.delenv("EVALS_KEEP_ARTIFACTS", raising=False)
+    text = runner_mod.default_generate(_artifact_entry(), "JD")
+    assert text == "RESUME BODY"          # the content was read before cleanup
+    from lib import config
+
+    assert not list(config.get_active_optimized_resumes_dir().glob("EVAL *"))
+    assert not list(config.get_active_resume_pdfs_dir().glob("EVAL *"))
+
+
+def test_default_generate_cleans_up_even_when_generation_reports_failure(isolated_server, monkeypatch):
+    """A run that saved files and THEN reported failure must not leak them."""
+    from tools import generate
+
+    def fake_generate(company, role, jd, output_filename=""):
+        _plant_artifacts(output_filename)
+        return "✗ something went sideways"
+
+    monkeypatch.setattr(generate, "generate_resume", fake_generate)
+    monkeypatch.delenv("EVALS_KEEP_ARTIFACTS", raising=False)
+    with pytest.raises(RuntimeError, match="generation did not complete"):
+        runner_mod.default_generate(_artifact_entry(), "JD")
+    from lib import config
+
+    assert not list(config.get_active_optimized_resumes_dir().glob("EVAL *"))
+    assert not list(config.get_active_resume_pdfs_dir().glob("EVAL *"))
+
+
+def test_default_generate_keeps_artifacts_when_asked(isolated_server, monkeypatch):
+    from tools import generate
+
+    def fake_generate(company, role, jd, output_filename=""):
+        _plant_artifacts(output_filename)
+        return "✓ Resume generated"
+
+    monkeypatch.setattr(generate, "generate_resume", fake_generate)
+    monkeypatch.setenv("EVALS_KEEP_ARTIFACTS", "1")
+    runner_mod.default_generate(_artifact_entry(), "JD")
+    from lib import config
+
+    assert list(config.get_active_optimized_resumes_dir().glob("EVAL *"))
