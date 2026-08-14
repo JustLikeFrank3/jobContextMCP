@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 
 from lib import config
-from lib.io import _format_personal_stories, _load_master_context
+from lib.io import _load_master_context
 
 
 def _seed_stories() -> None:
@@ -65,10 +65,17 @@ def test_budgeted_bundle_is_a_prefix_of_the_full_bundle(isolated_server):
     every generator-visible fact is judge-visible."""
     _seed_stories()
     full = _load_master_context()
-    first_story_cost = max(1, len(_format_personal_stories().split("\n\n")[0]) // 4)
-    trimmed = _load_master_context(stories_token_budget=first_story_cost)
+    # Find the smallest budget that admits the first story, by scanning rather
+    # than reimplementing the estimator (tiktoken vs chars/4 varies by env).
+    # At that exact boundary the second story cannot also fit, so this pins
+    # whole-story granularity too.
+    trimmed = next(
+        (t for b in range(1, 500)
+         if "1,491" in (t := _load_master_context(stories_token_budget=b))),
+        None,
+    )
+    assert trimmed is not None
     assert full.startswith(trimmed)
-    assert "1,491" in trimmed          # first story fit
     assert "Miami Beach" not in trimmed  # tail trimmed, whole-story granularity
 
 

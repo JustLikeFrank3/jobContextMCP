@@ -123,12 +123,19 @@ def _format_personal_stories(stories_token_budget: int | None = None) -> str:
             blocks.append("\n".join(lines))
 
     if stories_token_budget is not None:
-        # ~4 chars/token, matching lib.story_retrieval.estimate_tokens. Whole-
+        # Same estimator the prompt builders use to measure headroom (tiktoken
+        # when installed, chars/4 otherwise). Mixing estimators here — chars/4
+        # trim vs tiktoken headroom — let a "fitting" stories section overshoot
+        # the ceiling, and the last-resort ceiling guard truncates the prompt
+        # TAIL, i.e. the format spec, not the stories (caught by CI, where
+        # tiktoken is installed, on the first qa run of this feature). Whole-
         # story granularity: a half-story invites the model to complete it.
+        from lib.story_retrieval import estimate_tokens  # noqa: PLC0415 — lazy: story_retrieval imports lib.io
+
         kept: list[str] = []
         used = 0
         for block in blocks:
-            cost = max(1, len(block) // 4)
+            cost = estimate_tokens(block) + 2  # +2 ≈ the "\n\n" join
             if used + cost > stories_token_budget:
                 break
             kept.append(block)
@@ -199,13 +206,21 @@ def _load_master_context(stories_token_budget: int | None = None) -> str:
     # used in generated documents exactly as written. This section is LAST so a
     # token-budgeted trim only ever shortens the stories tail — the sections
     # above stay byte-identical for every consumer of the bundle.
-    stories_text = _format_personal_stories(stories_token_budget)
+    stories_header = (
+        "──── STORIES (first-person stories — part of the source of truth) ────\n"
+        "(Facts, numbers, names, and dates below are citable exactly as written; "
+        "adapt wording to the target role but never alter a number, name, or date)\n"
+    )
+    if stories_token_budget is None:
+        effective_budget = None
+    else:
+        # The header spends from the same budget the caller measured headroom
+        # for — an uncounted header is a small, silent ceiling overshoot.
+        from lib.story_retrieval import estimate_tokens  # noqa: PLC0415 — lazy: story_retrieval imports lib.io
+
+        effective_budget = max(0, stories_token_budget - estimate_tokens(stories_header))
+    stories_text = _format_personal_stories(effective_budget)
     if stories_text:
-        parts.append(
-            "──── STORIES (first-person stories — part of the source of truth) ────\n"
-            "(Facts, numbers, names, and dates below are citable exactly as written; "
-            "adapt wording to the target role but never alter a number, name, or date)\n"
-            + stories_text
-        )
+        parts.append(stories_header + stories_text)
 
     return "\n\n".join(parts)
