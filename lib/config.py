@@ -564,7 +564,12 @@ def get_generation_budgets() -> dict:
         "tone_token_budget": 1500,
         "max_tone_samples": 6,
         "cover_letter_max_tokens": 12000,
-        "resume_max_tokens": 12000,
+        # 24000, up from 12000 (2026-08): the master-context bundle now carries
+        # the full personal-story library as citable evidence, and at 12000 the
+        # deterministic stories trim would silently drop most of it. The old
+        # limit dated from 30K-TPM local serving; a 24K prompt + 2.8K output
+        # still fits the 40K-context local judge/generator models.
+        "resume_max_tokens": 24000,
         "safety_margin_tokens": 500,
     }
     configured = get_config_value("generation_budgets", {})

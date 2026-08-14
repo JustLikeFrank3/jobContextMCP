@@ -252,6 +252,12 @@ RESUME_SYSTEM = textwrap.dedent("""\
        in one section — never as both an employment bullet and a separate project
        entry, and never with its headline numbers restated in a summary line.
 
+    SOURCE DISCIPLINE: the MASTER RESUME block — including its STORIES
+    section — and the GITHUB PORTFOLIO METRICS block are the ONLY sources of
+    facts, numbers, names, and dates. The TONE PROFILE is style only: it shows
+    HOW the candidate writes, never WHAT is true. Never repeat a fact, number,
+    or project detail that appears only in a tone sample.
+
     The PROJECTS section is REQUIRED — do not omit it. Include 2–3 side projects
     from the master resume that are most relevant to the target role. Select based
     on what the JD emphasizes — all project names and metrics must come verbatim
@@ -277,9 +283,13 @@ COVER_LETTER_SYSTEM = textwrap.dedent("""\
     to a .txt file and fed to a strict PDF parser.
 
     Write in the candidate's voice as defined by their tone profile. The tone
-    samples are your ground truth. Study them and match their rhythm, register,
-    and sentence shapes above any structural rule below. If a formatting rule
-    fights the voice in the samples, keep the voice.
+    samples are your ground truth FOR VOICE ONLY. Study them and match their
+    rhythm, register, and sentence shapes above any structural rule below. If a
+    formatting rule fights the voice in the samples, keep the voice. But tone
+    samples are never a source of facts: any number, project detail, or claim
+    that appears only in a tone sample must not be repeated — facts come solely
+    from the master resume material, the personal stories, and the GITHUB
+    PORTFOLIO METRICS block.
 
     Voice characteristics to enforce:
     - Direct, declarative, confident without being boastful.
