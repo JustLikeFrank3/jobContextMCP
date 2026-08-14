@@ -58,6 +58,9 @@ def test_clean_job_description_for_prompt_strips_noise(isolated_server):
 
 
 def test_build_resume_user_message_includes_context_blocks(isolated_server, monkeypatch):
+    """Stories reach the resume prompt inside the master bundle, not as a
+    separately retrieved PERSONAL CONTEXT block — the gate's sources are this
+    prompt, so one evidence document means gate == judge == generator."""
     monkeypatch.setattr(generate.config, "get_generation_budgets", lambda: {
         "resume_max_tokens": 5000,
         "cover_letter_max_tokens": 6000,
@@ -65,20 +68,55 @@ def test_build_resume_user_message_includes_context_blocks(isolated_server, monk
         "tone_token_budget": 400,
         "max_tone_samples": 2,
     })
-    monkeypatch.setattr(generate, "_load_master_context", lambda: "MASTER")
+    monkeypatch.setattr(
+        generate, "_load_master_context",
+        lambda stories_token_budget=None: (
+            "MASTER" if stories_token_budget == 0 else "MASTER\nSTORY-FACT"
+        ),
+    )
     monkeypatch.setattr(generate, "_portfolio_metrics_block", lambda: "METRICS")
     monkeypatch.setattr(generate, "get_tone_profile_budgeted", lambda **_: "TONE")
     monkeypatch.setattr(generate, "get_customization_strategy", lambda _: "STRATEGY")
     monkeypatch.setattr(generate, "get_interview_context", lambda **_: "INTERVIEW")
-    monkeypatch.setattr(generate, "_dynamic_personal_budget", lambda *_: 123)
-    monkeypatch.setattr(generate, "_build_personal_context_block", lambda *_a, **_k: ("PERSONAL", None))
     monkeypatch.setattr(generate, "_enforce_token_ceiling", lambda text, _max: text)
 
     msg = generate._build_resume_user_message("Acme", "Engineer", "JD")
     assert "TARGET COMPANY: Acme" in msg
     assert "MASTER RESUME" in msg
-    assert "PERSONAL" in msg
+    assert "STORY-FACT" in msg           # stories arrive via the bundle
+    assert "PERSONAL CONTEXT" not in msg  # the separate block is gone
     assert "INTERVIEW" in msg
+
+
+def test_build_resume_user_message_trims_stories_not_the_format_spec(isolated_server, monkeypatch):
+    """When the bundle would blow the ceiling, the STORIES tail shrinks; the
+    format spec and instructions at the end of the prompt survive intact."""
+    captured: list = []
+
+    def fake_bundle(stories_token_budget=None):
+        captured.append(stories_token_budget)
+        stories = "S" * (4 * (stories_token_budget or 0))
+        return "MASTER\n" + stories
+
+    monkeypatch.setattr(generate.config, "get_generation_budgets", lambda: {
+        "resume_max_tokens": 2000,
+        "cover_letter_max_tokens": 6000,
+        "safety_margin_tokens": 100,
+        "tone_token_budget": 400,
+        "max_tone_samples": 2,
+    })
+    monkeypatch.setattr(generate, "_load_master_context", fake_bundle)
+    monkeypatch.setattr(generate, "_portfolio_metrics_block", lambda: "")
+    monkeypatch.setattr(generate, "get_tone_profile_budgeted", lambda **_: "TONE")
+    monkeypatch.setattr(generate, "get_customization_strategy", lambda _: "STRATEGY")
+    monkeypatch.setattr(generate, "get_interview_context", lambda **_: "")
+
+    msg = generate._build_resume_user_message("Acme", "Engineer", "JD")
+    # First call measures with zero stories; second passes the real headroom.
+    assert captured[0] == 0
+    assert len(captured) == 2 and captured[1] > 0
+    assert "[context truncated" not in msg
+    assert msg.rstrip().endswith("Output the raw .txt content only.")
 
 
 def test_build_cover_letter_user_message_includes_cleaned_jd_and_contact(isolated_server, monkeypatch):

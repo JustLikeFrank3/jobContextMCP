@@ -261,7 +261,7 @@ class TestPipelineIntegration:
         from tools import langgraph_pipeline as lp
 
         master = tmp_path / "master.txt"
-        master.write_text("Python engineer since 2018.", encoding="utf-8")
+        master.write_text("Python engineer since 2018. Cut latency 34% in 2021.", encoding="utf-8")
         monkeypatch.setattr(
             lp.config, "get_active_master_resume_path", lambda: master, raising=False
         )
@@ -269,6 +269,24 @@ class TestPipelineIntegration:
             draft="Cut latency 34% in 2021; saved $1.2M. Python since 2018."
         )
         assert lp.validate_provenance_node(state) == {"provenance_violations": []}
+
+    def test_retrieved_chunks_are_not_evidence(self, monkeypatch, tmp_path):
+        """Citogenesis guard: the RAG index ingests previously GENERATED
+        documents, so a claim backed only by a retrieved chunk is a past
+        fabrication certifying its own reappearance — it must violate."""
+        from tools import langgraph_pipeline as lp
+
+        master = tmp_path / "master.txt"
+        master.write_text("Python engineer since 2018.", encoding="utf-8")
+        monkeypatch.setattr(
+            lp.config, "get_active_master_resume_path", lambda: master, raising=False
+        )
+        # _state seeds retrieved_hits with "Reduced latency 34% in 2021." —
+        # the only place 34%/2021 exist. They must not count as sourced.
+        state = self._state(draft="Cut latency 34% in 2021. Python since 2018.")
+        result = lp.validate_provenance_node(state)
+        assert "34%" in result["provenance_violations"]
+        assert "2021" in result["provenance_violations"]
 
     def test_gate_catches_fabrication(self, monkeypatch, tmp_path):
         from tools import langgraph_pipeline as lp

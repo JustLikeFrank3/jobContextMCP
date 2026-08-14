@@ -138,10 +138,14 @@ def default_generate(entry: GoldenEntry, jd_text: str) -> str:
     return (out_dir / f"{output_filename}.txt").read_text(encoding="utf-8")
 
 
-# qwen3-jobcontext runs a 40K-token context; the full ~30K-char master fits.
-# Truncating to 6K made 80% of the master invisible and the judge flagged
-# real (unseen) claims as hallucinations.
-def _master_excerpt(max_chars: int = 32000, master_text: str | None = None) -> str:
+# Truncation here is a measurement bug, not a cost control: every char cut is
+# a claim the judge will call a hallucination because it never saw the source
+# (the 6K-cap incident, then again in 2026-08 when story-sourced claims were
+# flagged for weeks). The bundle now includes the STORIES section, so the cap
+# must clear master + achievements + feedback + all stories. 200K chars ≈ 50K
+# tokens — fine for the hosted judges; a local 40K-context judge model needs
+# either a bigger context window or a smaller source library, NOT a lower cap.
+def _master_excerpt(max_chars: int = 200_000, master_text: str | None = None) -> str:
     if master_text is not None:
         return master_text[:max_chars]
     from tools import resume  # noqa: PLC0415 — lazy: imports server config

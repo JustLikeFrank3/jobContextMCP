@@ -83,12 +83,78 @@ def _now() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
-def _load_master_context() -> str:
-    """Read master resume + GM awards + peer feedback as one enriched context block.
+def _format_personal_stories(stories_token_budget: int | None = None) -> str:
+    """Render personal stories + STAR stories as one plain-text block.
+
+    Reads config.PERSONAL_CONTEXT_FILE through _load_json (SQLite-aware,
+    partition-aware). Order is file order — deterministic, never query-ranked —
+    and *stories_token_budget* trims whole stories from the tail, so a budgeted
+    caller's block is always an exact prefix of an unbudgeted caller's block.
+    That prefix property is what lets the eval judge (unbudgeted) verify every
+    story fact a budgeted generator could have cited.
+    """
+    from lib import config  # local import avoids circular dependency
+
+    data = _load_json(config.PERSONAL_CONTEXT_FILE, {})
+    if not isinstance(data, dict):
+        return ""
+
+    blocks: list[str] = []
+    for s in data.get("stories") or []:
+        if not isinstance(s, dict):
+            continue
+        title = str(s.get("title", "")).strip()
+        body = str(s.get("story", "")).strip()
+        if not (title or body):
+            continue
+        blocks.append(f"• {title}\n{body}".strip())
+    for s in data.get("star_stories") or []:
+        if not isinstance(s, dict):
+            continue
+        lines = [f"• {str(s.get('title', '')).strip()} (STAR)"]
+        for label in ("situation", "task", "action", "result"):
+            value = str(s.get(label, "")).strip()
+            if value:
+                lines.append(f"  {label.capitalize()}: {value}")
+        metrics = [str(m).strip() for m in (s.get("metric_bullets") or []) if str(m).strip()]
+        if metrics:
+            lines.append("  Metrics: " + "; ".join(metrics))
+        if len(lines) > 1:
+            blocks.append("\n".join(lines))
+
+    if stories_token_budget is not None:
+        # ~4 chars/token, matching lib.story_retrieval.estimate_tokens. Whole-
+        # story granularity: a half-story invites the model to complete it.
+        kept: list[str] = []
+        used = 0
+        for block in blocks:
+            cost = max(1, len(block) // 4)
+            if used + cost > stories_token_budget:
+                break
+            kept.append(block)
+            used += cost
+        blocks = kept
+
+    return "\n\n".join(blocks)
+
+
+def _load_master_context(stories_token_budget: int | None = None) -> str:
+    """Read master resume + GM awards + peer feedback + personal stories as one
+    enriched context block — THE source-of-truth bundle.
 
     Use this everywhere instead of bare _read(config.MASTER_RESUME) so that
-    recognition quotes and peer feedback are always available to the AI when
-    drafting resumes, cover letters, fitment assessments, and interview prep.
+    recognition quotes, peer feedback, and story facts are always available to
+    the AI when drafting resumes, cover letters, fitment assessments, and
+    interview prep — and, symmetrically, to the eval judge scoring those
+    documents. Generator and judge consuming the same loader is what makes
+    "hallucination" mean fabrication rather than "sourced from a section the
+    judge wasn't shown" (the 2026-08 story blind spot).
+
+    *stories_token_budget* trims only the STORIES section, tail-first and
+    deterministically (see _format_personal_stories): pass a budget from
+    prompt-assembly code that must respect a token ceiling; pass None (the
+    default) to get everything — the judge and other verification paths must
+    never pass a budget, or the blind spot returns via truncation.
 
     Respects the per-request workspace ContextVar so non-owner users get their
     own resume file rather than the global MASTER_RESUME path.
@@ -127,6 +193,19 @@ def _load_master_context() -> str:
             "──── PEER FEEDBACK (verbatim) ────\n"
             "(Direct quotes from managers and colleagues — high-value credibility signals)\n"
             + feedback_text
+        )
+
+    # Stories are part of the citable source of truth: facts stated here may be
+    # used in generated documents exactly as written. This section is LAST so a
+    # token-budgeted trim only ever shortens the stories tail — the sections
+    # above stay byte-identical for every consumer of the bundle.
+    stories_text = _format_personal_stories(stories_token_budget)
+    if stories_text:
+        parts.append(
+            "──── STORIES (first-person stories — part of the source of truth) ────\n"
+            "(Facts, numbers, names, and dates below are citable exactly as written; "
+            "adapt wording to the target role but never alter a number, name, or date)\n"
+            + stories_text
         )
 
     return "\n\n".join(parts)

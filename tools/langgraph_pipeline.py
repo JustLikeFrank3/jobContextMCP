@@ -208,6 +208,12 @@ def validate_provenance_node(state: ResumeAgentState) -> dict:
     introduce a fresh fabrication that slips through. Violations feed the
     revise prompt via state and force the revise route even when the LLM
     reviewer approves — the reviewer checks quality; this checks truth.
+
+    Retrieved RAG chunks are deliberately NOT sources. The index ingests
+    previously generated resumes and cover letters, so counting chunks as
+    evidence let past fabrications certify their own reappearance
+    (citogenesis — the "1,491 chunks" fossil, 2026-08). Chunks steer emphasis
+    in the draft prompt; evidence is first-party material only.
     """
     from lib.provenance import check_claims
 
@@ -215,7 +221,6 @@ def validate_provenance_node(state: ResumeAgentState) -> dict:
         _read(config.get_active_master_resume_path()),
         state.get("star_stories", ""),
         state.get("job_description", ""),
-        *[h.get("text", "") for h in state.get("retrieved_hits", [])],
     ]
     violations = check_claims(state["draft"], sources)
     return {"provenance_violations": violations}
