@@ -105,6 +105,14 @@ def update_master_resume(old_text: str, new_text: str) -> str:
                     f"section, which read_master_resume appends from the separate reference "
                     f"file {ref_path.name}. That file can't be edited with this action."
                 )
+        from lib.io import _format_personal_stories  # noqa: PLC0415 — lazy, mirrors the sections above
+        if old_text in _format_personal_stories():
+            return (
+                "✗ old_text not found in the master resume — it is in the STORIES "
+                "section, which read_master_resume appends from the personal story "
+                "library. Edit the story itself (stories tool: update_personal_story), "
+                "not the master resume."
+            )
         return (
             "✗ old_text not found in the master resume. It must match exactly, "
             "including whitespace and line breaks — read the master resume and "

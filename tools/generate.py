@@ -590,11 +590,21 @@ def _clean_job_description_for_prompt(
 
 
 def _build_resume_user_message(company: str, role: str, job_description: str) -> str:
+    """Assemble the resume prompt around the source-of-truth bundle.
+
+    Stories reach the model INSIDE the master-context bundle (its STORIES
+    section), not as a separately retrieved PERSONAL CONTEXT block. One
+    evidence document means the deterministic provenance gate (whose sources
+    are this prompt) and the eval judge (which reads the same bundle) verify
+    against exactly what the generator saw — parity by construction. When the
+    full bundle would blow the token ceiling, the bundle's stories section is
+    trimmed tail-first and deterministically, so the generator's evidence is
+    always a prefix-aligned subset of the judge's.
+    """
     budgets = config.get_generation_budgets()
     max_tokens = budgets["resume_max_tokens"]
     safety = budgets["safety_margin_tokens"]
 
-    master = _load_master_context()
     portfolio_metrics = _portfolio_metrics_block()
     tone = get_tone_profile_budgeted(
         token_budget=min(budgets["tone_token_budget"], 800),
@@ -603,42 +613,39 @@ def _build_resume_user_message(company: str, role: str, job_description: str) ->
     strategy = get_customization_strategy(_infer_role_type(role))
     interview_block = get_interview_context(company=company, role=role)
 
-    fixed_sections = [
-        f"TARGET COMPANY: {company}",
-        f"TARGET ROLE: {role}",
-        f"JOB DESCRIPTION:\n{job_description}",
-        f"CUSTOMIZATION STRATEGY:\n{strategy}",
-        portfolio_metrics,
-        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
-        interview_block or "",
-        f"TONE PROFILE (write in this voice):\n{tone}",
-        _RESUME_FORMAT_SPEC,
-        "Now write the resume. Output the raw .txt content only.",
-    ]
-    personal_budget = _dynamic_personal_budget(fixed_sections, max_tokens, safety)
-    personal, _diag = _build_personal_context_block(
-        role,
-        job_description,
-        token_budget=personal_budget,
-    )
+    def _sections(master: str) -> list[str]:
+        sections = [
+            f"TARGET COMPANY: {company}",
+            f"TARGET ROLE: {role}",
+            f"JOB DESCRIPTION:\n{job_description}",
+            f"CUSTOMIZATION STRATEGY:\n{strategy}",
+            portfolio_metrics,
+            f"MASTER RESUME (source of truth — use real metrics only; "
+            f"the STORIES section is part of it):\n{master}",
+        ]
+        if interview_block:
+            sections.append(interview_block)
+        sections.extend([
+            f"TONE PROFILE (style only — write in this voice; facts come from the "
+            f"master resume, never from these samples):\n{tone}",
+            _RESUME_FORMAT_SPEC,
+            "Now write the resume. Output the raw .txt content only.",
+        ])
+        return sections
 
-    sections = [
-        f"TARGET COMPANY: {company}",
-        f"TARGET ROLE: {role}",
-        f"JOB DESCRIPTION:\n{job_description}",
-        f"CUSTOMIZATION STRATEGY:\n{strategy}",
-        portfolio_metrics,
-        f"MASTER RESUME (source of truth — use real metrics only):\n{master}",
-        personal,
-    ]
-    if interview_block:
-        sections.append(interview_block)
-    sections.extend([
-        f"TONE PROFILE (write in this voice):\n{tone}",
-        _RESUME_FORMAT_SPEC,
-        "Now write the resume. Output the raw .txt content only.",
-    ])
-    return _enforce_token_ceiling("\n\n".join(s for s in sections if s), max_tokens)
+    # Budget the bundle's stories section against the real headroom: measure
+    # the prompt with zero stories, then hand whatever remains to the loader.
+    # No clamp to personal_context_token_budget — the whole point of folding
+    # stories into the bundle is that they are evidence, not garnish.
+    fixed_cost = estimate_tokens(
+        "\n\n".join(s for s in _sections(_load_master_context(stories_token_budget=0)) if s)
+    )
+    stories_budget = max(0, max_tokens - fixed_cost - safety)
+    master = _load_master_context(stories_token_budget=stories_budget)
+
+    return _enforce_token_ceiling(
+        "\n\n".join(s for s in _sections(master) if s), max_tokens
+    )
 
 
 def _build_cover_letter_user_message(company: str, role: str, job_description: str) -> str:
