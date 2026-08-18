@@ -1202,7 +1202,13 @@ def _correct_unsourced_claims(
     try:
         from lib.provenance import check_claims, format_violation_feedback  # noqa: PLC0415
 
-        violations = check_claims(content, [user_msg])
+        # master_sources = the unbudgeted bundle: a superset of what the
+        # prompt carried, which is safe — a years claim backed by master text
+        # the model didn't see is still TRUE. The JD (inside user_msg) stays
+        # a source for everything except years claims.
+        violations = check_claims(
+            content, [user_msg], master_sources=[_load_master_context()]
+        )
         if not violations:
             return content, 0
         feedback = format_violation_feedback(violations)
@@ -1264,7 +1270,12 @@ def _provenance_note(
         )
 
         claims = extract_claims(content)
-        violations = check_claims(content, [source_text])
+        # Same partition as the correction pass above — the two must agree,
+        # or a "corrected" draft records a different verdict than it was
+        # corrected against.
+        violations = check_claims(
+            content, [source_text], master_sources=[_load_master_context()]
+        )
         record_run(
             kind=kind,
             company=company,

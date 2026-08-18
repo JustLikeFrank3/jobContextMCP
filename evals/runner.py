@@ -203,15 +203,25 @@ def _numeric_provenance_agreement(
     if provenance_row is None:
         buckets["no_record"] = 1
         return buckets
+
+    def _numeric_and_years(text: str) -> "list[str]":
+        # Years-of-experience claims are gated (Round 2) but never matched
+        # the numeric patterns — without this union, a years-only run counts
+        # as both_clean while the gate's row carries a violation.
+        return [
+            *provenance_mod.extract_claims(text),
+            *provenance_mod.extract_years_claims(text),
+        ]
+
     judge_claims = {
         claim
         for text in judge_hallucinations
-        for claim in provenance_mod.extract_claims(text)
+        for claim in _numeric_and_years(text)
     }
     prov_claims = {
         claim
         for text in (provenance_row or {}).get("violations", [])
-        for claim in provenance_mod.extract_claims(text)
+        for claim in _numeric_and_years(text)
     }
     if judge_claims and prov_claims:
         buckets["both_flagged"] = 1
