@@ -1,8 +1,12 @@
-# gpu-exporter.ps1 — serve nvidia-smi as Prometheus metrics on :9106 (Windows).
+# gpu-exporter.ps1 — serve nvidia-smi + local-LLM metrics on :9106 (Windows).
 #
-# Counterpart of scripts/ollama-exporter.py for the gaming rig: the Pi
+# Counterpart of scripts/ollama-exporter.py for the Windows boot: the Pi
 # wallboard's Prometheus scrapes it as job `gpu-windows` so the kiosk's GPU
-# panels show this machine's load alongside the Linux workstation's.
+# panels show this machine's load alongside the Linux workstation's. Since
+# the Windows boot also runs llama-server (:8081, setup-llama-windows.ps1),
+# it additionally emits the same local_llm_* series the Linux exporter does,
+# plus llama.cpp's native llamacpp:* families relayed verbatim — so the
+# kiosk local-LLM board works under either boot.
 #
 # Raw TcpListener rather than HttpListener on purpose — HttpListener needs a
 # urlacl reservation for non-localhost prefixes; a hand-rolled HTTP/1.1
@@ -49,6 +53,43 @@ while ($true) {
             }
             $i++
         }
+
+        # Local LLM (llama-server :8081 with --metrics). Same truthfulness
+        # contract as the Linux exporter: local_llm_up is always 0/1 while
+        # this exporter is alive; what a probe can't observe is ABSENT,
+        # never 0. -ErrorAction Stop is load-bearing — the script-global
+        # SilentlyContinue would otherwise skip the catch and emit neither.
+        $lines += '# TYPE local_llm_up gauge'
+        try {
+            $props = Invoke-RestMethod 'http://127.0.0.1:8081/props' -TimeoutSec 2 -ErrorAction Stop
+            $lines += 'local_llm_up 1'
+            $model = if ($props.model_alias) { $props.model_alias } else { 'unknown' }
+            $lines += '# TYPE local_llm_info gauge'
+            $lines += "local_llm_info{server=`"llama.cpp`",model=`"$model`",ftype=`"$($props.model_ftype)`"} 1"
+            $nctx = $props.default_generation_settings.n_ctx
+            if ($nctx) {
+                $lines += '# TYPE local_llm_context_length gauge'
+                $lines += "local_llm_context_length $nctx"
+            }
+            try {
+                $mdl = Invoke-RestMethod 'http://127.0.0.1:8081/v1/models' -TimeoutSec 2 -ErrorAction Stop
+                $size = $mdl.data[0].meta.size
+                if ($size) {
+                    $lines += '# TYPE local_llm_model_size_bytes gauge'
+                    $lines += "local_llm_model_size_bytes{model=`"$model`"} $size"
+                }
+            } catch { }
+            try {
+                # Native Prometheus counters, relayed verbatim so the Pi's
+                # rate()/increase() see true monotonic series.
+                $met = (Invoke-WebRequest 'http://127.0.0.1:8081/metrics' -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop).Content
+                $lines += ($met -split "`n") | ForEach-Object { $_.TrimEnd("`r") } | Where-Object {
+                    $_ -match '^llamacpp:' -or $_ -match '^# (TYPE|HELP) llamacpp:' }
+            } catch { }
+        } catch {
+            $lines += 'local_llm_up 0'
+        }
+
         $body = [System.Text.Encoding]::UTF8.GetBytes(($lines -join "`n") + "`n")
         $head = "HTTP/1.1 200 OK`r`nContent-Type: text/plain; version=0.0.4`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n"
         $headBytes = [System.Text.Encoding]::ASCII.GetBytes($head)

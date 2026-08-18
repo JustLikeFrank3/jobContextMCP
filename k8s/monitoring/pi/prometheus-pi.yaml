@@ -86,10 +86,14 @@ data:
             - '{namespace=~"jcmcp|jcmcp-qa"}'
         static_configs:
           - targets: ["192.168.101.2:9091"]
-      # Workstation local-LLM stack: Ollama status + GPU + the desktop
-      # app's relayed llm_* series (scripts/ollama-exporter.py, installed
-      # by scripts/ollama-exporter-setup.sh on the workstation), reached
-      # over the direct ethernet link (static IPs both ends).
+      # Workstation local-LLM stack: local LLM server status (llama.cpp
+      # since 2026-08; the exporter probes generically, ollama fallback
+      # kept) + GPU + the desktop app's relayed llm_* series
+      # (scripts/ollama-exporter.py, installed by
+      # scripts/ollama-exporter-setup.sh on the workstation), reached
+      # over the direct ethernet link (static IPs both ends). The job
+      # name predates the ollama→llama.cpp switch and is kept: dashboards
+      # and the boot-detection probes all reference it.
       - job_name: ollama-workstation
         static_configs:
           - targets: ["192.168.101.1:9105"]
