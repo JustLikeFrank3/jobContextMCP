@@ -18,8 +18,12 @@ Known trade-off, documented on purpose: including the JD as a source means
 a draft could parrot a JD metric as its own achievement and pass tier 1.
 Excluding it would false-positive on every legitimate JD echo ("your team
 of 12"). Tier 1 optimizes for zero false positives so the gate can hard-
-block; the parroting case is exactly what the (future) entailment tier is
-for.
+block; the general parroting case is what the (future) entailment tier is
+for. ONE claim shape is carved out of that policy: years-of-experience
+claims ("5+ years of X") check against master-side sources only — human
+triage (2026-08) showed the JD echo IS the failure there, and a years
+requirement appears in essentially every JD, so the carve-out costs no
+legitimate echoes. See check_years_claims.
 """
 from __future__ import annotations
 
@@ -110,17 +114,88 @@ def _contains_claim(corpus: str, needle: str) -> bool:
         start = idx + 1
 
 
-def check_claims(draft: str, sources: list[str]) -> list[str]:
+# ── Years-of-experience claims (Round 2, 2026-08) ───────────────────────────
+# "5+ years of agentic AI engineering" was the single surviving fabrication
+# class after the master-only-evidence baseline, and human triage confirmed
+# the mechanism: the number is mirrored from the JD's *requirement* back as
+# the candidate's *experience*. The gate's JD-as-source policy (module
+# docstring) is deliberate for every other claim shape — "your team of 12"
+# must not false-positive — but for experience durations the JD echo IS the
+# failure, so these claims get their own check against master-side sources
+# only. Single-digit "N+ years" never matched the numeric patterns above
+# (no %, no suffix, under two digits), so this class was entirely ungated.
+_YEARS_CLAIM_RE = re.compile(
+    r"\b(?:(?:over|more than)\s+)?\d{1,2}(?:\.\d)?\s*\+?\s*years?\b",
+    re.IGNORECASE,
+)
+
+
+def _normalize_years(token: str) -> str:
+    """Canonical form: '5+years' for any ≥-flavored claim, '5years' exact.
+
+    'over 5 years', 'more than 5 years', '5+ years', and '5 + years' all
+    claim the same thing; '5 years' claims something stricter and is NOT
+    backed by a source saying '5+ years' (nor vice versa — rule 1 is
+    verbatim, and '5 years'→'5+ years' is precisely the inflation move).
+    """
+    t = token.lower().strip()
+    plus = "+" in t or t.startswith(("over", "more than"))
+    n = re.search(r"\d{1,2}(?:\.\d)?", t).group(0)
+    return f"{n}+years" if plus else f"{n}years"
+
+
+def extract_years_claims(text: str) -> list[str]:
+    """Distinct years-of-experience claims in *text*, original spelling."""
+    seen: dict[str, str] = {}
+    for m in _YEARS_CLAIM_RE.finditer(text or ""):
+        token = m.group(0).strip()
+        key = _normalize_years(token)
+        if key not in seen:
+            seen[key] = token
+    return list(seen.values())
+
+
+def check_years_claims(draft: str, master_sources: list[str]) -> list[str]:
+    """Years-of-experience claims in *draft* not backed by master-side text.
+
+    master_sources is the first-party material only — master resume bundle,
+    STAR stories — NEVER the job description. Matching the JD is what this
+    check exists to catch.
+    """
+    allowed = {
+        _normalize_years(t)
+        for s in master_sources
+        for t in extract_years_claims(s or "")
+    }
+    return [
+        t for t in extract_years_claims(draft)
+        if _normalize_years(t) not in allowed
+    ]
+
+
+def check_claims(
+    draft: str,
+    sources: list[str],
+    master_sources: "list[str] | None" = None,
+) -> list[str]:
     """Return claims in *draft* whose normalized form appears in no source.
 
     Sources are concatenated and normalized the same way as claims, so
     formatting differences (commas, case, 'percent' vs '%') don't matter.
+
+    When *master_sources* is given, years-of-experience claims are
+    additionally checked against it ALONE (see check_years_claims) — the one
+    claim shape where the JD is not a valid source. Callers that don't pass
+    it keep the pre-Round-2 behavior: years claims unchecked.
     """
     corpus = _normalize("\n".join(s for s in sources if s))
-    return [
+    violations = [
         c for c in extract_claims(draft)
         if not _contains_claim(corpus, _normalize(c))
     ]
+    if master_sources is not None:
+        violations.extend(check_years_claims(draft, master_sources))
+    return violations
 
 
 def format_provenance_line(claims: list[str], violations: list[str]) -> str:
@@ -155,12 +230,25 @@ def format_violation_feedback(violations: list[str]) -> str:
     if not violations:
         return ""
     listed = "\n".join(f"  - {v}" for v in violations)
-    return (
+    text = (
         "PROVENANCE VIOLATIONS (these numbers appear in NO source material — "
         "each one MUST be removed or replaced with a claim that exists in the "
         "master resume or STAR stories; do not reword them into surviving):\n"
         + listed
     )
+    # Years-of-experience violations get their own instruction: the number
+    # usually DOES appear somewhere — in the JD's requirements — so "appears
+    # in no source" would invite the model to point at the JD and keep it.
+    if any(_YEARS_CLAIM_RE.fullmatch(v.strip()) for v in violations):
+        text += (
+            "\nEXPERIENCE-DURATION RULE: a years-of-experience claim may only "
+            "restate the master resume's own timeline. The job description's "
+            "requirement ('5+ years of X') is NOT evidence of the candidate's "
+            "experience — matching it is the violation. State the real "
+            "duration from the master resume, or make the claim without a "
+            "year count."
+        )
+    return text
 
 
 def record_run(
