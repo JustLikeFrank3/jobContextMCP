@@ -99,6 +99,13 @@ spec:
             # run_evals) for the owner partition — 08:00 UTC ≈ 4am ET.
             - name: EVALS_NIGHTLY_HOUR_UTC
               value: "8"
+            # MWF steady-state cadence (~$2-3/run): regression signal only
+            # exists when generation/judge code deploys, drift is slow enough
+            # for thrice-weekly detection, and variance is computed WITHIN a
+            # run (N=5), so lower frequency loses nothing. Delete this var to
+            # return to daily while actively iterating on the generator.
+            - name: EVALS_NIGHTLY_DAYS_UTC
+              value: "mon,wed,fri"
             - name: USE_SQLITE
               value: "1"
             # SQLite is the sole source of truth in the cloud. Reads already
