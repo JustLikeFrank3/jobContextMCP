@@ -563,3 +563,115 @@ class TestMasterEditAudit:
         out = resume_mod.update_master_resume("42%", "43%")
         assert out.startswith("✗") and "outside the active workspace" in out
         assert outside.read_text(encoding="utf-8") == "secret 42%"
+
+
+# ===========================================================================
+# Years-of-experience gate (Round 2, 2026-08) — the JD is not evidence here
+# ===========================================================================
+# Human triage of the 08-12/08-14 runs classified every surviving true
+# fabrication as years inflation, and pinned the mechanism as JD-parroting:
+# the JD requires "5+ years of X" and the draft mirrors it back as the
+# candidate's experience. The JD-as-source policy stands for every other
+# claim shape; years claims check against master-side text alone.
+
+class TestYearsClaims:
+    def test_extraction_and_normalization_equivalences(self):
+        from lib.provenance import _normalize_years, extract_years_claims
+
+        assert _normalize_years("5+ years") == "5+years"
+        assert _normalize_years("over 5 years") == "5+years"
+        assert _normalize_years("more than 5 years") == "5+years"
+        assert _normalize_years("5 + years") == "5+years"
+        assert _normalize_years("5 years") == "5years"
+        assert _normalize_years("4.5 years") == "4.5years"
+        # distinct normalized forms extract separately; duplicates collapse
+        got = extract_years_claims(
+            "over 5 years of Python, 5+ years of APIs, 7 years total, 7 years again"
+        )
+        assert len(got) == 2
+
+    def test_four_digit_years_are_not_experience_claims(self):
+        from lib.provenance import extract_years_claims
+
+        assert extract_years_claims("from 2021 years of archives") == []
+        assert extract_years_claims("in 2024-2025") == []
+
+    def test_jd_parrot_is_a_violation(self):
+        """THE Round 2 kill: the number exists only in the JD's requirement."""
+        from lib.provenance import check_claims
+
+        draft = "Engineer with 5+ years of agentic AI experience."
+        jd = "Requirements: 5+ years of agentic AI experience."
+        master = "Dedicated agentic work since Feb 2026; 4.5 years of SWE."
+        violations = check_claims(draft, [master, jd], master_sources=[master])
+        assert any("5+ years" in v for v in violations)
+
+    def test_master_backed_years_pass(self):
+        from lib.provenance import check_claims
+
+        draft = "Brings 2+ years of ERG leadership."
+        master = "GM ERG JumpStart President for 2+ years."
+        assert check_claims(draft, [master], master_sources=[master]) == []
+
+    def test_over_variant_backed_by_plus_variant(self):
+        from lib.provenance import check_claims
+
+        draft = "Over 2 years of ERG leadership."
+        master = "President for 2+ years."
+        assert check_claims(draft, [master], master_sources=[master]) == []
+
+    def test_inflation_from_exact_to_plus_is_a_violation(self):
+        """Master '4 years' does not back a draft's '4+ years'."""
+        from lib.provenance import check_years_claims
+
+        assert check_years_claims("4+ years of Java", ["4 years at GM"]) == ["4+ years"]
+
+    def test_without_master_sources_years_are_unchecked(self):
+        """Opt-in compat: untouched callers keep pre-Round-2 behavior."""
+        from lib.provenance import check_claims
+
+        draft = "Engineer with 7+ years of backend experience."
+        assert check_claims(draft, ["nothing relevant"]) == []
+
+    def test_feedback_carries_the_experience_duration_rule(self):
+        from lib.provenance import format_violation_feedback
+
+        text = format_violation_feedback(["7+ years", "34%"])
+        assert "EXPERIENCE-DURATION RULE" in text
+        assert "NOT evidence" in text
+        # ...and only when a years violation is present
+        assert "EXPERIENCE-DURATION" not in format_violation_feedback(["34%"])
+
+    def test_langgraph_gate_partitions_the_jd(self, monkeypatch, tmp_path):
+        from tools import langgraph_pipeline as lp
+
+        master = tmp_path / "master.txt"
+        master.write_text("Python engineer since 2018.", encoding="utf-8")
+        monkeypatch.setattr(
+            lp.config, "get_active_master_resume_path", lambda: master, raising=False
+        )
+        state = {
+            "company": "X", "role": "Y",
+            "job_description": "We need 5+ years of Python.",
+            "retrieved_hits": [], "star_stories": "",
+            "draft": "Engineer with 5+ years of Python. Python since 2018.",
+        }
+        result = lp.validate_provenance_node(state)
+        assert "5+ years" in result["provenance_violations"]
+
+    def test_langgraph_gate_accepts_star_backed_years(self, monkeypatch, tmp_path):
+        from tools import langgraph_pipeline as lp
+
+        master = tmp_path / "master.txt"
+        master.write_text("Python engineer since 2018.", encoding="utf-8")
+        monkeypatch.setattr(
+            lp.config, "get_active_master_resume_path", lambda: master, raising=False
+        )
+        state = {
+            "company": "X", "role": "Y",
+            "job_description": "We need 5+ years of Python.",
+            "retrieved_hits": [],
+            "star_stories": "Led the guild for 3+ years.",
+            "draft": "Led a guild for 3+ years. Python since 2018.",
+        }
+        assert lp.validate_provenance_node(state) == {"provenance_violations": []}

@@ -217,12 +217,15 @@ def validate_provenance_node(state: ResumeAgentState) -> dict:
     """
     from lib.provenance import check_claims
 
-    sources = [
+    master_side = [
         _read(config.get_active_master_resume_path()),
         state.get("star_stories", ""),
-        state.get("job_description", ""),
     ]
-    violations = check_claims(state["draft"], sources)
+    # The JD stays a source for ordinary numeric claims (legitimate echoes
+    # like "your team of 12") but NOT for years-of-experience claims — for
+    # those, matching the JD's requirement is the fabrication (Round 2).
+    sources = [*master_side, state.get("job_description", "")]
+    violations = check_claims(state["draft"], sources, master_sources=master_side)
     return {"provenance_violations": violations}
 
 
