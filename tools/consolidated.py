@@ -32,6 +32,7 @@ from tools import (
     context,
     crossref,
     digest,
+    eval_results,
     export,
     fitment,
     generate,
@@ -169,6 +170,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "rejections": (rejections.get_rejections, "Rejection history + funnel patterns."),
         "compensation_update": (compensation.update_compensation, "Record a comp datapoint."),
         "compensation_compare": (compensation.get_compensation_comparison, "Compare recorded comp."),
+        "evals_results": (eval_results.get_eval_results, "Latest eval-suite results: scores, alerts, flagged claims (read-only)."),
     },
     "workspace": {
         "check": (setup.check_workspace, "Diagnose what's present/missing (read-only)."),
@@ -532,7 +534,7 @@ def brand(
 
 
 def insights(
-    action: Literal["daily_digest", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare"],
+    action: Literal["daily_digest", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
     company: str | None = None,
     role: str | None = None,
     stage: str | None = None,
@@ -548,8 +550,9 @@ def insights(
     level: str | None = None,
     location: str | None = None,
     remote: bool | None = None,
+    raw: bool | None = None,
 ) -> str:
-    """Digests and analysis: daily/weekly summaries, session context, rejection funnel patterns, and compensation comparison."""
+    """Digests and analysis: daily/weekly summaries, session context, rejection funnel patterns, eval-suite results, and compensation comparison."""
     return _run("insights", action, locals())
 
 
