@@ -62,6 +62,13 @@ class RunAggregate:
     flip_rate_pct: float
     verdicts: list[str] = field(default_factory=list)
     hallucinations: list[str] = field(default_factory=list)  # unique claims across runs
+    # Total flags summed across runs (NOT deduplicated — the same claim flagged
+    # in every run counts every time). The rate above is the shipping bar and
+    # saturates by design: one flag per run and twelve flags per run both read
+    # 100%. This count is the progress signal the rate cannot carry — it kept
+    # reading 100% while the years-inflation class went from ~13 flags to zero
+    # (2026-08-18), which is how "no change" got misread twice.
+    hallucination_flags: int = 0
 
     @property
     def alerts(self) -> list[str]:
@@ -77,8 +84,13 @@ class RunAggregate:
         if self.cov_pct > COV_ALERT_PCT:
             found.append(f"CoV {self.cov_pct:.1f}% > {COV_ALERT_PCT}% — output unstable")
         if self.hallucination_rate_pct > 0:
+            # Trigger stays any-flag (one fabrication makes a document
+            # unsendable); the message carries the volume so a saturated bar
+            # still shows progress run-over-run.
+            runs_flagged = round(self.hallucination_rate_pct * self.n_runs / 100)
             found.append(
-                f"hallucination rate {self.hallucination_rate_pct:.0f}% — immediate review"
+                f"{self.hallucination_flags} hallucination flags in "
+                f"{runs_flagged}/{self.n_runs} runs — immediate review"
             )
         if self.flip_rate_pct > FLIP_ALERT_PCT:
             found.append(f"verdict flip rate {self.flip_rate_pct:.0f}% — non-deterministic")
@@ -90,6 +102,7 @@ class RunAggregate:
             "mean_score": round(self.mean_score, 2),
             "cov_pct": round(self.cov_pct, 1),
             "hallucination_rate_pct": round(self.hallucination_rate_pct, 1),
+            "hallucination_flags": self.hallucination_flags,
             "verdict_flip_rate_pct": round(self.flip_rate_pct, 1),
             "per_dimension": {
                 d: {k: round(v, 2) for k, v in m.items()}
@@ -124,6 +137,7 @@ def aggregate_runs(runs: list[JudgeScore]) -> RunAggregate:
         flip_rate_pct=verdict_flip_rate(verdicts),
         verdicts=verdicts,
         hallucinations=sorted({h for r in runs for h in r.hallucinations}),
+        hallucination_flags=sum(len(r.hallucinations) for r in runs),
     )
 
 
