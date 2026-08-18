@@ -16,7 +16,7 @@ UNIT_DIR="${HOME}/.config/systemd/user"
 mkdir -p "${UNIT_DIR}"
 cat > "${UNIT_DIR}/ollama-exporter.service" <<EOF
 [Unit]
-Description=Prometheus exporter for Ollama + GPU + jobContext desktop metrics
+Description=Prometheus exporter for the local LLM server + GPU + jobContext desktop metrics
 
 [Service]
 ExecStart=/usr/bin/python3 ${ROOT}/scripts/ollama-exporter.py

@@ -35,7 +35,7 @@
 # nothing to report still shows 0; feed gone shows No data. Verified against
 # both Prometheis (AKS live, Pi stale) before landing.
 #
-# The up/ollama_up/jobcontext_desktop_up panels previously kept `or vector(0)`
+# The up/local_llm_up/jobcontext_desktop_up panels previously kept `or vector(0)`
 # on the theory that 0 -> DOWN is truthful when the exporter is gone. It is
 # not, and the fallback only ever fires in the case where it lies:
 #
@@ -44,9 +44,9 @@
 #   Prometheus is not scraping that target — a monitoring gap, not a host
 #   outage — and that is precisely when `or vector(0)` painted a red DOWN.
 #
-#   ollama_up / jobcontext_desktop_up are relayed through the workstation
-#   exporter, which always emits them as 0 or 1 while it is alive
-#   (scripts/ollama-exporter.py: ollama_lines emits 0 on a failed poll,
+#   local_llm_up / jobcontext_desktop_up are relayed through the workstation
+#   exporters, which always emit them as 0 or 1 while they are alive
+#   (scripts/ollama-exporter.py: llm_lines emits 0 on a failed poll,
 #   desktop_lines emits 0 when no sidecar port answers). So absent means the
 #   exporter itself is gone — we have lost the observer, and claiming its
 #   subjects are DOWN asserts something we cannot see.
@@ -102,81 +102,93 @@ metadata:
 data:
   kiosk-ollama.json: |
     {
-      "uid": "kiosk-ollama", "title": "Local LLM — Ollama on the Workstation", "tags": ["kiosk"],
+      "uid": "kiosk-ollama", "title": "Local LLM — the Workstation", "tags": ["kiosk"],
       "timezone": "browser", "refresh": "30s", "schemaVersion": 39,
       "time": {"from": "now-3h", "to": "now"},
       "panels": [
-        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🦙 LOCAL LLM — Ollama · qwen3-jobcontext (from qwen2.5-coder:1.5b-base) · RTX 5060 Ti"}},
-        {"type": "stat", "title": "Ollama", "gridPos": {"x":0,"y":3,"w":3,"h":6},
+        {"type": "text", "title": "", "transparent": true, "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3}, "options": {"mode": "markdown", "content": "# 🧠 LOCAL LLM — whatever the workstation is serving · RTX 5060 Ti · either boot"}},
+        {"type": "stat", "title": "LLM server", "gridPos": {"x":0,"y":3,"w":3,"h":6},
+         "description": "local_llm_up from whichever workstation exporter is alive (:9105 Linux, :9106 Windows) — each probes the local OpenAI-compatible server (llama-server :8081, ollama :11434 fallback). Absent = both exporters gone, not a server verdict.",
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(ollama_up{job=\"ollama-workstation\"})"}],
+         "targets": [{"expr": "max(local_llm_up{job=~\"ollama-workstation|gpu-windows\"})"}],
          "fieldConfig": {"defaults": {"noValue": "NO EXPORTER", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
-        {"type": "stat", "title": "Model in VRAM", "gridPos": {"x":3,"y":3,"w":4,"h":6},
+        {"type": "stat", "title": "Model", "gridPos": {"x":3,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum by(model)(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "{{model}}", "instant": true}],
-         "fieldConfig": {"defaults": {"unit": "bytes", "noValue": "no model resident"}},
-         "options": {"textMode": "value_and_name"}},
+         "targets": [{"expr": "sum by(model, server)(local_llm_info{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "{{model}} · {{server}}", "instant": true}],
+         "fieldConfig": {"defaults": {"noValue": "none reported"}},
+         "options": {"textMode": "name"}},
         {"type": "stat", "title": "Context window", "gridPos": {"x":7,"y":3,"w":3,"h":6},
+         "description": "Absent when the running server does not report one — that is not a 0-token context.",
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(ollama_model_context_length{job=\"ollama-workstation\"})"}]},
+         "targets": [{"expr": "max(local_llm_context_length{job=~\"ollama-workstation|gpu-windows\"})"}],
+         "fieldConfig": {"defaults": {"noValue": "not reported"}}},
         {"type": "gauge", "title": "GPU temp", "gridPos": {"x":10,"y":3,"w":3,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(gpu_temperature_celsius{job=\"ollama-workstation\"})"}],
+         "targets": [{"expr": "max(gpu_temperature_celsius{job=~\"ollama-workstation|gpu-windows\"})"}],
          "fieldConfig": {"defaults": {"unit": "celsius", "min": 20, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":75},{"color":"red","value":90}]}}}},
         {"type": "gauge", "title": "GPU util", "gridPos": {"x":13,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})"}],
+         "targets": [{"expr": "max(gpu_utilization_percent{job=~\"ollama-workstation|gpu-windows\"})"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":80},{"color":"red","value":95}]}}}},
         {"type": "gauge", "title": "VRAM used", "gridPos": {"x":17,"y":3,"w":4,"h":6},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "100 * max(gpu_memory_used_bytes{job=\"ollama-workstation\"}) / max(gpu_memory_total_bytes{job=\"ollama-workstation\"})"}],
+         "targets": [{"expr": "100 * max(gpu_memory_used_bytes{job=~\"ollama-workstation|gpu-windows\"}) / max(gpu_memory_total_bytes{job=~\"ollama-workstation|gpu-windows\"})"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
            "thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":85},{"color":"red","value":95}]}}}},
         {"type": "stat", "title": "Desktop app", "gridPos": {"x":21,"y":3,"w":3,"h":6},
+         "description": "The jobContext desktop sidecar relay is Linux-boot-only (:9105). Under Windows this reads NO EXPORTER — the observer is gone, not the app.",
          "datasource": {"uid":"prometheus"},
          "targets": [{"expr": "max(jobcontext_desktop_up{job=\"ollama-workstation\"})"}],
          "fieldConfig": {"defaults": {"noValue": "NO EXPORTER", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}},
-        {"type": "timeseries", "title": "LLM calls (1h) by model/outcome", "gridPos": {"x":0,"y":9,"w":6,"h":9},
+        {"type": "timeseries", "title": "Token throughput (tok/s, 5m avg)", "gridPos": {"x":0,"y":9,"w":6,"h":9},
+         "description": "llama.cpp's native counters, relayed by whichever exporter is up — they see every client (desktop, phone, Mac), not just the desktop app.",
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_calls_total{job=\"ollama-workstation\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
-        {"type": "timeseries", "title": "LLM tokens/hour by direction", "gridPos": {"x":6,"y":9,"w":6,"h":9},
+         "targets": [
+           {"expr": "sum(rate(llamacpp:tokens_predicted_total{job=~\"ollama-workstation|gpu-windows\"}[5m]))", "legendFormat": "generate"},
+           {"expr": "sum(rate(llamacpp:prompt_tokens_total{job=~\"ollama-workstation|gpu-windows\"}[5m]))", "legendFormat": "prompt"}],
+         "fieldConfig": {"defaults": {"min": 0}}},
+        {"type": "timeseries", "title": "Tokens (1h)", "gridPos": {"x":6,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(increase(llm_tokens_total{job=\"ollama-workstation\"}[1h])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}]},
-        {"type": "timeseries", "title": "Avg LLM call latency", "gridPos": {"x":12,"y":9,"w":6,"h":9},
+         "targets": [
+           {"expr": "sum(increase(llamacpp:tokens_predicted_total{job=~\"ollama-workstation|gpu-windows\"}[1h]))", "legendFormat": "generated"},
+           {"expr": "sum(increase(llamacpp:prompt_tokens_total{job=~\"ollama-workstation|gpu-windows\"}[1h]))", "legendFormat": "prompt"},
+           {"expr": "sum(increase(llamacpp:prompt_tokens_cached_total{job=~\"ollama-workstation|gpu-windows\"}[1h]))", "legendFormat": "prompt (cached)"}],
+         "fieldConfig": {"defaults": {"min": 0}}},
+        {"type": "timeseries", "title": "Requests", "gridPos": {"x":12,"y":9,"w":6,"h":9},
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum by(model)(rate(llm_call_seconds_sum{job=\"ollama-workstation\"}[15m])) / sum by(model)(rate(llm_call_seconds_count{job=\"ollama-workstation\"}[15m]))", "legendFormat": "{{model}}"}],
-         "fieldConfig": {"defaults": {"unit": "s"}}},
-        {"type": "timeseries", "title": "Provenance gate runs by verdict", "gridPos": {"x":18,"y":9,"w":6,"h":9},
+         "targets": [
+           {"expr": "sum(llamacpp:requests_processing{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "processing"},
+           {"expr": "sum(llamacpp:requests_deferred{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "queued"}],
+         "fieldConfig": {"defaults": {"min": 0}}},
+        {"type": "timeseries", "title": "Speculative accept % (MTP)", "gridPos": {"x":18,"y":9,"w":6,"h":9},
+         "description": "Draft tokens accepted / drafted over 1h. Only the speed/balanced profiles load the MTP draft model; no data = no drafting in the window, which is not a 0% accept rate.",
          "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum by(verdict)(provenance_runs_total{job=\"ollama-workstation\"})", "legendFormat": "{{verdict}}"}]},
+         "targets": [{"expr": "100 * sum(increase(llamacpp:spec_decode_num_accepted_tokens_total{job=~\"ollama-workstation|gpu-windows\"}[1h])) / sum(increase(llamacpp:spec_decode_num_draft_tokens_total{job=~\"ollama-workstation|gpu-windows\"}[1h]))", "legendFormat": "accept"}],
+         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
         {"type": "timeseries", "title": "GPU utilization", "gridPos": {"x":0,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [
-           {"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "workstation"},
-           {"expr": "max(gpu_utilization_percent{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig"}],
+           {"expr": "max(gpu_utilization_percent{job=\"ollama-workstation\"})", "legendFormat": "Linux boot"},
+           {"expr": "max(gpu_utilization_percent{job=\"gpu-windows\"})", "legendFormat": "Windows boot"}],
          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}}},
-        {"type": "stat", "title": "Gate pass rate", "gridPos": {"x":16,"y":18,"w":4,"h":9},
-         "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "100 * sum(provenance_runs_total{job=\"ollama-workstation\",verdict=\"passed\"}) / sum(provenance_runs_total{job=\"ollama-workstation\"})"}],
-         "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "noValue": "no runs",
-           "thresholds": {"steps": [{"color":"red","value":null},{"color":"orange","value":80},{"color":"green","value":99}]}}}},
-        {"type": "stat", "title": "Gate runs", "gridPos": {"x":20,"y":18,"w":4,"h":5},
-         "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(provenance_runs_total{job=\"ollama-workstation\"}) or vector(0)"}]},
-        {"type": "stat", "title": "Violations", "gridPos": {"x":20,"y":23,"w":4,"h":4},
-         "datasource": {"uid":"prometheus"},
-         "targets": [{"expr": "sum(provenance_violations_recorded_total{job=\"ollama-workstation\"}) or vector(0)"}],
-         "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":null},{"color":"orange","value":1}]}}}},
         {"type": "timeseries", "title": "VRAM", "gridPos": {"x":8,"y":18,"w":8,"h":9},
          "datasource": {"uid":"prometheus"},
          "targets": [
-           {"expr": "max(gpu_memory_used_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation used"},
-           {"expr": "max(gpu_memory_total_bytes{job=\"ollama-workstation\"})", "legendFormat": "workstation total"},
-           {"expr": "sum(ollama_model_size_vram_bytes{job=\"ollama-workstation\"})", "legendFormat": "ollama model"},
-           {"expr": "max(gpu_memory_used_bytes{job=\"gpu-windows\"})", "legendFormat": "flight-sim rig used"}],
-         "fieldConfig": {"defaults": {"unit": "bytes"}}}
+           {"expr": "max(gpu_memory_used_bytes{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "used"},
+           {"expr": "max(gpu_memory_total_bytes{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "total"},
+           {"expr": "sum(local_llm_model_size_bytes{job=~\"ollama-workstation|gpu-windows\"})", "legendFormat": "model file size"}],
+         "fieldConfig": {"defaults": {"unit": "bytes"}}},
+        {"type": "timeseries", "title": "Desktop LLM calls (1h)", "gridPos": {"x":16,"y":18,"w":4,"h":9},
+         "description": "From the desktop sidecar relay — Linux boot only.",
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum(increase(llm_calls_total{job=\"ollama-workstation\"}[1h])) by (model, outcome)", "legendFormat": "{{model}}/{{outcome}}"}]},
+        {"type": "timeseries", "title": "Desktop call latency", "gridPos": {"x":20,"y":18,"w":4,"h":9},
+         "description": "From the desktop sidecar relay — Linux boot only.",
+         "datasource": {"uid":"prometheus"},
+         "targets": [{"expr": "sum by(model)(rate(llm_call_seconds_sum{job=\"ollama-workstation\"}[15m])) / sum by(model)(rate(llm_call_seconds_count{job=\"ollama-workstation\"}[15m]))", "legendFormat": "{{model}}"}],
+         "fieldConfig": {"defaults": {"unit": "s"}}}
       ]
     }
   kiosk-gaming.json: |

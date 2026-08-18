@@ -5,17 +5,25 @@ Serves :9105/metrics for the Pi wallboard's Prometheus (scrape job
 ``ollama-workstation`` in k8s/monitoring/pi/prometheus-pi.yaml) with three
 metric sources merged into one page:
 
-  - Ollama (localhost:11434): up/version plus per-loaded-model size, VRAM
-    and context length via /api/ps. Ollama has no native /metrics endpoint
-    (404 as of 0.32.x) — this is the workaround.
+  - The local LLM server, whichever one is running: candidate bases are
+    probed via the OpenAI-compatible /v1/models until one answers
+    (llama-server :8081 since 2026-08, ollama :11434 kept as a fallback).
+    Emits generic local_llm_* series (up, model, context length, model
+    file size); llama.cpp additionally gets its native llamacpp:* families
+    relayed verbatim from /metrics (its --metrics flag; ollama has no such
+    endpoint — 404 as of 0.32.x).
   - GPU via ``nvidia-smi`` (utilization, VRAM, temperature).
   - The desktop app's own llm_* series (calls/tokens/latency for the
-    ollama-served model), relayed. The packaged sidecar binds 127.0.0.1 on
-    an OS-assigned port, so it is unreachable from the Pi directly; the
+    locally served model), relayed. The packaged sidecar binds 127.0.0.1
+    on an OS-assigned port, so it is unreachable from the Pi directly; the
     port is rediscovered per scrape from listening sockets owned by
     ``jobcontext-back*`` processes (survives app restarts).
 
-Install with scripts/ollama-exporter-setup.sh (user systemd unit).
+Install with scripts/ollama-exporter-setup.sh (user systemd unit). The
+filename and the :9105 port predate the ollama→llama.cpp switch and are
+kept on purpose: the systemd unit, the Prometheus job name, and the
+dual-boot OS probes (this port answering means the Linux boot is up) all
+point here.
 """
 from __future__ import annotations
 
@@ -27,7 +35,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 9105
-OLLAMA = "http://127.0.0.1:11434"
+# Probe order is priority: first base whose /v1/models answers wins.
+LLM_BASES = (("http://127.0.0.1:8081", "llama.cpp"),
+             ("http://127.0.0.1:11434", "ollama"))
 TIMEOUT = 3
 
 # Desktop-app families forwarded verbatim (with their # TYPE lines); the
@@ -42,35 +52,56 @@ def _get_json(url: str):
         return json.load(resp)
 
 
-def ollama_lines() -> list[str]:
-    lines = ["# TYPE ollama_up gauge"]
-    try:
-        version = _get_json(f"{OLLAMA}/api/version").get("version", "unknown")
-        loaded = _get_json(f"{OLLAMA}/api/ps").get("models", [])
-    except Exception:
-        lines.append("ollama_up 0")
-        return lines
-    lines += [
-        "ollama_up 1",
-        "# TYPE ollama_info gauge",
-        f'ollama_info{{version="{version}"}} 1',
-        "# TYPE ollama_model_size_bytes gauge",
-        "# TYPE ollama_model_size_vram_bytes gauge",
-        "# TYPE ollama_model_context_length gauge",
-    ]
-    for m in loaded:
-        name = m.get("name", "unknown")
-        details = m.get("details", {})
-        info = (f'model="{name}"'
-                f',parameter_size="{details.get("parameter_size", "")}"'
-                f',quantization="{details.get("quantization_level", "")}"')
+def llm_lines() -> list[str]:
+    """Whatever local LLM server is up, found by OpenAI-compatible probe.
+
+    Truthfulness contract (grafana-pi.yaml header): local_llm_up is always
+    emitted 0/1 while this exporter is alive, so absent means the exporter
+    itself is gone. What a probe cannot observe (context length on a server
+    that does not report one) is ABSENT, never 0.
+    """
+    lines = ["# TYPE local_llm_up gauge"]
+    for base, server in LLM_BASES:
+        try:
+            entries = _get_json(f"{base}/v1/models").get("data", [])
+        except Exception:
+            continue
+        if not entries:
+            continue
+        model = entries[0].get("id", "unknown")
+        size = (entries[0].get("meta") or {}).get("size", 0)
+        ftype = ""
+        ctx = 0
+        try:  # llama.cpp-only detail: served alias, quantization, context
+            props = _get_json(f"{base}/props")
+            model = props.get("model_alias") or model
+            ftype = props.get("model_ftype", "")
+            ctx = (props.get("default_generation_settings") or {}).get("n_ctx", 0)
+        except Exception:
+            pass
         lines += [
-            f'ollama_model_size_bytes{{model="{name}"}} {m.get("size", 0)}',
-            f'ollama_model_size_vram_bytes{{model="{name}"}} {m.get("size_vram", 0)}',
-            f'ollama_model_context_length{{model="{name}"}} {m.get("context_length", 0)}',
-            "# TYPE ollama_model_info gauge",
-            f"ollama_model_info{{{info}}} 1",
+            "local_llm_up 1",
+            "# TYPE local_llm_info gauge",
+            f'local_llm_info{{server="{server}",model="{model}",ftype="{ftype}"}} 1',
         ]
+        if ctx:
+            lines += ["# TYPE local_llm_context_length gauge",
+                      f"local_llm_context_length {ctx}"]
+        if size:
+            lines += ["# TYPE local_llm_model_size_bytes gauge",
+                      f'local_llm_model_size_bytes{{model="{model}"}} {size}']
+        # llama.cpp's --metrics page is already Prometheus format; relay it
+        # verbatim so rate()/increase() on the Pi see true monotonic series.
+        try:
+            with urllib.request.urlopen(f"{base}/metrics", timeout=TIMEOUT) as resp:
+                body = resp.read().decode()
+            lines += [ln for ln in body.splitlines()
+                      if ln.startswith(("llamacpp:",
+                                        "# TYPE llamacpp:", "# HELP llamacpp:"))]
+        except Exception:
+            pass
+        return lines
+    lines.append("local_llm_up 0")
     return lines
 
 
@@ -177,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/metrics":
             self.send_error(404)
             return
-        body = "\n".join(ollama_lines() + gpu_lines() + desktop_lines()) + "\n"
+        body = "\n".join(llm_lines() + gpu_lines() + desktop_lines()) + "\n"
         payload = body.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4")

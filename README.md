@@ -223,7 +223,7 @@ Every tenant's data lives under `DATA_FOLDER/users/{oid}` with per-request conte
 | | |
 |---|---|
 | ![Cloud health](docs/images/wallboard/kiosk-cloud.png) | ![Local LLM](docs/images/wallboard/kiosk-ollama.png) |
-| Production — jobcontext.ai on AKS | Local LLM — Ollama + desktop app on the workstation |
+| Production — jobcontext.ai on AKS | Local LLM — whatever model the workstation is serving (llama.cpp/ollama) + desktop app |
 | ![Evals](docs/images/wallboard/kiosk-evals.png) | ![Provenance](docs/images/wallboard/kiosk-provenance.png) |
 | Golden-dataset judge scores, variance, alerts | Truth-gate verdicts (the red pass rate is the gate catching a local model fabricating) |
 
