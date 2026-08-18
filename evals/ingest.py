@@ -61,6 +61,11 @@ def _record_suite_gauges(payload: dict) -> int:
         rate = (detail.get(gd_id) or {}).get("hallucination_rate_pct")
         if rate is not None:
             metrics.set_gauge("eval_hallucination_rate_pct", float(rate), gd_id=gd_id)
+        # Volume alongside the (saturating) rate: total flags across runs.
+        # Absent from pre-2026-08-18 payloads — no gauge rather than a fake 0.
+        flags = (detail.get(gd_id) or {}).get("hallucination_flags")
+        if flags is not None:
+            metrics.set_gauge("eval_hallucination_flags", float(flags), gd_id=gd_id)
     return scored
 
 
