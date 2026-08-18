@@ -1632,3 +1632,66 @@ def test_default_generate_keeps_artifacts_when_asked(isolated_server, monkeypatc
     from lib import config
 
     assert list(config.get_active_optimized_resumes_dir().glob("EVAL *"))
+
+
+# ===========================================================================
+# Hallucination FLAGS count — the volume signal the saturating rate can't carry
+# ===========================================================================
+# The any-flag rate is the shipping bar (one fabrication = unsendable) and
+# saturates by design: 1 flag/run and 12 flags/run both read 100%. The count
+# is what moves when progress happens; its absence caused two "no change"
+# misreads while entire fabrication classes were being eliminated.
+
+def test_hallucination_flags_count_not_deduplicated():
+    """The same claim flagged in every run counts every time — persistence of
+    one fabrication across runs IS signal, not duplication."""
+    runs = [
+        _score({}, verdict="fail", hallucinations=["LiveVoxNative", "5+ years"]),
+        _score({}, verdict="fail", hallucinations=["LiveVoxNative"]),
+        _score({}, verdict="pass"),
+    ]
+    agg = variance.aggregate_runs(runs)
+    assert agg.hallucination_flags == 3          # 2 + 1 + 0, not len(unique)==2
+    assert agg.to_dict()["hallucination_flags"] == 3
+
+
+def test_hallucination_alert_carries_volume_and_run_counts():
+    runs = [
+        _score({}, verdict="fail", hallucinations=["a", "b"]),
+        _score({}, verdict="fail", hallucinations=["a"]),
+        _score({}, verdict="pass"),
+    ]
+    agg = variance.aggregate_runs(runs)
+    assert any("3 hallucination flags in 2/3 runs" in a for a in agg.alerts)
+
+
+def test_ingest_exposes_hallucination_flags_gauge():
+    from lib import metrics
+    from evals import ingest
+
+    metrics.reset()
+    ingest.apply_results({
+        "rows": [{"gd_id": "GD-01", "mean": 3.5}],
+        "detail": {"GD-01": {"hallucination_rate_pct": 100.0, "hallucination_flags": 7}},
+    })
+    from lib.metrics import render_prometheus
+
+    text = render_prometheus()
+    assert 'eval_hallucination_flags{gd_id="GD-01"} 7' in text
+    metrics.reset()
+
+
+def test_ingest_skips_flags_gauge_for_old_payloads():
+    """Pre-2026-08-18 payloads have no flags field — no gauge beats a fake 0."""
+    from lib import metrics
+    from evals import ingest
+
+    metrics.reset()
+    ingest.apply_results({
+        "rows": [{"gd_id": "GD-01", "mean": 3.5}],
+        "detail": {"GD-01": {"hallucination_rate_pct": 100.0}},
+    })
+    from lib.metrics import render_prometheus
+
+    assert "eval_hallucination_flags" not in render_prometheus()
+    metrics.reset()

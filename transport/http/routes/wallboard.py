@@ -177,6 +177,17 @@ def _render(evals: dict, work: "dict | None", request: "Request | None" = None) 
         parts.append("<div class='clean'>none — every entry inside thresholds</div>")
 
     parts.append("<h2>Flagged claims (judge)</h2>")
+    # Volume header: total flags across runs is the progress signal — the
+    # any-flag rate saturates (1 flag/run and 12 flags/run both read 100%).
+    total_flags = sum(
+        int((agg or {}).get("hallucination_flags") or 0)
+        for agg in (detail or {}).values()
+    )
+    if total_flags:
+        parts.append(
+            f"<div class='meta'>{total_flags} total flags across all runs; "
+            "distinct claims below</div>"
+        )
     any_claim = False
     for gd_id, agg in (detail or {}).items():
         for claim in (agg or {}).get("hallucinations") or []:
