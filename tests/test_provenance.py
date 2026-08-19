@@ -675,3 +675,53 @@ class TestYearsClaims:
             "draft": "Led a guild for 3+ years. Python since 2018.",
         }
         assert lp.validate_provenance_node(state) == {"provenance_violations": []}
+
+
+# ===========================================================================
+# Contact-handle gate (Round 3, 2026-08) — a drifted handle is worse than a
+# fabricated metric: it sends a recruiter to a stranger's profile
+# ===========================================================================
+# The LinkedIn mutation (frankvmacbride → frankmacbride) survived every
+# prompt-rule round and recurred 3× in the 2026-08-19 run. Perfectly
+# mechanical: any profile handle in the draft must appear verbatim in
+# master-side text.
+
+class TestContactClaims:
+    MASTER = ["linkedin: www.linkedin.com/in/frankvmacbride | github.com/JustLikeFrank3"]
+
+    def test_mutated_linkedin_handle_is_a_violation(self):
+        from lib.provenance import check_contact_claims
+
+        draft = "linkedin: www.linkedin.com/in/frankmacbride"
+        assert check_contact_claims(draft, self.MASTER) == ["linkedin.com/in/frankmacbride"]
+
+    def test_exact_handles_pass_case_insensitively(self):
+        from lib.provenance import check_contact_claims
+
+        draft = ("linkedin: www.linkedin.com/in/FrankVMacBride\n"
+                 "github: github.com/justlikefrank3")
+        assert check_contact_claims(draft, self.MASTER) == []
+
+    def test_repo_paths_only_check_the_handle_segment(self):
+        from lib.provenance import check_contact_claims
+
+        draft = "see github.com/JustLikeFrank3/jobContextMCP for the code"
+        assert check_contact_claims(draft, self.MASTER) == []
+
+    def test_wired_into_check_claims_behind_master_sources(self):
+        from lib.provenance import check_claims
+
+        draft = "Contact: linkedin.com/in/frankmacbride"
+        # Opt-in like the years gate: no master_sources → unchecked (compat)
+        assert check_claims(draft, self.MASTER) == []
+        assert check_claims(draft, self.MASTER, master_sources=self.MASTER) == [
+            "linkedin.com/in/frankmacbride"
+        ]
+
+    def test_feedback_carries_the_contact_detail_rule(self):
+        from lib.provenance import format_violation_feedback
+
+        text = format_violation_feedback(["linkedin.com/in/frankmacbride"])
+        assert "CONTACT-DETAIL RULE" in text
+        assert "character-for-character" in text
+        assert "CONTACT-DETAIL" not in format_violation_feedback(["34%"])

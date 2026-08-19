@@ -408,3 +408,28 @@ class TestNumericIntegrityRules:
         assert "NUMERIC INTEGRITY" in COVER_LETTER_SYSTEM
         assert "never moved onto a different claim" in COVER_LETTER_SYSTEM
         assert "at most once" in COVER_LETTER_SYSTEM
+
+
+class TestAttributionDisciplineRules:
+    """Round 3 prompt-side countermeasure: after the 2026-08-19 run, ALL
+    surviving semantic flags were attribution-shaped — bullets under the role
+    the master explicitly corrects away from, one project's timeframe annexing
+    sibling work, JD titles worn as held titles. Pin the rules so a later
+    prompt edit can't silently drop the constraints Friday's trend measures."""
+
+    def test_resume_system_carries_attribution_rules(self):
+        from tools.generate_prompts import RESUME_SYSTEM
+
+        assert "ATTRIBUTION DISCIPLINE" in RESUME_SYSTEM
+        assert "that\n       note is BINDING" in RESUME_SYSTEM or "note is BINDING" in RESUME_SYSTEM
+        assert "does not cover any\n       other migration" in RESUME_SYSTEM \
+            or "does not cover any" in RESUME_SYSTEM
+        assert "titles the master states the\n       candidate actually held" in RESUME_SYSTEM \
+            or "candidate actually held" in RESUME_SYSTEM
+        assert "character-for-character" in RESUME_SYSTEM
+
+    def test_cover_letter_system_carries_attribution_rule(self):
+        from tools.generate_prompts import COVER_LETTER_SYSTEM
+
+        assert "ATTRIBUTION" in COVER_LETTER_SYSTEM
+        assert "timeline correction note" in COVER_LETTER_SYSTEM

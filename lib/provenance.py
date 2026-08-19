@@ -173,6 +173,33 @@ def check_years_claims(draft: str, master_sources: list[str]) -> list[str]:
     ]
 
 
+# ── Contact-handle claims (Round 3, 2026-08) ────────────────────────────────
+# The LinkedIn-handle mutation (frankvmacbride → frankmacbride) survived every
+# prompt-rule round: it recurred 3× in the 2026-08-19 run after vanishing for
+# a week. A drifted handle is worse than a fabricated metric — it sends a
+# recruiter to a stranger's profile — and it is perfectly mechanical to check:
+# any profile handle in the draft must appear verbatim in master-side text.
+# Email/phone are deliberately NOT pattern-checked here: their regexes
+# false-positive on prose, and the numeric patterns above already cover phone
+# digit groups. Handles are the class with an observed failure.
+_CONTACT_HANDLE_RES = (
+    re.compile(r"linkedin\.com/in/([A-Za-z0-9._-]+)", re.IGNORECASE),
+    re.compile(r"github\.com/([A-Za-z0-9._-]+)", re.IGNORECASE),
+)
+
+
+def check_contact_claims(draft: str, master_sources: list[str]) -> list[str]:
+    """Profile handles in *draft* that don't match master-side text verbatim."""
+    master_text = "\n".join(s for s in master_sources if s)
+    violations: list[str] = []
+    for pattern in _CONTACT_HANDLE_RES:
+        allowed = {m.group(1).lower() for m in pattern.finditer(master_text)}
+        for m in pattern.finditer(draft or ""):
+            if m.group(1).lower() not in allowed:
+                violations.append(m.group(0))
+    return violations
+
+
 def check_claims(
     draft: str,
     sources: list[str],
@@ -195,6 +222,7 @@ def check_claims(
     ]
     if master_sources is not None:
         violations.extend(check_years_claims(draft, master_sources))
+        violations.extend(check_contact_claims(draft, master_sources))
     return violations
 
 
@@ -247,6 +275,16 @@ def format_violation_feedback(violations: list[str]) -> str:
             "experience — matching it is the violation. State the real "
             "duration from the master resume, or make the claim without a "
             "year count."
+        )
+    # Contact handles get their own instruction too: "remove" is the wrong fix
+    # for a contact line — the fix is copying the master's handle exactly.
+    if any(
+        p.search(v) for v in violations for p in _CONTACT_HANDLE_RES
+    ):
+        text += (
+            "\nCONTACT-DETAIL RULE: profile URLs and handles must be copied "
+            "character-for-character from the master resume's contact block — "
+            "do not remove the line; correct it to match the master exactly."
         )
     return text
 
