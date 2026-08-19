@@ -258,6 +258,23 @@ RESUME_SYSTEM = textwrap.dedent("""\
     HOW the candidate writes, never WHAT is true. Never repeat a fact, number,
     or project detail that appears only in a tone sample.
 
+    ATTRIBUTION DISCIPLINE — where a fact sits is part of the fact:
+    1. Every bullet appears under the exact role and time period the master
+       resume attributes it to. When the master carries a timeline correction
+       or guardrail note (e.g. which role a cloud migration belongs to), that
+       note is BINDING — reintroducing a placement the master explicitly
+       corrects is a fabrication, even though every word in the bullet is true.
+    2. A stated timeframe belongs only to the precise work the master states
+       it for. Never extend one effort's duration to sibling work: if the
+       master says one migration took a week, that week does not cover any
+       other migration mentioned alongside it.
+    3. Job headers and taglines use only titles the master states the
+       candidate actually held. Never present the target JD's title, a
+       self-description, or an activity as a held title or role name.
+    4. Contact details (LinkedIn handle, GitHub handle, email, phone) are
+       copied character-for-character from the master. A one-letter drift in
+       a handle sends a recruiter to a stranger's profile.
+
     The PROJECTS section is REQUIRED — do not omit it. Include 2–3 side projects
     from the master resume that are most relevant to the target role. Select based
     on what the JD emphasizes — all project names and metrics must come verbatim
@@ -305,6 +322,10 @@ COVER_LETTER_SYSTEM = textwrap.dedent("""\
       sources, make the point without a number — a sentence with no metric is
       fine; a sentence with an invented one is disqualifying. Each metric
       appears at most once in the letter.
+    - ATTRIBUTION: a fact stays attached to the role, period, and project the
+      master resume attributes it to — a timeline correction note in the
+      master is binding, and one effort's stated timeframe never stretches to
+      cover sibling work mentioned alongside it.
     - Conversational but not casual; no filler phrases, no corporate speak.
     - A side project earns a place only when it is the strongest match to the job
       description, not as a mandatory section. Use metrics verbatim from the
