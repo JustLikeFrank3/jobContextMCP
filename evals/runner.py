@@ -26,6 +26,7 @@ RESULTS_DIR = Path(__file__).parent / "results"
 
 GenerateFn = Callable[[GoldenEntry, str], str]      # (entry, jd_text) → output text
 JudgeFn = Callable[[str, str, str], JudgeScore]      # (jd, master_excerpt, output) → score
+CriticFn = Callable[[str, str], dict]                # (master_excerpt, output) → {"model", "findings"}
 
 # no_record is deliberately distinct from both_clean: a missing provenance row
 # (record_run swallows its own failures) means the comparison never happened,
@@ -47,6 +48,13 @@ class EntryResult:
     error: str = ""
     provenance_agreement: dict[str, int] = field(default_factory=_empty_agreement)
     judge_models: list[str] = field(default_factory=list)  # distinct, as stamped on the scores
+    # Phase-1 entailment critic: report-only, one critique of the FIRST
+    # generated document per entry (calibration needs coverage, not
+    # repetition — a second critique of the same entry buys agreement data,
+    # not coverage, at full bundle cost). {"model", "findings"} on success,
+    # {"error": ...} on failure, None when no critic ran. Never feeds
+    # verdicts, alerts, or gates — the whistle comes after the calibration.
+    critic: "dict | None" = None
 
     def dashboard_row(self) -> dict:
         """One row of the doc's results table."""
@@ -93,7 +101,10 @@ class SuiteResult:
             "n_runs": self.n_runs,
             "rows": [e.dashboard_row() for e in self.entries],
             "detail": {
-                e.entry_id: e.aggregate.to_dict()
+                e.entry_id: (
+                    {**e.aggregate.to_dict(), "critic": e.critic}
+                    if e.critic is not None else e.aggregate.to_dict()
+                )
                 for e in self.entries if e.aggregate is not None
             },
         }
@@ -268,13 +279,21 @@ def _latest_provenance_id(entry: GoldenEntry):
     return row.get("id") if row else None
 
 
+def default_critic(master: str, output: str) -> dict:
+    """Phase-1 entailment critique of one document (evals/critic.py)."""
+    from evals.critic import critique_document  # noqa: PLC0415 — lazy: no LLM imports at module load
+
+    return critique_document(master, output)
+
+
 def run_entry(
     entry: GoldenEntry,
     n: int = 5,
     generate_fn: GenerateFn | None = None,
     judge_fn: JudgeFn | None = None,
+    critic_fn: "CriticFn | None" = None,
 ) -> EntryResult:
-    """Generate + judge one golden entry N times."""
+    """Generate + judge one golden entry N times (+ one report-only critique)."""
     jd_path = resolve_file(entry.jd_file)
     if jd_path is None:
         return EntryResult(entry.id, entry.role, error=f"JD file not found: {entry.jd_file}")
@@ -283,10 +302,12 @@ def run_entry(
     judge = judge_fn or (
         lambda jd, master, output: judge_output(jd, master, output)
     )
+    critic = default_critic if critic_fn is None else critic_fn
     master = _master_excerpt()
     scores: list[JudgeScore] = []
     errors: list[str] = []
     provenance_agreement = _empty_agreement()
+    critic_result: "dict | None" = None
     for i in range(n):
         pre_row_id = _latest_provenance_id(entry)
         try:
@@ -301,6 +322,14 @@ def run_entry(
         for key in provenance_agreement:
             provenance_agreement[key] += agreement[key]
         scores.append(score)
+        # One critique per entry, on the first successfully judged document —
+        # coverage over repetition. Report-only: a critic failure is recorded
+        # and costs nothing else (the judge scores it accompanies stand).
+        if critic_result is None:
+            try:
+                critic_result = critic(master, output)
+            except Exception as e:  # noqa: BLE001 — report-only means fail-soft
+                critic_result = {"error": f"{type(e).__name__}: {e}"}
     if not scores:
         return EntryResult(entry.id, entry.role, error="; ".join(errors) or "no runs completed")
     result = EntryResult(
@@ -309,6 +338,7 @@ def run_entry(
         aggregate=aggregate_runs(scores),
         provenance_agreement=provenance_agreement,
         judge_models=list(dict.fromkeys(s.model for s in scores if s.model)),
+        critic=critic_result,
     )
     if errors:
         result.error = "; ".join(errors)
@@ -320,6 +350,7 @@ def run_suite(
     n: int = 5,
     generate_fn: GenerateFn | None = None,
     judge_fn: JudgeFn | None = None,
+    critic_fn: "CriticFn | None" = None,
     results_dir: Path | None = None,
 ) -> SuiteResult:
     """Run the full suite and persist a version-stamped results file."""
@@ -337,7 +368,9 @@ def run_suite(
         judge_model=judge_model,
     )
     for entry in entries if entries is not None else load_golden():
-        suite.entries.append(run_entry(entry, n=n, generate_fn=generate_fn, judge_fn=judge_fn))
+        suite.entries.append(run_entry(
+            entry, n=n, generate_fn=generate_fn, judge_fn=judge_fn, critic_fn=critic_fn,
+        ))
     # Report the judge model that actually ran, not the config's promise;
     # the config-derived value stands only when no score carries a model.
     ran_models = list(dict.fromkeys(m for e in suite.entries for m in e.judge_models))

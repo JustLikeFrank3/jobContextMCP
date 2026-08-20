@@ -81,4 +81,25 @@ def get_eval_results(raw: bool = False) -> str:
     if not any_claim:
         lines.append("  none flagged in the stored run")
 
+    # Phase-1 entailment critic (report-only) — absent for pre-critic payloads.
+    critic_lines: list[str] = []
+    for gd_id, agg in detail.items():
+        critic = (agg or {}).get("critic")
+        if not critic:
+            continue
+        if critic.get("error"):
+            critic_lines.append(f"  ⚠ {gd_id}: critic errored — {critic['error']}")
+            continue
+        for f in critic.get("findings") or []:
+            evidence = (f.get("evidence") or "").strip()
+            tail = f"  [vs source: “{evidence}”]" \
+                if evidence and evidence.upper() != "NONE" else ""
+            critic_lines.append(
+                f"  {gd_id} [{f.get('verdict')}]: “{f.get('claim')}”{tail}"
+            )
+    if critic_lines:
+        lines.append("")
+        lines.append("CRITIC FINDINGS (entailment, report-only)")
+        lines.extend(critic_lines)
+
     return "\n".join(lines)
