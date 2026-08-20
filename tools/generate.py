@@ -18,7 +18,7 @@ import re
 
 from lib import config
 from lib.io import _load_master_context
-from lib.openai_calls import create_chat_completion
+from lib.openai_calls import create_chat_completion, estimate_cost_usd
 from lib.story_retrieval import (
     RetrievalDiagnostics,
     estimate_tokens,
@@ -1372,9 +1372,10 @@ def generate_resume(
     usage = response.usage
     cost_note = ""
     if usage:
-        # gpt-4o-mini: $0.15/1M input, $0.60/1M output (as of 2025)
-        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
-        cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
+        cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out"
+        est = estimate_cost_usd(_model(), usage.prompt_tokens, usage.completion_tokens)
+        if est is not None:
+            cost_note += f" / est ${est:.4f}"
 
     prov_note = _provenance_note(
         "resume", company, role, job_description, content, user_msg, revisions
@@ -1485,8 +1486,10 @@ def generate_cover_letter(
     usage = response.usage
     cost_note = ""
     if usage:
-        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
-        cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}"
+        cost_note = f"\n  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out"
+        est = estimate_cost_usd(_model(), usage.prompt_tokens, usage.completion_tokens)
+        if est is not None:
+            cost_note += f" / est ${est:.4f}"
 
     prov_note = _provenance_note(
         "cover_letter", company, role, job_description, content, user_msg, revisions

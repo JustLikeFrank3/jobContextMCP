@@ -79,6 +79,45 @@ def _check_budget(label: str) -> None:
         )
 
 
+# ── cost estimation ──────────────────────────────────────────────────────────
+
+# USD per 1M tokens (input, output), matched by first substring hit — order
+# puts "-mini"/"-nano" variants before their base model so "gpt-4.1" never
+# claims a gpt-4.1-mini call. Substring (not equality) because the foundry
+# path passes the Azure DEPLOYMENT name, which convention prefixes/suffixes
+# around the model name. Prices as of 2026-08.
+_MODEL_PRICES_PER_MTOK: "tuple[tuple[str, float, float], ...]" = (
+    ("gpt-4.1-mini", 0.40, 1.60),
+    ("gpt-4.1-nano", 0.10, 0.40),
+    ("gpt-4.1", 2.00, 8.00),
+    ("gpt-4o-mini", 0.15, 0.60),
+    ("gpt-4o", 2.50, 10.00),
+)
+
+
+def estimate_cost_usd(
+    model: str, prompt_tokens: int, completion_tokens: int
+) -> "float | None":
+    """Best-effort USD cost of one call; None when the model isn't priced.
+
+    Every status-line estimate used to hardcode gpt-4o-mini's rates, which
+    under-reported the cloud's gpt-4.1-mini spend ~2.7x — noticed only when
+    the Azure budget alert disagreed with the tool output (2026-08-20).
+    Unknown models (ollama, anthropic, unrecognized deployments) get None so
+    callers omit the dollar figure: no estimate beats a wrong one.
+    """
+    name = str(model or "").lower()
+    if not name:
+        return None
+    for fragment, in_price, out_price in _MODEL_PRICES_PER_MTOK:
+        if fragment in name:
+            return (
+                int(prompt_tokens or 0) * in_price
+                + int(completion_tokens or 0) * out_price
+            ) / 1_000_000
+    return None
+
+
 # Cryptographically-seeded RNG used only for retry-backoff jitter. Avoids the
 # non-secure global PRNG so static analysers don't flag it (Sonar S2245 / B311).
 _RNG = SystemRandom()
