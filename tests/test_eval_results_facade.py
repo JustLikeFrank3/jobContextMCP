@@ -81,3 +81,26 @@ def test_empty_partition_degrades_to_a_sentence(isolated_server):
         config.EVAL_RESULTS_FILE.unlink()
     out = insights(action="evals_results")
     assert "No stored eval run" in out
+
+
+def test_critic_findings_render_in_the_synopsis(isolated_server):
+    payload = json.loads(json.dumps(PAYLOAD))
+    payload["suite"]["detail"]["GD-01"]["critic"] = {
+        "model": "claude-sonnet-5",
+        "findings": [
+            {"claim": "Azure work under Level 5", "verdict": "contradicted",
+             "evidence": "MADM was on-prem until 2025"},
+            {"claim": "adept at workshops", "verdict": "unsupported", "evidence": "NONE"},
+        ],
+    }
+    _seed(payload)
+    out = insights(action="evals_results")
+    assert "CRITIC FINDINGS (entailment, report-only)" in out
+    assert "[contradicted]" in out and "MADM was on-prem until 2025" in out
+    assert "[unsupported]" in out
+    assert "NONE" not in out.split("CRITIC FINDINGS")[1]  # NONE evidence not rendered
+
+
+def test_no_critic_section_for_pre_critic_payloads(isolated_server):
+    _seed(PAYLOAD)
+    assert "CRITIC FINDINGS" not in insights(action="evals_results")

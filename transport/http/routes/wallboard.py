@@ -196,6 +196,30 @@ def _render(evals: dict, work: "dict | None", request: "Request | None" = None) 
     if not any_claim:
         parts.append("<div class='clean'>none flagged in the stored run</div>")
 
+    # Phase-1 entailment critic: report-only findings, shown for calibration
+    # against the judge's list above. Absent for pre-critic payloads.
+    critic_parts: list[str] = []
+    for gd_id, agg in (detail or {}).items():
+        critic = (agg or {}).get("critic")
+        if not critic:
+            continue
+        if critic.get("error"):
+            critic_parts.append(
+                f"<div class='alert'>⚠ {_e(gd_id)}: critic errored — {_e(critic['error'])}</div>"
+            )
+            continue
+        for f in critic.get("findings") or []:
+            evidence = (f.get("evidence") or "").strip()
+            tail = f" <span class='meta'>vs source: “{_e(evidence)}”</span>" \
+                if evidence and evidence.upper() != "NONE" else ""
+            critic_parts.append(
+                f"<div class='claim'>{_e(gd_id)} [{_e(f.get('verdict'))}]: "
+                f"“{_e(f.get('claim'))}”{tail}</div>"
+            )
+    if critic_parts:
+        parts.append("<h2>Critic findings (entailment, report-only)</h2>")
+        parts.extend(critic_parts)
+
     if work:
         parts.append("<h2>Work stats (tokens by kind)</h2><table>"
                      "<tr><th>kind</th><th>calls</th><th>prompt</th><th>completion</th></tr>")
