@@ -169,3 +169,22 @@ def test_back_link_uses_the_request_host(client, monkeypatch):
     wallboard._CACHE.clear()
     _configure(monkeypatch, fail=RuntimeError("down"))
     assert "back to the board" in client.get("/wallboard/evals").text  # error page too
+
+
+def test_critic_findings_render_and_escape(client, monkeypatch):
+    payload = dict(PAYLOAD)
+    payload["suite"] = dict(PAYLOAD["suite"])
+    payload["suite"]["detail"] = {
+        "GD-03": {
+            "hallucinations": ["931 passing tests"],
+            "critic": {"model": "m", "findings": [
+                {"claim": "<b>bold claim</b>", "verdict": "contradicted",
+                 "evidence": "the <i>source</i> passage"},
+            ]},
+        },
+    }
+    _configure(monkeypatch, {"/api/evals/results": payload, "/api/work/stats": WORK})
+    body = client.get("/wallboard/evals").text
+    assert "Critic findings (entailment, report-only)" in body
+    assert "&lt;b&gt;bold claim&lt;/b&gt;" in body      # escaped, not executed
+    assert "the &lt;i&gt;source&lt;/i&gt; passage" in body
