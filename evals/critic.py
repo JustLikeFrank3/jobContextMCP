@@ -162,3 +162,72 @@ def critique_document(
         except ValueError as e:
             last_error = e
     raise ValueError(f"critic returned unparseable output after {max_attempts} attempts: {last_error}")
+
+
+# ── Phase 3: enforcement (generation-time) ──────────────────────────────────
+# Calibration verdict (2026-08-21 maiden run): 11/11 contradicted findings
+# correct, every one carrying verbatim source evidence, zero over-reach on
+# the human-triaged C-class, plus one catch the judge missed across five
+# passes. That earned the whistle — for CONTRADICTED findings only.
+# Unsupported stays advisory forever unless its own calibration happens:
+# "plausible addition" is exactly where the over-reach risk lives.
+
+def enforcement_enabled() -> bool:
+    """Kill switch: CRITIC_ENFORCE=0 disables generation-time enforcement.
+
+    Default ON — Phase 3 is a deliberate behavior change, not an accident,
+    but a one-env rollback must exist because the enforcement path adds an
+    LLM call inside every generation and a miscalibrated critic strips TRUE
+    claims from real application documents.
+    """
+    import os  # noqa: PLC0415
+
+    return os.environ.get("CRITIC_ENFORCE", "").strip().lower() not in ("0", "false", "no")
+
+
+def enforceable_findings(critic_result: "dict | None") -> list[dict]:
+    """The findings allowed to drive a revision: contradicted WITH evidence.
+
+    A contradiction without a quoted source passage gives the reviser nothing
+    to correct against and is indistinguishable from over-reach — it stays
+    advisory. 'NONE' is the prompt's explicit no-evidence marker.
+    """
+    if not critic_result:
+        return []
+    out = []
+    for f in critic_result.get("findings") or []:
+        evidence = (f.get("evidence") or "").strip()
+        if f.get("verdict") == "contradicted" and evidence and evidence.upper() != "NONE":
+            out.append(f)
+    return out
+
+
+def format_contradiction_feedback(findings: list[dict]) -> str:
+    """Render enforceable findings as a correction-prompt section.
+
+    Mirrors lib.provenance.format_violation_feedback's contract: same section
+    shape, so the single correction pass can carry both kinds of violation in
+    one message. The fix instruction is specific because the generic "remove
+    the unsourced claim" is wrong here — these claims are TRUE facts in the
+    wrong place, and the fix is moving them to where the quoted source puts
+    them, restoring the source's timeframe, or downgrading delivered-language
+    to what the source states.
+    """
+    if not findings:
+        return ""
+    blocks = []
+    for f in findings:
+        blocks.append(
+            f"  - CLAIM: {f.get('claim')}\n"
+            f"    SOURCE SAYS: “{f.get('evidence')}”"
+        )
+    return (
+        "ENTAILMENT VIOLATIONS (each claim below contradicts the quoted source "
+        "passage — every word may be true and the claim is still wrong because "
+        "of WHERE or HOW it is stated. Fix each claim to match its quoted "
+        "source exactly: move the bullet to the role/period the source "
+        "attributes it to, restore a timeframe to the specific work the source "
+        "ties it to, or restate delivered-capability language as what the "
+        "source actually says. Do not delete true facts — relocate or restate "
+        "them):\n" + "\n".join(blocks)
+    )
