@@ -1206,12 +1206,37 @@ def _correct_unsourced_claims(
         # prompt carried, which is safe — a years claim backed by master text
         # the model didn't see is still TRUE. The JD (inside user_msg) stays
         # a source for everything except years claims.
-        violations = check_claims(
-            content, [user_msg], master_sources=[_load_master_context()]
+        bundle = _load_master_context()
+        violations = check_claims(content, [user_msg], master_sources=[bundle])
+
+        # Phase-3 entailment enforcement: contradicted-with-evidence findings
+        # join the numeric violations in the same single correction pass. The
+        # critic earned this on 2026-08-21 (11/11 maiden precision with quoted
+        # evidence, zero C-class over-reach); unsupported findings stay
+        # advisory. Fail-soft — a critic outage must not block generation or
+        # discard the numeric gate's verdict.
+        critic_feedback = ""
+        from evals.critic import (  # noqa: PLC0415
+            enforceable_findings,
+            enforcement_enabled,
+            format_contradiction_feedback,
         )
-        if not violations:
+
+        if enforcement_enabled():
+            try:
+                from evals.critic import critique_document  # noqa: PLC0415
+
+                critic_feedback = format_contradiction_feedback(
+                    enforceable_findings(critique_document(bundle, content))
+                )
+            except Exception:  # noqa: BLE001 — enforcement is best-effort by design
+                critic_feedback = ""
+
+        if not violations and not critic_feedback:
             return content, 0
-        feedback = format_violation_feedback(violations)
+        feedback = "\n\n".join(
+            part for part in (format_violation_feedback(violations), critic_feedback) if part
+        )
         response = _chat_completion_create(
             client,
             label=f"{label}_correct",
@@ -1223,8 +1248,11 @@ def _correct_unsourced_claims(
                     "role": "user",
                     "content": (
                         f"{feedback}\n\nReturn the corrected document in full, in the "
-                        "same format. Change nothing except what is required to remove "
-                        "the unsourced claims listed above."
+                        "same format. Change nothing except what is required to fix "
+                        "the violations listed above: unsourced numbers are removed "
+                        "or replaced with sourced ones; entailment violations are "
+                        "relocated or restated to match their quoted source — never "
+                        "deleted."
                     ),
                 },
             ],
