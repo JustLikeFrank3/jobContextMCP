@@ -47,35 +47,50 @@ spec:
             - -c
             - |
               set -e
-              echo "Seeding tenant data from Blob Storage..."
-              # Workload identity: federated token file is injected by the webhook.
-              az login \
-                --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
-                --service-principal \
-                -u "$AZURE_CLIENT_ID" \
-                --tenant "$AZURE_TENANT_ID" \
-                --output none
+              # /app/data is the durable PVC and the SOURCE OF TRUTH; blob is
+              # a backup written FROM this volume every 15 min by the
+              # workspace-sync sidecar, never an independent source. Restoring
+              # over a populated volume therefore always moves files BACKWARD:
+              # any write in the ~15 min before a restart is not in the backup
+              # yet, and an unconditional --overwrite restore silently
+              # reverted it (confirmed 2026-08-22 — ate the same master-resume
+              # corrections twice, with no error and no log). Seed ONLY an
+              # empty volume: first boot, or disaster recovery onto a fresh
+              # PVC. To force a full restore deliberately, empty
+              # /app/data/users first (kubectl exec ... mv) and restart.
+              if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                echo "Data volume already populated ($(find /app/data/users -type f | wc -l) files) — skipping blob restore; PVC state wins."
+              else
+                echo "Empty data volume — seeding tenant data from Blob Storage..."
+                # Workload identity: federated token file is injected by the webhook.
+                az login \
+                  --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                  --service-principal \
+                  -u "$AZURE_CLIENT_ID" \
+                  --tenant "$AZURE_TENANT_ID" \
+                  --output none
+                # Restore all tenant data in one operation.
+                # Blob layout: workspace/users/{oid}/workspace/...
+                #                           users/{oid}/jobcontextmcp.db
+                #                           users/{oid}/*.json
+                # Restored to:  /app/data/users/{oid}/workspace/...
+                #                           users/{oid}/jobcontextmcp.db
+                #                           users/{oid}/*.json
+                mkdir -p /app/data/users
+                az storage blob download-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source workspace \
+                  --pattern "users/*" \
+                  --destination /app/data \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none && echo "Tenant data restored ($(find /app/data/users -type f | wc -l) files)." || echo "No tenant data in blob yet (first boot)."
+              fi
               # Remove legacy root-level data trees left behind by the earlier
               # single-user layout. The live data model now lives under
               # /app/data/users/{oid}/, so these duplicates should never be
               # preserved across pod restarts.
               rm -rf /app/data/data /app/data/workspace/data
-              # Restore all tenant data in one operation.
-              # Blob layout: workspace/users/{oid}/workspace/...
-              #                           users/{oid}/jobcontextmcp.db
-              #                           users/{oid}/*.json
-              # Restored to:  /app/data/users/{oid}/workspace/...
-              #                           users/{oid}/jobcontextmcp.db
-              #                           users/{oid}/*.json
-              mkdir -p /app/data/users
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "users/*" \
-                --destination /app/data \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "Tenant data restored." || echo "No tenant data in blob yet (first boot)."
               echo "Seed complete."
           env:
             - name: STORAGE_ACCOUNT
