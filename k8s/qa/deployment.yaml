@@ -34,23 +34,31 @@ spec:
             - -c
             - |
               set -e
-              echo "Seeding QA tenant data from Blob Storage..."
-              az login \
-                --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
-                --service-principal \
-                -u "$AZURE_CLIENT_ID" \
-                --tenant "$AZURE_TENANT_ID" \
-                --output none
+              # Same contract as prod (see k8s/deployment.yaml): the PVC is
+              # the source of truth, blob is a 15-min backup written FROM it.
+              # Seed only an empty volume — an unconditional restore reverts
+              # any write from the last ~15 min before a restart.
+              if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                echo "QA data volume already populated ($(find /app/data/users -type f | wc -l) files) — skipping blob restore; PVC state wins."
+              else
+                echo "Empty QA data volume — seeding tenant data from Blob Storage..."
+                az login \
+                  --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                  --service-principal \
+                  -u "$AZURE_CLIENT_ID" \
+                  --tenant "$AZURE_TENANT_ID" \
+                  --output none
+                mkdir -p /app/data/users
+                az storage blob download-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source workspace \
+                  --pattern "users/*" \
+                  --destination /app/data \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none && echo "QA tenant data restored ($(find /app/data/users -type f | wc -l) files)." || echo "No QA tenant data in blob yet (first boot)."
+              fi
               rm -rf /app/data/data /app/data/workspace/data
-              mkdir -p /app/data/users
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "users/*" \
-                --destination /app/data \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "QA tenant data restored." || echo "No QA tenant data in blob yet (first boot)."
               echo "QA seed complete."
           env:
             - name: STORAGE_ACCOUNT
