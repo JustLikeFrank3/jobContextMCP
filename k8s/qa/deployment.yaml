@@ -222,16 +222,28 @@ spec:
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
                 if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
-                  if [ -n "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ] \
-                    && az storage blob sync \
+                  # Mirror stderr is CAPTURED and printed on failure — a
+                  # fail-soft path that discards its error is undiagnosable
+                  # (learned 2026-08-23: the first live tick fell back and the
+                  # log could name the fallback but not the reason).
+                  mirror_out=""
+                  mirror_ok=0
+                  if [ -n "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ]; then
+                    mirror_out="$(az storage blob sync \
                       --account-name "${STORAGE_ACCOUNT}" \
                       --container workspace \
                       --source /app/data/users \
                       --destination users \
                       --delete-destination true \
-                      --output none 2>/dev/null; then
+                      --only-show-errors 2>&1)" && mirror_ok=1
+                  else
+                    mirror_out="no tenant SQLite db found — volume suspect, mirror skipped"
+                  fi
+                  if [ "$mirror_ok" = "1" ]; then
                     echo "[$(date -u +%H:%M:%SZ)] QA tenant mirror OK (deletes propagated)"
                   else
+                    echo "[$(date -u +%H:%M:%SZ)] QA mirror attempt failed — reason follows; add-only fallback engaged"
+                    echo "$mirror_out" | tail -n 5
                     az storage blob upload-batch \
                       --account-name "${STORAGE_ACCOUNT}" \
                       --source /app/data/users \
