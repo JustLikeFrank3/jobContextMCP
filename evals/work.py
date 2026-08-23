@@ -37,17 +37,30 @@ def _partition_results_dir() -> Path:
 
 
 def run_evals_executor(inputs: dict) -> dict:
-    """Blocking executor: run the golden suite with the configured provider."""
+    """Blocking executor: run the golden suite with the configured provider.
+
+    A partition that has authored its own golden set (evals/tenant.py) runs
+    that set; otherwise the committed owner manifest is the fallback (the
+    pre-tenant behavior, still correct for the owner partition). The judge
+    likewise honors the partition's stored preference when one exists —
+    tenant key and model apply to THEIR runs only, never the process env.
+    """
     from evals.golden import load_golden  # noqa: PLC0415 — heavy imports stay off app startup
     from evals.ingest import store_results  # noqa: PLC0415
     from evals.runner import run_suite  # noqa: PLC0415
+    from evals.tenant import build_judge_fn, load_tenant_golden  # noqa: PLC0415
 
     n = max(1, min(int(inputs.get("n", 5)), 10))
-    entries = load_golden()
+    tenant_entries = load_tenant_golden()
+    entries = tenant_entries if tenant_entries is not None else load_golden()
     wanted = inputs.get("entries") or []
     if wanted:
         entries = [e for e in entries if e.id in set(wanted)]
-    suite = run_suite(entries=entries, n=n, results_dir=_partition_results_dir())
+    if not entries:
+        return {"stored": "", "entries_scored": 0, "n_runs": n, "rows": [],
+                "errors": ["no golden entries to run — add entries on the Evals page first"]}
+    suite = run_suite(entries=entries, n=n, judge_fn=build_judge_fn(),
+                      results_dir=_partition_results_dir())
     payload = suite.to_dict()
     kind, scored = store_results(payload)
     errors = [e.error for e in suite.entries if e.error]
