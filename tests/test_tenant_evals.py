@@ -146,9 +146,15 @@ class TestJudgePrefs:
         tenant.save_judge_prefs("openai", "gpt-4o-mini")  # no key ever stored
         assert tenant.build_judge_fn() is None
 
-    def test_calibration_labels(self):
-        assert tenant.judge_calibration_label("claude-sonnet-5").startswith("calibrated")
-        assert "NOT recommended" in tenant.judge_calibration_label("gpt-4.1-mini")
+    def test_calibration_labels_state_their_corpus_scope(self):
+        # A true measurement rendered in a tenant dashboard silently implies
+        # THEIR corpus — every measured label must name what it was measured
+        # on (ruled D in review, 2026-08-23).
+        sonnet = tenant.judge_calibration_label("claude-sonnet-5")
+        assert sonnet.startswith("calibrated")
+        assert "platform's reference corpus" in sonnet and "not your documents" in sonnet
+        mini = tenant.judge_calibration_label("gpt-4.1-mini")
+        assert "NOT recommended" in mini and "platform's reference corpus" in mini
         assert tenant.judge_calibration_label("mystery-9b") == tenant.JUDGE_UNCALIBRATED
 
 
@@ -172,25 +178,37 @@ class TestJudgeKeyAtRest:
         tenant.build_judge_fn()("jd", "m", "o")
         assert captured["key"] == "sk-ant-verysecret"
 
-    def test_no_app_key_degrades_to_cleartext_like_oauth_tokens(self, workspace, monkeypatch):
+    def test_no_app_key_degrades_to_cleartext_and_says_so(self, workspace, monkeypatch):
         monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
         monkeypatch.setattr("lib.crypto._load_key", lambda: "")
         tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-clear")
         raw = (workspace / "evals" / "judge.json").read_text()
         assert "sk-clear" in raw  # documented degradation, same as lib.crypto
-        assert tenant.load_judge_prefs()["has_key"] is True
+        prefs = tenant.load_judge_prefs()
+        assert prefs["has_key"] is True
+        # a tenant-supplied key in cleartext is surfaced, never silent
+        assert prefs["key_plaintext_at_rest"] is True
+
+    def test_encrypted_key_not_reported_as_plaintext(self, workspace, monkeypatch):
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode())
+        tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-x")
+        assert tenant.load_judge_prefs()["key_plaintext_at_rest"] is False
 
 
 class TestHistoryAndVisuals:
-    def _write_run(self, results_dir, stamp, mean, flags, accuracy=4.0):
+    def _write_run(self, results_dir, stamp, mean, flags, accuracy=4.0, n_runs=5):
         results_dir.mkdir(parents=True, exist_ok=True)
         detail = {"GD-T01": {"per_dimension": {
             "accuracy": {"mean": accuracy}, "keyword_coverage": {"mean": 3.0}}}}
         if flags is not None:
             detail["GD-T01"]["hallucination_flags"] = flags
-        (results_dir / f"results-{stamp}.json").write_text(json.dumps({
-            "started_at": stamp, "rows": [{"gd_id": "GD-T01", "mean": mean}],
-            "detail": detail}))
+        payload = {"started_at": stamp, "rows": [{"gd_id": "GD-T01", "mean": mean}],
+                   "detail": detail}
+        if n_runs is not None:
+            payload["n_runs"] = n_runs
+        (results_dir / f"results-{stamp}.json").write_text(json.dumps(payload))
 
     def test_history_oldest_first_with_absent_flags_as_none(self, workspace, tmp_path):
         rd = tmp_path / "eval_runs"
@@ -200,6 +218,7 @@ class TestHistoryAndVisuals:
         hist = tenant.results_history()
         assert [round(r["mean"], 2) for r in hist] == [3.2, 3.5, 3.66]
         assert [r["flags"] for r in hist] == [None, 26, 8]
+        assert [r["n_runs"] for r in hist] == [5, 5, 5]
         assert hist[-1]["dimensions"]["accuracy"] == 4.0
 
     def test_history_skips_malformed_files(self, workspace, tmp_path):
@@ -221,6 +240,24 @@ class TestHistoryAndVisuals:
         dims = lab._svg_dimensions(hist[-1]["dimensions"])
         assert "accuracy" in dims and "4.00" in dims
         assert lab._svg_trend(hist[:1]) == ""  # one point is not a trend
+
+    def test_trend_bars_normalize_by_n(self, workspace, tmp_path):
+        # 8 flags at N=5 and 2 flags at N=1 are the SAME rate — equal bars,
+        # each tooltip naming its N. Raw totals across mixed N would ship the
+        # specificity bug this product exists to catch.
+        import re
+
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260822-080000", 3.5, 8, n_runs=5)
+        self._write_run(rd, "20260823-080000", 3.6, 2, n_runs=1)
+        trend = lab._svg_trend(tenant.results_history())
+        assert "8 flags across N=5 (1.6/run)" in trend
+        assert "2 flags across N=1 (2.0/run)" in trend
+        heights = [float(m) for m in re.findall(r"height='([\d.]+)'", trend)]
+        assert len(heights) == 2
+        assert heights[1] > heights[0]  # 2.0/run beats 1.6/run despite 8 > 2 raw
 
 
 class TestTriage:

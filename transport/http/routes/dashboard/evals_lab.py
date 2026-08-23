@@ -119,7 +119,11 @@ async def evals_judge(body: JudgeBody) -> JSONResponse:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=422)
     prefs["calibration"] = judge_calibration_label(prefs["model"])
-    return JSONResponse({"prefs": prefs})
+    out = {"prefs": prefs}
+    if prefs.get("key_plaintext_at_rest"):
+        out["warning"] = ("key stored WITHOUT encryption — the server has no "
+                         "APP_ENCRYPTION_KEY configured; it is in cleartext at rest")
+    return JSONResponse(out)
 
 
 @router.get("/evals/stamp")
@@ -141,14 +145,27 @@ _DIM_LABELS = (
 
 
 def _svg_trend(history: list[dict]) -> str:
-    """Mean score (line, 1–5 left axis) + flags (bars, scaled right) per run."""
+    """Mean score (line, 1–5 left axis) + flags per run (bars) per stored suite.
+
+    Flag bars are normalized to flags/N, never raw totals: a flag class that
+    fires in 1 of 5 runs triples its raw count going N=1 → N=5 with zero real
+    change, so a raw-total trend across mixed-N history would be the exact
+    specificity failure this product flags in resumes. Each point's N renders
+    in its tooltip; a run whose N is unknown shows its raw count, labeled.
+    """
     if len(history) < 2:
         return ""
     w, h, pad = 820, 200, 34
     n = len(history)
     step = (w - 2 * pad) / max(n - 1, 1)
     y_score = lambda s: h - pad - (max(1.0, min(5.0, s)) - 1.0) / 4.0 * (h - 2 * pad)  # noqa: E731
-    max_flags = max((r["flags"] or 0) for r in history) or 1
+
+    def per_run(r) -> "float | None":
+        if r["flags"] is None:
+            return None
+        return r["flags"] / r["n_runs"] if r.get("n_runs") else float(r["flags"])
+
+    max_rate = max((per_run(r) or 0) for r in history) or 1.0
     parts = [f"<svg viewBox='0 0 {w} {h}' style='width:100%;height:auto' role='img' "
              "aria-label='Mean score and hallucination flags per run'>"]
     pass_y = y_score(4.0)
@@ -158,12 +175,16 @@ def _svg_trend(history: list[dict]) -> str:
     bar_w = max(4.0, min(18.0, step * 0.4))
     for i, r in enumerate(history):
         x = pad + i * step
-        if r["flags"] is not None:  # absent stays absent — a gap, not a zero bar
-            bh = (r["flags"] / max_flags) * (h - 2 * pad) * 0.85
+        rate = per_run(r)
+        if rate is not None:  # absent stays absent — a gap, not a zero bar
+            bh = (rate / max_rate) * (h - 2 * pad) * 0.85
             color = "var(--danger)" if r["flags"] else "var(--ok)"
+            n_runs = r.get("n_runs")
+            tip = (f"{r['started_at']}: {r['flags']} flags across N={n_runs} ({rate:.1f}/run)"
+                   if n_runs else f"{r['started_at']}: {r['flags']} flags (N unknown — raw count)")
             parts.append(f"<rect x='{x - bar_w / 2:.1f}' y='{h - pad - bh:.1f}' width='{bar_w:.1f}' "
                          f"height='{max(bh, 2):.1f}' fill='{color}' opacity='.45'>"
-                         f"<title>{_e(r['started_at'])}: {r['flags']} flags</title></rect>")
+                         f"<title>{_e(tip)}</title></rect>")
     points = " ".join(f"{pad + i * step:.1f},{y_score(r['mean']):.1f}" for i, r in enumerate(history))
     parts.append(f"<polyline points='{points}' fill='none' stroke='var(--accent)' stroke-width='2.5'/>")
     for i, r in enumerate(history):
@@ -174,7 +195,7 @@ def _svg_trend(history: list[dict]) -> str:
     parts.append(f"<text x='{pad + (n - 1) * step + 6:.1f}' y='{y_score(last['mean']) + 4:.1f}' "
                  f"fill='var(--text)' font-size='12' font-weight='700'>{last['mean']:.2f}</text>")
     parts.append(f"<text x='{pad}' y='16' fill='var(--muted)' font-size='11'>"
-                 "mean score (line) · hallucination flags (bars)</text>")
+                 "mean score (line) · hallucination flags per run, normalized by N (bars)</text>")
     parts.append("</svg>")
     return ("<div class='card' style='padding:16px'>"
             "<div class='k'>Trend across stored runs</div>" + "".join(parts) + "</div>")
@@ -405,6 +426,12 @@ def _judge_section(prefs: dict) -> str:
     cal = judge_calibration_label(model) if provider else \
         "server default judge — the calibrated configuration the platform runs"
     key_ph = "API key (stored, unchanged)" if prefs.get("has_key") else "API key"
+    clear_warn = ""
+    if prefs.get("key_plaintext_at_rest"):
+        clear_warn = ("<div class='cal-label warn-c'>⚠ your key is stored WITHOUT encryption — "
+                      "this server has no APP_ENCRYPTION_KEY configured. It is never shown or "
+                      "sent back, but it sits in cleartext at rest; clear the provider to "
+                      "remove it if that is not acceptable.</div>")
     cal_json = json.dumps({"map": JUDGE_CALIBRATION, "default": JUDGE_UNCALIBRATED}).replace("</", "<\\/")
     opts = "".join(
         f"<option value='{v}'{' selected' if provider == v else ''}>{label}</option>"
@@ -422,6 +449,7 @@ def _judge_section(prefs: dict) -> str:
       <input id="j-base" placeholder="Base URL (Ollama only)" value="{_e(prefs.get('base_url', ''))}">
     </div>
     <div class="cal-label" id="j-cal">{_e(cal)}</div>
+    {clear_warn}
     <button class="btn-primary" id="j-save">Save judge</button>
     <span class="status-line" id="j-status"></span>
     <script>window.__cal = {cal_json};</script>"""
@@ -497,7 +525,8 @@ if (jSave) jSave.addEventListener('click', async () => {
     api_key: document.getElementById('j-key').value,
     base_url: document.getElementById('j-base').value,
   });
-  status.textContent = out.error ? out.error : 'saved — applies to your next run';
+  status.textContent = out.error ? out.error
+    : (out.warning ? 'saved, but: ' + out.warning : 'saved — applies to your next run');
 });
 
 // run
