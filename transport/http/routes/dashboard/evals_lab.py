@@ -131,6 +131,77 @@ async def evals_stamp() -> JSONResponse:
     return JSONResponse({"updated_at": _payload().get("updated_at") or ""})
 
 
+@router.get("/evals/data")
+async def evals_data() -> JSONResponse:
+    """Everything the SPA's Evals screen needs, in one authenticated call.
+
+    The React frontend is the product UI (web AND the desktop shell); the
+    server-rendered page above serves the operational/LAN layer. Both drive
+    the same POST endpoints — this endpoint is the SPA's read side.
+    """
+    from evals.tenant import (  # noqa: PLC0415
+        JUDGE_CALIBRATION, JUDGE_UNCALIBRATED, TRIAGE_MEANINGS, claim_key,
+        judge_calibration_label, list_tenant_entries, load_judge_prefs,
+        load_triage, results_history,
+    )
+
+    payload = _payload()
+    suite = payload.get("suite") or {}
+    rows_in = suite.get("rows") or []
+    detail = suite.get("detail") or {}
+    triage = load_triage()
+
+    rows = []
+    for r in rows_in:
+        agg = detail.get(r.get("gd_id")) or {}
+        rows.append({
+            "gd_id": r.get("gd_id"), "role": r.get("role"),
+            "mean": r.get("mean"), "accuracy": r.get("accuracy"),
+            "cov_pct": r.get("cov_pct"), "flip_rate_pct": r.get("flip_rate_pct"),
+            "flags": agg.get("hallucination_flags"),
+            "alerts": r.get("alerts") or [], "error": r.get("error") or "",
+        })
+
+    claims = []
+    for gd_id, agg in detail.items():
+        for claim in (agg or {}).get("hallucinations") or []:
+            claims.append({"gd_id": gd_id, "claim": claim, "source": "judge"})
+        for f in ((agg or {}).get("critic") or {}).get("findings") or []:
+            text = str(f.get("claim") or "")
+            if text:
+                claims.append({"gd_id": gd_id, "claim": text,
+                               "source": f"critic:{f.get('verdict')}"})
+    for c in claims:
+        key = claim_key(c["gd_id"], c["claim"])
+        rec = triage.get(key) or {}
+        c.update({"key": key, "ruling": rec.get("ruling", ""), "note": rec.get("note", "")})
+
+    total_flags = sum(int((agg or {}).get("hallucination_flags") or 0) for agg in detail.values())
+    means = [float(r.get("mean") or 0) for r in rows_in if "mean" in r]
+    judge_model = str(suite.get("judge_model") or "")
+    prefs = load_judge_prefs()
+    prefs["calibration"] = (judge_calibration_label(prefs["model"]) if prefs["provider"]
+                            else "server default judge — the calibrated configuration the platform runs")
+    return JSONResponse({
+        "stamp": payload.get("updated_at") or "",
+        "summary": {
+            "mean": round(sum(means) / len(means), 3) if means else None,
+            "total_flags": total_flags if rows_in else None,
+            "judge_model": judge_model,
+            "judge_calibration": judge_calibration_label(judge_model.split(",")[0].strip()),
+            "n_runs": suite.get("n_runs"),
+        },
+        "rows": rows,
+        "claims": claims,
+        "golden": list_tenant_entries(),
+        "judge": prefs,
+        "calibration_map": JUDGE_CALIBRATION,
+        "calibration_default": JUDGE_UNCALIBRATED,
+        "triage_meanings": TRIAGE_MEANINGS,
+        "history": results_history(),
+    })
+
+
 # ── scoring visuals (inline SVG — kiosk visual language, dashboard palette) ──
 #
 # Same truthfulness rules as the Grafana boards: absent data renders as a gap,

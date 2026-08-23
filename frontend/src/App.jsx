@@ -13,6 +13,7 @@ import Interviews from './screens/Interviews.jsx'
 import Chat from './screens/Chat.jsx'
 import Settings from './screens/Settings.jsx'
 import ApiKeys from './screens/ApiKeys.jsx'
+import Evals from './screens/Evals.jsx'
 import { ProtectedRoute } from './auth/AuthContext.jsx'
 
 // All dashboard screens render inside DashboardShell (header + tab bar) via
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/materials" element={<Materials />} />
         <Route path="/rejections" element={<Rejections />} />
         <Route path="/certification" element={<Certification />} />
+        <Route path="/evals" element={<Evals />} />
         <Route path="/posts" element={<Posts />} />
         <Route path="/people" element={<People />} />
         <Route path="/health" element={<Health />} />

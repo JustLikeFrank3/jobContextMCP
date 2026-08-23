@@ -357,3 +357,18 @@ class TestScreens:
 
     def test_stamp_endpoint(self, client):
         assert client.get("/dashboard/evals/stamp").json()["updated_at"] == "2026-08-23T04:29:30"
+
+    def test_data_endpoint_feeds_the_spa(self, client):
+        tenant.save_ruling("GD-T01", "<b>claims X</b>", "B", "wrong place")
+        data = client.get("/dashboard/evals/data").json()
+        assert data["stamp"] == "2026-08-23T04:29:30"
+        assert data["summary"]["total_flags"] == 2
+        assert "platform's reference corpus" in data["summary"]["judge_calibration"]
+        row = data["rows"][0]
+        assert row["gd_id"] == "GD-T01" and row["flags"] == 2
+        claims = {c["claim"]: c for c in data["claims"]}
+        assert claims["<b>claims X</b>"]["ruling"] == "B"  # ruling joined in
+        assert claims["misplaced Y"]["source"] == "critic:contradicted"
+        assert "sk-" not in str(data["judge"])  # key never in the payload
+        assert data["calibration_map"]["claude-sonnet-5"]
+        assert data["triage_meanings"]["D"].startswith("True but undocumented")

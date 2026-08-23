@@ -28,6 +28,7 @@ const SECONDARY_NAV = [
   { label: 'Job Hunt', key: 'job-hunt' },
   { label: 'Materials', key: 'materials' },
   { label: 'Rejections', key: 'rejections' },
+  { label: 'Evals', key: 'evals' },
   { label: 'Certification', key: 'certification' },
   { label: 'API Keys', key: 'api-keys' },
 ]
@@ -51,6 +52,7 @@ const PAGE_META = {
   settings: ['Settings', 'API keys, integrations (Oura ring) & account preferences'],
   'api-keys': ['API Keys', 'Personal access tokens for MCP clients'],
   certification: ['Certification', 'Weekly work-search reports for your unemployment claim'],
+  evals: ['Evals', 'Run the truth suite on your golden set, triage flagged claims, pick your judge'],
 }
 
 const keyToPath = (key) => (key === 'home' ? '/' : `/${key}`)
