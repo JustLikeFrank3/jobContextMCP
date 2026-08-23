@@ -18,8 +18,16 @@ backs up like the rest of the workspace):
   workspace/evals/golden/{id}-jd.txt      JD text per entry (resolve_file
                                           already searches this folder)
   workspace/evals/judge.json              judge preference (provider, model,
-                                          optional key — key is WRITE-ONLY:
-                                          never rendered back to a page)
+                                          optional key). The key is WRITE-ONLY
+                                          toward pages AND encrypted at rest
+                                          via lib.crypto (APP_ENCRYPTION_KEY;
+                                          same guarantee as OAuth tokens, same
+                                          documented cleartext degradation
+                                          when no app key is configured) —
+                                          not-rendering-back and
+                                          not-stored-in-the-clear are
+                                          different guarantees; this file
+                                          carries both.
   <data>/eval_runs/triage.json            claim rulings (A/B/C/D + note),
                                           keyed by a hash of (gd_id, claim)
 
@@ -227,14 +235,20 @@ def save_judge_prefs(provider: str, model: str = "", api_key: str = "", base_url
     if not provider:
         _write_json(_judge_prefs_path(), {})
         return load_judge_prefs()
+    from lib.crypto import encrypt_secret  # noqa: PLC0415
+
     stored = _read_json(_judge_prefs_path(), {})
     if not isinstance(stored, dict):
         stored = {}
+    new_key = (api_key or "").strip()
     payload = {
         "provider": provider,
         "model": (model or "").strip(),
         "base_url": (base_url or "").strip(),
-        "api_key": (api_key or "").strip() or str(stored.get("api_key", "") or ""),
+        # A newly pasted key is encrypted before it touches disk; an absent
+        # one keeps whatever is stored (already-encrypted, or legacy
+        # plaintext that migrates on the next paste).
+        "api_key": encrypt_secret(new_key) if new_key else str(stored.get("api_key", "") or ""),
     }
     _write_json(_judge_prefs_path(), payload)
     return load_judge_prefs()
@@ -251,9 +265,11 @@ def build_judge_fn():
     data = _read_json(_judge_prefs_path(), {})
     if not isinstance(data, dict) or not str(data.get("provider", "") or "").strip():
         return None
+    from lib.crypto import decrypt_secret  # noqa: PLC0415
+
     provider = str(data["provider"]).lower()
     model = str(data.get("model", "") or "").strip()
-    api_key = str(data.get("api_key", "") or "").strip()
+    api_key = decrypt_secret(str(data.get("api_key", "") or "")).strip()
     base_url = str(data.get("base_url", "") or "").strip()
 
     try:
@@ -281,6 +297,51 @@ def build_judge_fn():
         return judge_output(jd, master, output, client=client, model=model)
 
     return _judge
+
+
+# ── run history (feeds the scoring visuals) ──────────────────────────────────
+
+def results_history(limit: int = 24) -> list[dict]:
+    """Compact per-run stats from the partition's stored results files.
+
+    One dict per run, oldest first: started_at, mean (suite average of entry
+    means), flags (total across runs; None — not 0 — for pre-count payloads,
+    matching the wallboard's absent-is-not-zero rule), and per-dimension mean
+    averages for the dimension bars. Malformed files are skipped.
+    """
+    from evals.work import _partition_results_dir  # noqa: PLC0415
+
+    out: list[dict] = []
+    try:
+        files = sorted(_partition_results_dir().glob("results-*.json"))
+    except OSError:
+        return out
+    for path in files[-limit:]:
+        payload = _read_json(path, None)
+        if not isinstance(payload, dict):
+            continue
+        rows = payload.get("rows") or []
+        detail = payload.get("detail") or {}
+        means = [float(r.get("mean") or 0) for r in rows if isinstance(r, dict) and "mean" in r]
+        if not means:
+            continue
+        flag_counts = [
+            agg.get("hallucination_flags")
+            for agg in detail.values() if isinstance(agg, dict)
+        ]
+        flags = sum(int(f or 0) for f in flag_counts) if any(f is not None for f in flag_counts) else None
+        dims: dict[str, list[float]] = {}
+        for agg in detail.values():
+            for dim, stats in ((agg or {}).get("per_dimension") or {}).items():
+                if isinstance(stats, dict) and "mean" in stats:
+                    dims.setdefault(dim, []).append(float(stats["mean"]))
+        out.append({
+            "started_at": str(payload.get("started_at") or ""),
+            "mean": sum(means) / len(means),
+            "flags": flags,
+            "dimensions": {d: sum(v) / len(v) for d, v in dims.items()},
+        })
+    return out
 
 
 # ── triage rulings ───────────────────────────────────────────────────────────

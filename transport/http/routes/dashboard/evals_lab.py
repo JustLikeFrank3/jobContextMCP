@@ -127,6 +127,87 @@ async def evals_stamp() -> JSONResponse:
     return JSONResponse({"updated_at": _payload().get("updated_at") or ""})
 
 
+# ── scoring visuals (inline SVG — kiosk visual language, dashboard palette) ──
+#
+# Same truthfulness rules as the Grafana boards: absent data renders as a gap,
+# never a zero; the 4.0 pass line is drawn, not implied; flags color red the
+# moment they exist. CSS vars keep the charts on the dashboard theme.
+
+_DIM_LABELS = (
+    ("keyword_coverage", "keyword"), ("relevance", "relevance"),
+    ("accuracy", "accuracy"), ("impact_language", "impact"),
+    ("ats_readiness", "ats"),
+)
+
+
+def _svg_trend(history: list[dict]) -> str:
+    """Mean score (line, 1–5 left axis) + flags (bars, scaled right) per run."""
+    if len(history) < 2:
+        return ""
+    w, h, pad = 820, 200, 34
+    n = len(history)
+    step = (w - 2 * pad) / max(n - 1, 1)
+    y_score = lambda s: h - pad - (max(1.0, min(5.0, s)) - 1.0) / 4.0 * (h - 2 * pad)  # noqa: E731
+    max_flags = max((r["flags"] or 0) for r in history) or 1
+    parts = [f"<svg viewBox='0 0 {w} {h}' style='width:100%;height:auto' role='img' "
+             "aria-label='Mean score and hallucination flags per run'>"]
+    pass_y = y_score(4.0)
+    parts.append(f"<line x1='{pad}' y1='{pass_y:.1f}' x2='{w - pad}' y2='{pass_y:.1f}' "
+                 "stroke='var(--ok)' stroke-dasharray='5 5' stroke-width='1' opacity='.7'/>")
+    parts.append(f"<text x='{w - pad + 4}' y='{pass_y + 4:.1f}' fill='var(--ok)' font-size='11'>4.0</text>")
+    bar_w = max(4.0, min(18.0, step * 0.4))
+    for i, r in enumerate(history):
+        x = pad + i * step
+        if r["flags"] is not None:  # absent stays absent — a gap, not a zero bar
+            bh = (r["flags"] / max_flags) * (h - 2 * pad) * 0.85
+            color = "var(--danger)" if r["flags"] else "var(--ok)"
+            parts.append(f"<rect x='{x - bar_w / 2:.1f}' y='{h - pad - bh:.1f}' width='{bar_w:.1f}' "
+                         f"height='{max(bh, 2):.1f}' fill='{color}' opacity='.45'>"
+                         f"<title>{_e(r['started_at'])}: {r['flags']} flags</title></rect>")
+    points = " ".join(f"{pad + i * step:.1f},{y_score(r['mean']):.1f}" for i, r in enumerate(history))
+    parts.append(f"<polyline points='{points}' fill='none' stroke='var(--accent)' stroke-width='2.5'/>")
+    for i, r in enumerate(history):
+        x, y = pad + i * step, y_score(r["mean"])
+        parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3.5' fill='var(--accent)'>"
+                     f"<title>{_e(r['started_at'])}: mean {r['mean']:.2f}</title></circle>")
+    last = history[-1]
+    parts.append(f"<text x='{pad + (n - 1) * step + 6:.1f}' y='{y_score(last['mean']) + 4:.1f}' "
+                 f"fill='var(--text)' font-size='12' font-weight='700'>{last['mean']:.2f}</text>")
+    parts.append(f"<text x='{pad}' y='16' fill='var(--muted)' font-size='11'>"
+                 "mean score (line) · hallucination flags (bars)</text>")
+    parts.append("</svg>")
+    return ("<div class='card' style='padding:16px'>"
+            "<div class='k'>Trend across stored runs</div>" + "".join(parts) + "</div>")
+
+
+def _svg_dimensions(dims: dict) -> str:
+    """Latest run's per-dimension means as bars against the 4.0 pass line."""
+    rows = [(label, dims.get(key)) for key, label in _DIM_LABELS if dims.get(key) is not None]
+    if not rows:
+        return ""
+    w, row_h, pad_l, pad_r = 820, 30, 90, 46
+    h = len(rows) * row_h + 26
+    scale = lambda s: pad_l + (max(1.0, min(5.0, s)) - 1.0) / 4.0 * (w - pad_l - pad_r)  # noqa: E731
+    parts = [f"<svg viewBox='0 0 {w} {h}' style='width:100%;height:auto' role='img' "
+             "aria-label='Per-dimension mean scores'>"]
+    pass_x = scale(4.0)
+    parts.append(f"<line x1='{pass_x:.1f}' y1='8' x2='{pass_x:.1f}' y2='{h - 8}' "
+                 "stroke='var(--ok)' stroke-dasharray='5 5' stroke-width='1' opacity='.7'/>")
+    for i, (label, val) in enumerate(rows):
+        y = 18 + i * row_h
+        good = val >= 4.0
+        parts.append(f"<text x='{pad_l - 8}' y='{y + 13}' fill='var(--muted)' font-size='12' "
+                     f"text-anchor='end'>{_e(label)}</text>")
+        parts.append(f"<rect x='{pad_l}' y='{y}' width='{scale(val) - pad_l:.1f}' height='18' rx='4' "
+                     f"fill='{'var(--ok)' if good else 'var(--accent)'}' opacity='{'0.9' if good else '0.75'}'>"
+                     f"<title>{_e(label)}: {val:.2f}</title></rect>")
+        parts.append(f"<text x='{scale(val) + 6:.1f}' y='{y + 13}' fill='var(--text)' "
+                     f"font-size='12' font-weight='700'>{val:.2f}</text>")
+    parts.append("</svg>")
+    return ("<div class='card' style='padding:16px; margin-top:10px'>"
+            "<div class='k'>Latest run — per dimension (pass line 4.0)</div>" + "".join(parts) + "</div>")
+
+
 # ── the page ─────────────────────────────────────────────────────────────────
 
 _EXTRA_CSS = """
@@ -440,15 +521,22 @@ if (runBtn) runBtn.addEventListener('click', async () => {
 
 @router.get("/evals")
 async def evals_page() -> HTMLResponse:
-    from evals.tenant import list_tenant_entries, load_judge_prefs, load_triage  # noqa: PLC0415
+    from evals.tenant import (  # noqa: PLC0415
+        list_tenant_entries, load_judge_prefs, load_triage, results_history,
+    )
 
     payload = _payload()
     triage = load_triage()
     cards, entries_html, claims = _results_section(payload, triage)
     tenant_entries = list_tenant_entries()
+    history = results_history()
+    visuals = ""
+    if history:
+        visuals = _svg_trend(history) + _svg_dimensions(history[-1].get("dimensions") or {})
     stamp = json.dumps(str(payload.get("updated_at") or ""))
     body = f"""
     {cards}
+    {visuals}
     <div class="lab-section">
       <div class="section-title">Latest run</div>
       {entries_html}
