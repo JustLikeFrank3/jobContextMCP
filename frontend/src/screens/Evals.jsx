@@ -335,17 +335,28 @@ function RunSection({ stamp, reload }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-      <select style={{ ...inputStyle, width: 'auto' }} value={n} onChange={(e) => setN(e.target.value)}>
-        <option value="1">N=1 (quick, ~$0.50)</option>
-        <option value="3">N=3</option>
-        <option value="5">N=5 (full variance)</option>
-      </select>
-      <button type="button" onClick={run}
-        style={{ background: 'var(--cyan-500, #00B5C8)', color: '#062330', border: 'none', borderRadius: 8, fontWeight: 700, padding: '9px 16px', cursor: 'pointer' }}>
-        Run evals
-      </button>
-      {status && <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5 }}>{status}</span>}
+    <div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select style={{ ...inputStyle, width: 'auto' }} value={n} onChange={(e) => setN(e.target.value)}>
+          <option value="1">N=1 (quick)</option>
+          <option value="3">N=3</option>
+          <option value="5">N=5 (full variance)</option>
+        </select>
+        <button type="button" onClick={run}
+          style={{ background: 'var(--cyan-500, #00B5C8)', color: '#062330', border: 'none', borderRadius: 8, fontWeight: 700, padding: '9px 16px', cursor: 'pointer' }}>
+          Run evals
+        </button>
+        {status && <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5 }}>{status}</span>}
+      </div>
+      <div style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>
+        First runs usually flag a lot — most of it points at gaps in your master resume, not at
+        the generator. Triage with <b>D</b>, document the true facts, and the count drains on the
+        next run.
+      </div>
+      <div style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5, marginTop: 4 }}>
+        Cost scales with entries × N: on the default judge a 5-entry set at N=5 runs roughly
+        $2.50–8. A cheaper judge (below) cuts this.
+      </div>
     </div>
   )
 }
@@ -421,8 +432,8 @@ export default function Evals() {
         </>
       ) : (
         <div style={{ marginBottom: 20 }}>
-          <EmptyState label="No eval run stored yet."
-            hint="Add golden entries below, then hit Run evals — results land here when the run finishes." />
+          <EmptyState label="No eval run stored yet — nothing to triage or score."
+            hint="Add golden entries below, then hit Run evals. Results land here when the run finishes." />
           <div style={{ marginTop: 14 }}>
             <RunSection stamp="" reload={reload} />
           </div>

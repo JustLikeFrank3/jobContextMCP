@@ -46,7 +46,22 @@ class RunBody(BaseModel):
 @router.post("/evals/run")
 async def evals_run(body: RunBody) -> JSONResponse:
     from evals import work as evals_work  # noqa: PLC0415
+    from evals.tenant import load_tenant_golden  # noqa: PLC0415
 
+    # The first error a new user hits must be a sentence, not a stack trace
+    # (or worse, a silent errored run against someone else's file names).
+    tenant_set = load_tenant_golden()
+    if tenant_set is not None and not tenant_set:
+        return JSONResponse({"error": "Your golden set is empty — add an entry below first."},
+                            status_code=422)
+    if tenant_set is None:
+        from evals.golden import load_golden, resolve_file  # noqa: PLC0415
+
+        fallback = load_golden()
+        if not any(resolve_file(e.jd_file) for e in fallback):
+            return JSONResponse({"error": "No golden set yet — add 3–5 entries below before "
+                                          "running. The suite needs your job descriptions."},
+                                status_code=422)
     n = max(1, min(int(body.n), 10))
     work_id = evals_work.enqueue_run(n=n, origin="dashboard")
     return JSONResponse({"work_id": work_id, "n": n})
@@ -412,7 +427,7 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
     return cards, "".join(body), claims
 
 
-def _triage_section(claims: list[dict]) -> str:
+def _triage_section(claims: list[dict], has_run: bool) -> str:
     from evals.tenant import TRIAGE_MEANINGS  # noqa: PLC0415
 
     legend = "".join(
@@ -420,6 +435,12 @@ def _triage_section(claims: list[dict]) -> str:
         for k, v in TRIAGE_MEANINGS.items()
     )
     if not claims:
+        # Two DIFFERENT empty states: "no run yet" must never read as "you're
+        # passing" — a clean run earns that sentence, an absent run doesn't.
+        if not has_run:
+            return (f"<div class='legend-grid'>{legend}</div>"
+                    "<div class='empty'>No run yet, so nothing to triage. Flagged claims from "
+                    "your first run land here — expect some.</div>")
         return (f"<div class='legend-grid'>{legend}</div>"
                 "<div class='empty'>Nothing to triage — the stored run has no flagged claims. "
                 "That is the goal state; keep it.</div>")
@@ -650,10 +671,15 @@ async def evals_page() -> HTMLResponse:
         <button class="btn-primary" id="run-btn">Run evals</button>
         <span class="status-line" id="run-status"></span>
       </div>
+      <div class="hint" style="margin-top:8px">First runs usually flag a lot — most of it
+        points at gaps in your master resume, not at the generator. Triage with <b>D</b>,
+        document the true facts, and the count drains on the next run.</div>
+      <div class="hint">Cost scales with entries × N: on the default judge a 5-entry set at
+        N=5 runs roughly $2.50–8. A cheaper judge (below) cuts this.</div>
     </div>
     <div class="lab-section">
       <div class="section-title">Triage flagged claims</div>
-      {_triage_section(claims)}
+      {_triage_section(claims, has_run=bool((payload.get('suite') or {}).get('rows')))}
     </div>
     <div class="lab-section">
       <div class="section-title">Your golden set</div>
