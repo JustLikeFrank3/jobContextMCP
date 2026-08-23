@@ -288,10 +288,7 @@ spec:
             - -c
             - |
               set -e
-              echo "Tenant sync sidecar ready. Mirroring every 15 min."
-              # `az storage blob sync` shells out to azcopy, which does NOT
-              # inherit the CLI's login on its own; this makes it reuse it.
-              export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
+              echo "Tenant sync sidecar ready. Backing up + pruning every 15 min."
               while true; do
                 sleep 900
                 az login \
@@ -300,58 +297,58 @@ spec:
                   -u "$AZURE_CLIENT_ID" \
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
-                # Mirror all tenants in one operation — sync, not accumulate:
-                # a file deleted from the volume leaves the backup too, so a
-                # disaster-recovery restore no longer resurrects every file
-                # ever removed. Because a mirror can DELETE backup blobs, it
-                # is guarded twice:
-                #   1. an empty/missing users dir skips the tick entirely — a
-                #      mirror from an unmounted or wiped volume would
-                #      obediently delete the whole backup;
-                #   2. a volume with no tenant SQLite db anywhere is suspect
-                #      (half-mounted, mid-provision) and gets the old
-                #      add-only upload-batch instead — a weird volume may
-                #      degrade the backup's tidiness, never its contents.
-                # upload-batch is also the fallback when the mirror itself
-                # fails (azcopy missing, transient error), so a backup tick
-                # never silently does nothing. Watch the log labels: "mirror
-                # OK" is the healthy state; persistent "add-only fallback"
-                # means deletes are not propagating and wants investigation.
-                # Source: /app/data/users/{oid}/...
-                # Dest:   workspace/users/{oid}/...
                 if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
-                  # Mirror stderr is CAPTURED and printed on failure — a
-                  # fail-soft path that discards its error is undiagnosable
-                  # (learned 2026-08-23: the first live tick fell back and the
-                  # log could name the fallback but not the reason).
-                  mirror_out=""
-                  mirror_ok=0
-                  if [ -n "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ]; then
-                    mirror_out="$(az storage blob sync \
-                      --account-name "${STORAGE_ACCOUNT}" \
-                      --container workspace \
-                      --source /app/data/users \
-                      --destination users \
-                      --delete-destination true \
-                      --only-show-errors 2>&1)" && mirror_ok=1
-                  else
-                    mirror_out="no tenant SQLite db found — volume suspect, mirror skipped"
-                  fi
-                  if [ "$mirror_ok" = "1" ]; then
-                    echo "[$(date -u +%H:%M:%SZ)] tenant mirror OK (deletes propagated)"
-                  else
-                    echo "[$(date -u +%H:%M:%SZ)] mirror attempt failed — reason follows; add-only fallback engaged"
-                    echo "$mirror_out" | tail -n 5
-                    az storage blob upload-batch \
+                  if az storage blob upload-batch \
                       --account-name "${STORAGE_ACCOUNT}" \
                       --source /app/data/users \
                       --destination workspace \
                       --destination-path users \
                       --overwrite true \
                       --auth-mode login \
-                      --output none \
-                      && echo "[$(date -u +%H:%M:%SZ)] tenant sync OK (add-only fallback — mirror unavailable or volume suspect)" \
-                      || echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
+                      --output none 2>/dev/null; then
+                    # Delete propagation WITHOUT azcopy: `az storage blob sync` downloads
+                    # azcopy at runtime and this cluster's egress blocks that (2026-08-23:
+                    # every tick failed with "Name does not resolve" fetching azcopy
+                    # 10.13.0 — transfers seen in the log were the fallback's). Pure-CLI
+                    # prune instead: list blobs, subtract local files, delete the extras.
+                    # Guards, because a prune can DELETE backup blobs: the tenant SQLite
+                    # db must exist (suspect volume: no prune) and >=10 local files (a
+                    # nearly-empty volume must never empty the backup). The upload above
+                    # already succeeded either way — a skipped prune degrades tidiness,
+                    # never contents.
+                    local_count=$(find /app/data/users -type f | wc -l)
+                    if [ -z "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ]; then
+                      echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — no tenant db, volume suspect)"
+                    elif [ "$local_count" -lt 10 ]; then
+                      echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — only $local_count local files)"
+                    else
+                      (cd /app/data && find users -type f) > /tmp/local.txt
+                      if az storage blob list \
+                          --account-name "${STORAGE_ACCOUNT}" \
+                          --container-name workspace \
+                          --prefix users/ \
+                          --num-results "*" \
+                          --query "[].name" -o tsv \
+                          --auth-mode login > /tmp/blobs.txt 2>/dev/null; then
+                        grep -vxF -f /tmp/local.txt /tmp/blobs.txt > /tmp/extras.txt || true
+                        pruned=0
+                        failed=0
+                        while IFS= read -r blob; do
+                          [ -n "$blob" ] || continue
+                          az storage blob delete \
+                            --account-name "${STORAGE_ACCOUNT}" \
+                            --container-name workspace \
+                            --name "$blob" \
+                            --auth-mode login \
+                            --output none 2>/dev/null && pruned=$((pruned+1)) || failed=$((failed+1))
+                        done < /tmp/extras.txt
+                        echo "[$(date -u +%H:%M:%SZ)] tenant mirror OK (backup fresh, $pruned stale blobs pruned, $failed delete failures)"
+                      else
+                        echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — blob list failed)"
+                      fi
+                    fi
+                  else
+                    echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
                   fi
                 else
                   echo "[$(date -u +%H:%M:%SZ)] no tenant data to sync yet"
