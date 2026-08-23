@@ -209,7 +209,10 @@ spec:
             - -c
             - |
               set -e
-              echo "QA tenant sync sidecar ready. Syncing every 15 min."
+              # Mirror with delete propagation, double-guarded — same
+              # contract and rationale as prod (see k8s/deployment.yaml).
+              echo "QA tenant sync sidecar ready. Mirroring every 15 min."
+              export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
               while true; do
                 sleep 900
                 az login \
@@ -219,16 +222,27 @@ spec:
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
                 if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
-                  az storage blob upload-batch \
-                    --account-name "${STORAGE_ACCOUNT}" \
-                    --source /app/data/users \
-                    --destination workspace \
-                    --destination-path users \
-                    --overwrite true \
-                    --auth-mode login \
-                    --output none \
-                    && echo "[$(date -u +%H:%M:%SZ)] QA tenant sync OK" \
-                    || echo "[$(date -u +%H:%M:%SZ)] QA tenant sync FAILED"
+                  if [ -n "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ] \
+                    && az storage blob sync \
+                      --account-name "${STORAGE_ACCOUNT}" \
+                      --container workspace \
+                      --source /app/data/users \
+                      --destination users \
+                      --delete-destination true \
+                      --output none 2>/dev/null; then
+                    echo "[$(date -u +%H:%M:%SZ)] QA tenant mirror OK (deletes propagated)"
+                  else
+                    az storage blob upload-batch \
+                      --account-name "${STORAGE_ACCOUNT}" \
+                      --source /app/data/users \
+                      --destination workspace \
+                      --destination-path users \
+                      --overwrite true \
+                      --auth-mode login \
+                      --output none \
+                      && echo "[$(date -u +%H:%M:%SZ)] QA tenant sync OK (add-only fallback — mirror unavailable or volume suspect)" \
+                      || echo "[$(date -u +%H:%M:%SZ)] QA tenant sync FAILED"
+                  fi
                 else
                   echo "[$(date -u +%H:%M:%SZ)] no QA tenant data to sync yet"
                 fi
