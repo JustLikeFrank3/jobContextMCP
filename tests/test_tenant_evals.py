@@ -1,0 +1,251 @@
+"""Tenant eval loop: golden set CRUD, judge preference, triage rulings, screens."""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from evals import tenant
+
+
+@pytest.fixture
+def workspace(tmp_path, monkeypatch):
+    """Point the partition-resolved paths at a temp dir."""
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    from lib import config
+
+    monkeypatch.setattr(config, "get_active_workspace_folder", lambda: ws)
+    import evals.work as evals_work
+
+    monkeypatch.setattr(evals_work, "_partition_results_dir", lambda: tmp_path / "eval_runs")
+    return ws
+
+
+class TestGoldenCrud:
+    def test_no_manifest_means_none_not_empty(self, workspace):
+        assert tenant.load_tenant_golden() is None
+
+    def test_upsert_creates_entry_and_jd_file(self, workspace):
+        row = tenant.upsert_golden_entry("Acme", "Staff Engineer", "JD text here")
+        assert row["id"] == "GD-T01"
+        assert row["reference_file"] == ""
+        jd = workspace / "evals" / "golden" / "GD-T01-jd.txt"
+        assert jd.read_text(encoding="utf-8") == "JD text here"
+        entries = tenant.load_tenant_golden()
+        assert entries is not None and entries[0].company == "Acme"
+
+    def test_ids_increment_and_update_in_place(self, workspace):
+        tenant.upsert_golden_entry("A", "R1", "jd1")
+        row2 = tenant.upsert_golden_entry("B", "R2", "jd2")
+        assert row2["id"] == "GD-T02"
+        updated = tenant.upsert_golden_entry("B2", "R2b", "jd2b", entry_id="GD-T02")
+        assert updated["id"] == "GD-T02"
+        entries = tenant.list_tenant_entries()
+        assert len(entries) == 2
+        assert {e["company"] for e in entries} == {"A", "B2"}
+
+    def test_blank_fields_rejected(self, workspace):
+        with pytest.raises(ValueError):
+            tenant.upsert_golden_entry("", "R", "jd")
+        with pytest.raises(ValueError):
+            tenant.upsert_golden_entry("C", "R", "jd", output_kind="poem")
+
+    def test_delete_removes_row_and_jd(self, workspace):
+        tenant.upsert_golden_entry("A", "R", "jd")
+        assert tenant.delete_golden_entry("GD-T01") is True
+        assert tenant.delete_golden_entry("GD-T01") is False
+        assert tenant.list_tenant_entries() == []
+        assert not (workspace / "evals" / "golden" / "GD-T01-jd.txt").exists()
+
+    def test_malformed_row_skipped_not_fatal(self, workspace):
+        tenant.upsert_golden_entry("A", "R", "jd")
+        path = workspace / "evals" / "golden_dataset.json"
+        data = json.loads(path.read_text())
+        data["entries"].append({"id": "GD-BAD", "unknown_key": 1})
+        path.write_text(json.dumps(data))
+        entries = tenant.load_tenant_golden()
+        assert [e.id for e in entries] == ["GD-T01"]
+
+
+class TestExecutorPrecedence:
+    def test_tenant_set_wins_over_committed_manifest(self, workspace, monkeypatch):
+        import evals.work as evals_work
+
+        tenant.upsert_golden_entry("Acme", "Staff", "jd")
+        captured = {}
+
+        def fake_run_suite(entries=None, n=5, judge_fn=None, results_dir=None, **kw):
+            captured["ids"] = [e.id for e in entries]
+            captured["judge_fn"] = judge_fn
+
+            class Suite:
+                def to_dict(self):
+                    return {"rows": []}
+                entries = []
+            return Suite()
+
+        monkeypatch.setattr("evals.runner.run_suite", fake_run_suite)
+        monkeypatch.setattr("evals.ingest.store_results", lambda p: ("evals", 0))
+        evals_work.run_evals_executor({"n": 1})
+        assert captured["ids"] == ["GD-T01"]
+        assert captured["judge_fn"] is None  # no judge prefs stored
+
+    def test_empty_tenant_set_refuses_instead_of_running_owner_files(self, workspace):
+        import evals.work as evals_work
+
+        tenant.upsert_golden_entry("A", "R", "jd")
+        tenant.delete_golden_entry("GD-T01")  # manifest now exists but is empty
+        out = evals_work.run_evals_executor({"n": 1})
+        assert out["entries_scored"] == 0
+        assert "no golden entries" in out["errors"][0]
+
+
+class TestJudgePrefs:
+    def test_default_is_no_override(self, workspace):
+        prefs = tenant.load_judge_prefs()
+        assert prefs["provider"] == "" and prefs["has_key"] is False
+        assert tenant.build_judge_fn() is None
+
+    def test_key_is_write_only_and_survives_resave(self, workspace):
+        tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-secret")
+        prefs = tenant.load_judge_prefs()
+        assert prefs["has_key"] is True
+        assert "sk-secret" not in json.dumps(prefs)
+        # re-save without a key keeps the stored one
+        tenant.save_judge_prefs("openai", "gpt-4o")
+        raw = json.loads((workspace / "evals" / "judge.json").read_text())
+        assert raw["api_key"] == "sk-secret" and raw["model"] == "gpt-4o"
+
+    def test_clearing_provider_clears_everything(self, workspace):
+        tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-secret")
+        tenant.save_judge_prefs("")
+        assert tenant.load_judge_prefs()["has_key"] is False
+        assert tenant.build_judge_fn() is None
+
+    def test_bad_provider_rejected(self, workspace):
+        with pytest.raises(ValueError):
+            tenant.save_judge_prefs("bard")
+
+    def test_judge_fn_uses_stored_client_and_model(self, workspace, monkeypatch):
+        tenant.save_judge_prefs("anthropic", "claude-sonnet-5", api_key="sk-ant")
+        captured = {}
+
+        def fake_judge(jd, master, output, client=None, model=""):
+            captured["model"] = model
+            captured["base_url"] = str(client.base_url)
+            return "SCORE"
+
+        monkeypatch.setattr("evals.judge.judge_output", fake_judge)
+        fn = tenant.build_judge_fn()
+        assert fn("jd", "master", "out") == "SCORE"
+        assert captured["model"] == "claude-sonnet-5"
+        assert "api.anthropic.com" in captured["base_url"]
+
+    def test_keyed_provider_without_key_disables_override(self, workspace):
+        tenant.save_judge_prefs("openai", "gpt-4o-mini")  # no key ever stored
+        assert tenant.build_judge_fn() is None
+
+    def test_calibration_labels(self):
+        assert tenant.judge_calibration_label("claude-sonnet-5").startswith("calibrated")
+        assert "NOT recommended" in tenant.judge_calibration_label("gpt-4.1-mini")
+        assert tenant.judge_calibration_label("mystery-9b") == tenant.JUDGE_UNCALIBRATED
+
+
+class TestTriage:
+    def test_ruling_roundtrip_and_clear(self, workspace):
+        rec = tenant.save_ruling("GD-T01", "claims 5+ years", "D", "actually true, document it")
+        key = tenant.claim_key("GD-T01", "claims 5+ years")
+        assert tenant.load_triage()[key]["ruling"] == "D"
+        assert rec["note"] == "actually true, document it"
+        tenant.save_ruling("GD-T01", "claims 5+ years", "")
+        assert key not in tenant.load_triage()
+
+    def test_same_claim_same_key_across_runs(self, workspace):
+        assert tenant.claim_key("GD-1", "x") == tenant.claim_key("GD-1", "x")
+        assert tenant.claim_key("GD-1", "x") != tenant.claim_key("GD-2", "x")
+
+    def test_bad_ruling_rejected(self, workspace):
+        with pytest.raises(ValueError):
+            tenant.save_ruling("GD-1", "claim", "E")
+
+
+class TestScreens:
+    @pytest.fixture
+    def client(self, workspace, monkeypatch, tmp_path):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        results = {"updated_at": "2026-08-23T04:29:30", "suite": {
+            "judge_model": "claude-sonnet-5", "n_runs": 5,
+            "rows": [{"gd_id": "GD-T01", "role": "Staff", "mean": 3.5, "accuracy": 4.0,
+                      "cov_pct": 4.0, "flip_rate_pct": 0.0, "alerts": ["mean 3.50 < 4.0"]}],
+            "detail": {"GD-T01": {"hallucination_flags": 2,
+                                  "hallucinations": ["<b>claims X</b>"],
+                                  "critic": {"findings": [
+                                      {"claim": "misplaced Y", "verdict": "contradicted",
+                                       "evidence": "source says Z"}]}}},
+        }}
+        monkeypatch.setattr(lab, "_payload", lambda: results)
+        app = FastAPI()
+        app.include_router(lab.router, prefix="/dashboard")
+        return TestClient(app)
+
+    def test_page_renders_results_triage_and_escapes(self, client):
+        page = client.get("/dashboard/evals")
+        assert page.status_code == 200
+        text = page.text
+        assert "claude-sonnet-5" in text and "calibrated" in text
+        assert "&lt;b&gt;claims X&lt;/b&gt;" in text  # LLM output escaped
+        assert "<b>claims X</b>" not in text
+        assert "misplaced Y" in text  # critic findings triageable too
+
+    def test_page_empty_state(self, client, monkeypatch):
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        monkeypatch.setattr(lab, "_payload", lambda: {})
+        page = client.get("/dashboard/evals")
+        assert "No eval run stored yet" in page.text
+
+    def test_triage_post_persists(self, client):
+        out = client.post("/dashboard/evals/triage", json={
+            "gd_id": "GD-T01", "claim": "claims X", "ruling": "B", "note": "wrong place"})
+        assert out.status_code == 200
+        assert out.json()["stored"]["ruling"] == "B"
+        assert client.post("/dashboard/evals/triage", json={
+            "gd_id": "GD-T01", "claim": "claims X", "ruling": "Q"}).status_code == 422
+
+    def test_golden_post_and_delete(self, client):
+        out = client.post("/dashboard/evals/golden", json={
+            "company": "Acme", "role": "Staff", "jd_text": "the jd"})
+        assert out.json()["entry"]["id"] == "GD-T01"
+        assert client.post("/dashboard/evals/golden", json={
+            "company": "", "role": "", "jd_text": ""}).status_code == 422
+        assert client.post("/dashboard/evals/golden/delete",
+                           json={"entry_id": "GD-T01"}).json()["deleted"] is True
+
+    def test_judge_post_never_echoes_key(self, client):
+        out = client.post("/dashboard/evals/judge", json={
+            "provider": "openai", "model": "gpt-4o-mini", "api_key": "sk-supersecret"})
+        assert out.status_code == 200
+        assert "sk-supersecret" not in out.text
+        assert out.json()["prefs"]["has_key"] is True
+        page = client.get("/dashboard/evals")
+        assert "sk-supersecret" not in page.text
+
+    def test_run_post_enqueues_in_partition(self, client, monkeypatch):
+        import evals.work as evals_work
+
+        captured = {}
+        def fake_enqueue(n=5, entries=None, origin="api"):
+            captured["n"] = n
+            return 77
+
+        monkeypatch.setattr(evals_work, "enqueue_run", fake_enqueue)
+        out = client.post("/dashboard/evals/run", json={"n": 3})
+        assert out.json() == {"work_id": 77, "n": 3}
+        assert captured["n"] == 3
+
+    def test_stamp_endpoint(self, client):
+        assert client.get("/dashboard/evals/stamp").json()["updated_at"] == "2026-08-23T04:29:30"

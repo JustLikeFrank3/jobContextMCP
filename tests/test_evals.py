@@ -1192,8 +1192,9 @@ def test_run_evals_executor_end_to_end(isolated_server, tmp_path, monkeypatch):
     from lib import config, metrics, work
     from lib.io import _load_json
 
-    def fake_run_suite(entries=None, n=5, results_dir=None):
+    def fake_run_suite(entries=None, n=5, results_dir=None, judge_fn=None):
         assert n == 2
+        assert judge_fn is None  # no tenant judge prefs in this test partition
         assert [e.id for e in entries] == ["GD-01"]
         suite = runner_mod.SuiteResult(n_runs=n, started_at="2026-07-29T22:00:00")
         suite.entries.append(runner_mod.EntryResult(
