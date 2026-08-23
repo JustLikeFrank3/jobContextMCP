@@ -345,6 +345,7 @@ class TestScreens:
     def test_run_post_enqueues_in_partition(self, client, monkeypatch):
         import evals.work as evals_work
 
+        tenant.upsert_golden_entry("Acme", "Staff", "jd")  # guard needs a runnable set
         captured = {}
         def fake_enqueue(n=5, entries=None, origin="api"):
             captured["n"] = n
@@ -354,6 +355,42 @@ class TestScreens:
         out = client.post("/dashboard/evals/run", json={"n": 3})
         assert out.json() == {"work_id": 77, "n": 3}
         assert captured["n"] == 3
+
+    def test_run_refuses_empty_golden_set_with_a_sentence(self, client):
+        tenant.upsert_golden_entry("A", "R", "jd")
+        tenant.delete_golden_entry("GD-T01")  # manifest exists, empty
+        out = client.post("/dashboard/evals/run", json={"n": 5})
+        assert out.status_code == 422
+        assert "golden set is empty" in out.json()["error"]
+
+    def test_run_refuses_when_no_set_and_fallback_files_absent(self, client, monkeypatch):
+        # Brand-new tenant: no manifest, and the committed fallback's JD files
+        # don't exist in their partition — refuse before enqueuing a doomed run.
+        monkeypatch.setattr("evals.golden.resolve_file", lambda name: None)
+        out = client.post("/dashboard/evals/run", json={"n": 5})
+        assert out.status_code == 422
+        assert "add 3" in out.json()["error"].lower() or "No golden set" in out.json()["error"]
+
+    def test_no_run_triage_state_never_claims_passing(self, client, monkeypatch):
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        monkeypatch.setattr(lab, "_payload", lambda: {})
+        page = client.get("/dashboard/evals").text
+        assert "No run yet, so nothing to triage" in page
+        assert "goal state" not in page  # that sentence is earned by a clean RUN
+
+    def test_clean_run_triage_state_says_goal_state(self, client, monkeypatch):
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        clean = {"updated_at": "2026-08-23", "suite": {
+            "judge_model": "claude-sonnet-5", "n_runs": 5,
+            "rows": [{"gd_id": "GD-T01", "role": "Staff", "mean": 4.5, "accuracy": 4.5,
+                      "cov_pct": 2.0, "flip_rate_pct": 0.0, "alerts": []}],
+            "detail": {"GD-T01": {"hallucination_flags": 0, "hallucinations": [],
+                                  "critic": {"findings": []}}}}}
+        monkeypatch.setattr(lab, "_payload", lambda: clean)
+        page = client.get("/dashboard/evals").text
+        assert "goal state" in page
 
     def test_stamp_endpoint(self, client):
         assert client.get("/dashboard/evals/stamp").json()["updated_at"] == "2026-08-23T04:29:30"
