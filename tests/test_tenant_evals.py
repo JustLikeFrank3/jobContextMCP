@@ -152,6 +152,77 @@ class TestJudgePrefs:
         assert tenant.judge_calibration_label("mystery-9b") == tenant.JUDGE_UNCALIBRATED
 
 
+class TestJudgeKeyAtRest:
+    def test_key_encrypted_on_disk_when_app_key_set(self, workspace, monkeypatch):
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode())
+        tenant.save_judge_prefs("anthropic", "claude-sonnet-5", api_key="sk-ant-verysecret")
+        raw = (workspace / "evals" / "judge.json").read_text()
+        assert "sk-ant-verysecret" not in raw
+        assert "enc:v1:" in raw
+        # ... and decrypts on use
+        captured = {}
+
+        def fake_judge(jd, master, output, client=None, model=""):
+            captured["key"] = client.api_key
+            return "S"
+
+        monkeypatch.setattr("evals.judge.judge_output", fake_judge)
+        tenant.build_judge_fn()("jd", "m", "o")
+        assert captured["key"] == "sk-ant-verysecret"
+
+    def test_no_app_key_degrades_to_cleartext_like_oauth_tokens(self, workspace, monkeypatch):
+        monkeypatch.delenv("APP_ENCRYPTION_KEY", raising=False)
+        monkeypatch.setattr("lib.crypto._load_key", lambda: "")
+        tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-clear")
+        raw = (workspace / "evals" / "judge.json").read_text()
+        assert "sk-clear" in raw  # documented degradation, same as lib.crypto
+        assert tenant.load_judge_prefs()["has_key"] is True
+
+
+class TestHistoryAndVisuals:
+    def _write_run(self, results_dir, stamp, mean, flags, accuracy=4.0):
+        results_dir.mkdir(parents=True, exist_ok=True)
+        detail = {"GD-T01": {"per_dimension": {
+            "accuracy": {"mean": accuracy}, "keyword_coverage": {"mean": 3.0}}}}
+        if flags is not None:
+            detail["GD-T01"]["hallucination_flags"] = flags
+        (results_dir / f"results-{stamp}.json").write_text(json.dumps({
+            "started_at": stamp, "rows": [{"gd_id": "GD-T01", "mean": mean}],
+            "detail": detail}))
+
+    def test_history_oldest_first_with_absent_flags_as_none(self, workspace, tmp_path):
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260820-080000", 3.2, None)  # pre-count payload
+        self._write_run(rd, "20260822-080000", 3.5, 26)
+        self._write_run(rd, "20260823-080000", 3.66, 8)
+        hist = tenant.results_history()
+        assert [round(r["mean"], 2) for r in hist] == [3.2, 3.5, 3.66]
+        assert [r["flags"] for r in hist] == [None, 26, 8]
+        assert hist[-1]["dimensions"]["accuracy"] == 4.0
+
+    def test_history_skips_malformed_files(self, workspace, tmp_path):
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260823-080000", 3.66, 8)
+        (rd / "results-bad.json").write_text("{not json")
+        assert len(tenant.results_history()) == 1
+
+    def test_svg_panels_render_and_respect_absent(self, workspace, tmp_path):
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260822-080000", 3.5, None)
+        self._write_run(rd, "20260823-080000", 3.66, 8)
+        hist = tenant.results_history()
+        trend = lab._svg_trend(hist)
+        assert "<svg" in trend and "3.66" in trend
+        assert trend.count("<rect") == 1  # absent flags = gap, not a zero bar
+        dims = lab._svg_dimensions(hist[-1]["dimensions"])
+        assert "accuracy" in dims and "4.00" in dims
+        assert lab._svg_trend(hist[:1]) == ""  # one point is not a trend
+
+
 class TestTriage:
     def test_ruling_roundtrip_and_clear(self, workspace):
         rec = tenant.save_ruling("GD-T01", "claims 5+ years", "D", "actually true, document it")
