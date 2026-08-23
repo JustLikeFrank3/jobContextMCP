@@ -333,6 +333,10 @@ _PAGES = [
         '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><circle cx="10" cy="8" r="4"/><path d="M3 17c0-3 3-5 7-5s7 2 7 5"/><path d="M14 5l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" stroke-width="1.2"/></svg>',
         "Interviews", "/dashboard/interviews", "Upcoming schedule, debrief log, verbatim quotes",
     ),
+    (
+        '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24"><path d="M8 3h4v3a4 4 0 01-1 2.5l-.5.5.5.5A4 4 0 0112 12v3H8v-3a4 4 0 011-2.5l.5-.5-.5-.5A4 4 0 018 6V3z"/><path d="M6 3h8M6 17h8"/></svg>',
+        "Evals", "/dashboard/evals", "Run the truth suite on your golden set, triage flagged claims, pick your judge",
+    ),
 ]
 
 
