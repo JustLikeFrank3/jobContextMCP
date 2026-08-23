@@ -57,10 +57,19 @@ TRIAGE_MEANINGS = {
 # What has actually been measured, against blind human labels on the owner's
 # golden references (docs/evals.md carries the tables). Everything else is
 # honestly unknown — which the default label says out loud.
+# Scope discipline: these were measured on the PLATFORM's reference corpus
+# (the owner's five labeled documents), not on any tenant's. Saying so in the
+# label is load-bearing — "measured against blind human labels" rendered
+# inside a tenant's own dashboard silently implies THEIR corpus, which is the
+# same true-fact-widened-in-scope failure the entailment critic flags in
+# resumes. Ruled D (true but undocumented) 2026-08-23; documented here.
 JUDGE_CALIBRATION = {
-    "claude-sonnet-5": "calibrated — accuracy MAE 1.48–1.56 vs blind human labels (best measured)",
-    "gpt-4.1-mini": "measured, NOT recommended — scored accuracy a constant 5.0 (ranks nothing); MAE 3.0–3.2",
-    "llama3.1:8b": "measured — accuracy MAE 3.2 vs blind human labels; cheap drift signal only",
+    "claude-sonnet-5": ("calibrated on the platform's reference corpus (not your documents) — "
+                        "accuracy MAE 1.48–1.56 vs blind human labels; best measured"),
+    "gpt-4.1-mini": ("measured on the platform's reference corpus, NOT recommended — "
+                     "scored accuracy a constant 5.0 (ranks nothing); MAE 3.0–3.2"),
+    "llama3.1:8b": ("measured on the platform's reference corpus — accuracy MAE 3.2; "
+                    "cheap drift signal only"),
 }
 JUDGE_UNCALIBRATED = (
     "uncalibrated — no measurement against human labels; scores are comparable "
@@ -214,11 +223,17 @@ def load_judge_prefs() -> dict:
     data = _read_json(_judge_prefs_path(), {})
     if not isinstance(data, dict):
         data = {}
+    stored_key = str(data.get("api_key", "") or "").strip()
     return {
         "provider": str(data.get("provider", "") or "").lower(),
         "model": str(data.get("model", "") or ""),
         "base_url": str(data.get("base_url", "") or ""),
-        "has_key": bool(str(data.get("api_key", "") or "").strip()),
+        "has_key": bool(stored_key),
+        # Cleartext-at-rest is a DIFFERENT risk for a tenant-supplied key
+        # than for platform-provisioned OAuth tokens — it is their secret in
+        # our storage. Surfaced so the page can say so instead of implying
+        # the encrypted guarantee everywhere.
+        "key_plaintext_at_rest": bool(stored_key) and not stored_key.startswith("enc:v1:"),
     }
 
 
@@ -235,7 +250,7 @@ def save_judge_prefs(provider: str, model: str = "", api_key: str = "", base_url
     if not provider:
         _write_json(_judge_prefs_path(), {})
         return load_judge_prefs()
-    from lib.crypto import encrypt_secret  # noqa: PLC0415
+    from lib.crypto import encrypt_secret, encryption_enabled  # noqa: PLC0415
 
     stored = _read_json(_judge_prefs_path(), {})
     if not isinstance(stored, dict):
@@ -250,6 +265,12 @@ def save_judge_prefs(provider: str, model: str = "", api_key: str = "", base_url
         # plaintext that migrates on the next paste).
         "api_key": encrypt_secret(new_key) if new_key else str(stored.get("api_key", "") or ""),
     }
+    if new_key and not encryption_enabled():
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).warning(
+            "tenant judge API key stored WITHOUT encryption — APP_ENCRYPTION_KEY "
+            "is not configured; a tenant-supplied secret in cleartext at rest")
     _write_json(_judge_prefs_path(), payload)
     return load_judge_prefs()
 
@@ -339,6 +360,10 @@ def results_history(limit: int = 24) -> list[dict]:
             "started_at": str(payload.get("started_at") or ""),
             "mean": sum(means) / len(means),
             "flags": flags,
+            # N rides along because a flag total is only comparable at the
+            # same N — classes that fire in 1/5 runs triple their count going
+            # N=1 → N=5 with zero real change. The trend panel normalizes.
+            "n_runs": int(payload.get("n_runs") or 0) or None,
             "dimensions": {d: sum(v) / len(v) for d, v in dims.items()},
         })
     return out
