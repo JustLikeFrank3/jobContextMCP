@@ -16,6 +16,11 @@ def workspace(tmp_path, monkeypatch):
     from lib import config
 
     monkeypatch.setattr(config, "get_active_workspace_folder", lambda: ws)
+    # The evals page reads the latest run_evals work item, so the work DB
+    # must be hermetic too — never the repo's real data folder.
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(config, "DATA_FOLDER", data, raising=False)
     import evals.work as evals_work
 
     monkeypatch.setattr(evals_work, "_partition_results_dir", lambda: tmp_path / "eval_runs")
@@ -467,3 +472,86 @@ class TestScreens:
         assert "sk-" not in str(data["judge"])  # key never in the payload
         assert data["calibration_map"]["claude-sonnet-5"]
         assert data["triage_meanings"]["D"].startswith("True but undocumented")
+
+
+class TestRunVisibility:
+    """A launched run always resolves to a state the user can see.
+
+    The 2026-08-24 report: a deploy killed an in-flight run; the startup
+    sweep dutifully marked the work row failed, but nothing on the evals
+    page read work state — so the run 'vanished' and the page said
+    'No eval run stored yet', indistinguishable from never having run."""
+
+    @pytest.fixture
+    def client(self, workspace, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        monkeypatch.setattr(lab, "_payload", lambda: {})
+        app = FastAPI()
+        app.include_router(lab.router, prefix="/dashboard")
+        return TestClient(app)
+
+    @staticmethod
+    def _mark_abandoned(work_id):
+        from lib.db import get_connection
+
+        with get_connection() as con:
+            con.execute(
+                "UPDATE work_items SET status='failed', "
+                "error='abandoned: attempts exhausted (process restart)', "
+                "finished_at=datetime('now') WHERE id=?", (work_id,))
+            con.commit()
+
+    def test_latest_run_status_none_without_items(self, workspace):
+        import evals.work as evals_work
+
+        assert evals_work.latest_run_status() is None
+
+    def test_latest_run_status_reports_queued_run(self, workspace):
+        import evals.work as evals_work
+
+        wid = evals_work.enqueue_run(n=3)
+        st = evals_work.latest_run_status()
+        assert st["work_id"] == wid and st["status"] == "queued" and st["n"] == 3
+
+    def test_abandoned_error_translated_for_users(self, workspace):
+        # The sweep's operator-facing reason becomes what the user needs to
+        # know: no results, no resume, provider calls may have been billed.
+        import evals.work as evals_work
+
+        self._mark_abandoned(evals_work.enqueue_run(n=1))
+        st = evals_work.latest_run_status()
+        assert st["status"] == "failed"
+        assert "interrupted by a server restart" in st["error"]
+        assert "billed" in st["error"]
+        assert "abandoned:" not in st["error"]
+
+    def test_data_and_status_endpoints_carry_run_state(self, client):
+        import evals.work as evals_work
+
+        assert client.get("/dashboard/evals/data").json()["run"] is None
+        assert client.get("/dashboard/evals/run/status").json() == {}
+        wid = evals_work.enqueue_run(n=5)
+        assert client.get("/dashboard/evals/data").json()["run"]["work_id"] == wid
+        s = client.get("/dashboard/evals/run/status").json()
+        assert s["status"] == "queued" and s["work_id"] == wid
+
+    def test_page_renders_failed_run_state(self, client):
+        import evals.work as evals_work
+
+        wid = evals_work.enqueue_run(n=1)
+        self._mark_abandoned(wid)
+        page = client.get("/dashboard/evals").text
+        assert f"run #{wid} failed" in page
+        assert "interrupted by a server restart" in page
+        assert "window.__run_inflight = false" in page
+
+    def test_page_renders_inflight_run_and_arms_poll(self, client):
+        import evals.work as evals_work
+
+        wid = evals_work.enqueue_run(n=5)
+        page = client.get("/dashboard/evals").text
+        assert f"work #{wid}" in page
+        assert "window.__run_inflight = true" in page

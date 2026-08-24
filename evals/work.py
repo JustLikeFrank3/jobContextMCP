@@ -81,6 +81,47 @@ def enqueue_run(n: int = 5, entries: "list[str] | None" = None, origin: str = "a
     return work.enqueue(KIND, {"n": n, "entries": entries or []}, origin=origin)
 
 
+# What the startup sweep writes when a restart killed an in-flight item
+# (lib/work._sweep_partitions). Matched by prefix so the page can translate
+# the operator-facing reason into what the user needs to know: the run is
+# gone, it will not resume, and provider calls before the kill may have been
+# billed. The 2026-08-24 report is the motivating incident — a deploy landed
+# during a 1–3 hour run and the page later read "No eval run stored yet",
+# indistinguishable from the run never having existed.
+_ABANDONED_PREFIX = "abandoned:"
+_ABANDONED_EXPLANATION = (
+    "interrupted by a server restart (usually a deploy) before it finished — "
+    "no results were stored, and provider calls made before the interruption "
+    "may still have been billed. Run it again."
+)
+
+
+def latest_run_status() -> "dict | None":
+    """The most recent run_evals work item in the CURRENT partition, shaped
+    for the evals page.
+
+    A launched run must always resolve to a state the user can see: stored
+    results, a visible failure, or visibly in progress. The work row already
+    carries the truth (the dispatcher and startup sweep keep it durable);
+    this is the read path the page was missing.
+    """
+    items = [i for i in work.list_items(limit=50) if i["kind"] == KIND]
+    if not items:
+        return None
+    item = items[0]  # list_items orders by id DESC
+    error = str(item.get("error") or "")
+    if error.startswith(_ABANDONED_PREFIX):
+        error = _ABANDONED_EXPLANATION
+    return {
+        "work_id": item["id"],
+        "status": item["status"],
+        "error": error,
+        "n": int((item.get("inputs") or {}).get("n") or 0) or None,
+        "created_at": item.get("created_at") or "",
+        "finished_at": item.get("finished_at") or "",
+    }
+
+
 # ── nightly schedule ──────────────────────────────────────────────────────────
 
 # EVALS_NIGHTLY_DAYS_UTC values, UTC weekdays (datetime.weekday(): Mon=0).
