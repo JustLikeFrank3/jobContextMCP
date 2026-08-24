@@ -69,15 +69,17 @@ data:
       - job_name: kube-state-metrics
         static_configs:
           - targets: [kube-state-metrics.monitoring.svc:8080]
-      # Federate the cloud app series from AKS Prometheus via the local
-      # tunnel (aks-prom-tunnel on the host). ONE request per interval —
-      # kubectl port-forward wedges under concurrent connections, so the
-      # wallboard's Cloud page reads these locally instead of querying
-      # through the tunnel at render time (which never finished a first
-      # render). namespace labels (jcmcp/jcmcp-qa) disambiguate from the
-      # Pi's own jcmcp-pi series. Target is the Pi's static address on the
-      # direct ethernet link (the tunnel binds it) — static beats the
-      # DHCP-leased wlan address, which broke the kiosk once (2026-07-15).
+      # Federate the cloud app series from AKS Prometheus via the
+      # in-cluster forwarder (aks-federate-proxy.yaml) — service DNS, no
+      # host addresses. The old host-side tunnel bound the direct-link
+      # address 192.168.101.2, which existed only while the workstation
+      # ran its Linux boot; every Windows boot blanked the kiosk's cloud
+      # panels (2026-08-01 incident and repeats). ONE request per
+      # interval — kubectl port-forward wedges under concurrent
+      # connections, so the wallboard's Cloud page reads these locally
+      # instead of querying through the forwarder at render time.
+      # namespace labels (jcmcp/jcmcp-qa) disambiguate from the Pi's own
+      # jcmcp-pi series.
       - job_name: aks-federate
         honor_labels: true
         metrics_path: /federate
@@ -85,7 +87,7 @@ data:
           "match[]":
             - '{namespace=~"jcmcp|jcmcp-qa"}'
         static_configs:
-          - targets: ["192.168.101.2:9091"]
+          - targets: ["aks-federate.monitoring.svc:9091"]
       # Workstation local-LLM stack: local LLM server status (llama.cpp
       # since 2026-08; the exporter probes generically, ollama fallback
       # kept) + GPU + the desktop app's relayed llm_* series
