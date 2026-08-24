@@ -63,10 +63,16 @@ export async function apiFetch(path, options = {}) {
 /**
  * Send a mutating request (POST by default) with a JSON body.
  *
- * Mirrors apiFetch's auth handling: forwards the session cookie, redirects on
- * 401, and throws ApiError on non-2xx. On error it captures the response body
- * (when present) on err.body so callers can surface why an action failed
- * (e.g. an LLM rate-limit message from a generate endpoint).
+ * Forwards the session cookie and throws ApiError on non-2xx, capturing the
+ * response body (when present) on err.body so callers can surface why an
+ * action failed.
+ *
+ * Deliberately UNLIKE apiFetch: a 401 here throws instead of redirecting.
+ * Redirecting a mutation replaces the whole page — the user's un-saved
+ * input goes with it, and the fresh page after silent re-auth is
+ * indistinguishable from a successful save (2026-08-24 golden-set bug:
+ * an idle tab's expired session ate full JD pastes with no error). The
+ * caller keeps the form intact and tells the user to re-authenticate.
  *
  * Returns parsed JSON, or { ok: true, raw } when the body is not JSON.
  */
@@ -84,8 +90,8 @@ export async function apiSend(path, { method = 'POST', body, headers } = {}) {
   })
 
   if (res.status === 401) {
-    redirectToLogin()
-    throw new ApiError(401, 'Authentication required')
+    throw new ApiError(401,
+      'Session expired — your input is untouched. Sign in again in another tab (or reload after copying your text), then retry.')
   }
 
   const text = await res.text()
