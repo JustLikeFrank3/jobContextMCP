@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, List, Row, EmptyState,
 } from './_shared.jsx'
@@ -348,21 +348,36 @@ function JudgeSection({ judge, calMap, calDefault, defaultJudge }) {
   )
 }
 
-function RunSection({ stamp, reload }) {
+function RunSection({ run: runState, reload }) {
   const [n, setN] = useState('5')
   const [status, setStatus] = useState('')
+
+  // Run state comes from the SERVER's work item, never from post-click JS
+  // alone: ephemeral status was how the 2026-08-24 run "vanished" — a reload
+  // forgot an in-flight run, and a run killed by a deploy looked identical
+  // to one that never launched. The work row is durable; render it.
+  const inFlight = runState && (runState.status === 'queued' || runState.status === 'running')
+  const runDead = runState && (runState.status === 'failed' || runState.status === 'cancelled')
+
+  useEffect(() => {
+    if (!inFlight) return undefined
+    const poll = setInterval(async () => {
+      try {
+        const r = await (await fetch('/dashboard/evals/run/status', { credentials: 'same-origin' })).json()
+        // Reload on ANY terminal state — polling only the results stamp
+        // could never terminate on a failed run (a failure stores nothing).
+        if (r.status && r.status !== 'queued' && r.status !== 'running') { clearInterval(poll); reload() }
+      } catch { /* transient — next tick retries */ }
+    }, 60000)
+    return () => clearInterval(poll)
+  }, [inFlight, reload])
 
   const run = async () => {
     setStatus('starting…')
     try {
       const out = await apiSend('/dashboard/evals/run', { body: { n: parseInt(n, 10) } })
-      setStatus(`running ${out.entries ?? '?'} entries × N=${out.n} (work #${out.work_id}) — a full run takes 1–3 hours; results appear here when stored`)
-      const poll = setInterval(async () => {
-        try {
-          const s = await (await fetch('/dashboard/evals/stamp', { credentials: 'same-origin' })).json()
-          if (s.updated_at && s.updated_at !== stamp) { clearInterval(poll); reload() }
-        } catch { /* transient — next tick retries */ }
-      }, 60000)
+      setStatus(`started ${out.entries ?? '?'} entries × N=${out.n} (work #${out.work_id})`)
+      reload() // refetch — the server's run block takes over the status line
     } catch (err) {
       setStatus(err?.body?.error || err.message)
     }
@@ -376,12 +391,24 @@ function RunSection({ stamp, reload }) {
           <option value="3">N=3</option>
           <option value="5">N=5 (full variance)</option>
         </select>
-        <button type="button" onClick={run}
-          style={{ background: 'var(--cyan-500, #00B5C8)', color: '#062330', border: 'none', borderRadius: 8, fontWeight: 700, padding: '9px 16px', cursor: 'pointer' }}>
+        <button type="button" onClick={run} disabled={!!inFlight}
+          style={{ background: 'var(--cyan-500, #00B5C8)', color: '#062330', border: 'none', borderRadius: 8, fontWeight: 700, padding: '9px 16px', cursor: inFlight ? 'default' : 'pointer', opacity: inFlight ? 0.6 : 1 }}>
           Run evals
         </button>
-        {status && <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5 }}>{status}</span>}
+        {inFlight ? (
+          <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5 }}>
+            running{runState.n ? ` N=${runState.n}` : ''} (work #{runState.work_id}, started {runState.created_at} UTC) —
+            a full run takes 1–3 hours; this page updates when it resolves
+          </span>
+        ) : (
+          status && <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5 }}>{status}</span>
+        )}
       </div>
+      {runDead && (
+        <div style={{ color: 'var(--red, #e5484d)', fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>
+          Run #{runState.work_id} {runState.status}: {runState.error || 'no error recorded'}
+        </div>
+      )}
       <div style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>
         First runs usually flag a lot — most of it points at gaps in your master resume, not at
         the generator. Triage with <b>D</b>, document the true facts, and the count drains on the
@@ -442,7 +469,7 @@ export default function Evals() {
             ))}
           </List>
           <div style={{ margin: '14px 0 24px' }}>
-            <RunSection stamp={data?.stamp} reload={reload} />
+            <RunSection run={data?.run} reload={reload} />
           </div>
 
           <SectionHead title="Triage flagged claims" right={`${ruled}/${claims.length} ruled`} />
@@ -469,7 +496,7 @@ export default function Evals() {
           <EmptyState label="No eval run stored yet — nothing to triage or score."
             hint="Add golden entries below, then hit Run evals. Results land here when the run finishes." />
           <div style={{ marginTop: 14 }}>
-            <RunSection stamp="" reload={reload} />
+            <RunSection run={data?.run} reload={reload} />
           </div>
         </div>
       )}
