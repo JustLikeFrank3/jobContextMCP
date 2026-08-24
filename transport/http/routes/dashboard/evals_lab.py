@@ -15,12 +15,16 @@ from __future__ import annotations
 import html
 import json
 
+import logging
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from transport.http.auth import require_api_key
 from .shared import html_page
+
+_LOG = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -54,17 +58,23 @@ async def evals_run(body: RunBody) -> JSONResponse:
     if tenant_set is not None and not tenant_set:
         return JSONResponse({"error": "Your golden set is empty — add an entry below first."},
                             status_code=422)
-    if tenant_set is None:
+    # The run confirmation names how many entries the SERVER will actually
+    # run — a silently-short golden set must not score silently (a user who
+    # believes they added five and lost two to a failed write should see
+    # "running 3 entries" before the money is spent).
+    if tenant_set is not None:
+        entry_count = len(tenant_set)
+    else:
         from evals.golden import load_golden, resolve_file  # noqa: PLC0415
 
-        fallback = load_golden()
-        if not any(resolve_file(e.jd_file) for e in fallback):
+        entry_count = sum(1 for e in load_golden() if resolve_file(e.jd_file))
+        if not entry_count:
             return JSONResponse({"error": "No golden set yet — add 3–5 entries below before "
                                           "running. The suite needs your job descriptions."},
                                 status_code=422)
     n = max(1, min(int(body.n), 10))
     work_id = evals_work.enqueue_run(n=n, origin="dashboard")
-    return JSONResponse({"work_id": work_id, "n": n})
+    return JSONResponse({"work_id": work_id, "n": n, "entries": entry_count})
 
 
 class GoldenBody(BaseModel):
@@ -85,7 +95,13 @@ async def evals_golden_upsert(body: GoldenBody) -> JSONResponse:
             entry_id=body.entry_id, output_kind=body.output_kind,
         )
     except ValueError as e:
+        # Every rejected golden-set write leaves a server-side trace — the
+        # 2026-08-24 report's first finding was that a dropped write had no
+        # record anywhere.
+        _LOG.warning("golden-set write rejected (company=%r, role=%r, jd_len=%d): %s",
+                     body.company[:40], body.role[:40], len(body.jd_text), e)
         return JSONResponse({"error": str(e)}, status_code=422)
+    _LOG.info("golden-set entry saved: %s (%s)", row["id"], row["company"])
     return JSONResponse({"entry": row})
 
 
@@ -114,6 +130,7 @@ async def evals_triage(body: TriageBody) -> JSONResponse:
     try:
         record = save_ruling(body.gd_id, body.claim, body.ruling, body.note)
     except ValueError as e:
+        _LOG.warning("triage ruling rejected (gd_id=%s, ruling=%r): %s", body.gd_id, body.ruling, e)
         return JSONResponse({"error": str(e)}, status_code=422)
     return JSONResponse({"stored": record})
 
