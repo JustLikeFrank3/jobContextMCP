@@ -246,7 +246,7 @@ function GoldenSection({ golden, hasRun, reload }) {
   )
 }
 
-function JudgeSection({ judge, calMap, calDefault }) {
+function JudgeSection({ judge, calMap, calDefault, defaultJudge }) {
   const [provider, setProvider] = useState(judge.provider || '')
   const [model, setModel] = useState(judge.model || '')
   const [apiKey, setApiKey] = useState('')
@@ -254,7 +254,9 @@ function JudgeSection({ judge, calMap, calDefault }) {
   const [status, setStatus] = useState('')
 
   const cal = !provider
-    ? 'server default judge — the calibrated configuration the platform runs'
+    ? (defaultJudge
+      ? `default judge for this install: ${defaultJudge.model} — ${defaultJudge.calibration}`
+      : 'default judge for this install')
     : (calMap?.[model.trim()] || calDefault)
 
   const save = async () => {
@@ -280,7 +282,7 @@ function JudgeSection({ judge, calMap, calDefault }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
         <select style={inputStyle} value={provider} onChange={(e) => setProvider(e.target.value)}>
-          <option value="">Server default (calibrated)</option>
+          <option value="">Default judge for this install</option>
           <option value="openai">OpenAI (your key)</option>
           <option value="anthropic">Anthropic (your key)</option>
           <option value="ollama">Ollama / local</option>
@@ -443,7 +445,7 @@ export default function Evals() {
       <div style={{ display: 'grid', gap: 14 }}>
         <GoldenSection golden={data?.golden || []} hasRun={hasRun} reload={reload} />
         <JudgeSection judge={data?.judge || {}} calMap={data?.calibration_map}
-          calDefault={data?.calibration_default} />
+          calDefault={data?.calibration_default} defaultJudge={data?.default_judge} />
       </div>
     </Screen>
   )

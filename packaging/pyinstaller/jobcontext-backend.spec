@@ -33,11 +33,23 @@ datas = [
     # to the module — must travel into the bundle or every browser/webview
     # favicon request errors in the frozen app (Windows field report).
     (os.path.join(ROOT, "transport", "http", "static"), os.path.join("transport", "http", "static")),
+    # The golden-suite manifest is a data file next to the evals package —
+    # load_golden() resolves it via __file__, so it must travel into the
+    # bundle or the desktop Run-evals path dies on FileNotFoundError for
+    # any user without their own tenant golden set.
+    (os.path.join(ROOT, "evals", "golden_dataset.json"), "evals"),
 ]
+
+from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = [
     "tiktoken_ext",
     "tiktoken_ext.openai_public",
+    # evals is imported only lazily inside route/executor function bodies —
+    # the same "static analysis can't see it" class as tiktoken_ext. The
+    # tenant eval loop (run button, triage, judge picker) needs the whole
+    # package in the frozen sidecar.
+    *collect_submodules("evals"),
 ]
 
 a = Analysis(

@@ -395,6 +395,19 @@ class TestScreens:
     def test_stamp_endpoint(self, client):
         assert client.get("/dashboard/evals/stamp").json()["updated_at"] == "2026-08-23T04:29:30"
 
+    def test_data_endpoint_default_judge_resolved_not_asserted(self, client, monkeypatch):
+        # A BYOK desktop's default judge is the user's own model — the label
+        # must resolve reality, never assert "calibrated" for a config this
+        # install may not have.
+        monkeypatch.setattr("lib.config._resolve_llm_settings",
+                            lambda task="", cfg=None: ("ollama", "llama3.1:8b"))
+        data = client.get("/dashboard/evals/data").json()
+        dj = data["default_judge"]
+        assert dj["model"] == "llama3.1:8b"
+        assert "MAE 3.2" in dj["calibration"]
+        assert "llama3.1:8b" in data["judge"]["calibration"]
+        assert "calibrated configuration the platform runs" not in str(data)
+
     def test_data_endpoint_feeds_the_spa(self, client):
         tenant.save_ruling("GD-T01", "<b>claims X</b>", "B", "wrong place")
         data = client.get("/dashboard/evals/data").json()
