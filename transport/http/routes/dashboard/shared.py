@@ -139,6 +139,7 @@ _PAGES = [
     ("Wellbeing",   "/dashboard/health",      "health"),
     ("Digest",      "/dashboard/digest",      "digest"),
     ("Interviews",  "/dashboard/interviews",  "interviews"),
+    ("Evals",       "/dashboard/evals",       "evals"),
     ("API Keys",    "/dashboard/api-keys",    "api-keys"),
     ("Settings",    "/dashboard/settings",    "settings"),
 ]
