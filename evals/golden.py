@@ -29,7 +29,22 @@ class GoldenEntry:
 
 
 def load_golden(manifest_path: Path | None = None) -> list[GoldenEntry]:
-    data = json.loads((manifest_path or _MANIFEST_PATH).read_text(encoding="utf-8"))
+    """Entries from the committed manifest; [] when the manifest is absent.
+
+    Absent happens legitimately in a frozen desktop build where the data
+    file didn't travel (and is belt-and-braces even now that the spec
+    ships it): the caller's no-entries handling ("add golden entries
+    first") is the right user experience there — a FileNotFoundError
+    from the Run button is not.
+    """
+    import logging  # noqa: PLC0415
+
+    path = manifest_path or _MANIFEST_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        logging.getLogger(__name__).warning("golden manifest missing at %s — empty set", path)
+        return []
     return [GoldenEntry(**e) for e in data["entries"]]
 
 

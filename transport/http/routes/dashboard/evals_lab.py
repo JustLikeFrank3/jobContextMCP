@@ -195,8 +195,22 @@ async def evals_data() -> JSONResponse:
     means = [float(r.get("mean") or 0) for r in rows_in if "mean" in r]
     judge_model = str(suite.get("judge_model") or "")
     prefs = load_judge_prefs()
+    # The default judge is whatever this DEPLOYMENT resolves for
+    # task="eval_judge" — on the cloud that's the calibrated split; on a
+    # BYOK desktop it's the user's own generation model judging its own
+    # output. Resolve it and label it honestly instead of asserting
+    # "calibrated" for a configuration this install may not have.
+    from lib import config as config_mod  # noqa: PLC0415
+
+    d_provider, d_model = config_mod._resolve_llm_settings(task="eval_judge")
+    default_judge = {
+        "provider": d_provider,
+        "model": d_model,
+        "calibration": judge_calibration_label(d_model),
+    }
     prefs["calibration"] = (judge_calibration_label(prefs["model"]) if prefs["provider"]
-                            else "server default judge — the calibrated configuration the platform runs")
+                            else f"default judge for this install: {d_model} — "
+                                 + judge_calibration_label(d_model))
     return JSONResponse({
         "stamp": payload.get("updated_at") or "",
         "summary": {
@@ -210,6 +224,7 @@ async def evals_data() -> JSONResponse:
         "claims": claims,
         "golden": list_tenant_entries(),
         "judge": prefs,
+        "default_judge": default_judge,
         "calibration_map": JUDGE_CALIBRATION,
         "calibration_default": JUDGE_UNCALIBRATED,
         "triage_meanings": TRIAGE_MEANINGS,
@@ -513,10 +528,13 @@ def _golden_section(entries: list[dict], using_fallback: bool) -> str:
 def _judge_section(prefs: dict) -> str:
     from evals.tenant import JUDGE_CALIBRATION, JUDGE_UNCALIBRATED, judge_calibration_label  # noqa: PLC0415
 
+    from lib import config as config_mod  # noqa: PLC0415
+
     provider = prefs.get("provider", "")
     model = prefs.get("model", "")
-    cal = judge_calibration_label(model) if provider else \
-        "server default judge — the calibrated configuration the platform runs"
+    _, d_model = config_mod._resolve_llm_settings(task="eval_judge")
+    default_cal = f"default judge for this install: {d_model} — {judge_calibration_label(d_model)}"
+    cal = judge_calibration_label(model) if provider else default_cal
     key_ph = "API key (stored, unchanged)" if prefs.get("has_key") else "API key"
     clear_warn = ""
     if prefs.get("key_plaintext_at_rest"):
@@ -524,10 +542,11 @@ def _judge_section(prefs: dict) -> str:
                       "this server has no APP_ENCRYPTION_KEY configured. It is never shown or "
                       "sent back, but it sits in cleartext at rest; clear the provider to "
                       "remove it if that is not acceptable.</div>")
-    cal_json = json.dumps({"map": JUDGE_CALIBRATION, "default": JUDGE_UNCALIBRATED}).replace("</", "<\\/")
+    cal_json = json.dumps({"map": JUDGE_CALIBRATION, "default": JUDGE_UNCALIBRATED,
+                           "install_default": default_cal}).replace("</", "<\\/")
     opts = "".join(
         f"<option value='{v}'{' selected' if provider == v else ''}>{label}</option>"
-        for v, label in (("", "Server default (calibrated)"), ("openai", "OpenAI (your key)"),
+        for v, label in (("", "Default judge for this install"), ("openai", "OpenAI (your key)"),
                          ("anthropic", "Anthropic (your key)"), ("ollama", "Ollama / local"))
     )
     return f"""
@@ -604,7 +623,7 @@ const jModel = document.getElementById('j-model');
 const jProv = document.getElementById('j-provider');
 function refreshCal() {
   const el = document.getElementById('j-cal');
-  if (!jProv.value) { el.textContent = 'server default judge — the calibrated configuration the platform runs'; return; }
+  if (!jProv.value) { el.textContent = window.__cal.install_default; return; }
   el.textContent = (window.__cal.map[jModel.value.trim()] || window.__cal.default);
 }
 if (jModel) { jModel.addEventListener('input', refreshCal); jProv.addEventListener('change', refreshCal); }
