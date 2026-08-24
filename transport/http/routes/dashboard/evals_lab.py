@@ -163,6 +163,17 @@ async def evals_stamp() -> JSONResponse:
     return JSONResponse({"updated_at": _payload().get("updated_at") or ""})
 
 
+@router.get("/evals/run/status")
+async def evals_run_status() -> JSONResponse:
+    """The latest run's work-item state — the poll target while a run is in
+    flight. Polling the results stamp alone could never terminate on a FAILED
+    run (a failure never stores results, so the stamp never changes and the
+    page said "running" forever, or nothing at all after a reload)."""
+    from evals import work as evals_work  # noqa: PLC0415
+
+    return JSONResponse(evals_work.latest_run_status() or {})
+
+
 @router.get("/evals/data")
 async def evals_data() -> JSONResponse:
     """Everything the SPA's Evals screen needs, in one authenticated call.
@@ -228,8 +239,11 @@ async def evals_data() -> JSONResponse:
     prefs["calibration"] = (judge_calibration_label(prefs["model"]) if prefs["provider"]
                             else f"default judge for this install: {d_model} — "
                                  + judge_calibration_label(d_model))
+    from evals import work as evals_work  # noqa: PLC0415
+
     return JSONResponse({
         "stamp": payload.get("updated_at") or "",
+        "run": evals_work.latest_run_status(),
         "summary": {
             "mean": round(sum(means) / len(means), 3) if means else None,
             "total_flags": total_flags if rows_in else None,
@@ -657,21 +671,33 @@ if (jSave) jSave.addEventListener('click', async () => {
     : (out.warning ? 'saved, but: ' + out.warning : 'saved — applies to your next run');
 });
 
-// run
+// run — poll the WORK ITEM, not the results stamp: a failed run never
+// stores results, so a stamp poll would say "running" forever while the
+// run was already dead (2026-08-24 vanished-run report).
+function armRunPoll() {
+  if (window.__runPoll) return;
+  window.__runPoll = setInterval(async () => {
+    try {
+      const r = await (await fetch('/dashboard/evals/run/status')).json();
+      if (r.status && r.status !== 'queued' && r.status !== 'running') {
+        clearInterval(window.__runPoll); window.location.reload();
+      }
+    } catch (e) { /* transient — next tick retries */ }
+  }, 60000);
+}
 const runBtn = document.getElementById('run-btn');
 if (runBtn) runBtn.addEventListener('click', async () => {
   const status = document.getElementById('run-status');
   status.textContent = 'starting…';
   const out = await post('/dashboard/evals/run',
     {n: parseInt(document.getElementById('run-n').value, 10)});
-  status.textContent = 'running (work #' + out.work_id +
-    ') — a full run takes 1–3 hours; this page reloads itself when results land';
-  const stamp = (window.__stamp || '');
-  setInterval(async () => {
-    const s = await (await fetch('/dashboard/evals/stamp')).json();
-    if (s.updated_at && s.updated_at !== stamp) window.location.reload();
-  }, 60000);
+  if (out.error) { status.textContent = out.error; return; }
+  status.textContent = 'running ' + (out.entries ?? '?') + ' entries × N=' + out.n +
+    ' (work #' + out.work_id +
+    ') — a full run takes 1–3 hours; this page reloads itself when the run resolves';
+  armRunPoll();
 });
+if (window.__run_inflight) armRunPoll();
 </script>
 """
 
@@ -682,6 +708,8 @@ async def evals_page() -> HTMLResponse:
         list_tenant_entries, load_judge_prefs, load_triage, results_history,
     )
 
+    from evals import work as evals_work  # noqa: PLC0415
+
     payload = _payload()
     triage = load_triage()
     cards, entries_html, claims = _results_section(payload, triage)
@@ -691,6 +719,23 @@ async def evals_page() -> HTMLResponse:
     if history:
         visuals = _svg_trend(history) + _svg_dimensions(history[-1].get("dimensions") or {})
     stamp = json.dumps(str(payload.get("updated_at") or ""))
+    # A launched run always renders a state here — in flight, failed, or its
+    # stored results above. Before this, the ONLY record of an in-flight or
+    # failed run was ephemeral post-click JS state: a reload forgot a running
+    # run, and a failed one looked identical to "never ran".
+    run_state = evals_work.latest_run_status()
+    run_inflight = bool(run_state and run_state["status"] in ("queued", "running"))
+    if run_inflight:
+        run_status_html = (
+            f"running (work #{_e(run_state['work_id'])}, started "
+            f"{_e(run_state['created_at'])} UTC) — a full run takes 1–3 hours; "
+            "this page reloads itself when the run resolves")
+    elif run_state and run_state["status"] in ("failed", "cancelled"):
+        run_status_html = (
+            f"<span style='color:var(--red, #e5484d)'>run #{_e(run_state['work_id'])} "
+            f"{_e(run_state['status'])}: {_e(run_state['error'] or 'no error recorded')}</span>")
+    else:
+        run_status_html = ""
     body = f"""
     {cards}
     {visuals}
@@ -705,7 +750,7 @@ async def evals_page() -> HTMLResponse:
           <option value="5" selected>N=5 (full variance)</option>
         </select>
         <button class="btn-primary" id="run-btn">Run evals</button>
-        <span class="status-line" id="run-status"></span>
+        <span class="status-line" id="run-status">{run_status_html}</span>
       </div>
       <div class="hint" style="margin-top:8px">First runs usually flag a lot — most of it
         points at gaps in your master resume, not at the generator. Triage with <b>D</b>,
@@ -725,7 +770,7 @@ async def evals_page() -> HTMLResponse:
       <div class="section-title">Judge</div>
       {_judge_section(load_judge_prefs())}
     </div>
-    <script>window.__stamp = {stamp};</script>
+    <script>window.__stamp = {stamp}; window.__run_inflight = {json.dumps(run_inflight)};</script>
     {_PAGE_JS}
     """
     return HTMLResponse(html_page(
