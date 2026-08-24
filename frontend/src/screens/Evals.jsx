@@ -120,20 +120,28 @@ function TriageCard({ claim, meanings }) {
   const [note, setNote] = useState(claim.note || '')
   const [saving, setSaving] = useState(false)
 
-  const send = async (nextRuling, nextNote) => {
+  const [error, setError] = useState('')
+
+  const send = async (nextRuling, nextNote, prevRuling) => {
     setSaving(true)
+    setError('')
     try {
       await apiSend('/dashboard/evals/triage', {
         body: { gd_id: claim.gd_id, claim: claim.claim, ruling: nextRuling, note: nextNote },
       })
+    } catch (err) {
+      // A ruling that didn't persist must not keep looking ruled.
+      if (prevRuling !== undefined) setRuling(prevRuling)
+      setError(err?.body?.error || err.message)
     } finally {
       setSaving(false)
     }
   }
   const pick = (r) => {
+    const prev = ruling
     const next = ruling === r ? '' : r
     setRuling(next)
-    send(next, note)
+    send(next, note, prev)
   }
 
   return (
@@ -165,6 +173,7 @@ function TriageCard({ claim, meanings }) {
           }}
         />
         {saving && <span style={{ color: 'var(--text-muted, #9aa8bf)', fontSize: 12 }}>saving…</span>}
+        {error && <span style={{ color: 'var(--danger, #ef4444)', fontSize: 12 }}>{error}</span>}
       </div>
     </Row>
   )
@@ -177,20 +186,40 @@ const inputStyle = {
   borderRadius: 8, color: 'var(--text, #f2f6fc)', fontSize: 13, padding: '9px 12px', width: '100%',
 }
 
+const DRAFT_KEY = 'jc-evals-golden-draft'
+
+function loadDraft() {
+  try {
+    return JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {}
+  } catch { return {} }
+}
+
 function GoldenSection({ golden, hasRun, reload }) {
-  const [company, setCompany] = useState('')
-  const [role, setRole] = useState('')
-  const [jd, setJd] = useState('')
-  const [kind, setKind] = useState('resume')
+  const draft = loadDraft()
+  const [company, setCompany] = useState(draft.company || '')
+  const [role, setRole] = useState(draft.role || '')
+  const [jd, setJd] = useState(draft.jd || '')
+  const [kind, setKind] = useState(draft.kind || 'resume')
   const [status, setStatus] = useState('')
+
+  // Draft persists on every keystroke: a pasted 4,000-char JD must survive
+  // anything short of a confirmed save — including the session-expired
+  // reload path. Cleared ONLY in the success branch below.
+  const persist = (next) => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ company, role, jd, kind, ...next }))
+    } catch { /* private mode — the in-memory state still holds it */ }
+  }
 
   const add = async () => {
     setStatus('saving…')
     try {
-      await apiSend('/dashboard/evals/golden', {
+      const out = await apiSend('/dashboard/evals/golden', {
         body: { company, role, jd_text: jd, output_kind: kind },
       })
+      if (!out?.entry?.id) throw new Error('save not confirmed by the server — input kept')
       setCompany(''); setRole(''); setJd(''); setStatus('')
+      try { sessionStorage.removeItem(DRAFT_KEY) } catch { /* best effort */ }
       reload()
     } catch (err) {
       setStatus(err?.body?.error || err.message)
@@ -226,11 +255,14 @@ function GoldenSection({ golden, hasRun, reload }) {
         </List>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-        <input style={inputStyle} placeholder="Company" value={company} onChange={(e) => setCompany(e.target.value)} />
-        <input style={inputStyle} placeholder="Role title" value={role} onChange={(e) => setRole(e.target.value)} />
+        <input style={inputStyle} placeholder="Company" value={company}
+          onChange={(e) => { setCompany(e.target.value); persist({ company: e.target.value }) }} />
+        <input style={inputStyle} placeholder="Role title" value={role}
+          onChange={(e) => { setRole(e.target.value); persist({ role: e.target.value }) }} />
       </div>
       <textarea style={{ ...inputStyle, minHeight: 130, marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-        placeholder="Paste the full job description here" value={jd} onChange={(e) => setJd(e.target.value)} />
+        placeholder="Paste the full job description here" value={jd}
+        onChange={(e) => { setJd(e.target.value); persist({ jd: e.target.value }) }} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10 }}>
         <select style={{ ...inputStyle, width: 'auto' }} value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="resume">resume</option>
@@ -324,7 +356,7 @@ function RunSection({ stamp, reload }) {
     setStatus('starting…')
     try {
       const out = await apiSend('/dashboard/evals/run', { body: { n: parseInt(n, 10) } })
-      setStatus(`running (work #${out.work_id}) — a full run takes 1–3 hours; results appear here when stored`)
+      setStatus(`running ${out.entries ?? '?'} entries × N=${out.n} (work #${out.work_id}) — a full run takes 1–3 hours; results appear here when stored`)
       const poll = setInterval(async () => {
         try {
           const s = await (await fetch('/dashboard/evals/stamp', { credentials: 'same-origin' })).json()

@@ -333,6 +333,35 @@ class TestScreens:
         assert client.post("/dashboard/evals/golden/delete",
                            json={"entry_id": "GD-T01"}).json()["deleted"] is True
 
+    def test_rejected_golden_write_leaves_a_log_line(self, client, caplog):
+        # 2026-08-24 report, acceptance criteria: "A server-side log line
+        # exists for every rejected or dropped golden set write."
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="transport.http.routes.dashboard.evals_lab"):
+            out = client.post("/dashboard/evals/golden", json={
+                "company": "", "role": "Staff", "jd_text": "jd"})
+        assert out.status_code == 422
+        assert any("golden-set write rejected" in r.getMessage() for r in caplog.records)
+
+    def test_saved_golden_write_leaves_a_log_line(self, client, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="transport.http.routes.dashboard.evals_lab"):
+            out = client.post("/dashboard/evals/golden", json={
+                "company": "Acme", "role": "Staff", "jd_text": "the jd"})
+        assert out.status_code == 200
+        assert any("golden-set entry saved" in r.getMessage() for r in caplog.records)
+
+    def test_rejected_triage_ruling_leaves_a_log_line(self, client, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="transport.http.routes.dashboard.evals_lab"):
+            out = client.post("/dashboard/evals/triage", json={
+                "gd_id": "GD-T01", "claim": "claims X", "ruling": "Q"})
+        assert out.status_code == 422
+        assert any("triage ruling rejected" in r.getMessage() for r in caplog.records)
+
     def test_judge_post_never_echoes_key(self, client):
         out = client.post("/dashboard/evals/judge", json={
             "provider": "openai", "model": "gpt-4o-mini", "api_key": "sk-supersecret"})
@@ -353,8 +382,24 @@ class TestScreens:
 
         monkeypatch.setattr(evals_work, "enqueue_run", fake_enqueue)
         out = client.post("/dashboard/evals/run", json={"n": 3})
-        assert out.json() == {"work_id": 77, "n": 3}
+        assert out.json() == {"work_id": 77, "n": 3, "entries": 1}
         assert captured["n"] == 3
+
+    def test_run_reports_fallback_entry_count(self, client, monkeypatch):
+        # No tenant manifest → committed fallback; the count reflects only
+        # the JDs actually resolvable in this partition, because that is
+        # what the executor will actually run.
+        import evals.golden as golden
+        import evals.work as evals_work
+
+        monkeypatch.setattr(evals_work, "enqueue_run",
+                            lambda n=5, entries=None, origin="api": 78)
+        fake = [type("E", (), {"jd_file": f"jd{i}.txt"})() for i in range(3)]
+        monkeypatch.setattr(golden, "load_golden", lambda: fake)
+        monkeypatch.setattr(golden, "resolve_file",
+                            lambda name: None if name == "jd1.txt" else f"/x/{name}")
+        out = client.post("/dashboard/evals/run", json={"n": 2})
+        assert out.json() == {"work_id": 78, "n": 2, "entries": 2}
 
     def test_run_refuses_empty_golden_set_with_a_sentence(self, client):
         tenant.upsert_golden_entry("A", "R", "jd")
