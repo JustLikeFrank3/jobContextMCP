@@ -263,7 +263,6 @@ KC
       rm /tmp/aks-prom.kubeconfig
       sudo k3s kubectl apply -f /tmp/aks-federate-proxy.yaml
       rm /tmp/aks-federate-proxy.yaml
-      sudo k3s kubectl -n monitoring rollout restart deployment/aks-federate-proxy 2>/dev/null || true
       if systemctl is-enabled aks-prom-tunnel.service >/dev/null 2>&1; then
         sudo systemctl disable --now aks-prom-tunnel.service
         sudo rm -f /etc/systemd/system/aks-prom-tunnel.service

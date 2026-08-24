@@ -39,8 +39,10 @@ spec:
     spec:
       containers:
         - name: forwarder
-          # Multi-arch (arm64 included); pinned minor to avoid surprise pulls.
-          image: bitnami/kubectl:1.30
+          # Multi-arch incl. arm64. rancher/kubectl, not bitnami/kubectl:
+          # Bitnami purged versioned Docker Hub tags in 2025 and the first
+          # deploy sat in ImagePullBackOff (2026-08-24).
+          image: rancher/kubectl:v1.30.4
           command:
             - kubectl
             - --kubeconfig=/etc/aks/kubeconfig
