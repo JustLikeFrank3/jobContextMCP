@@ -5,7 +5,7 @@ import re
 from lib.io import _load_master_context
 from lib import config
 from lib.helpers import sanitize_filename
-from lib.openai_calls import create_chat_completion
+from lib.openai_calls import create_chat_completion, estimate_cost_usd
 from tools.interviews import get_interview_context
 from tools import generate_work as _work
 from tools.generate_work import tracked as _tracked
@@ -336,8 +336,11 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     usage = response.usage
     cost_note = ""
     if usage:
-        est = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.60) / 1_000_000
-        cost_note = f"  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out / est ${est:.4f}\n"
+        cost_note = f"  tokens: {usage.prompt_tokens} in / {usage.completion_tokens} out"
+        est = estimate_cost_usd(model, usage.prompt_tokens, usage.completion_tokens)
+        if est is not None:
+            cost_note += f" / est ${est:.4f}"
+        cost_note += "\n"
 
     if auto_save:
         slug = f"{company} {role} - Fitment Assessment.md"
