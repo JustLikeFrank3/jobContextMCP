@@ -58,6 +58,21 @@ function TrendChart({ history }) {
             </rect>
           )
         })}
+        {/* Ground-truth change markers: amber dashed line where consecutive
+            runs measured different masters (both shas known). Unknown draws
+            nothing — absence of evidence is not a change. */}
+        {history.map((r, i) => {
+          if (i === 0) return null
+          const prev = history[i - 1]
+          if (!prev.master_sha || !r.master_sha || prev.master_sha === r.master_sha) return null
+          const mx = pad + (i - 0.5) * step
+          return (
+            <line key={`m${i}`} x1={mx} y1={pad} x2={mx} y2={h - pad}
+              stroke="var(--warn, #f59e0b)" strokeDasharray="3 4" strokeWidth="1.5" opacity=".9">
+              <title>{`master changed here (${prev.master_sha} → ${r.master_sha}) — runs across this line measured different ground truth`}</title>
+            </line>
+          )
+        })}
         <polyline points={points} fill="none" stroke="var(--cyan-500, #00B5C8)" strokeWidth="2.5" />
         {history.map((r, i) => (
           <circle key={`c${i}`} cx={pad + i * step} cy={yScore(r.mean)} r="3.5"
@@ -444,6 +459,16 @@ export default function Evals() {
           <Stat label="Judge" value={summary.judge_model || 'unknown'} sub={summary.judge_calibration} />
           <Stat label="Stored" value={data?.stamp || '—'} tone="muted" />
         </StatGrid>
+      )}
+
+      {/* Ground-truth staleness: only when both hashes are known and differ.
+          Unknown (pre-stamp run) says nothing — never guessed either way. */}
+      {hasRun && data?.master?.changed === true && (
+        <div style={{ color: 'var(--warn, #f59e0b)', fontSize: 12.5, margin: '0 0 16px', lineHeight: 1.5 }}>
+          The master resume has changed since this run ({data.master.run_sha} → {data.master.current_sha}).
+          These scores describe the previous ground truth — run again to measure the current one;
+          comparing new results against this run compares different masters.
+        </div>
       )}
 
       {history.length >= 2 && (

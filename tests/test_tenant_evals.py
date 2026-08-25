@@ -203,7 +203,8 @@ class TestJudgeKeyAtRest:
 
 
 class TestHistoryAndVisuals:
-    def _write_run(self, results_dir, stamp, mean, flags, accuracy=4.0, n_runs=5):
+    def _write_run(self, results_dir, stamp, mean, flags, accuracy=4.0, n_runs=5,
+                   master_sha=None):
         results_dir.mkdir(parents=True, exist_ok=True)
         detail = {"GD-T01": {"per_dimension": {
             "accuracy": {"mean": accuracy}, "keyword_coverage": {"mean": 3.0}}}}
@@ -213,6 +214,8 @@ class TestHistoryAndVisuals:
                    "detail": detail}
         if n_runs is not None:
             payload["n_runs"] = n_runs
+        if master_sha is not None:
+            payload["master_sha"] = master_sha
         (results_dir / f"results-{stamp}.json").write_text(json.dumps(payload))
 
     def test_history_oldest_first_with_absent_flags_as_none(self, workspace, tmp_path):
@@ -263,6 +266,28 @@ class TestHistoryAndVisuals:
         heights = [float(m) for m in re.findall(r"height='([\d.]+)'", trend)]
         assert len(heights) == 2
         assert heights[1] > heights[0]  # 2.0/run beats 1.6/run despite 8 > 2 raw
+
+    def test_history_carries_master_sha(self, workspace, tmp_path):
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260822-080000", 3.5, 8)  # pre-stamp payload
+        self._write_run(rd, "20260823-080000", 3.6, 2, master_sha="abc123def456")
+        hist = tenant.results_history()
+        assert [r["master_sha"] for r in hist] == ["", "abc123def456"]
+
+    def test_trend_marks_master_changes_and_never_guesses(self, workspace, tmp_path):
+        # Amber marker ONLY between points whose shas are known and differ.
+        # unknown→known and known→same draw nothing: absence of evidence is
+        # not a change.
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        rd = tmp_path / "eval_runs"
+        self._write_run(rd, "20260820-080000", 3.2, 26)                          # unknown
+        self._write_run(rd, "20260821-080000", 3.4, 20, master_sha="aaa111")     # unknown→known: no marker
+        self._write_run(rd, "20260822-080000", 3.5, 12, master_sha="aaa111")     # same: no marker
+        self._write_run(rd, "20260823-080000", 3.9, 4, master_sha="bbb222")      # changed: marker
+        trend = lab._svg_trend(tenant.results_history())
+        assert trend.count("master changed here") == 1
+        assert "aaa111 → bbb222" in trend
 
 
 class TestTriage:
@@ -555,3 +580,60 @@ class TestRunVisibility:
         page = client.get("/dashboard/evals").text
         assert f"work #{wid}" in page
         assert "window.__run_inflight = true" in page
+
+
+class TestMasterVersioning:
+    """Ground-truth identity: stored scores must say WHICH master they
+    measured, and the page must compare that against the live master instead
+    of letting the user reconstruct it from deploy timestamps (run 363)."""
+
+    @pytest.fixture
+    def client(self, workspace, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        self._payload = {"updated_at": "2026-08-23T04:29:30", "suite": {
+            "judge_model": "claude-sonnet-5", "n_runs": 5, "master_sha": "aaa111bbb222",
+            "rows": [{"gd_id": "GD-T01", "role": "Staff", "mean": 4.5}],
+            "detail": {},
+        }}
+        monkeypatch.setattr(lab, "_payload", lambda: self._payload)
+        app = FastAPI()
+        app.include_router(lab.router, prefix="/dashboard")
+        return TestClient(app)
+
+    def test_data_reports_master_changed(self, client, monkeypatch):
+        monkeypatch.setattr("evals.runner.master_bundle_sha", lambda: "ccc333ddd444")
+        m = client.get("/dashboard/evals/data").json()["master"]
+        assert m == {"current_sha": "ccc333ddd444", "run_sha": "aaa111bbb222",
+                     "changed": True}
+
+    def test_data_reports_master_unchanged(self, client, monkeypatch):
+        monkeypatch.setattr("evals.runner.master_bundle_sha", lambda: "aaa111bbb222")
+        m = client.get("/dashboard/evals/data").json()["master"]
+        assert m["changed"] is False
+
+    def test_prestamp_run_reports_unknown_not_a_verdict(self, client, monkeypatch):
+        monkeypatch.setattr("evals.runner.master_bundle_sha", lambda: "ccc333ddd444")
+        del self._payload["suite"]["master_sha"]
+        m = client.get("/dashboard/evals/data").json()["master"]
+        assert m["changed"] is None and m["run_sha"] == ""
+
+    def test_unreadable_live_master_reports_unknown(self, client, monkeypatch):
+        def boom():
+            raise OSError("no master here")
+        monkeypatch.setattr("evals.runner.master_bundle_sha", boom)
+        m = client.get("/dashboard/evals/data").json()["master"]
+        assert m["changed"] is None and m["current_sha"] == ""
+
+    def test_page_warns_when_master_changed(self, client, monkeypatch):
+        monkeypatch.setattr("evals.runner.master_bundle_sha", lambda: "ccc333ddd444")
+        page = client.get("/dashboard/evals").text
+        assert "master resume has changed since this run" in page
+        assert "aaa111bbb222" in page and "ccc333ddd444" in page
+
+    def test_page_silent_when_master_unchanged(self, client, monkeypatch):
+        monkeypatch.setattr("evals.runner.master_bundle_sha", lambda: "aaa111bbb222")
+        page = client.get("/dashboard/evals").text
+        assert "master resume has changed" not in page

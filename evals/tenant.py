@@ -364,6 +364,9 @@ def results_history(limit: int = 24) -> list[dict]:
             # same N — classes that fire in 1/5 runs triple their count going
             # N=1 → N=5 with zero real change. The trend panel normalizes.
             "n_runs": int(payload.get("n_runs") or 0) or None,
+            # Ground-truth identity: two points are only comparable when they
+            # measured the same master. "" = pre-stamp payload (unknown).
+            "master_sha": str(payload.get("master_sha") or ""),
             "dimensions": {d: sum(v) / len(v) for d, v in dims.items()},
         })
     return out
