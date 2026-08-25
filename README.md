@@ -102,7 +102,7 @@ Screens, capture flow, and build/ship docs: [mobile/README.md](mobile/README.md)
 
 ### The dashboard
 
-The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
+The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Evals (your own golden set, run history with scoring visuals, A/B/C/D triage, judge picker), Chat (desktop), Settings, and API Keys.
 
 ![Home — your career command center](docs/images/dashboard/home.png)
 *Home: active/in-flight counts, dismissible priorities, daily digest, and Oura readiness driving "today's move".*
@@ -189,7 +189,7 @@ flowchart LR
         HTTP["FastAPI transport<br/>REST + SSE + /mcp"]
         WORK["Control plane<br/>(durable work_items)"]
         GATE["Provenance truth gate"]
-        EVALS["Eval framework"]
+        EVALS["Eval framework<br/>(per-tenant golden set · judge · triage)"]
     end
     subgraph Storage
         DB[("SQLite per partition")]
@@ -206,6 +206,7 @@ flowchart LR
     TOOLS --> WS
     DB <--> SYNC
     WORK --> EVALS
+    EVALS --> WS
 ```
 
 Every tenant's data lives under `DATA_FOLDER/users/{oid}` with per-request context routing; background work goes through a durable control plane so it can never run against the wrong partition ([docs/control-plane.md](docs/control-plane.md)). Desktop and cloud stay consistent through journal-based bidirectional sync ([docs/persistence.md](docs/persistence.md)).
