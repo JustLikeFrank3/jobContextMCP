@@ -41,6 +41,28 @@ def _payload() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _master_state(suite: dict) -> dict:
+    """Ground-truth identity for the stored run vs. the partition's LIVE master.
+
+    changed=True means the stored scores describe an older master than the one
+    a fresh run would measure — the run-363 confound, surfaced instead of
+    reconstructed. None = unknown (pre-stamp payload, or the live hash could
+    not be computed); unknown is never reported as either verdict.
+    """
+    run_sha = str((suite or {}).get("master_sha") or "")
+    try:
+        from evals.runner import master_bundle_sha  # noqa: PLC0415
+
+        current_sha = master_bundle_sha()
+    except Exception:  # noqa: BLE001 — a missing master must not break the page
+        current_sha = ""
+    return {
+        "current_sha": current_sha,
+        "run_sha": run_sha,
+        "changed": (run_sha != current_sha) if run_sha and current_sha else None,
+    }
+
+
 # ── POST endpoints the page drives ───────────────────────────────────────────
 
 class RunBody(BaseModel):
@@ -244,6 +266,7 @@ async def evals_data() -> JSONResponse:
     return JSONResponse({
         "stamp": payload.get("updated_at") or "",
         "run": evals_work.latest_run_status(),
+        "master": _master_state(suite),
         "summary": {
             "mean": round(sum(means) / len(means), 3) if means else None,
             "total_flags": total_flags if rows_in else None,
@@ -317,6 +340,19 @@ def _svg_trend(history: list[dict]) -> str:
             parts.append(f"<rect x='{x - bar_w / 2:.1f}' y='{h - pad - bh:.1f}' width='{bar_w:.1f}' "
                          f"height='{max(bh, 2):.1f}' fill='{color}' opacity='.45'>"
                          f"<title>{_e(tip)}</title></rect>")
+    # Ground-truth change markers: an amber dashed line between two points
+    # whose master hashes are known AND differ — scores on either side
+    # measured different masters and are not one trend. Unknown (pre-stamp)
+    # shas draw nothing: absence of evidence is not a change.
+    for i in range(1, n):
+        prev_sha, cur_sha = history[i - 1].get("master_sha"), history[i].get("master_sha")
+        if prev_sha and cur_sha and prev_sha != cur_sha:
+            mx = pad + (i - 0.5) * step
+            parts.append(
+                f"<line x1='{mx:.1f}' y1='{pad}' x2='{mx:.1f}' y2='{h - pad}' "
+                "stroke='var(--warn, #f59e0b)' stroke-dasharray='3 4' stroke-width='1.5' opacity='.9'>"
+                f"<title>master changed here ({_e(prev_sha)} → {_e(cur_sha)}) — "
+                "runs across this line measured different ground truth</title></line>")
     points = " ".join(f"{pad + i * step:.1f},{y_score(r['mean']):.1f}" for i, r in enumerate(history))
     parts.append(f"<polyline points='{points}' fill='none' stroke='var(--accent)' stroke-width='2.5'/>")
     for i, r in enumerate(history):
@@ -736,12 +772,22 @@ async def evals_page() -> HTMLResponse:
             f"{_e(run_state['status'])}: {_e(run_state['error'] or 'no error recorded')}</span>")
     else:
         run_status_html = ""
+    master_state = _master_state(payload.get("suite") or {})
+    master_note = ""
+    if master_state["changed"]:
+        master_note = (
+            "<div class='hint' style='color:var(--warn, #f59e0b)'>The master resume has "
+            f"changed since this run ({_e(master_state['run_sha'])} → "
+            f"{_e(master_state['current_sha'])}). These scores describe the previous "
+            "ground truth — run again to measure the current one; deltas against this "
+            "run compare different masters.</div>")
     body = f"""
     {cards}
     {visuals}
     <div class="lab-section">
       <div class="section-title">Latest run</div>
       {entries_html}
+      {master_note}
       <div style="display:flex; gap:10px; align-items:center; margin-top:12px">
         <select id="run-n" style="width:auto; background:var(--well); color:var(--text);
                 border:1px solid var(--line); border-radius:8px; padding:8px 10px">
