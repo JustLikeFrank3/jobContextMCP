@@ -502,3 +502,34 @@ class TestCollectUsage:
         with oc.collect_usage() as usage:
             oc.create_chat_completion(client, label="b", model="m", max_tokens=10)
         assert len(usage) == 1
+
+
+class TestEstimateCostUsd:
+    def test_known_models_price_correctly(self):
+        # 1M prompt + 1M completion tokens = input price + output price.
+        assert oc.estimate_cost_usd("gpt-4.1-mini", 1_000_000, 1_000_000) == pytest.approx(2.00)
+        assert oc.estimate_cost_usd("gpt-4o-mini", 1_000_000, 1_000_000) == pytest.approx(0.75)
+        assert oc.estimate_cost_usd("gpt-4.1", 1_000_000, 1_000_000) == pytest.approx(10.00)
+        assert oc.estimate_cost_usd("gpt-4o", 1_000_000, 1_000_000) == pytest.approx(12.50)
+
+    def test_mini_variant_wins_over_base_model(self):
+        # "gpt-4.1" is a substring of "gpt-4.1-mini"; the -mini row must match
+        # first or every mini call would be priced 5x too high.
+        assert oc.estimate_cost_usd("gpt-4.1-mini", 24_000, 3_000) == pytest.approx(
+            (24_000 * 0.40 + 3_000 * 1.60) / 1_000_000
+        )
+        assert oc.estimate_cost_usd("gpt-4o-mini", 12_000, 2_000) == pytest.approx(
+            (12_000 * 0.15 + 2_000 * 0.60) / 1_000_000
+        )
+
+    def test_azure_deployment_names_match_by_substring(self):
+        assert oc.estimate_cost_usd("prod-gpt-4.1-mini-eastus2", 1_000_000, 0) == pytest.approx(0.40)
+
+    def test_unknown_or_empty_model_returns_none(self):
+        assert oc.estimate_cost_usd("llama3.1:8b", 1000, 1000) is None
+        assert oc.estimate_cost_usd("claude-sonnet-5", 1000, 1000) is None
+        assert oc.estimate_cost_usd("", 1000, 1000) is None
+        assert oc.estimate_cost_usd(None, 1000, 1000) is None
+
+    def test_none_token_counts_are_zero(self):
+        assert oc.estimate_cost_usd("gpt-4.1-mini", None, None) == 0.0
