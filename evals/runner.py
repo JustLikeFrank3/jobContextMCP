@@ -10,6 +10,7 @@ or MCP tool logic.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -87,6 +88,7 @@ class SuiteResult:
     entries: list[EntryResult] = field(default_factory=list)
     started_at: str = ""
     git_sha: str = ""
+    master_sha: str = ""  # content hash of the ground truth this run measured against
     provider: str = ""
     judge_provider: str = ""
     judge_model: str = ""
@@ -95,6 +97,7 @@ class SuiteResult:
         return {
             "started_at": self.started_at,
             "git_sha": self.git_sha,
+            "master_sha": self.master_sha,
             "provider": self.provider,
             "judge_provider": self.judge_provider,
             "judge_model": self.judge_model,
@@ -203,6 +206,27 @@ def _master_excerpt(max_chars: int = 200_000, master_text: str | None = None) ->
     from tools import resume  # noqa: PLC0415 — lazy: imports server config
 
     return resume.read_master_resume()[:max_chars]
+
+
+def master_bundle_sha(master_text: str | None = None) -> str:
+    """Content hash of the exact ground-truth text the judge and critic consume.
+
+    Every suite score is a measurement AGAINST this text — the master bundle
+    is the harness's ground truth, and it is a mutable file that has silently
+    changed underneath runs before (the 2026-08 blob-restore reversions: run
+    363 flagged the generator for faithfully reproducing a layout the master
+    itself had rolled back to; every component behaved correctly over wrong
+    data, and nothing recorded which master the run had measured). Stamping
+    the hash makes "were these two runs measuring the same thing?" a field
+    comparison instead of a forensic reconstruction from deploy timestamps.
+
+    Hashes the same `_master_excerpt()` handed to the judge/critic (cap
+    included): identical text ⇒ identical measurement basis, whatever the
+    files' mtimes say. Short 12-hex digest — this is an identity label for
+    humans and payloads, not a security boundary.
+    """
+    text = _master_excerpt() if master_text is None else master_text
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
 def _numeric_provenance_agreement(
@@ -359,10 +383,15 @@ def run_suite(
 
     provider, _ready = llm_generation_status()
     judge_provider, judge_model = config_mod._resolve_llm_settings(task="eval_judge")
+    try:
+        master_sha = master_bundle_sha()
+    except Exception:  # noqa: BLE001 — the stamp must never abort a run; unknown stays ""
+        master_sha = ""
     suite = SuiteResult(
         n_runs=n,
         started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         git_sha=_git_sha(),
+        master_sha=master_sha,
         provider=provider,
         judge_provider=judge_provider,
         judge_model=judge_model,
@@ -394,6 +423,13 @@ def save_results(suite: SuiteResult, results_dir: Path | None = None) -> Path:
     if previous is not None:
         payload["baseline"] = str(previous[0].name)
         payload["baseline_delta"] = _delta(payload, previous[1])
+        # A delta across a master change measures two different ground truths
+        # — the exact confound behind the run-363 misread. True = the master
+        # changed between the runs; False = attested same; absent = one side
+        # predates the stamp, so comparability is unknown (never guessed).
+        prev_sha = str(previous[1].get("master_sha") or "")
+        if payload.get("master_sha") and prev_sha:
+            payload["baseline_master_changed"] = prev_sha != payload["master_sha"]
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
 

@@ -165,6 +165,33 @@ The suite also runs inside the server via the control plane (work kind `run_eval
 - `EVALS_NIGHTLY_HOUR_UTC=<0–23>` schedules runs in the owner's partition from the always-on pod — a fixed-model drift baseline, with workstation runs as a comparison overlay. `EVALS_NIGHTLY_DAYS_UTC` (`mon,wed,fri` or `0,2,4`) restricts which UTC weekdays fire; unset = daily. Cadence is a deployment choice, not a quality one: regression signal exists only when something deployed, drift is slow enough for weekly detection, and the variance stats (CoV, verdict flips) are computed *within* a run at N=5, so they are identical at any frequency. The wallboard staleness panel tolerates 7 days before going amber. Nightly earns its cost while generation or the judge is being actively changed; MWF or weekly + a run after each deploy is the steady state.
 - Results history lands under `<partition>/eval_runs/`.
 
+## Versioned ground truth (`master_sha`)
+
+Every suite score is a measurement *against* the master bundle — and the
+master is a mutable file that has silently changed underneath runs before
+(the 2026-08 blob-restore reversions: run 363 flagged the generator for
+faithfully reproducing a layout the master itself had rolled back to, and
+which master a run had measured could only be reconstructed from deploy
+timestamps). Every run now stamps `master_sha` — a 12-hex content hash of
+the exact `_master_excerpt()` text handed to the judge and critic — into its
+results payload (`evals.runner.master_bundle_sha`).
+
+What reads it:
+
+- **`baseline_master_changed`** on the stored payload: `true` when the
+  baseline run measured a different master (its delta compares two ground
+  truths, not two generators), `false` when attested same, **absent** when
+  either side predates the stamp — unknown is never reported as a verdict.
+- **The trend panels** (server page and SPA) draw an amber dashed marker
+  between consecutive runs whose hashes are known and differ: points across
+  the line are not one trend.
+- **The evals page** compares the stored run's hash against the partition's
+  *live* master on every load and warns when they differ: the scores
+  describe the previous ground truth; run again to measure the current one.
+
+A failed stamp (unreadable master) records `""` and never aborts the run.
+The hash is an identity label, not a security boundary.
+
 ## Metrics & dashboard
 
 Results push into `eval_*` Prometheus gauges (`eval_mean_score`, `eval_cov_pct`, `eval_hallucination_rate_pct`, `eval_verdict_flip_rate_pct`, `eval_dimension_score`, `eval_layer1_pass_rate_pct`, `eval_last_run_timestamp_seconds`, …), restored from stored results at startup so a pod restart doesn't blank the wallboard. A `kiosk-evals` Grafana dashboard renders them; its queries are source-agnostic, so the board keeps showing scores when the workstation is off.

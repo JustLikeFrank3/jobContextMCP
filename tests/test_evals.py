@@ -1704,3 +1704,60 @@ def test_ingest_skips_flags_gauge_for_old_payloads():
 
     assert "eval_hallucination_flags" not in render_prometheus()
     metrics.reset()
+
+
+# ── versioned ground truth (master_bundle_sha) ────────────────────────────────
+
+
+class TestMasterSha:
+    def test_hash_is_deterministic_and_content_sensitive(self):
+        a = runner_mod.master_bundle_sha(master_text="MASTER v1")
+        assert a == runner_mod.master_bundle_sha(master_text="MASTER v1")
+        assert a != runner_mod.master_bundle_sha(master_text="MASTER v2")
+        assert len(a) == 12
+
+    def test_suite_stamps_the_master_it_measured(self, isolated_server, tmp_path):
+        suite = runner_mod.run_suite(
+            entries=[_suite_entry(tmp_path)], n=1,
+            generate_fn=lambda _e, _jd: "OUT",
+            judge_fn=lambda _jd, _m, _o: _score({}),
+            results_dir=tmp_path / "results",
+        )
+        assert suite.master_sha == runner_mod.master_bundle_sha()
+        assert suite.to_dict()["master_sha"] == suite.master_sha
+
+    def _saved(self, tmp_path, results_dir, master_sha, stamp):
+        suite = runner_mod.SuiteResult(n_runs=1, started_at=stamp, master_sha=master_sha)
+        path = runner_mod.save_results(suite, results_dir)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_baseline_delta_attests_master_comparability(self, tmp_path):
+        rd = tmp_path / "results"
+        first = self._saved(tmp_path, rd, "aaa111", "2026-08-25T01:00:00")
+        assert "baseline_master_changed" not in first  # no baseline at all
+        same = self._saved(tmp_path, rd, "aaa111", "2026-08-25T02:00:00")
+        assert same["baseline_master_changed"] is False
+        changed = self._saved(tmp_path, rd, "bbb222", "2026-08-25T03:00:00")
+        assert changed["baseline_master_changed"] is True
+
+    def test_prestamp_baseline_stays_unknown(self, tmp_path):
+        # A baseline written before the stamp existed can't attest either way
+        # — the key must be ABSENT, not a guessed False.
+        rd = tmp_path / "results"
+        self._saved(tmp_path, rd, "", "2026-08-25T01:00:00")  # pre-stamp shape
+        second = self._saved(tmp_path, rd, "bbb222", "2026-08-25T02:00:00")
+        assert "baseline" in second
+        assert "baseline_master_changed" not in second
+
+    def test_stamp_failure_never_aborts_the_run(self, isolated_server, tmp_path, monkeypatch):
+        def boom(master_text=None):
+            raise OSError("master unreadable")
+        monkeypatch.setattr(runner_mod, "master_bundle_sha", boom)
+        suite = runner_mod.run_suite(
+            entries=[_suite_entry(tmp_path)], n=1,
+            generate_fn=lambda _e, _jd: "OUT",
+            judge_fn=lambda _jd, _m, _o: _score({}),
+            results_dir=tmp_path / "results",
+        )
+        assert suite.master_sha == ""  # unknown, never a lie — and the run completed
+        assert suite.entries and suite.entries[0].error == ""
