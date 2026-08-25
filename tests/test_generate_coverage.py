@@ -433,3 +433,90 @@ class TestAttributionDisciplineRules:
 
         assert "ATTRIBUTION" in COVER_LETTER_SYSTEM
         assert "timeline correction note" in COVER_LETTER_SYSTEM
+
+
+class TestCriticEnforcementInCorrectionPass:
+    """Phase 3: contradicted-with-evidence critic findings drive the SAME
+    single correction pass the numeric gate uses. Earned 2026-08-21 (11/11
+    maiden precision). Fail-soft is the contract: a critic outage must never
+    block generation or discard the numeric gate's verdict."""
+
+    def _run(self, monkeypatch, *, numeric_violations, critic_result, enforce="1"):
+        import evals.critic as critic_mod
+        import lib.provenance as prov_mod
+
+        monkeypatch.setenv("CRITIC_ENFORCE", enforce)
+        monkeypatch.setattr(generate, "_load_master_context",
+                            lambda *a, **k: "BUNDLE")
+        monkeypatch.setattr(prov_mod, "check_claims",
+                            lambda *a, **k: list(numeric_violations))
+        if isinstance(critic_result, Exception):
+            def critique(*a, **k):
+                raise critic_result
+        else:
+            def critique(*a, **k):
+                return critic_result
+        monkeypatch.setattr(critic_mod, "critique_document", critique)
+
+        calls = []
+
+        def fake_create(client, **kwargs):
+            calls.append(kwargs)
+            return _FakeResponse("CORRECTED DOC")
+
+        monkeypatch.setattr(generate, "_chat_completion_create", fake_create)
+        content, revisions = generate._correct_unsourced_claims(
+            client=object(), label="resume", system="SYS",
+            user_msg="USER", content="DRAFT",
+        )
+        return content, revisions, calls
+
+    def test_contradiction_alone_triggers_correction(self, monkeypatch):
+        content, revisions, calls = self._run(
+            monkeypatch, numeric_violations=[],
+            critic_result={"findings": [{"claim": "Azure under L5",
+                                         "verdict": "contradicted",
+                                         "evidence": "never place Azure under Level 5"}]},
+        )
+        assert (content, revisions) == ("CORRECTED DOC", 1)
+        prompt = calls[0]["messages"][-1]["content"]
+        assert "ENTAILMENT VIOLATIONS" in prompt
+        assert "never place Azure under Level 5" in prompt
+
+    def test_numeric_and_critic_feedback_combine_in_one_pass(self, monkeypatch):
+        content, revisions, calls = self._run(
+            monkeypatch, numeric_violations=["47%"],
+            critic_result={"findings": [{"claim": "c", "verdict": "contradicted",
+                                         "evidence": "e"}]},
+        )
+        assert revisions == 1
+        prompt = calls[0]["messages"][-1]["content"]
+        assert "PROVENANCE VIOLATIONS" in prompt and "ENTAILMENT VIOLATIONS" in prompt
+        assert len(calls) == 1                        # one pass, both kinds
+
+    def test_unsupported_findings_do_not_trigger_correction(self, monkeypatch):
+        content, revisions, calls = self._run(
+            monkeypatch, numeric_violations=[],
+            critic_result={"findings": [{"claim": "c", "verdict": "unsupported",
+                                         "evidence": "NONE"}]},
+        )
+        assert (content, revisions) == ("DRAFT", 0)
+        assert calls == []
+
+    def test_critic_outage_fails_soft_numeric_gate_still_corrects(self, monkeypatch):
+        content, revisions, calls = self._run(
+            monkeypatch, numeric_violations=["47%"],
+            critic_result=RuntimeError("critic upstream down"),
+        )
+        assert (content, revisions) == ("CORRECTED DOC", 1)
+        assert "PROVENANCE VIOLATIONS" in calls[0]["messages"][-1]["content"]
+
+    def test_kill_switch_restores_numeric_only_behavior(self, monkeypatch):
+        content, revisions, calls = self._run(
+            monkeypatch, numeric_violations=[],
+            critic_result={"findings": [{"claim": "c", "verdict": "contradicted",
+                                         "evidence": "e"}]},
+            enforce="0",
+        )
+        assert (content, revisions) == ("DRAFT", 0)
+        assert calls == []

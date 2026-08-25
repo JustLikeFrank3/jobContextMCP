@@ -1,0 +1,90 @@
+# Pi-only: in-cluster forwarder to AKS Prometheus — boot-independent.
+#
+# History: the aks-federate scrape used to reach AKS through an
+# aks-prom-tunnel systemd unit on the Pi HOST, whose port-forward bound
+# --address 127.0.0.1,192.168.101.2. That second address is the Pi's end of
+# the direct ethernet link to the workstation, and its interface config is
+# only alive when the workstation runs its Linux boot — every Windows boot
+# took the address down, the bind with it, and the kiosk's cloud panels went
+# No data (correctly, but chronically: 2026-08-01 incident and repeats).
+#
+# This Deployment moves the forwarder inside k3s: no host addresses, no
+# systemd, no dependence on which OS the workstation booted. Prometheus
+# scrapes the ClusterIP service by DNS. Same scoped credential as before
+# (the prom-reader ServiceAccount from k8s/monitoring/aks-prom-reader.yaml,
+# port-forward-only RBAC); the kubeconfig arrives as secret
+# aks-prom-kubeconfig, created by `pi-deploy.sh aks-feed` — which also
+# retires the old systemd unit.
+#
+# kubectl port-forward is single-client-fragile, which is fine here for the
+# same reason it was on the host: the Pi's Prometheus is the ONLY client,
+# one /federate request per scrape interval. The tcp liveness probe restarts
+# the pod if the listener dies (parity with the unit's Restart=always).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-federate-proxy
+  namespace: monitoring
+  labels:
+    app: aks-federate-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aks-federate-proxy
+  template:
+    metadata:
+      labels:
+        app: aks-federate-proxy
+    spec:
+      containers:
+        - name: forwarder
+          # Multi-arch incl. arm64. rancher/kubectl, not bitnami/kubectl:
+          # Bitnami purged versioned Docker Hub tags in 2025 and the first
+          # deploy sat in ImagePullBackOff (2026-08-24).
+          image: rancher/kubectl:v1.30.4
+          command:
+            - kubectl
+            - --kubeconfig=/etc/aks/kubeconfig
+            - -n
+            - monitoring
+            - port-forward
+            - svc/prometheus
+            - "9091:9090"
+            - --address
+            - 0.0.0.0
+          ports:
+            - containerPort: 9091
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: /etc/aks
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 9091
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: aks-prom-kubeconfig
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aks-federate
+  namespace: monitoring
+spec:
+  selector:
+    app: aks-federate-proxy
+  ports:
+    - port: 9091
+      targetPort: 9091

@@ -701,6 +701,28 @@ class TestPipelineAuth:
         assert r.status_code == 303
         assert r.headers["location"] == "/"
 
+    def test_non_dashboard_browser_nav_unauthenticated_redirects(self, http_client_authed):
+        # 2026-08-24 report: an unauthenticated deep link OUTSIDE /dashboard
+        # (an old bookmark like /evals) rendered the raw JSON 401 as plain
+        # text. Any browser document navigation must redirect to the landing
+        # page, whatever the path.
+        r = http_client_authed.get(
+            "/evals",
+            headers={"Accept": "text/html,application/xhtml+xml"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/"
+
+    def test_non_dashboard_fetch_unauthenticated_still_gets_json_401(self, http_client_authed):
+        r = http_client_authed.get(
+            "/evals",
+            headers={"Accept": "application/json"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 401
+        assert r.json()["error"] == "unauthorized"
+
     def test_pipeline_data_accepts_bearer(self, http_client_authed):
         r = http_client_authed.get(
             "/dashboard/pipeline/data",

@@ -146,3 +146,42 @@ def test_pre_critic_payloads_have_no_critic_key(tmp_path, monkeypatch):
     result.critic = None  # simulate a payload written before the critic existed
     suite = runner_mod.SuiteResult(n_runs=1, entries=[result])
     assert "critic" not in suite.to_dict()["detail"]["GD-T"]
+
+
+# ── Phase 3: enforcement helpers ────────────────────────────────────────────
+
+class TestEnforcement:
+    def test_only_contradicted_with_real_evidence_is_enforceable(self):
+        from evals.critic import enforceable_findings
+
+        result = {"findings": [
+            {"claim": "a", "verdict": "contradicted", "evidence": "the source passage"},
+            {"claim": "b", "verdict": "contradicted", "evidence": "NONE"},
+            {"claim": "c", "verdict": "contradicted", "evidence": ""},
+            {"claim": "d", "verdict": "unsupported", "evidence": "irrelevant"},
+        ]}
+        assert [f["claim"] for f in enforceable_findings(result)] == ["a"]
+        assert enforceable_findings(None) == []
+        assert enforceable_findings({"error": "boom"}) == []
+
+    def test_feedback_instructs_relocation_not_deletion(self):
+        from evals.critic import format_contradiction_feedback
+
+        text = format_contradiction_feedback([
+            {"claim": "Azure under Level 5", "verdict": "contradicted",
+             "evidence": "never place Azure cloud work under Level 5"},
+        ])
+        assert "ENTAILMENT VIOLATIONS" in text
+        assert "Do not delete true facts" in text
+        assert "never place Azure cloud work under Level 5" in text
+        assert format_contradiction_feedback([]) == ""
+
+    def test_kill_switch(self, monkeypatch):
+        from evals.critic import enforcement_enabled
+
+        monkeypatch.delenv("CRITIC_ENFORCE", raising=False)
+        assert enforcement_enabled() is True          # default ON, deliberately
+        monkeypatch.setenv("CRITIC_ENFORCE", "0")
+        assert enforcement_enabled() is False
+        monkeypatch.setenv("CRITIC_ENFORCE", "1")
+        assert enforcement_enabled() is True

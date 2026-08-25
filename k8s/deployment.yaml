@@ -47,35 +47,50 @@ spec:
             - -c
             - |
               set -e
-              echo "Seeding tenant data from Blob Storage..."
-              # Workload identity: federated token file is injected by the webhook.
-              az login \
-                --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
-                --service-principal \
-                -u "$AZURE_CLIENT_ID" \
-                --tenant "$AZURE_TENANT_ID" \
-                --output none
+              # /app/data is the durable PVC and the SOURCE OF TRUTH; blob is
+              # a backup written FROM this volume every 15 min by the
+              # workspace-sync sidecar, never an independent source. Restoring
+              # over a populated volume therefore always moves files BACKWARD:
+              # any write in the ~15 min before a restart is not in the backup
+              # yet, and an unconditional --overwrite restore silently
+              # reverted it (confirmed 2026-08-22 — ate the same master-resume
+              # corrections twice, with no error and no log). Seed ONLY an
+              # empty volume: first boot, or disaster recovery onto a fresh
+              # PVC. To force a full restore deliberately, empty
+              # /app/data/users first (kubectl exec ... mv) and restart.
+              if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
+                echo "Data volume already populated ($(find /app/data/users -type f | wc -l) files) — skipping blob restore; PVC state wins."
+              else
+                echo "Empty data volume — seeding tenant data from Blob Storage..."
+                # Workload identity: federated token file is injected by the webhook.
+                az login \
+                  --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+                  --service-principal \
+                  -u "$AZURE_CLIENT_ID" \
+                  --tenant "$AZURE_TENANT_ID" \
+                  --output none
+                # Restore all tenant data in one operation.
+                # Blob layout: workspace/users/{oid}/workspace/...
+                #                           users/{oid}/jobcontextmcp.db
+                #                           users/{oid}/*.json
+                # Restored to:  /app/data/users/{oid}/workspace/...
+                #                           users/{oid}/jobcontextmcp.db
+                #                           users/{oid}/*.json
+                mkdir -p /app/data/users
+                az storage blob download-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source workspace \
+                  --pattern "users/*" \
+                  --destination /app/data \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none && echo "Tenant data restored ($(find /app/data/users -type f | wc -l) files)." || echo "No tenant data in blob yet (first boot)."
+              fi
               # Remove legacy root-level data trees left behind by the earlier
               # single-user layout. The live data model now lives under
               # /app/data/users/{oid}/, so these duplicates should never be
               # preserved across pod restarts.
               rm -rf /app/data/data /app/data/workspace/data
-              # Restore all tenant data in one operation.
-              # Blob layout: workspace/users/{oid}/workspace/...
-              #                           users/{oid}/jobcontextmcp.db
-              #                           users/{oid}/*.json
-              # Restored to:  /app/data/users/{oid}/workspace/...
-              #                           users/{oid}/jobcontextmcp.db
-              #                           users/{oid}/*.json
-              mkdir -p /app/data/users
-              az storage blob download-batch \
-                --account-name "${STORAGE_ACCOUNT}" \
-                --source workspace \
-                --pattern "users/*" \
-                --destination /app/data \
-                --overwrite true \
-                --auth-mode login \
-                --output none && echo "Tenant data restored." || echo "No tenant data in blob yet (first boot)."
               echo "Seed complete."
           env:
             - name: STORAGE_ACCOUNT
@@ -273,7 +288,7 @@ spec:
             - -c
             - |
               set -e
-              echo "Tenant sync sidecar ready. Syncing every 15 min."
+              echo "Tenant sync sidecar ready. Backing up + pruning every 15 min."
               while true; do
                 sleep 900
                 az login \
@@ -282,20 +297,59 @@ spec:
                   -u "$AZURE_CLIENT_ID" \
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
-                # Sync all tenants in one operation.
-                # Source: /app/data/users/{oid}/...
-                # Dest:   workspace/users/{oid}/...
                 if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
-                  az storage blob upload-batch \
-                    --account-name "${STORAGE_ACCOUNT}" \
-                    --source /app/data/users \
-                    --destination workspace \
-                    --destination-path users \
-                    --overwrite true \
-                    --auth-mode login \
-                    --output none \
-                    && echo "[$(date -u +%H:%M:%SZ)] tenant sync OK" \
-                    || echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
+                  if az storage blob upload-batch \
+                      --account-name "${STORAGE_ACCOUNT}" \
+                      --source /app/data/users \
+                      --destination workspace \
+                      --destination-path users \
+                      --overwrite true \
+                      --auth-mode login \
+                      --output none 2>/dev/null; then
+                    # Delete propagation WITHOUT azcopy: `az storage blob sync` downloads
+                    # azcopy at runtime and this cluster's egress blocks that (2026-08-23:
+                    # every tick failed with "Name does not resolve" fetching azcopy
+                    # 10.13.0 — transfers seen in the log were the fallback's). Pure-CLI
+                    # prune instead: list blobs, subtract local files, delete the extras.
+                    # Guards, because a prune can DELETE backup blobs: the tenant SQLite
+                    # db must exist (suspect volume: no prune) and >=10 local files (a
+                    # nearly-empty volume must never empty the backup). The upload above
+                    # already succeeded either way — a skipped prune degrades tidiness,
+                    # never contents.
+                    local_count=$(find /app/data/users -type f | wc -l)
+                    if [ -z "$(find /app/data/users -name 'jobcontextmcp.db' -print -quit 2>/dev/null)" ]; then
+                      echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — no tenant db, volume suspect)"
+                    elif [ "$local_count" -lt 10 ]; then
+                      echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — only $local_count local files)"
+                    else
+                      (cd /app/data && find users -type f) > /tmp/local.txt
+                      if az storage blob list \
+                          --account-name "${STORAGE_ACCOUNT}" \
+                          --container-name workspace \
+                          --prefix users/ \
+                          --num-results "*" \
+                          --query "[].name" -o tsv \
+                          --auth-mode login > /tmp/blobs.txt 2>/dev/null; then
+                        grep -vxF -f /tmp/local.txt /tmp/blobs.txt > /tmp/extras.txt || true
+                        pruned=0
+                        failed=0
+                        while IFS= read -r blob; do
+                          [ -n "$blob" ] || continue
+                          az storage blob delete \
+                            --account-name "${STORAGE_ACCOUNT}" \
+                            --container-name workspace \
+                            --name "$blob" \
+                            --auth-mode login \
+                            --output none 2>/dev/null && pruned=$((pruned+1)) || failed=$((failed+1))
+                        done < /tmp/extras.txt
+                        echo "[$(date -u +%H:%M:%SZ)] tenant mirror OK (backup fresh, $pruned stale blobs pruned, $failed delete failures)"
+                      else
+                        echo "[$(date -u +%H:%M:%SZ)] tenant backup OK (prune skipped — blob list failed)"
+                      fi
+                    fi
+                  else
+                    echo "[$(date -u +%H:%M:%SZ)] tenant sync FAILED"
+                  fi
                 else
                   echo "[$(date -u +%H:%M:%SZ)] no tenant data to sync yet"
                 fi

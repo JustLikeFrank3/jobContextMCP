@@ -1184,6 +1184,14 @@ def test_restore_reads_owner_partition(isolated_server, monkeypatch):
 
 # ── server-side runs (control plane) ─────────────────────────────────────────
 
+def test_load_golden_missing_manifest_is_empty_not_fatal(tmp_path):
+    """Frozen desktop build without the data file: empty set, not a crash —
+    the caller's "add golden entries first" handling is the right UX."""
+    from evals.golden import load_golden
+
+    assert load_golden(manifest_path=tmp_path / "nope.json") == []
+
+
 def test_run_evals_executor_end_to_end(isolated_server, tmp_path, monkeypatch):
     """enqueue → dispatch → executor runs the (stubbed) suite → results stored,
     gauges set, artifacts on the work row."""
@@ -1192,8 +1200,9 @@ def test_run_evals_executor_end_to_end(isolated_server, tmp_path, monkeypatch):
     from lib import config, metrics, work
     from lib.io import _load_json
 
-    def fake_run_suite(entries=None, n=5, results_dir=None):
+    def fake_run_suite(entries=None, n=5, results_dir=None, judge_fn=None):
         assert n == 2
+        assert judge_fn is None  # no tenant judge prefs in this test partition
         assert [e.id for e in entries] == ["GD-01"]
         suite = runner_mod.SuiteResult(n_runs=n, started_at="2026-07-29T22:00:00")
         suite.entries.append(runner_mod.EntryResult(

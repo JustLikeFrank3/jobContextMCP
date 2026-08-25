@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2019%20passing-brightgreen" alt="2019 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2078%20passing-brightgreen" alt="2078 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%2097%20actions-informational" alt="12 domain tools, 97 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -39,7 +39,7 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 | | |
 |---|---|
 | 12 MCP tools | 97 domain actions behind them |
-| 2019 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 2078 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
@@ -74,7 +74,7 @@ Download, drag to Applications (or run the installer), double-click.
 | Windows | `jobContext_*_x64-setup.exe` | Per-user install (unsigned — SmartScreen will warn) |
 | Linux | `.AppImage` / `.deb` | AppImage auto-updates; deb is manual |
 
-On top of the server you get an **embedded AI chat** over your own job-search data (OpenAI/Anthropic BYOK or local Ollama), **one-click MCP connect** for Claude Desktop / VS Code / Cursor, **cloud workspace import/export**, **desktop ⇄ cloud sync**, Oura readiness, and **automatic updates**. Everything stays on your machine: local SQLite, loopback-only server, keys in your local config.
+On top of the server you get an **embedded AI chat** over your own job-search data (OpenAI/Anthropic BYOK or local Ollama), **one-click MCP connect** for Claude Desktop / VS Code / Cursor, **cloud workspace import/export**, **desktop ⇄ cloud sync**, the **eval loop on your own applications** (author a golden set, run the truth suite, triage flagged claims — same screen as the cloud), Oura readiness, and **automatic updates**. Everything stays on your machine: local SQLite, loopback-only server, keys in your local config.
 
 | | |
 |---|---|
@@ -102,7 +102,7 @@ Screens, capture flow, and build/ship docs: [mobile/README.md](mobile/README.md)
 
 ### The dashboard
 
-The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Chat (desktop), Settings, and API Keys.
+The same React SPA serves the desktop app and the cloud ([app.jobcontext.ai](https://app.jobcontext.ai)) — these captures are the live cloud workspace, synced from desktop and mobile. Screens: Home, Pipeline, Job Hunt, Materials, Interviews, People (with a liveness-aware follow-up queue), Posts, Rejections, Wellbeing, Evals (your own golden set, run history with scoring visuals, A/B/C/D triage, judge picker), Chat (desktop), Settings, and API Keys.
 
 ![Home — your career command center](docs/images/dashboard/home.png)
 *Home: active/in-flight counts, dismissible priorities, daily digest, and Oura readiness driving "today's move".*
@@ -189,7 +189,7 @@ flowchart LR
         HTTP["FastAPI transport<br/>REST + SSE + /mcp"]
         WORK["Control plane<br/>(durable work_items)"]
         GATE["Provenance truth gate"]
-        EVALS["Eval framework"]
+        EVALS["Eval framework<br/>(per-tenant golden set · judge · triage)"]
     end
     subgraph Storage
         DB[("SQLite per partition")]
@@ -206,6 +206,7 @@ flowchart LR
     TOOLS --> WS
     DB <--> SYNC
     WORK --> EVALS
+    EVALS --> WS
 ```
 
 Every tenant's data lives under `DATA_FOLDER/users/{oid}` with per-request context routing; background work goes through a durable control plane so it can never run against the wrong partition ([docs/control-plane.md](docs/control-plane.md)). Desktop and cloud stay consistent through journal-based bidirectional sync ([docs/persistence.md](docs/persistence.md)).
@@ -217,6 +218,8 @@ Every tenant's data lives under `DATA_FOLDER/users/{oid}` with per-request conte
 **Provenance gate** — a deterministic truth check on every generated document: numeric claims (percentages, dollar amounts, multipliers, years) must trace to the master resume, stories, or JD, or the run is flagged — an LLM reviewer checks quality, this checks *truth*. Verdicts surface in the dashboard (violations modal) and Grafana; in-place master-resume edits are audit-logged so an agent can't legalize a fabricated claim by editing the source. Details: [docs/generation.md](docs/generation.md).
 
 **Eval framework** — three layers in [`evals/`](evals/): declarative tool evals through the exact MCP dispatch path (a <95% smoke pass rate blocks deploys in CI), scoring rubrics with hard thresholds, and an adversarial LLM-as-judge over a committed golden dataset with N-run variance analysis (hallucination rate, verdict flips, baseline deltas). The judge itself is measured, not trusted: a planted-error fixture corpus records per-class catch rates against a synthetic master resume, blind human labels on the golden entries calibrate judge scores per dimension, and every run cross-checks the judge's hallucination list against the provenance gate's record. The judge can run on a separate provider/model from the generator. Runs from the CLI, or server-side via the control plane on a nightly schedule. Details: [docs/evals.md](docs/evals.md).
+
+**Your own eval loop** — the suite is also a product surface, not just an operator tool: the **Evals screen** (web and desktop — the Tauri shell wraps the same dashboards) lets any tenant author their own golden set by pasting 3–5 real job descriptions, run the truth suite against their own master resume, and triage every flagged claim **A/B/C/D**. The **D ruling ("true but undocumented")** is the loop's teaching moment — most first-run flags point at gaps in the master resume, and each documented D converts a recurring flag into citable material on the next run. The judge is configurable per tenant (a cheaper model is a legitimate cost choice for a personal trend line), with calibration labels that name exactly what was measured and on which corpus — an uncalibrated judge is labeled as one, never dressed up as the calibrated default. A bring-your-own judge key is write-only toward every page and encrypted at rest. The screen holds two durability guarantees, both incident-tested: a write either lands or fails loudly with your input intact, and a launched run always resolves to a state you can see — stored results, a visible failure (including "interrupted by a deploy; provider calls may have been billed"), or visibly in progress across reloads.
 
 **Observability** — a dependency-free metrics registry exposes Prometheus counters for requests, LLM calls/tokens, work items, evals, and provenance verdicts at `/metrics`; dashboards-as-code under [`k8s/monitoring/`](k8s/monitoring/) render them on an always-on wallboard (a Raspberry Pi running k3s + Prometheus + Grafana, federating the AKS cluster and scraping the workstation's local-LLM exporter).
 
@@ -311,7 +314,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 - **v1.3.x** — Desktop ⇄ cloud sync (journal-based, LWW, file manifests), workspace export/import, per-user API keys, Oura OAuth + encryption at rest.
 - **v1.2** — jobContext rebrand, React SPA dashboard, QA environment, desktop app GA (signed macOS/Windows/Linux builds, auto-update).
 - **v1.0–v1.1** — Multi-tenant AKS with Entra ID, per-user isolation, OAuth proxy for remote MCP clients, control plane P0, Prometheus/Grafana monitoring, mobile companion app.
-- **Unreleased** — Three-layer eval framework with adversarial LLM-as-judge, planted-error fixture corpus with measured per-class catch rates, blind human-label judge calibration (local + production-candidate judge tables), judge/generator model split, judge ⇄ provenance agreement tracking on the wallboard, server-side nightly eval runs, CI eval smoke gate, scraper guards against non-job pages, wallboard GPU rotation, `mcp<2` pin.
+- **Unreleased** — Per-tenant eval loop as a product surface (own golden set, A/B/C/D triage rulings that persist across runs, configurable judge with honest calibration labels, encrypted BYOK judge key, scoring visuals), entailment critic with contradicted-finding enforcement in the revise pass, write durability + run visibility on the evals screen (failed writes keep your input and say so; launched runs always resolve to a visible state), backup delete propagation + restore-only-onto-empty-volume seed. Earlier: three-layer eval framework with adversarial LLM-as-judge, planted-error fixture corpus with measured per-class catch rates, blind human-label judge calibration, judge/generator model split, judge ⇄ provenance agreement tracking on the wallboard, server-side nightly eval runs, CI eval smoke gate, scraper guards against non-job pages, wallboard GPU rotation, `mcp<2` pin.
 
 ### What's next
 

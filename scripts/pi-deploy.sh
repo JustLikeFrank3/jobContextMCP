@@ -27,7 +27,7 @@
 #                                      Pi (port-forward -> :9091)
 #
 # Assumes: SSH alias pi-node1 (direct ethernet link, 192.168.101.2;
-# LAN fallback 192.168.68.51) with passwordless
+# LAN fallback 192.168.71.51) with passwordless
 # sudo, k3s installed on the Pi, and qemu binfmt for arm64 cross-builds
 # (docker run --privileged --rm tonistiigi/binfmt --install arm64).
 #
@@ -38,7 +38,7 @@
 set -euo pipefail
 
 # Override with PI_HOST when the direct-link alias isn't available (e.g.
-# running from the Windows boot): PI_HOST=fvm3@192.168.68.51
+# running from the Windows boot): PI_HOST=fvm3@192.168.71.51
 PI="${PI_HOST:-pi-node1}"
 NS=jcmcp-pi
 IMAGE=jcmcp:pi
@@ -117,7 +117,7 @@ apply_all() {
   pk rollout status deployment/jcmcp-pi --timeout=300s
   echo
   echo "jcmcp is up on the Pi:"
-  echo "  LAN     http://192.168.68.51/   (dashboard: /dashboard, SPA: /app)"
+  echo "  LAN     http://192.168.71.51/   (dashboard: /dashboard, SPA: /app)"
   echo "  direct  http://192.168.101.2/"
 }
 
@@ -162,7 +162,7 @@ case "${1:-}" in
     ssh "${PI}" "sudo k3s kubectl -n monitoring patch svc grafana -p '{\"spec\":{\"type\":\"LoadBalancer\"}}'"
     ssh "${PI}" "sudo k3s kubectl -n monitoring rollout status deploy/prometheus deploy/grafana --timeout=300s"
     echo
-    echo "Grafana:    http://192.168.68.51:3000  (user: admin)"
+    echo "Grafana:    http://192.168.71.51:3000  (user: admin)"
     echo "Password:   ssh ${PI} \"sudo k3s kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d\""
     ;;
   wallboard)
@@ -221,7 +221,7 @@ case "${1:-}" in
         GF_AUTH_ANONYMOUS_ENABLED=true GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer && \
       sudo k3s kubectl -n monitoring rollout status deploy/grafana --timeout=180s'
     echo
-    echo "Wallboard: http://192.168.68.51:3000/playlists (jcmcp-wallboard-linux / -windows)"
+    echo "Wallboard: http://192.168.71.51:3000/playlists (jcmcp-wallboard-linux / -windows)"
     echo "Kiosk picks one by booted OS — see kiosk-setup (wallboard-kiosk.sh)"
     ;;
   logs)
@@ -251,16 +251,29 @@ contexts:
 current-context: aks
 KC
     scp -q "${TMP_KC}" "${PI}:/tmp/aks-prom.kubeconfig" && rm -f "${TMP_KC}"
+    scp -q "${ROOT}/k8s/monitoring/pi/aks-federate-proxy.yaml" "${PI}:/tmp/aks-federate-proxy.yaml"
+    # The forwarder runs IN k3s (aks-federate-proxy.yaml): no host
+    # addresses, so the workstation's boot choice can't take it down. The
+    # old host-side systemd unit bound the direct-link 192.168.101.2 —
+    # Linux-boot-only config — and is retired here if present.
     ssh "${PI}" 'set -e
-      sudo mkdir -p /etc/jcmcp
-      sudo install -m 600 -o root -g root /tmp/aks-prom.kubeconfig /etc/jcmcp/aks-prom.kubeconfig
+      sudo k3s kubectl -n monitoring create secret generic aks-prom-kubeconfig \
+        --from-file=kubeconfig=/tmp/aks-prom.kubeconfig \
+        --dry-run=client -o yaml | sudo k3s kubectl apply -f -
       rm /tmp/aks-prom.kubeconfig
-      printf "[Unit]\nDescription=Tunnel to AKS Prometheus for the wallboard\nAfter=network-online.target\nWants=network-online.target\n[Service]\nExecStart=/usr/local/bin/k3s kubectl --kubeconfig /etc/jcmcp/aks-prom.kubeconfig -n monitoring port-forward svc/prometheus 9091:9090 --address 127.0.0.1,192.168.101.2\nRestart=always\nRestartSec=10\n[Install]\nWantedBy=multi-user.target\n" \
-        | sudo tee /etc/systemd/system/aks-prom-tunnel.service >/dev/null
-      sudo systemctl daemon-reload
-      sudo systemctl enable --now aks-prom-tunnel.service
-      sleep 5
-      curl -sf -o /dev/null -w "AKS Prometheus via tunnel: %{http_code}\n" "http://localhost:9091/api/v1/status/buildinfo"'
+      sudo k3s kubectl apply -f /tmp/aks-federate-proxy.yaml
+      rm /tmp/aks-federate-proxy.yaml
+      if systemctl is-enabled aks-prom-tunnel.service >/dev/null 2>&1; then
+        sudo systemctl disable --now aks-prom-tunnel.service
+        sudo rm -f /etc/systemd/system/aks-prom-tunnel.service
+        sudo systemctl daemon-reload
+        echo "retired host-side aks-prom-tunnel systemd unit"
+      fi
+      sudo k3s kubectl -n monitoring rollout status deployment/aks-federate-proxy --timeout=120s
+      sudo k3s kubectl -n monitoring run aks-feed-check --rm -i --restart=Never \
+        --image=busybox:1.36 -- \
+        wget -q -O /dev/null "http://aks-federate.monitoring.svc:9091/api/v1/status/buildinfo" \
+        && echo "AKS Prometheus via in-cluster forwarder: OK"'
     ;;
   kiosk-setup)
     # TV kiosk on the Pi's own HDMI: waits for Grafana (slow k3s cold start
