@@ -71,7 +71,7 @@ Download, drag to Applications (or run the installer), double-click.
 |----------|------|-------|
 | macOS (Apple Silicon) | `jobContext_*_aarch64.dmg` | Signed + notarized |
 | macOS (Intel) | `jobContext_*_x64.dmg` | Signed + notarized |
-| Windows | `jobContext_*_x64-setup.exe` | Per-user install (unsigned — SmartScreen will warn) |
+| Windows | `jobContext_*_x64-setup.exe` | Per-user install, Authenticode-signed (Azure Trusted Signing; SmartScreen may still warn while the new certificate builds reputation) |
 | Linux | `.AppImage` / `.deb` | AppImage auto-updates; deb is manual |
 
 On top of the server you get an **embedded AI chat** over your own job-search data (OpenAI/Anthropic BYOK or local Ollama), **one-click MCP connect** for Claude Desktop / VS Code / Cursor, **cloud workspace import/export**, **desktop ⇄ cloud sync**, the **eval loop on your own applications** (author a golden set, run the truth suite, triage flagged claims — same screen as the cloud), Oura readiness, and **automatic updates**. Everything stays on your machine: local SQLite, loopback-only server, keys in your local config.
@@ -318,7 +318,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 
 ### What's next
 
-Route document generation through the control plane (P1), automatic re-assessment on master-resume change (P2), eval-run work kind hardening, richer mobile capture (WebView escalation for authwalled pages), voice debriefs, Azure Trusted Signing for the Windows installer.
+Route document generation through the control plane (P1), automatic re-assessment on master-resume change (P2), per-entry checkpoint/resume for eval runs (so a deploy costs one entry, not the run), richer mobile capture (WebView escalation for authwalled pages), voice debriefs.
 
 ---
 
