@@ -96,8 +96,10 @@ commits — never tag those) → desktop-release workflow → rolling
   app with --exclude), notarize via rcodesign; updater `.app.tar.gz` built
   AFTER signing; TAURI_SIGNING_* env-only.
 - Windows: sidecar is console-subsystem (stdout carries the port handshake) —
-  spawn with `CREATE_NO_WINDOW`. Installer is unsigned → SmartScreen warning
-  (task: Azure Trusted Signing). Filenames are sanitized at creation
+  spawn with `CREATE_NO_WINDOW`. Installer + sidecar are Authenticode-signed
+  via Azure Trusted Signing (guarded on AZURE_CLIENT_ID — forks build
+  unsigned); SmartScreen can still warn until the cert builds reputation.
+  Filenames are sanitized at creation
   (`lib.helpers.sanitize_filename`) and sync file transfers skip-and-report
   per file (`last_summary.files.errors`) — but the cloud has no file-delete
   propagation, so a bad-named file already in a partition must be renamed
