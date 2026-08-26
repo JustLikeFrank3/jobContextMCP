@@ -200,6 +200,81 @@ def check_contact_claims(draft: str, master_sources: list[str]) -> list[str]:
     return violations
 
 
+# ── Held-title claims (Round 4, 2026-08) ────────────────────────────────────
+# Title-ification survived two consecutive nightly runs after the prompt rule
+# shipped: job headers and the headline tagline wearing titles the candidate
+# never held ("Australian Team Support Lead", "AI Evangelist", a JD's
+# "SENIOR DIGITAL EXPERIENCE AI DEVELOPER" as the tagline, an invented "Peer
+# Mentor" role). A wrong held title is an identity claim — worse than a
+# wrong metric, and perfectly mechanical to check because the .txt format
+# spec pins where titles live:
+#   job header  : `Title | Company, Location | Month YYYY - Month YYYY`
+#   tagline     : `ROLE TITLE | Tech • Stack • Here`
+# Project headers (`Name | Tech Stack | Year`) and education (`Degree |
+# School | YYYY`) share the pipe shape but end in a BARE year — no month
+# name, no "Present" — which is the discriminator: project and degree names
+# are legitimately not "held titles" and stay ungated. LEADERSHIP's
+# `Role/label: description` lines are deliberately out of scope for now:
+# their labels are fuzzy ("Mentor:", "Speaker:") and gating them on verbatim
+# master containment would false-positive on honest paraphrase; the two
+# shapes gated here are the ones with observed failures.
+_TITLE_DATE_RANGE_RE = re.compile(
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b"
+    r"|\bpresent\b|\bcurrent\b",
+    re.IGNORECASE,
+)
+_YEAR_RE = re.compile(r"\b(?:19|20)\d\d\b")
+
+
+def _normalize_title(text: str) -> str:
+    """Canonical form for title comparison: lowercase, every punctuation/
+    whitespace run collapsed to a single space. 'Sr. Software Engineer' and
+    'sr software engineer' compare equal; word boundaries survive as spaces."""
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def extract_title_claims(draft: str) -> list[str]:
+    """Titles the draft presents as HELD: job-header first segments and the
+    headline tagline. Original spelling, deduped on normalized form."""
+    seen: dict[str, str] = {}
+    for line in (draft or "").splitlines():
+        if "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        title = ""
+        if len(parts) == 3 and parts[0]:
+            years = _YEAR_RE.findall(parts[2])
+            # Job headers span time: two year tokens ("2019 - 2021") or a
+            # year plus a month/Present ("Jan 2024 - Present"). Projects and
+            # education carry exactly ONE bare year and stay ungated.
+            if len(years) >= 2 or (years and _TITLE_DATE_RANGE_RE.search(parts[2])):
+                title = parts[0]
+        elif len(parts) == 2 and parts[0] and "•" in parts[1]:
+            title = parts[0]  # headline tagline
+        if title:
+            key = _normalize_title(title)
+            if key and key not in seen:
+                seen[key] = title
+    return list(seen.values())
+
+
+def check_title_claims(draft: str, master_sources: list[str]) -> list[str]:
+    """Held-title claims in *draft* not present in master-side text.
+
+    Containment is word-boundary-aware on the normalized forms, so a master
+    'Senior Software Engineer — Level 6' backs a draft 'Senior Software
+    Engineer'. Direction matters: a draft title that is a SUBSET of a held
+    title passes (under-claiming is honest), while adding seniority or
+    inventing a role the master never states is the violation. The JD is
+    never a source here — mirroring its title is the failure being caught.
+    """
+    corpus = " " + _normalize_title("\n".join(s for s in master_sources if s)) + " "
+    return [
+        t for t in extract_title_claims(draft)
+        if _normalize_title(t) and f" {_normalize_title(t)} " not in corpus
+    ]
+
+
 def check_claims(
     draft: str,
     sources: list[str],
@@ -223,6 +298,13 @@ def check_claims(
     if master_sources is not None:
         violations.extend(check_years_claims(draft, master_sources))
         violations.extend(check_contact_claims(draft, master_sources))
+        # Self-describing prefix: title violations carry no numeric shape, so
+        # downstream consumers (feedback rule matching, dashboards, the
+        # numeric agreement join's extractors) need the class named in the
+        # string itself.
+        violations.extend(
+            f"unheld title: {t}" for t in check_title_claims(draft, master_sources)
+        )
     return violations
 
 
@@ -285,6 +367,21 @@ def format_violation_feedback(violations: list[str]) -> str:
             "\nCONTACT-DETAIL RULE: profile URLs and handles must be copied "
             "character-for-character from the master resume's contact block — "
             "do not remove the line; correct it to match the master exactly."
+        )
+    # Title violations get their own instruction: "remove the claim" is the
+    # wrong fix for a job header (the role stays; its NAME is wrong), and the
+    # JD is where the invented title usually came from — the model must not
+    # point at it as evidence.
+    if any(v.startswith("unheld title: ") for v in violations):
+        text += (
+            "\nHELD-TITLE RULE: job headers and the headline tagline may only "
+            "use titles the master resume states the candidate actually held, "
+            "copied from the master — never the job description's title, a "
+            "self-description, or an activity dressed as a role. The fix is "
+            "replacing the invented title with the master's actual title for "
+            "that role and period (or the master's own headline); express "
+            "target-role fit in the summary or bullets instead. Do not delete "
+            "the role entry."
         )
     return text
 

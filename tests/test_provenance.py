@@ -725,3 +725,92 @@ class TestContactClaims:
         assert "CONTACT-DETAIL RULE" in text
         assert "character-for-character" in text
         assert "CONTACT-DETAIL" not in format_violation_feedback(["34%"])
+
+
+class TestTitleClaims:
+    MASTER = [
+        "PROFESSIONAL EXPERIENCE\n"
+        "Software Engineer | General Motors, Remote | Jan 2022 - Dec 2023\n"
+        "Senior Software Engineer — Level 6 | General Motors | 2024 - Present\n"
+        "Full Stack Software Engineer | LiveVox | 2019 - 2021\n"
+    ]
+
+    def test_invented_job_header_title_is_a_violation(self):
+        from lib.provenance import check_title_claims
+
+        draft = ("PROFESSIONAL EXPERIENCE\n"
+                 "Australian Team Support Lead | General Motors | Jan 2022 - Dec 2023\n"
+                 "• Supported the DMR team\n")
+        assert check_title_claims(draft, self.MASTER) == ["Australian Team Support Lead"]
+
+    def test_held_titles_pass_case_and_punct_insensitively(self):
+        from lib.provenance import check_title_claims
+
+        draft = ("SENIOR SOFTWARE ENGINEER | General Motors | 2024 - Present\n"
+                 "Sr… no wait\n"
+                 "Software Engineer | General Motors, Remote | Jan 2022 - Dec 2023\n")
+        assert check_title_claims(draft, self.MASTER) == []
+
+    def test_jd_title_as_tagline_is_a_violation(self):
+        from lib.provenance import check_title_claims
+
+        draft = "SENIOR DIGITAL EXPERIENCE AI DEVELOPER | Python • Azure • React\n"
+        assert check_title_claims(draft, self.MASTER) == [
+            "SENIOR DIGITAL EXPERIENCE AI DEVELOPER"
+        ]
+
+    def test_held_title_as_tagline_passes(self):
+        from lib.provenance import check_title_claims
+
+        draft = "Full Stack Software Engineer | Python • Azure • React\n"
+        assert check_title_claims(draft, self.MASTER) == []
+
+    def test_seniority_inflation_is_a_violation(self):
+        from lib.provenance import check_title_claims
+
+        master = ["Software Engineer | LiveVox | 2019 - 2021"]
+        draft = "Senior Software Engineer | LiveVox | 2019 - 2021"
+        assert check_title_claims(draft, master) == ["Senior Software Engineer"]
+
+    def test_subset_of_held_title_passes(self):
+        # Under-claiming is honest: master holds "Senior Software Engineer",
+        # draft says "Software Engineer" — the words appear in the master.
+        from lib.provenance import check_title_claims
+
+        master = ["Senior Software Engineer | GM | Jan 2024 - Present"]
+        draft = "Software Engineer | GM | Jan 2024 - Present"
+        assert check_title_claims(draft, master) == []
+
+    def test_project_and_education_headers_are_not_gated(self):
+        from lib.provenance import check_title_claims
+
+        draft = ("PROJECTS\n"
+                 "jobContext — Career Memory Layer | Python, FastAPI | 2026\n"
+                 "EDUCATION\n"
+                 "BSc Computer Science | Some University | 2005\n")
+        assert check_title_claims(draft, self.MASTER) == []
+
+    def test_prose_and_cover_letters_are_untouched(self):
+        from lib.provenance import check_title_claims
+
+        draft = ("Dear Hiring Manager,\n"
+                 "As an AI Evangelist at heart | I love pipes in prose\n"
+                 "I led the team from Jan 2022 - Dec 2023.\n")
+        assert check_title_claims(draft, self.MASTER) == []
+
+    def test_wired_into_check_claims_behind_master_sources(self):
+        from lib.provenance import check_claims
+
+        draft = "AI Evangelist | General Motors | Jan 2022 - Dec 2023"
+        assert check_claims(draft, self.MASTER) == []  # opt-in, like years/contacts
+        assert check_claims(draft, self.MASTER, master_sources=self.MASTER) == [
+            "unheld title: AI Evangelist"
+        ]
+
+    def test_feedback_carries_the_held_title_rule(self):
+        from lib.provenance import format_violation_feedback
+
+        text = format_violation_feedback(["unheld title: AI Evangelist"])
+        assert "HELD-TITLE RULE" in text
+        assert "Do not delete the role entry" in text
+        assert "HELD-TITLE" not in format_violation_feedback(["34%"])
