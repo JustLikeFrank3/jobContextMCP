@@ -156,6 +156,27 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             )
 
 
+def _is_cross_site_browser_request(request: "StarletteRequest") -> bool:
+    """True when a browser sent this request from another origin.
+
+    Sec-Fetch-Site is the authority when present (every current Chromium/
+    Firefox/Safari sends it); 'same-site' is deliberately NOT allowed — the
+    SPA is same-ORIGIN with the API, so a sibling-subdomain sender is not
+    ours. The Origin/Host comparison is the fallback for older browsers;
+    scheme is ignored because TLS terminates at the ingress and the app sees
+    http. No header at all means a non-browser client (curl, SDK), which
+    cannot be CSRF'd into sending a cookie — allow it.
+    """
+    fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+    if fetch_site:
+        return fetch_site not in ("same-origin", "none")
+    origin = request.headers.get("origin", "").strip()
+    if not origin:
+        return False
+    from urllib.parse import urlparse
+    return urlparse(origin).netloc.lower() != request.headers.get("host", "").strip().lower()
+
+
 class UserDataContextMiddleware(BaseHTTPMiddleware):
     """Starlette middleware that routes each authenticated request to the
     requesting user's own data partition under DATA_FOLDER/users/{oid}/.
@@ -176,6 +197,24 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         provider = get_auth_provider()
         authorization = request.headers.get("Authorization")
         session = request.cookies.get("jc_session")
+
+        # CSRF guard for the MCP endpoint: the jc_session cookie is an
+        # ambient credential the browser attaches to ANY site's request, and
+        # /mcp executes tools with side effects on a bare POST (no CORS
+        # preflight protects it — the WebMCP bridge sends a simple
+        # same-origin fetch, but so could evil.example). Cross-site senders
+        # must use a bearer credential; only drop the cookie, so the request
+        # falls through to the normal 401 + WWW-Authenticate answer that
+        # tells real MCP clients how to authenticate.
+        if session and not authorization and request.url.path.startswith("/mcp"):
+            if _is_cross_site_browser_request(request):
+                _logger.warning(
+                    "auth: ignoring jc_session cookie on cross-site /mcp request "
+                    "(origin=%s sec-fetch-site=%s)",
+                    request.headers.get("origin"),
+                    request.headers.get("sec-fetch-site"),
+                )
+                session = None
         # An AuthUnavailable means we could not CHECK the credential, which is
         # not the same as "you are not authorised".  Remember that and decide
         # below — after the public-path passthrough, because health, discovery
