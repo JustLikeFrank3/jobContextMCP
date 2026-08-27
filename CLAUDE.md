@@ -43,6 +43,13 @@ commits — never tag those) → desktop-release workflow → rolling
 - **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
   facade doesn't expose — update the facade signature.
+- **WebMCP bridge** (`frontend/src/webmcp/`, docs/webmcp.md): the SPA
+  re-registers the server's tools/list verbatim as `document.modelContext`
+  tools for in-browser agents (ChatGPT desktop, Chrome OT), calling `/mcp`
+  same-origin on the jc_session cookie. Corollary: the middleware IGNORES
+  that cookie on cross-site `/mcp` requests (Sec-Fetch-Site, Origin/Host
+  fallback) — the cookie is ambient and `/mcp` mutates without a CORS
+  preflight. Bearer auth is untouched; don't loosen the guard.
 - **Streamable HTTP runs stateless** (`stateless_http=True`, server.py).
   Session mode keeps sessions in a process-local dict with no event store,
   so `Recreate` deploys stranded hosted connectors on a dead session id →

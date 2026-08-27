@@ -28,6 +28,11 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 # Build the SPA. vite.config.js sets base=/app/, output → /frontend/dist.
+# VITE_WEBMCP_OT_TOKEN: Chrome origin-trial token for WebMCP (per-origin, from
+# developers.chrome.com/origintrials). Optional — without it the bridge still
+# serves ChatGPT desktop and Edge, which don't use Chrome's trial gating.
+ARG VITE_WEBMCP_OT_TOKEN=""
+ENV VITE_WEBMCP_OT_TOKEN=$VITE_WEBMCP_OT_TOKEN
 COPY frontend/ ./
 RUN npm run build
 
