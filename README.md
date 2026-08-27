@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2106%20passing-brightgreen" alt="2106 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2115%20passing-brightgreen" alt="2115 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%2097%20actions-informational" alt="12 domain tools, 97 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -39,14 +39,14 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 | | |
 |---|---|
 | 12 MCP tools | 97 domain actions behind them |
-| 2106 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 2115 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
 | Azure AKS multi-tenant deployment | Three-layer eval framework with LLM-as-judge |
 | Journal-based desktop ⇄ cloud sync | Prometheus + Grafana observability |
 
-**Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · Zed · HTTP clients · CLI automation
+**Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · Zed · in-browser agents via WebMCP (ChatGPT desktop, Chrome origin trial, Edge) · HTTP clients · CLI automation
 
 ---
 
@@ -266,7 +266,7 @@ Docker works too: `docker compose run --rm jobcontextmcp` (stdio) or `MCP_TRANSP
 
 ### Option C — Cloud (AKS) or self-hosted Kubernetes
 
-The hosted deployment ([jobcontext.ai](https://jobcontext.ai)) runs the HTTP server multi-tenant on AKS behind Entra ID: any Microsoft account can be invited as a guest and gets an isolated partition on first login; MCP clients (Claude.ai, Cursor, VS Code) connect over Streamable HTTP with OAuth (dynamic client registration + PKCE proxied to Entra). Deploys are CI-driven with an eval smoke gate. Manifests in [`k8s/`](k8s/); full guide: **[docs/aks-deployment.md](docs/aks-deployment.md)**.
+The hosted deployment ([jobcontext.ai](https://jobcontext.ai)) runs the HTTP server multi-tenant on AKS behind Entra ID: any Microsoft account can be invited as a guest and gets an isolated partition on first login; MCP clients (Claude.ai, Cursor, VS Code) connect over Streamable HTTP with OAuth (dynamic client registration + PKCE proxied to Entra). The dashboard is itself agent-usable: it republishes the same tools in-page over [WebMCP](docs/webmcp.md) (`document.modelContext`), so an in-browser agent — ChatGPT desktop's built-in browser, Chrome's origin trial, Edge preview — can drive your pipeline while you're signed in, with no connector setup. Deploys are CI-driven with an eval smoke gate. Manifests in [`k8s/`](k8s/); full guide: **[docs/aks-deployment.md](docs/aks-deployment.md)**.
 
 Self-hosting without Azure: a disposable local k3d cluster or single-node k3s (proven on a Raspberry Pi 4) — [docs/local-cluster.md](docs/local-cluster.md).
 
@@ -290,6 +290,7 @@ Everything the code reads — env vars, `config.json` keys, feature flags, per-d
 | [docs/api-reference.md](docs/api-reference.md) | Every HTTP endpoint, schema, auth requirement, error code |
 | [docs/http-api.md](docs/http-api.md) | HTTP quick start, dashboard, LAN/phone mode, iOS Shortcut, API keys |
 | [docs/client-setup.md](docs/client-setup.md) | Connecting VS Code, Claude Desktop, ChatGPT, Cursor, Windsurf |
+| [docs/webmcp.md](docs/webmcp.md) | WebMCP bridge: the dashboard as a tool surface for in-browser agents |
 | [docs/generation.md](docs/generation.md) | Generation modes, provenance gate, personas, PDF export, feeding the system |
 | [docs/evals.md](docs/evals.md) | Three-layer eval framework, LLM-as-judge, nightly runs, CI gate |
 | [docs/configuration.md](docs/configuration.md) | Every env var and config.json key |
