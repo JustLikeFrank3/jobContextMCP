@@ -48,6 +48,8 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 **Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · Zed · in-browser agents via WebMCP (ChatGPT desktop, Chrome origin trial, Edge) · HTTP clients · CLI automation
 
+**Jump to:** [Desktop](#jobcontext-desktop) · [Mobile](#jobcontext-mobile--ios-beta-testflight) · [Dashboard & output](#output) · [Tool surface](#the-tool-surface) · [Truth & evals](#truth-evals--observability) · [Setup](#setup) · [Configuration](#configuration) · [Docs](#documentation) · [Releases](#recent-releases)
+
 ---
 
 ## Why I Built This
@@ -120,7 +122,7 @@ Generated from plain `.txt` files — no design tools. Templates live in `templa
 
 ### Resume template gallery
 
-4 layout formats x 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
+4 layout formats × 5 color themes = 20 variants. All consume the same resume data; only the presentation changes. Template and theme are selected per-job in the pipeline.
 
 | Sidebar resume | Sidebar cover letter |
 |----------------|----------------------|
@@ -156,7 +158,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 96 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 97 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
@@ -169,7 +171,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 | `stories` | 10 | Personal stories, STAR context, writing-tone profile |
 | `wellbeing` | 7 | Mood/energy check-ins, Oura readiness, HBDI profile |
 | `brand` | 7 | LinkedIn post pipeline + metrics, GitHub/portfolio stats, skill scans |
-| `insights` | 7 | Daily/weekly digests, session context, rejection funnel, comp comparison |
+| `insights` | 8 | Daily/weekly digests, session context, rejection funnel, comp comparison, eval-suite results |
 | `certification` | 8 | Weekly work-search certification reports, employer directory, portal-ready exports |
 | `workspace` | 2 | Workspace diagnosis and zero-manual-setup creation |
 
