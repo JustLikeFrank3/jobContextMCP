@@ -224,7 +224,9 @@ def save_job_assessment(company: str, content: str, filename: str = "", source: 
     if not filename:
         filename = f"{company.strip()} - Fitment Assessment.md"
     filename = sanitize_filename(filename)
-    if not filename.endswith(".md"):
+    # .txt is a legitimate plain-text alternative the Materials preview also
+    # serves; forcing .md onto it produced "….txt.md" (judge-filed bug).
+    if not filename.endswith((".md", ".txt")):
         filename += ".md"
 
     cleaned = "\n".join(line.rstrip() for line in content.splitlines())
