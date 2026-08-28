@@ -234,6 +234,15 @@ class TestFitmentCoverageExtras:
         )
         assert saved.is_file()
 
+    def test_save_job_assessment_keeps_txt_extension(self, isolated_server):
+        """A .txt filename must stay .txt — forcing .md onto it produced
+        '….txt.md' and blocked plain text as a preview fallback."""
+        fitment.save_job_assessment("Acme", "content", filename="assessment.txt")
+
+        folder = fitment.config.get_active_job_assessments_dir()
+        assert (folder / "assessment.txt").is_file()
+        assert not (folder / "assessment.txt.md").exists()
+
     def test_save_job_assessment_default_filename_is_sanitized(self, isolated_server):
         fitment.save_job_assessment('Acme <Labs>: "AI"', "content")
 

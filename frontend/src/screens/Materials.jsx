@@ -101,7 +101,13 @@ function openPreview(file) {
     border: 1px solid #2a3a5e; background: #16223a; color: #d6e3f7; }
   .btn.primary { background: #00b5c8; border-color: transparent; color: #04222a; font-weight: 600; }
   .btn:hover { filter: brightness(1.08); }
-  iframe { border: 0; width: 100%; height: calc(100vh - 53px); background: #fff; }
+  /* Dark, not #fff: with color-scheme: dark on this window, a text/markdown
+     document in the iframe adopts the dark UA scheme (light text) and — the
+     schemes matching — keeps a TRANSPARENT canvas, so a white iframe painted
+     white-on-white (judge-filed bug, 2026-08-28). In light-mode browsers the
+     schemes mismatch and the child canvas goes opaque white, so this dark
+     backdrop never touches it. PDFs paint their own opaque viewer either way. */
+  iframe { border: 0; width: 100%; height: calc(100vh - 53px); background: #0a1018; }
   .msg { padding: 48px 24px; text-align: center; color: #9fb0c8; }
   .msg .btn { margin-top: 14px; }
 </style></head><body>
