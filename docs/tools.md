@@ -1,4 +1,4 @@
-# MCP Tool Reference — 12 Domain Tools, 96 Actions
+# MCP Tool Reference — 12 Domain Tools, 97 Actions
 
 The default MCP surface is **12 consolidated domain tools** (`tools/consolidated.py`). Each takes an `action` parameter plus that action's arguments; the generated docstring on every tool lists each action's required and optional parameters. Rationale: MCP clients budget tools (VS Code caps 128 across every server), and 85 near-duplicate names both hog that budget and give the model look-alike choices to fumble.
 
@@ -162,7 +162,7 @@ Professional brand: LinkedIn post pipeline + metrics, GitHub stats, portfolio me
 | `portfolio_refresh` | Refresh portfolio metrics | — | — |
 | `scan_project_skills` | Scan side projects for skills | — | — |
 
-## insights — 7 actions
+## insights — 8 actions
 
 Digests and analysis: daily/weekly summaries, session context, rejection funnel patterns, and compensation comparison.
 
@@ -175,6 +175,7 @@ Digests and analysis: daily/weekly summaries, session context, rejection funnel 
 | `rejections` | Rejection history + funnel patterns | — | `company`, `stage`, `since`, `include_pattern_analysis` |
 | `compensation_update` | Record a comp datapoint | `company`, `role` | `base`, `equity_total`, `equity_vest_years`, `bonus_target_pct`, `level`, `location`, `remote`, `notes` |
 | `compensation_compare` | Compare recorded comp | — | — |
+| `evals_results` | Latest eval-suite results: scores, alerts, flagged claims (read-only) | — | `raw` |
 
 `insights(action="session_context")` is the session-startup call — run it first in a new AI session to load pipeline state, recent activity, and workspace status.
 
