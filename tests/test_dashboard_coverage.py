@@ -566,12 +566,22 @@ class TestDashboardHomeApiCoverage:
         reset_settings_cache()
         assert response.status_code in (401, 403)
 
-    def test_api_me_returns_user_when_authed(self, http_client_noauth):
+    def test_api_me_returns_user_when_authed(self, monkeypatch, http_client_noauth):
+        monkeypatch.delenv("DEPLOY_MODE", raising=False)
         response = http_client_noauth.get("/api/dashboard/me")
         assert response.status_code == 200
         body = response.json()
         assert body["authenticated"] is True
         assert "name" in body and "firstName" in body and "id" in body
+        # Cloud deployment: the SPA gates desktop-only surfaces (Chat) on this
+        # instead of probing a desktop-only route that 404s in the console.
+        assert body["desktop"] is False
+
+    def test_api_me_reports_desktop_mode(self, monkeypatch, http_client_noauth):
+        monkeypatch.setenv("DEPLOY_MODE", "desktop")
+        response = http_client_noauth.get("/api/dashboard/me")
+        assert response.status_code == 200
+        assert response.json()["desktop"] is True
 
     def test_api_me_requires_auth(self, monkeypatch, isolated_server):
         from fastapi.testclient import TestClient
