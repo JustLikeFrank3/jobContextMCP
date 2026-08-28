@@ -258,15 +258,26 @@ spec:
                 command: ["sh", "-c", "sleep 5"]
           # Liveness never checks a dependency: a transient Entra outage must
           # not get the pod killed.
+          # timeoutSeconds 5, not the 1s default: in-request LLM work (doc
+          # generation, assessments) stalls the single GIL-bound process past
+          # 1s, and on 2026-08-27 a resume+cover-letter generation tripped 3
+          # consecutive 1s liveness timeouts — the kubelet killed a healthy
+          # pod mid-request (exit 137, no OOM). Slow is not dead here; a truly
+          # hung process still dies after 3×5s misses. Remove only after doc
+          # generation moves to the control plane (P1).
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
+            timeoutSeconds: 5
           # Readiness DOES: /ready is 503 until the Entra JWKS is cached, so
           # the ingress does not route to a pod that would answer a valid
           # token with an auth error.
+          # timeoutSeconds 3: the 1s default flapped ~every 10 min under
+          # normal LLM load (24 failures in <4h on 2026-08-27), each flap a
+          # brief ingress 503.
           readinessProbe:
             httpGet:
               path: /ready
@@ -274,6 +285,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 12
+            timeoutSeconds: 3
           volumeMounts:
             - name: data
               mountPath: /app/data
