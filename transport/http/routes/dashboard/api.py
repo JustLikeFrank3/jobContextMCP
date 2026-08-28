@@ -218,13 +218,20 @@ async def dashboard_me(
     or 401 (via the dependency) when it is not. The React AuthContext calls
     this on mount to decide between rendering the app and redirecting to login,
     without paying for the full home payload.
+
+    Also carries the deployment mode: desktop-only surfaces (Chat, local
+    workspace sections) gate on `desktop` instead of probing a desktop-only
+    route, which 404s in the cloud and litters the console.
     """
+    from lib.app_dirs import is_desktop_mode
+
     return JSONResponse(
         {
             "authenticated": True,
             "id": user.id,
             "name": (user.name or "").strip(),
             "firstName": _first_name(user),
+            "desktop": is_desktop_mode(),
         }
     )
 

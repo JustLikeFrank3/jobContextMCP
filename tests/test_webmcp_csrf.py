@@ -19,10 +19,20 @@ from __future__ import annotations
 COOKIE = {"jc_session": "test-key"}
 
 
+def _set_cookies(client, cookies):
+    # Cookies live on the client instance — per-request cookies= is deprecated
+    # in Starlette's TestClient (persistence semantics are ambiguous). The
+    # client is function-scoped, so this never leaks between tests.
+    client.cookies.clear()
+    for name, value in cookies.items():
+        client.cookies.set(name, value)
+
+
 def _post_mcp(client, headers=None, cookies=COOKIE):
+    _set_cookies(client, cookies)
     # No MCP app is mounted in these tests, so a request that SURVIVES auth
     # 404s at routing. 401 = the guard (or missing auth) rejected it.
-    return client.post("/mcp", headers=headers or {}, cookies=cookies)
+    return client.post("/mcp", headers=headers or {})
 
 
 class TestCrossSiteCookieRejected:
@@ -76,9 +86,9 @@ class TestLegitimateSendersUnaffected:
     def test_cross_site_cookie_on_non_mcp_path_keeps_existing_behavior(self, http_client_authed):
         """The guard is scoped to /mcp — dashboard routes keep their current
         cookie semantics (tightening those is a separate decision)."""
+        _set_cookies(http_client_authed, COOKIE)
         r = http_client_authed.get(
             "/api/dashboard/me",
             headers={"Sec-Fetch-Site": "cross-site"},
-            cookies=COOKIE,
         )
         assert r.status_code != 401
