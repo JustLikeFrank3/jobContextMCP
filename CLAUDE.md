@@ -30,8 +30,9 @@ commits — never tag those) → desktop-release workflow → rolling
   through the control plane.
 - **Control plane** (`lib/work.py`, docs/control-plane.md): durable
   `work_items` rows + in-process dispatcher; executors get partition context
-  FROM THE ROW. Status: `GET /api/work`, `/api/work/stats`. First kind:
-  `capture_url`. P1 (route doc generation through it) is task backlog.
+  FROM THE ROW. Status: `GET /api/work`, `/api/work/stats`. Kinds:
+  `capture_url`, `run_evals`, `certification.weekly`, `generate.*`
+  (P1/P2 shipped 2026-08-10; P3 scheduler is backlog).
 - **Sync**: journal-based bidirectional (lib/sync.py), AFTER-triggers into
   `sync_log`; upsert tables LWW by ts; file sync by sha256 manifest.
 - **Telemetry**: `lib/metrics.py` (no deps) → `GET /metrics` (Prometheus);

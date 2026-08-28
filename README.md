@@ -321,7 +321,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 
 ### What's next
 
-Route document generation through the control plane (P1), automatic re-assessment on master-resume change (P2), per-entry checkpoint/resume for eval runs (so a deploy costs one entry, not the run), richer mobile capture (WebView escalation for authwalled pages), voice debriefs.
+Control-plane P3 scheduler (cron-style enqueuers for Oura autosync, weekly digest, follow-up nudges — document generation and per-row accounting/policy already run through the control plane as of P1/P2), automatic re-assessment on master-resume change, per-entry checkpoint/resume for eval runs (so a deploy costs one entry, not the run), richer mobile capture (WebView escalation for authwalled pages), voice debriefs. Tracked on the [roadmap board](https://github.com/JustLikeFrank3/jobContextMCP/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap).
 
 ---
 
