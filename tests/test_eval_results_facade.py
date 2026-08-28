@@ -11,7 +11,13 @@ from __future__ import annotations
 import json
 
 from lib import config
-from tools.consolidated import DOMAINS, insights
+from tools.consolidated import DOMAINS, insights as insights_facade
+
+from tests.facade_driver import call_facade
+
+
+def insights(**kwargs):
+    return call_facade(insights_facade, **kwargs)
 
 PAYLOAD = {
     "updated_at": "2026-08-18T16:25:17",
