@@ -24,6 +24,9 @@ from __future__ import annotations
 import inspect
 import json
 import types
+
+# anyio: facade dispatch runs in a worker thread (see the facades below).
+import anyio
 from typing import Literal, get_args, get_origin, Union
 
 from tools import (
@@ -311,7 +314,15 @@ def _run(domain: str, action: str, params: dict) -> str:
 # listing appended at registration.
 
 
-def applications(
+# The facades are async and push _run onto a worker thread because FastMCP
+# calls SYNC tools directly on the event loop (mcp/server/fastmcp/utilities/
+# func_metadata.py: `return fn(**arguments)`), so a slow action — LLM
+# generation, an assessment — froze the WHOLE server for the call's duration:
+# health probes included, which got the prod pod liveness-killed mid-request
+# twice on 2026-08-27. anyio.to_thread.run_sync copies the caller's context,
+# so the per-request partition contextvars (lib/user_context.py) survive the
+# hop — unlike bare run_in_executor, which is why that remains forbidden.
+async def applications(
     action: Literal["status", "update", "log_event", "queue", "get_queue", "evaluate", "decide", "assess", "full_assessment", "save_assessment"],
     company: str | None = None,
     role: str | None = None,
@@ -332,10 +343,11 @@ def applications(
     content: str | None = None,
 ) -> str:
     """Track and evaluate job applications: pipeline status, the evaluation queue, fitment assessments, and application events."""
-    return _run("applications", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("applications", action, params))
 
 
-def job_search(
+async def job_search(
     action: Literal["web", "greenhouse", "lever", "url"],
     query: str | None = None,
     location: str | None = None,
@@ -346,10 +358,11 @@ def job_search(
     page_text: str | None = None,
 ) -> str:
     """Find job postings: open-web search, Greenhouse/Lever company boards, or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
-    return _run("job_search", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("job_search", action, params))
 
 
-def documents(
+async def documents(
     action: Literal["generate_resume", "generate_resume_agent", "generate_cover_letter", "export_resume_pdf", "export_cover_letter_pdf", "export_resume_latex", "export_cover_letter_latex", "save_resume", "save_cover_letter", "diff", "write_latex_section", "customization_strategy", "preview_story_retrieval"],
     company: str | None = None,
     role: str | None = None,
@@ -373,10 +386,11 @@ def documents(
     section_filename: str | None = None,
 ) -> str:
     """Generate, export, and manage application documents: resumes and cover letters (text, PDF, LaTeX), diffs, and customization strategy."""
-    return _run("documents", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("documents", action, params))
 
 
-def materials(
+async def materials(
     action: Literal["read_master_resume", "update_master_resume", "read_resume", "read_reference", "read_latex_asset", "list", "search", "reindex", "reindex_stories"],
     filename: str | None = None,
     company: str | None = None,
@@ -386,10 +400,11 @@ def materials(
     new_text: str | None = None,
 ) -> str:
     """Read, search, and maintain your existing materials: master resume (read and in-place edit), saved resumes/letters, reference files, LaTeX assets, and the semantic index."""
-    return _run("materials", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("materials", action, params))
 
 
-def interviews_tool(
+async def interviews_tool(
     action: Literal["log", "list", "context", "upcoming", "prep_context", "save_prep", "get_prep", "quick_reference", "leetcode_cheatsheet"],
     company: str | None = None,
     role: str | None = None,
@@ -420,10 +435,11 @@ def interviews_tool(
     section: str | None = None,
 ) -> str:
     """Interview lifecycle: log debriefs, review history and company context, see upcoming interviews, and build/save prep docs."""
-    return _run("interviews", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("interviews", action, params))
 
 
-def people_tool(
+async def people_tool(
     action: Literal["log", "list", "get", "referral_chains", "draft_outreach", "draft_reply", "review_message", "crossref_run", "crossref_get", "fb_queue"],
     name: str | None = None,
     relationship: str | None = None,
@@ -450,10 +466,11 @@ def people_tool(
     include_pending: bool | None = None,
 ) -> str:
     """Contacts and outreach: log/list people, referral paths, draft and review outreach messages, and the FB cross-reference queue."""
-    return _run("people", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("people", action, params))
 
 
-def stories(
+async def stories(
     action: Literal["log", "update", "delete", "ingest", "personal_context", "star_context", "star_all", "tone_log", "tone_profile", "tone_scan"],
     story_id: str | None = None,
     story: str | None = None,
@@ -473,10 +490,11 @@ def stories(
     force: bool | None = None,
 ) -> str:
     """Personal stories and voice: log anecdotes, retrieve STAR/personal context for applications, and manage your writing-tone profile."""
-    return _run("stories", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("stories", action, params))
 
 
-def wellbeing(
+async def wellbeing(
     action: Literal["checkin", "log", "oura_sync", "oura_log", "oura_get", "hbdi_run", "hbdi_profile"],
     mood: int | None = None,
     energy: int | None = None,
@@ -499,10 +517,11 @@ def wellbeing(
     score_d: int | None = None,
 ) -> str:
     """Wellbeing during the hunt: mood/energy check-ins, Oura readiness (sync/log/history), and the HBDI thinking-style profile."""
-    return _run("wellbeing", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("wellbeing", action, params))
 
 
-def brand(
+async def brand(
     action: Literal["post_log", "post_metrics", "posts", "github_stats", "portfolio", "portfolio_refresh", "scan_project_skills"],
     text: str | None = None,
     source: str | None = None,
@@ -530,10 +549,11 @@ def brand(
     username: str | None = None,
 ) -> str:
     """Professional brand: LinkedIn post pipeline + metrics, GitHub stats, portfolio metrics, and side-project skill scans."""
-    return _run("brand", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("brand", action, params))
 
 
-def insights(
+async def insights(
     action: Literal["daily_digest", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
     company: str | None = None,
     role: str | None = None,
@@ -553,10 +573,11 @@ def insights(
     raw: bool | None = None,
 ) -> str:
     """Digests and analysis: daily/weekly summaries, session context, rejection funnel patterns, eval-suite results, and compensation comparison."""
-    return _run("insights", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("insights", action, params))
 
 
-def workspace(
+async def workspace(
     action: Literal["check", "setup"],
     name: str | None = None,
     email: str | None = None,
@@ -570,10 +591,11 @@ def workspace(
     side_project_folders: str | None = None,
 ) -> str:
     """Workspace setup: check what's present/missing, and create or complete the workspace from your details."""
-    return _run("workspace", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("workspace", action, params))
 
 
-def certification(
+async def certification(
     action: Literal["weekly_report", "list_reports", "export", "swap_entry", "mark_submitted", "employer_lookup", "employer_override", "state_profile"],
     week_ending: str | None = None,
     limit: int | None = None,
@@ -596,7 +618,8 @@ def certification(
     counts_materials_prep: bool | None = None,
 ) -> str:
     """Weekly work-search certification: frozen weekly reports derived from logged events, employer address directory, portal-ready exports, and per-state rules."""
-    return _run("certification", action, locals())
+    params = locals()
+    return await anyio.to_thread.run_sync(lambda: _run("certification", action, params))
 
 
 # MCP tool name → facade. interviews/people shadow imported modules, hence

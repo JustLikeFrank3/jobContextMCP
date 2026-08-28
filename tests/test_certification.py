@@ -7,6 +7,7 @@ import re
 import pytest
 
 import server as srv
+from tests.facade_driver import call_facade
 from tools import certification as cert
 
 
@@ -322,21 +323,21 @@ class TestFacade:
         _write_status([
             _app("Acme", events=[{"type": "applied", "date": _iso(IN_WEEK), "notes": ""}]),
         ])
-        out = FACADES["certification"](action="weekly_report", week_ending=_iso(WEEK_END))
+        out = call_facade(FACADES["certification"],action="weekly_report", week_ending=_iso(WEEK_END))
         assert "CERTIFICATION WEEK" in out
         assert "needs_address" in cert.list_certification_reports() or "gap" in cert.list_certification_reports()
 
     def test_state_profile_roundtrip_through_dispatch(self, workspace):
         from tools.consolidated import FACADES
 
-        out = FACADES["certification"](action="state_profile", mode="set", min_activities_per_week=5)
+        out = call_facade(FACADES["certification"],action="state_profile", mode="set", min_activities_per_week=5)
         assert "5/week" in out
         assert cert.get_state_profile()["min_activities_per_week"] == 5
 
     def test_unknown_action_is_a_friendly_error(self):
         from tools.consolidated import FACADES
 
-        out = FACADES["certification"](action="weekly_report ")
+        out = call_facade(FACADES["certification"],action="weekly_report ")
         assert isinstance(out, str)
 
 
@@ -474,7 +475,7 @@ class TestSubmission:
         _write_status([_app("Acme", applied_date=_iso(IN_WEEK))])
         rid = _freeze_week(monkeypatch)
         from tools import consolidated
-        out = consolidated.certification(
+        out = call_facade(consolidated.certification,
             action="mark_submitted", report_id=rid, confirmation_number="GA-42",
         )
         assert out.startswith("✓") and "GA-42" in out
@@ -609,7 +610,7 @@ class TestFacadeDispatch:
 
     def test_override_fields_json_string_through_facade(self, workspace):
         from tools import consolidated
-        out = consolidated.certification(
+        out = call_facade(consolidated.certification,
             action="employer_override", name="Acme",
             fields='{"street": "1 Main St", "city": "Atlanta",'
                    ' "state": "GA", "zip": "30303"}',
@@ -620,7 +621,7 @@ class TestFacadeDispatch:
         # claude.ai / Claude Code harnesses auto-parse JSON-string args into
         # objects — the facade schema must accept the dict form too.
         from tools import consolidated
-        out = consolidated.certification(
+        out = call_facade(consolidated.certification,
             action="employer_override", name="DictCo",
             fields={"street": "1 Main St", "city": "Atlanta",
                     "state": "GA", "zip": "30303"},
@@ -636,7 +637,7 @@ class TestFacadeDispatch:
 
     def test_activity_kinds_csv_becomes_list_not_characters(self, workspace):
         from tools import consolidated
-        out = consolidated.certification(
+        out = call_facade(consolidated.certification,
             action="state_profile", mode="set",
             accepted_activity_kinds="application_submitted,interview_attended",
         )

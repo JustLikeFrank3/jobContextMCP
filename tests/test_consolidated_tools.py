@@ -13,7 +13,40 @@ import inspect
 import pytest
 
 from tools import consolidated
-from tools.consolidated import DOMAINS, FACADES, _actions_doc, _run
+import functools
+
+from tools.consolidated import DOMAINS, FACADES as _ASYNC_FACADES, _actions_doc, _run
+
+from tests.facade_driver import call_facade
+
+
+class _SyncFacades:
+    """Dict-like view that drives the async facades synchronously, so the
+    dispatch tests below keep reading as plain calls."""
+
+    def __getitem__(self, name):
+        facade = _ASYNC_FACADES[name]
+
+        @functools.wraps(facade)  # keeps inspect.signature() seeing the facade
+        def _sync(**kwargs):
+            return call_facade(facade, **kwargs)
+
+        return _sync
+
+    def items(self):
+        return _ASYNC_FACADES.items()
+
+    def keys(self):
+        return _ASYNC_FACADES.keys()
+
+    def __iter__(self):
+        return iter(_ASYNC_FACADES)
+
+    def __len__(self):
+        return len(_ASYNC_FACADES)
+
+
+FACADES = _SyncFacades()
 
 
 # ── surface shape ─────────────────────────────────────────────────────────────
