@@ -177,6 +177,10 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 A coverage test guarantees every capability of the historical 88-function surface is reachable through the facades; `JOBCONTEXT_LEGACY_TOOLS=1` restores the per-function surface if a client needs it.
 
+### WebMCP — the dashboard is itself an agent surface
+
+On the cloud dashboard, the same 12 tools are also registered as in-page **WebMCP** tools (`document.modelContext`, the W3C Web Machine Learning CG draft). An in-browser agent — ChatGPT desktop's built-in browser, Chrome's origin trial, Edge preview — can drive your whole workspace while you're on the site, signed in as you: no connector setup, no OAuth dance, no second tool surface. The bridge (`frontend/src/webmcp/`) fetches `tools/list` from `/mcp` and registers each tool verbatim, so it can never drift from what MCP clients see; calls ride the same-origin session cookie, and a CSRF guard ignores that cookie on cross-site `/mcp` requests so a hostile page can't ride your session. Security model, browser enablement (origin-trial tokens), and design notes: **[docs/webmcp.md](docs/webmcp.md)**.
+
 ### Architecture
 
 ```mermaid
@@ -292,6 +296,7 @@ Everything the code reads — env vars, `config.json` keys, feature flags, per-d
 | [docs/api-reference.md](docs/api-reference.md) | Every HTTP endpoint, schema, auth requirement, error code |
 | [docs/http-api.md](docs/http-api.md) | HTTP quick start, dashboard, LAN/phone mode, iOS Shortcut, API keys |
 | [docs/client-setup.md](docs/client-setup.md) | Connecting VS Code, Claude Desktop, ChatGPT, Cursor, Windsurf |
+| [docs/webmcp.md](docs/webmcp.md) | WebMCP bridge: in-browser agents driving the dashboard, CSRF model, browser enablement |
 | [docs/webmcp.md](docs/webmcp.md) | WebMCP bridge: the dashboard as a tool surface for in-browser agents |
 | [docs/generation.md](docs/generation.md) | Generation modes, provenance gate, personas, PDF export, feeding the system |
 | [docs/evals.md](docs/evals.md) | Three-layer eval framework, LLM-as-judge, nightly runs, CI gate |
@@ -321,7 +326,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 
 ### What's next
 
-Route document generation through the control plane (P1), automatic re-assessment on master-resume change (P2), per-entry checkpoint/resume for eval runs (so a deploy costs one entry, not the run), richer mobile capture (WebView escalation for authwalled pages), voice debriefs.
+Control-plane P3 scheduler (cron-style enqueuers for Oura autosync, weekly digest, follow-up nudges — document generation and per-row accounting/policy already run through the control plane as of P1/P2), automatic re-assessment on master-resume change, per-entry checkpoint/resume for eval runs (so a deploy costs one entry, not the run), richer mobile capture (WebView escalation for authwalled pages), voice debriefs. Tracked on the [roadmap board](https://github.com/JustLikeFrank3/jobContextMCP/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap).
 
 ---
 
