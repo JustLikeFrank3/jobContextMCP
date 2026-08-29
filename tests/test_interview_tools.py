@@ -139,3 +139,67 @@ class TestSaveInterviewPrep:
         content = (srv.INTERVIEW_PREP_FOLDER / "NETFLIX_PREP.md").read_text(encoding="utf-8")
         assert "v2 updated" in content
         assert "v1" not in content
+
+
+class TestSaveGetPrepRoundTrip:
+    """save_prep confirmed a write that get_prep could not retrieve — the
+    worst shape for a persistence bug (2026-08-28 report, BUG-4). Any saved
+    prep must be findable by company afterwards."""
+
+    def test_arbitrary_filename_round_trips(self, isolated_server):
+        # The exact filename from the live failure: no company name in it.
+        srv.save_interview_prep(
+            "Mercedes-Benz USA",
+            "HM round prep body",
+            filename="MBUSA_AI_Productization_Engineer_prep_2026-08-31_chatgpt_draft.md",
+        )
+        result = srv.get_existing_prep_file("Mercedes-Benz USA")
+        assert "HM round prep body" in result
+
+    def test_company_slug_prefixed_when_filename_lacks_company(self, isolated_server):
+        result = srv.save_interview_prep("Mercedes-Benz USA", "body", filename="HM_notes.md")
+        assert "MERCEDES_BENZ_USA_HM_notes.md" in result
+
+    def test_filename_already_naming_company_is_untouched(self, isolated_server):
+        result = srv.save_interview_prep(
+            "Mercedes-Benz USA", "body", filename="Mercedes-Benz USA HM prep.md"
+        )
+        assert "Mercedes-Benz USA HM prep.md" in result
+
+    def test_get_prep_matches_slugged_names(self, isolated_server):
+        # Read path alone must bridge punctuation: slugged file vs pretty query.
+        (srv.INTERVIEW_PREP_FOLDER).mkdir(parents=True, exist_ok=True)
+        (srv.INTERVIEW_PREP_FOLDER / "MERCEDES_BENZ_USA_INTERVIEW_PREP.md").write_text(
+            "slugged body", encoding="utf-8"
+        )
+        result = srv.get_existing_prep_file("Mercedes-Benz USA")
+        assert "slugged body" in result
+
+    def test_save_sanitizes_windows_illegal_characters(self, isolated_server):
+        srv.save_interview_prep("ACME", "body", filename="ACME <HM|prep>.md")
+        names = [p.name for p in srv.INTERVIEW_PREP_FOLDER.glob("*.md")]
+        assert names, "prep file was not saved"
+        for name in names:
+            assert not set('<>:"/\\|?*') & set(name), name
+
+
+class TestPrepContextWorkspaceSignal:
+    def test_prep_context_names_the_interviewer(self, isolated_server):
+        srv.log_person(
+            "Umesh Misra",
+            "hiring manager",
+            "Mercedes-Benz USA",
+            "Leads the AI productization group.",
+        )
+        out = srv.generate_interview_prep_context(
+            "Mercedes-Benz USA", "AI Productization Engineer", stage="hiring_manager"
+        )
+        assert "WORKSPACE SIGNAL" in out
+        assert "Umesh Misra" in out
+        assert "who the candidate is meeting" in out
+
+    def test_prep_context_without_signal_keeps_original_shape(self, isolated_server):
+        out = srv.generate_interview_prep_context("Stripe", "Staff Engineer")
+        assert "WORKSPACE SIGNAL" not in out
+        assert "who the candidate is meeting" not in out
+        assert "INTERVIEW PREP CONTEXT" in out
