@@ -245,6 +245,7 @@ save_interview_prep = interview.save_interview_prep
 log_interview = interviews.log_interview
 get_interviews = interviews.get_interviews
 get_interview_context = interviews.get_interview_context
+get_company_signal_context = interviews.get_company_signal_context
 
 scan_project_for_skills = project_scanner.scan_project_for_skills
 

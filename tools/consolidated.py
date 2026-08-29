@@ -76,8 +76,8 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "get_queue": (job_queue.get_job_queue, "List queued jobs."),
         "evaluate": (job_queue.evaluate_queued_job, "Evaluate a queued job against your profile."),
         "decide": (job_queue.decide_job, "Record an apply/skip decision."),
-        "assess": (fitment.assess_job_fitment, "Quick fitment assessment for a role."),
-        "full_assessment": (fitment.run_job_assessment, "Full structured job assessment."),
+        "assess": (fitment.assess_job_fitment, "Quick fitment assessment for a role — auto-includes workspace signal: known contacts, application events, scheduled interviews."),
+        "full_assessment": (fitment.run_job_assessment, "Full structured job assessment, conditioned on workspace signal (known interviewers, pipeline events); returns the existing saved assessment for the company+role unless force=True."),
         "save_assessment": (fitment.save_job_assessment, "Persist an assessment to the workspace."),
     },
     "job_search": {
@@ -117,9 +117,9 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "list": (interviews.get_interviews, "List logged interviews (filterable)."),
         "context": (interviews.get_interview_context, "Everything known about a company's process."),
         "upcoming": (interviews.get_upcoming_interviews, "Upcoming interviews."),
-        "prep_context": (interview.generate_interview_prep_context, "Build prep context for an interview."),
-        "save_prep": (interview.save_interview_prep, "Save a prep doc."),
-        "get_prep": (interview.get_existing_prep_file, "Read the existing prep doc for a company."),
+        "prep_context": (interview.generate_interview_prep_context, "Build prep context for an interview — auto-includes known interviewers, scheduled interviews, and prior in-room signal from the workspace."),
+        "save_prep": (interview.save_interview_prep, "Save a prep doc (the filename is company-slugged so get_prep finds it)."),
+        "get_prep": (interview.get_existing_prep_file, "Read existing prep docs for a company (punctuation-insensitive name match)."),
         "quick_reference": (interview.get_interview_quick_reference, "One-page interview quick reference."),
         "leetcode_cheatsheet": (interview.get_leetcode_cheatsheet, "LeetCode pattern cheatsheet."),
     },
@@ -339,10 +339,11 @@ async def applications(
     event_type: str | None = None,
     date: str | None = None,
     auto_save: bool | None = None,
+    force: bool | None = None,
     filename: str | None = None,
     content: str | None = None,
 ) -> str:
-    """Track and evaluate job applications: pipeline status, the evaluation queue, fitment assessments, and application events."""
+    """Track and evaluate job applications: pipeline status, the evaluation queue, fitment assessments, and application events. Assessments and evaluations automatically pull workspace signal — known contacts, logged events, scheduled interviews — so their output reflects the live pipeline, not just the JD."""
     params = locals()
     return await anyio.to_thread.run_sync(lambda: _run("applications", action, params))
 

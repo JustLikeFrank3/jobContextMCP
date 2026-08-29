@@ -455,6 +455,103 @@ def get_interview_context(company: str, role: str = "") -> str:  # NOSONAR
     return "\n".join(lines)
 
 
+def _companies_match(a: str, b: str) -> bool:
+    """Either name contains the other, case-insensitive ('Mercedes-Benz'
+    vs 'Mercedes-Benz USA' must match — records and queries disagree on
+    suffixes constantly)."""
+    al, bl = a.strip().lower(), b.strip().lower()
+    return bool(al) and bool(bl) and (al in bl or bl in al)
+
+
+def get_company_signal_context(company: str, role: str = "") -> str:
+    """Cross-domain workspace signal for one company: known contacts, the
+    tracked application's status and event history, and future-dated
+    interviews.
+
+    Injected server-side into assessment and prep generation so output is
+    conditioned on who the candidate will actually meet. A foreign MCP
+    client picks tools from names and descriptions alone and has no reason
+    to query the people domain before generating — correctness here cannot
+    depend on the client choosing to ask.
+
+    Returns "" when the workspace holds nothing for the company — safe to
+    unconditionally append to generator context.
+    """
+    import datetime as _dt
+
+    if not company or not company.strip():
+        return ""
+
+    sections: list[str] = []
+
+    people = _load_json(config.PEOPLE_FILE, {"people": []}).get("people", [])
+    contacts = [p for p in people if _companies_match(company, p.get("company", ""))]
+    if contacts:
+        sections.append("KNOWN CONTACTS AT THIS COMPANY:")
+        for p in contacts:
+            sections.append(f"▪ {p.get('name', '?')} — {p.get('relationship', '?')}")
+            if p.get("context"):
+                sections.append(f"  Background: {p['context']}")
+            if p.get("notes"):
+                sections.append(f"  Notes: {p['notes']}")
+        sections.append("")
+
+    apps = _load_json(config.STATUS_FILE, {"applications": []}).get("applications", [])
+    matches = [a for a in apps if _companies_match(company, a.get("company", ""))]
+    if role and len(matches) > 1:
+        rl = role.strip().lower()
+        exact = [a for a in matches if a.get("role", "").lower() == rl]
+        matches = exact or matches
+    for app in matches:
+        sections.append(
+            f"TRACKED APPLICATION: {app.get('role', '?')} — status: {app.get('status', '?')}"
+        )
+        if app.get("next_steps"):
+            sections.append(f"  Next steps: {app['next_steps']}")
+        if app.get("contact"):
+            sections.append(f"  Contact: {app['contact']}")
+        for ev in app.get("events", []):
+            note = f" — {ev['notes']}" if ev.get("notes") else ""
+            sections.append(f"  ▪ {ev.get('date', '?')[:10]} [{ev.get('type', '?')}]{note}")
+        sections.append("")
+
+    interviews = _load_json(config.INTERVIEWS_FILE, {"interviews": []}).get("interviews", [])
+    today = _dt.date.today()
+    scheduled = []
+    for i in interviews:
+        if not _companies_match(company, i.get("company", "")):
+            continue
+        try:
+            d = _dt.date.fromisoformat((i.get("interview_date") or "")[:10])
+        except ValueError:
+            continue
+        if d >= today:
+            scheduled.append((d, i))
+    if scheduled:
+        scheduled.sort(key=lambda t: t[0])
+        sections.append("SCHEDULED INTERVIEWS (already on the calendar):")
+        for d, i in scheduled:
+            with_part = f" with {i['interviewer']}" if i.get("interviewer") else ""
+            role_part = f" ({i['interviewer_role']})" if i.get("interviewer_role") else ""
+            sections.append(
+                f"▪ {d.isoformat()} — {i.get('interview_type', '?')}{with_part}{role_part}"
+            )
+        sections.append("")
+
+    if not sections:
+        return ""
+
+    header = [
+        f"──── WORKSPACE SIGNAL ({company}) ────",
+        "(Live pipeline state from the candidate's workspace. Condition your",
+        " output on it: address named interviewers by name, and match any",
+        " recommendation to the pipeline stage — an interview already on the",
+        " calendar means the question is how to win it, not whether to apply.)",
+        "",
+    ]
+    return "\n".join(header + sections).rstrip()
+
+
 def get_upcoming_interviews(days_ahead: int = 14) -> str:
     """Return interviews whose interview_date is on/after today, soonest first.
 
