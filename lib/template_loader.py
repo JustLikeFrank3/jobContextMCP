@@ -46,6 +46,34 @@ DEFAULT_TEMPLATE = "modern"
 DEFAULT_STYLE = "navy"
 
 
+def template_style_error(
+    template: str | None,
+    style: str | None,
+    cover_letter: bool = False,
+) -> str | None:
+    """Return an actionable error string for an unknown template/style, else None.
+
+    Single source of truth for template/style acceptance across the whole
+    document pipeline: generation (tools/generate.py), background submit
+    (tools/generate_async.py), and export (tools/export.py) all gate on this
+    same check, so nothing generation accepts can later be rejected by export.
+    Empty values pass — they mean "use the default".
+    """
+    valid_templates = VALID_CL_TEMPLATES if cover_letter else VALID_TEMPLATES
+    if template and template not in valid_templates:
+        label = "CL template" if cover_letter else "template"
+        return (
+            f"Error: unknown {label} {template!r}. "
+            f"Valid options: {sorted(valid_templates)} or leave empty for default."
+        )
+    if style and style not in VALID_STYLES:
+        return (
+            f"Error: unknown style {style!r}. "
+            f"Valid options: {sorted(VALID_STYLES)}."
+        )
+    return None
+
+
 def _load_theme_css(style: str) -> str:
     """Load and return the CSS custom property overrides for the given style."""
     theme_path = _THEMES_DIR / f"{style}.css"
