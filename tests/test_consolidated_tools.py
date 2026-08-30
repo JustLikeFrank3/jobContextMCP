@@ -75,9 +75,11 @@ def test_action_count_covers_legacy_surface():
     # a suite run but never read its outcome — pull path, read-only);
     # 97 → 98 when documents gained provenance (the truth gate recorded every
     # run but an agent in chat could never show its user the verdict —
-    # pull path, read-only).
+    # pull path, read-only); 98 → 100 when job_search gained ashby + recruitee
+    # board browsing (keyless public JSON boards, same shape as
+    # greenhouse/lever).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 98, f"action count changed: {total} — update this pin deliberately"
+    assert total == 100, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():
@@ -228,10 +230,10 @@ def test_chat_allowlist_matches_domain_names():
     assert set(CHAT_TOOL_ALLOWLIST) == set(FACADES)
 
 
-@pytest.mark.parametrize("flag,expected", [("", 12), ("1", 95)])
+@pytest.mark.parametrize("flag,expected", [("", 12), ("1", 97)])
 def test_server_surface_size(flag, expected, tmp_path):
-    """server.py registers 12 consolidated tools by default, 95 legacy ones
-    behind JOBCONTEXT_LEGACY_TOOLS=1.
+    """server.py registers 12 consolidated tools by default, 97 legacy ones
+    behind JOBCONTEXT_LEGACY_TOOLS=1 (95 + ashby + recruitee board search).
 
     Runs in a subprocess: re-importing server inside the test process would
     register the conftest autouse stubs (lambdas) as tools.
