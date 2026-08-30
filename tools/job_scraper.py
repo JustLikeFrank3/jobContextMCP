@@ -58,6 +58,7 @@ _JINA_BASE         = "https://r.jina.ai/"
 _SERPAPI_BASE      = "https://serpapi.com/search.json"
 _GREENHOUSE_BASE   = "https://boards-api.greenhouse.io/v1/boards"
 _LEVER_BASE        = "https://api.lever.co/v0/postings"
+_ASHBY_BASE        = "https://api.ashbyhq.com/posting-api/job-board"
 _HTTP_TIMEOUT      = 20  # seconds
 _UNKNOWN_ROLE      = "Unknown Role"
 _AUTO_QUEUED_HEADER = "─── AUTO-QUEUED ───"
@@ -79,6 +80,18 @@ def _strip_html(raw: str) -> str:
 def _is_linkedin_url(url: str) -> bool:
     """Return True if *url* is a LinkedIn URL."""
     return "linkedin.com" in (urlparse(url).hostname or "").lower()
+
+
+def _valid_board_slug(slug: str) -> bool:
+    """True if *slug* is safe to interpolate into a board-API URL.
+
+    Recruitee slugs become the request HOSTNAME (https://<slug>.recruitee.com),
+    so an unvalidated slug containing '/', '?', '@', or '.' redirects the
+    server-side fetch to an attacker-chosen host — an SSRF primitive from the
+    multi-tenant pod, with the response echoed back to the caller. Path-position
+    slugs (Ashby/Greenhouse/Lever) are lower stakes but get the same check.
+    """
+    return bool(re.fullmatch(r"[A-Za-z0-9-]{1,100}", slug or ""))
 
 
 def _fetch_linkedin_direct(url: str) -> str:  # NOSONAR
@@ -492,11 +505,15 @@ def search_jobs(  # NOSONAR
             "Get a free key at https://serpapi.com"
         )
 
+    # No "num" parameter: google_jobs doesn't support it (it belongs to the
+    # google web engine) and SerpAPI rejects the whole request with HTTP 400.
+    # Every search this tool made failed that way until 2026-08-30. The engine
+    # returns one page (~10 results); num_results trims the display below.
+    num_results = min(max(int(num_results), 1), 20)
     params: dict = {
         "engine":  "google_jobs",
         "q":       query,
         "api_key": api_key,
-        "num":     str(min(max(int(num_results), 1), 20)),
     }
     # SerpAPI location must be a real geographic place (e.g. "Seattle, WA").
     # "Remote" / "remote" is not a valid location — fold it into the query.
@@ -511,7 +528,19 @@ def search_jobs(  # NOSONAR
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPStatusError as exc:
-        return f"SerpAPI returned HTTP {exc.response.status_code}. Check your API key."
+        # Surface SerpAPI's own error body — a 400 is a rejected parameter,
+        # not a key problem, and "check your API key" on every status sent a
+        # real outage down a key-rotation rabbit hole.
+        status = exc.response.status_code
+        try:
+            detail = exc.response.json().get("error", "")
+        except Exception:  # noqa: BLE001 — non-JSON error body
+            detail = ""
+        if not isinstance(detail, str):
+            detail = ""
+        hint = " Check your API key." if status in (401, 403) else ""
+        detail_part = f": {detail}" if detail else ""
+        return f"SerpAPI returned HTTP {status}{detail_part}.{hint}"
     except httpx.HTTPError as exc:
         return f"SerpAPI request failed: {exc}"
 
@@ -768,8 +797,218 @@ def search_lever_jobs(  # NOSONAR
     return "\n".join(lines)
 
 
+def search_ashby_jobs(  # NOSONAR
+    company_slug: str,
+    query: str = "",
+    num_results: int = 20,
+    auto_queue: bool = False,
+) -> str:
+    """Browse open roles on a company's public Ashby job board. No API key required.
+
+    Ashby powers many startups' boards (Notion, Ramp, Linear, etc.). The
+    company_slug is the job-board name in their Ashby URL, e.g. for
+    https://jobs.ashbyhq.com/ramp the slug is 'ramp'.
+
+    Args:
+        company_slug: Company identifier on Ashby (e.g. 'ramp', 'linear').
+        query:        Optional keyword filter applied client-side against title
+                      and description (case-insensitive).
+        num_results:  Max results to display. Default 20.
+        auto_queue:   If True, queues every matched result immediately.
+    """
+    if not _valid_board_slug(company_slug):
+        return (
+            f"Invalid Ashby company slug '{company_slug}'. "
+            "Slugs contain only letters, digits, and hyphens — it appears in "
+            "their Ashby URL: https://jobs.ashbyhq.com/<slug>"
+        )
+    url = f"{_ASHBY_BASE}/{company_slug}"
+    try:
+        response = httpx.get(url, timeout=_HTTP_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return (
+                f"No Ashby board found for '{company_slug}'. "
+                "Check the company slug — it appears in their Ashby URL: "
+                "https://jobs.ashbyhq.com/<slug>"
+            )
+        return f"Ashby API returned HTTP {exc.response.status_code} for '{company_slug}'."
+    except httpx.HTTPError as exc:
+        return f"Failed to reach Ashby API: {exc}"
+
+    jobs: list[dict] = data.get("jobs", []) if isinstance(data, dict) else (data or [])
+    if not jobs:
+        return f"No open roles found on Ashby for '{company_slug}'."
+
+    # Client-side filter
+    if query:
+        q = query.lower()
+        jobs = [
+            j for j in jobs
+            if q in j.get("title", "").lower()
+            or q in _strip_html(j.get("descriptionHtml", "") or j.get("descriptionPlain", "")).lower()
+        ]
+        if not jobs:
+            return f"No Ashby roles matching '{query}' at '{company_slug}'."
+
+    company_display = company_slug.replace("-", " ").title()
+    header = f"═══ ASHBY: {company_display}"
+    if query:
+        header += f" | '{query}'"
+    header += " ═══"
+
+    lines = [header, ""]
+    queued_lines: list[str] = []
+
+    for i, job in enumerate(jobs[:num_results], 1):
+        title    = job.get("title", _UNKNOWN_ROLE)
+        loc      = job.get("location", "")
+        if job.get("isRemote"):
+            loc = f"{loc} (Remote)".strip() if loc else "Remote"
+        team     = job.get("team", "") or job.get("department", "")
+        emp_type = job.get("employmentType", "")
+        job_url  = job.get("jobUrl", "") or job.get("applyUrl", "")
+
+        lines.append(f"[{i}] {title}")
+        if loc:
+            lines.append(f"    Location:   {loc}")
+        if team:
+            lines.append(f"    Team:       {team}")
+        if emp_type:
+            lines.append(f"    Type:       {emp_type}")
+        if job_url:
+            lines.append(f"    Link:       {job_url}")
+        lines.append("")
+
+        if auto_queue:
+            description = _strip_html(job.get("descriptionHtml", "") or job.get("descriptionPlain", ""))[:8000]
+            result = _queue_job(
+                company=company_display,
+                role=title,
+                jd=description or title,
+                source=job_url,
+            )
+            queued_lines.append(f"  {title}: {result}")
+
+    if queued_lines:
+        lines.append(_AUTO_QUEUED_HEADER)
+        lines.extend(queued_lines)
+    else:
+        lines.append(_SCRAPE_JOB_URL_TIP)
+
+    return "\n".join(lines)
+
+
+def search_recruitee_jobs(  # NOSONAR
+    company_slug: str,
+    query: str = "",
+    num_results: int = 20,
+    auto_queue: bool = False,
+) -> str:
+    """Browse open roles on a company's public Recruitee careers site. No API key required.
+
+    Recruitee (Tellent) powers many European and growth-stage company boards.
+    The company_slug is the subdomain in their Recruitee URL, e.g. for
+    https://acme.recruitee.com the slug is 'acme'.
+
+    Args:
+        company_slug: Company subdomain on Recruitee (e.g. 'acme').
+        query:        Optional keyword filter applied client-side against title
+                      and description (case-insensitive).
+        num_results:  Max results to display. Default 20.
+        auto_queue:   If True, queues every matched result immediately.
+    """
+    if not _valid_board_slug(company_slug):
+        return (
+            f"Invalid Recruitee company slug '{company_slug}'. "
+            "Slugs contain only letters, digits, and hyphens — it is the "
+            "subdomain in their Recruitee URL: https://<slug>.recruitee.com"
+        )
+    url = f"https://{company_slug}.recruitee.com/api/offers/"
+    try:
+        response = httpx.get(url, timeout=_HTTP_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (403, 404):
+            return (
+                f"No Recruitee careers site found for '{company_slug}'. "
+                "Check the company slug — it is the subdomain in their Recruitee URL: "
+                "https://<slug>.recruitee.com"
+            )
+        return f"Recruitee API returned HTTP {exc.response.status_code} for '{company_slug}'."
+    except httpx.HTTPError as exc:
+        return f"Failed to reach Recruitee API: {exc}"
+
+    offers: list[dict] = data.get("offers", []) if isinstance(data, dict) else []
+    if not offers:
+        return f"No open roles found on Recruitee for '{company_slug}'."
+
+    # Client-side filter
+    if query:
+        q = query.lower()
+        offers = [
+            o for o in offers
+            if q in o.get("title", "").lower()
+            or q in _strip_html(o.get("description", "")).lower()
+        ]
+        if not offers:
+            return f"No Recruitee roles matching '{query}' at '{company_slug}'."
+
+    company_display = company_slug.replace("-", " ").title()
+    header = f"═══ RECRUITEE: {company_display}"
+    if query:
+        header += f" | '{query}'"
+    header += " ═══"
+
+    lines = [header, ""]
+    queued_lines: list[str] = []
+
+    for i, offer in enumerate(offers[:num_results], 1):
+        title    = offer.get("title", _UNKNOWN_ROLE)
+        loc      = offer.get("location", "") or ", ".join(
+            p for p in (offer.get("city", ""), offer.get("country", "")) if p
+        )
+        dept     = offer.get("department", "")
+        emp_type = offer.get("employment_type_code", "")
+        job_url  = offer.get("careers_url", "") or offer.get("careers_apply_url", "")
+
+        lines.append(f"[{i}] {title}")
+        if loc:
+            lines.append(f"    Location:   {loc}")
+        if dept:
+            lines.append(f"    Department: {dept}")
+        if emp_type:
+            lines.append(f"    Type:       {emp_type}")
+        if job_url:
+            lines.append(f"    Link:       {job_url}")
+        lines.append("")
+
+        if auto_queue:
+            description = _strip_html(offer.get("description", ""))[:8000]
+            result = _queue_job(
+                company=company_display,
+                role=title,
+                jd=description or title,
+                source=job_url,
+            )
+            queued_lines.append(f"  {title}: {result}")
+
+    if queued_lines:
+        lines.append(_AUTO_QUEUED_HEADER)
+        lines.extend(queued_lines)
+    else:
+        lines.append(_SCRAPE_JOB_URL_TIP)
+
+    return "\n".join(lines)
+
+
 def register(mcp) -> None:
     mcp.tool()(scrape_job_url)
     mcp.tool()(search_jobs)
     mcp.tool()(search_greenhouse_jobs)
     mcp.tool()(search_lever_jobs)
+    mcp.tool()(search_ashby_jobs)
+    mcp.tool()(search_recruitee_jobs)

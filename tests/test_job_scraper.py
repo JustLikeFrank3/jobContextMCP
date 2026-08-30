@@ -429,19 +429,60 @@ class TestSearchJobs:
         assert "Stripe" in result
         assert "Plaid" not in result
 
-    def test_serpapi_http_error(self, isolated_server, monkeypatch):
+    def test_num_never_sent_to_serpapi(self, isolated_server, monkeypatch):
+        """google_jobs has no 'num' parameter — SerpAPI 400s the whole request.
+        Every search failed that way until 2026-08-30; pin so it can't return."""
         from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "test-key")
+        captured = {}
+        mock = MagicMock()
+        mock.raise_for_status = MagicMock()
+        mock.json.return_value = _SAMPLE_SERPAPI_RESPONSE
+
+        def _capture(*a, **kw):
+            captured["params"] = kw.get("params", {})
+            return mock
+
+        monkeypatch.setattr("httpx.get", _capture)
+        srv.search_jobs("Engineer", num_results=5)
+        assert "num" not in captured["params"]
+
+    def _raise_status(self, status_code, body=None):
         import httpx
-        monkeypatch.setattr(cfg, "SERPAPI_KEY", "bad-key")
 
         def _raise(*a, **kw):
             mock_resp = MagicMock()
-            mock_resp.status_code = 401
-            raise httpx.HTTPStatusError("401", request=MagicMock(), response=mock_resp)
+            mock_resp.status_code = status_code
+            if body is None:
+                mock_resp.json.side_effect = ValueError("not json")
+            else:
+                mock_resp.json.return_value = body
+            raise httpx.HTTPStatusError(
+                str(status_code), request=MagicMock(), response=mock_resp)
 
-        monkeypatch.setattr("httpx.get", _raise)
+        return _raise
+
+    def test_serpapi_http_error(self, isolated_server, monkeypatch):
+        from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "bad-key")
+        monkeypatch.setattr("httpx.get", self._raise_status(401))
         result = srv.search_jobs("Engineer")
-        assert "401" in result or "API key" in result
+        assert "401" in result
+        assert "API key" in result
+
+    def test_serpapi_400_surfaces_error_body_without_blaming_the_key(
+        self, isolated_server, monkeypatch
+    ):
+        """A 400 is a rejected parameter, not a key problem — the old blanket
+        'Check your API key' message misdirected a real outage."""
+        from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "good-key")
+        monkeypatch.setattr("httpx.get", self._raise_status(
+            400, body={"error": "Unsupported `num` parameter."}))
+        result = srv.search_jobs("Engineer")
+        assert "400" in result
+        assert "Unsupported `num` parameter." in result
+        assert "API key" not in result
 
 
 # ── sample payloads ────────────────────────────────────────────────────────────
@@ -652,3 +693,232 @@ class TestSearchLeverJobs:
         result = srv.search_lever_jobs("plaid", num_results=1)
         assert "Staff Backend Engineer" in result
         assert "Data Engineer" not in result
+
+
+# ── search_ashby_jobs ──────────────────────────────────────────────────────────
+
+_ASHBY_RESPONSE = {
+    "jobs": [
+        {
+            "title": "Senior Software Engineer",
+            "location": "New York, NY",
+            "team": "Platform",
+            "department": "Engineering",
+            "employmentType": "FullTime",
+            "isRemote": False,
+            "jobUrl": "https://jobs.ashbyhq.com/ramp/1001",
+            "applyUrl": "https://jobs.ashbyhq.com/ramp/1001/application",
+            "descriptionHtml": "<p>Build the <strong>platform</strong> at Ramp.</p>",
+        },
+        {
+            "title": "Product Designer",
+            "location": "San Francisco, CA",
+            "team": "Design",
+            "employmentType": "FullTime",
+            "isRemote": True,
+            "jobUrl": "https://jobs.ashbyhq.com/ramp/1002",
+            "descriptionHtml": "<p>Design delightful experiences.</p>",
+        },
+    ]
+}
+
+
+class TestSearchAshbyJobs:
+    def test_returns_all_roles(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        result = srv.search_ashby_jobs("ramp")
+        assert "Senior Software Engineer" in result
+        assert "Product Designer" in result
+        assert "ASHBY: Ramp" in result
+
+    def test_query_filters_by_title(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        result = srv.search_ashby_jobs("ramp", query="engineer")
+        assert "Senior Software Engineer" in result
+        assert "Product Designer" not in result
+
+    def test_query_no_match_returns_message(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        result = srv.search_ashby_jobs("ramp", query="quantum chef")
+        assert "No Ashby roles matching" in result
+
+    def test_404_returns_slug_hint(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _status_error_mock(404))
+        result = srv.search_ashby_jobs("notacompany")
+        assert "notacompany" in result
+        assert "slug" in result.lower() or "ashby" in result.lower()
+
+    def test_empty_board_returns_message(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock({"jobs": []}))
+        result = srv.search_ashby_jobs("ramp")
+        assert "No open roles" in result
+
+    def test_remote_flag_shown(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        result = srv.search_ashby_jobs("ramp")
+        assert "Remote" in result
+
+    def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        srv.search_ashby_jobs("ramp", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        titles = [j["role"] for j in data["jobs"]]
+        assert "Senior Software Engineer" in titles
+        assert "Product Designer" in titles
+
+    def test_auto_queue_source_is_ashby_url(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        srv.search_ashby_jobs("ramp", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        sources = [j["source"] for j in data["jobs"]]
+        assert any("ashbyhq.com" in s for s in sources)
+
+    def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        srv.search_ashby_jobs("ramp", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        jd = data["jobs"][0]["jd"]
+        assert "<p>" not in jd
+        assert "<strong>" not in jd
+
+    def test_num_results_respected(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        result = srv.search_ashby_jobs("ramp", num_results=1)
+        assert "Senior Software Engineer" in result
+        assert "Product Designer" not in result
+
+    def test_network_error_handled(self, isolated_server, monkeypatch):
+        import httpx
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: (_ for _ in ()).throw(
+            httpx.ConnectError("timeout")
+        ))
+        result = srv.search_ashby_jobs("ramp")
+        assert "Failed" in result or "Ashby" in result
+
+    def test_hostile_slug_rejected_without_fetch(self, isolated_server, monkeypatch):
+        def _no_fetch(*a, **kw):
+            raise AssertionError("httpx.get must not be called for an invalid slug")
+        monkeypatch.setattr("httpx.get", _no_fetch)
+        result = srv.search_ashby_jobs("ramp/../other?x=")
+        assert "Invalid Ashby company slug" in result
+
+    def test_empty_slug_rejected(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
+        assert "Invalid Ashby company slug" in srv.search_ashby_jobs("")
+
+
+# ── search_recruitee_jobs ──────────────────────────────────────────────────────
+
+_RECRUITEE_RESPONSE = {
+    "offers": [
+        {
+            "title": "Backend Engineer",
+            "location": "Amsterdam, NL",
+            "department": "Engineering",
+            "employment_type_code": "fulltime",
+            "careers_url": "https://acme.recruitee.com/o/backend-engineer",
+            "careers_apply_url": "https://acme.recruitee.com/o/backend-engineer/c/new",
+            "description": "<p>Own our <strong>backend</strong> services.</p>",
+        },
+        {
+            "title": "Marketing Lead",
+            "city": "Berlin",
+            "country": "Germany",
+            "department": "Marketing",
+            "employment_type_code": "fulltime",
+            "careers_url": "https://acme.recruitee.com/o/marketing-lead",
+            "description": "<p>Lead marketing.</p>",
+        },
+    ]
+}
+
+
+class TestSearchRecruiteeJobs:
+    def test_returns_all_roles(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        result = srv.search_recruitee_jobs("acme")
+        assert "Backend Engineer" in result
+        assert "Marketing Lead" in result
+        assert "RECRUITEE: Acme" in result
+
+    def test_query_filters_by_title(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        result = srv.search_recruitee_jobs("acme", query="backend")
+        assert "Backend Engineer" in result
+        assert "Marketing Lead" not in result
+
+    def test_query_no_match_returns_message(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        result = srv.search_recruitee_jobs("acme", query="quantum chef")
+        assert "No Recruitee roles matching" in result
+
+    def test_404_returns_slug_hint(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _status_error_mock(404))
+        result = srv.search_recruitee_jobs("notacompany")
+        assert "notacompany" in result
+        assert "slug" in result.lower() or "recruitee" in result.lower()
+
+    def test_403_treated_as_missing_board(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _status_error_mock(403))
+        result = srv.search_recruitee_jobs("notacompany")
+        assert "notacompany" in result
+
+    def test_empty_board_returns_message(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock({"offers": []}))
+        result = srv.search_recruitee_jobs("acme")
+        assert "No open roles" in result
+
+    def test_city_country_location_fallback(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        result = srv.search_recruitee_jobs("acme")
+        assert "Berlin, Germany" in result
+
+    def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        srv.search_recruitee_jobs("acme", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        titles = [j["role"] for j in data["jobs"]]
+        assert "Backend Engineer" in titles
+        assert "Marketing Lead" in titles
+
+    def test_auto_queue_source_is_recruitee_url(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        srv.search_recruitee_jobs("acme", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        sources = [j["source"] for j in data["jobs"]]
+        assert any("recruitee.com" in s for s in sources)
+
+    def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        srv.search_recruitee_jobs("acme", auto_queue=True)
+        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        jd = data["jobs"][0]["jd"]
+        assert "<p>" not in jd
+        assert "<strong>" not in jd
+
+    def test_num_results_respected(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        result = srv.search_recruitee_jobs("acme", num_results=1)
+        assert "Backend Engineer" in result
+        assert "Marketing Lead" not in result
+
+    def test_network_error_handled(self, isolated_server, monkeypatch):
+        import httpx
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: (_ for _ in ()).throw(
+            httpx.ConnectError("timeout")
+        ))
+        result = srv.search_recruitee_jobs("acme")
+        assert "Failed" in result or "Recruitee" in result
+
+    def test_hostile_slug_rejected_without_fetch(self, isolated_server, monkeypatch):
+        """The slug is the request HOSTNAME here — an unvalidated slug is a
+        server-side request to an attacker-chosen host (SSRF)."""
+        def _no_fetch(*a, **kw):
+            raise AssertionError("httpx.get must not be called for an invalid slug")
+        monkeypatch.setattr("httpx.get", _no_fetch)
+        result = srv.search_recruitee_jobs("evil.com/pwn?")
+        assert "Invalid Recruitee company slug" in result
+
+    def test_empty_slug_rejected(self, isolated_server, monkeypatch):
+        monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
+        assert "Invalid Recruitee company slug" in srv.search_recruitee_jobs("")

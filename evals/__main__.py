@@ -5,6 +5,7 @@
     python -m evals suite [-n 5] [--entries GD-01,GD-03]
     python -m evals fixtures [-n 5] [--json PATH]
     python -m evals calibrate [-n 5] [--entries GD-01,GD-03] [--json PATH]
+    python -m evals consistency [-n 5] [--jd FILE --company X --role Y] [--json PATH]
 
 ``layer1`` runs against the ACTIVE workspace. Write-tagged cases are
 excluded unless ``--include-writes`` is passed — only use that in an
@@ -18,6 +19,10 @@ and reports per-class catch rates — needs a live judge, nothing else.
 ``calibrate`` judges the golden references N times each and computes
 per-dimension MAE against the blind human labels — the docs/evals.md
 calibration tables come from this, not from hand arithmetic.
+``consistency`` runs run_job_assessment N times on one fixed input
+(default: the committed synthetic Harborline JD) and scores cross-run
+agreement of the GAPS / RISKS bullets — needs a configured assessment
+provider, nothing else.
 """
 from __future__ import annotations
 
@@ -98,6 +103,19 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
 
     wanted = set(args.entries.split(",")) if args.entries else None
     report = run_calibration(n=args.n, entry_ids=wanted)
+    print(report.to_text())
+    if args.json:
+        Path(args.json).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"\nJSON report → {args.json}")
+    return 0
+
+
+def _cmd_consistency(args: argparse.Namespace) -> int:
+    from evals.consistency import run_consistency
+
+    report = run_consistency(
+        n=args.n, company=args.company, role=args.role, jd_file=args.jd,
+    )
     print(report.to_text())
     if args.json:
         Path(args.json).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
@@ -188,6 +206,19 @@ def main(argv: list[str] | None = None) -> int:
     p6.add_argument("--entries", default="", help="comma-separated GD ids (default: all)")
     p6.add_argument("--json", default="", help="write JSON report to this path")
     p6.set_defaults(fn=_cmd_calibrate)
+
+    p7 = sub.add_parser(
+        "consistency", help="cross-run GAPS/RISKS agreement for run_job_assessment"
+    )
+    p7.add_argument("-n", type=int, default=5, help="assessment runs on the same input")
+    p7.add_argument("--jd", default="",
+                    help="JD file (default: committed synthetic_jd.txt fixture)")
+    from evals.consistency import DEFAULT_COMPANY, DEFAULT_ROLE
+
+    p7.add_argument("--company", default=DEFAULT_COMPANY)
+    p7.add_argument("--role", default=DEFAULT_ROLE)
+    p7.add_argument("--json", default="", help="write JSON report to this path")
+    p7.set_defaults(fn=_cmd_consistency)
 
     args = parser.parse_args(argv)
     return args.fn(args)

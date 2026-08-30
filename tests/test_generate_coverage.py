@@ -245,6 +245,40 @@ def test_generate_resume_returns_context_fallback_when_no_client(isolated_server
     assert "GENERATE_RESUME" in out
 
 
+def test_generate_resume_rejects_unknown_style_before_any_generation(isolated_server, monkeypatch):
+    # Fail-fast pin: an unknown style must error out before the prompt is even
+    # built (i.e. before any LLM spend or saved .txt), naming the valid set.
+    monkeypatch.setattr(
+        generate, "_build_resume_user_message",
+        lambda *_: (_ for _ in ()).throw(AssertionError("prompt built for an invalid style")),
+    )
+    out = generate.generate_resume("Acme", "Engineer", "JD", style="ai-platform")
+    assert out.startswith("Error: unknown style 'ai-platform'")
+    assert "navy" in out and "classic" in out
+
+
+def test_generate_resume_rejects_unknown_template_before_any_generation(isolated_server, monkeypatch):
+    monkeypatch.setattr(
+        generate, "_build_resume_user_message",
+        lambda *_: (_ for _ in ()).throw(AssertionError("prompt built for an invalid template")),
+    )
+    out = generate.generate_resume("Acme", "Engineer", "JD", template="fancy")
+    assert out.startswith("Error: unknown template 'fancy'")
+    assert "modern" in out
+
+
+def test_generate_cover_letter_rejects_unknown_style_before_any_generation(isolated_server, monkeypatch):
+    monkeypatch.setattr(
+        generate, "_build_cover_letter_user_message",
+        lambda *_: (_ for _ in ()).throw(AssertionError("prompt built for an invalid style")),
+    )
+    out = generate.generate_cover_letter("Acme", "Engineer", "JD", cl_style="ai-platform")
+    assert out.startswith("Error: unknown style 'ai-platform'")
+    assert "navy" in out
+    err_template = generate.generate_cover_letter("Acme", "Engineer", "JD", cl_template="fancy")
+    assert err_template.startswith("Error: unknown CL template 'fancy'")
+
+
 def test_generate_resume_success_and_api_error_paths(isolated_server, monkeypatch):
     monkeypatch.setattr(generate, "_build_resume_user_message", lambda *_: "USER")
     monkeypatch.setattr(generate, "_openai_client", lambda: object())

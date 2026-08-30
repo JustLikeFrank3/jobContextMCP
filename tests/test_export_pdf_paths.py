@@ -25,3 +25,21 @@ def test_resume_and_cover_letter_pdfs_use_separate_folders(monkeypatch, tmp_path
     assert "09-Cover-Letter-PDFs" in cover_result
     assert (resume_folder / "03-Resume-PDFs" / "resume.pdf").exists()
     assert (resume_folder / "09-Cover-Letter-PDFs" / "letter.pdf").exists()
+
+
+def test_export_rejects_unknown_template_and_style_with_valid_options():
+    # Same gate as generation (lib.template_loader.template_style_error) —
+    # the error must name the valid set so an agent recovers in one step.
+    out = export.export_resume_pdf("whatever.txt", style="ai-platform")
+    assert out.startswith("Error: unknown style 'ai-platform'")
+    assert "navy" in out
+
+    out = export.export_resume_pdf("whatever.txt", template="fancy")
+    assert out.startswith("Error: unknown template 'fancy'")
+    assert "modern" in out
+
+    out = export.export_cover_letter_pdf("whatever.txt", style="ai-platform")
+    assert out.startswith("Error: unknown style 'ai-platform'")
+
+    out = export.export_cover_letter_pdf("whatever.txt", template="fancy")
+    assert out.startswith("Error: unknown CL template 'fancy'")
