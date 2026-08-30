@@ -84,6 +84,8 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "web": (job_scraper.search_jobs, "Search job boards on the open web."),
         "greenhouse": (job_scraper.search_greenhouse_jobs, "Search a company's Greenhouse board."),
         "lever": (job_scraper.search_lever_jobs, "Search a company's Lever board."),
+        "ashby": (job_scraper.search_ashby_jobs, "Search a company's Ashby board."),
+        "recruitee": (job_scraper.search_recruitee_jobs, "Search a company's Recruitee careers site."),
         "url": (job_scraper.scrape_job_url, "Scrape a specific job posting URL."),
     },
     "documents": {
@@ -350,7 +352,7 @@ async def applications(
 
 
 async def job_search(
-    action: Literal["web", "greenhouse", "lever", "url"],
+    action: Literal["web", "greenhouse", "lever", "ashby", "recruitee", "url"],
     query: str | None = None,
     location: str | None = None,
     num_results: int | None = None,
@@ -359,7 +361,7 @@ async def job_search(
     auto_queue: bool | None = None,
     page_text: str | None = None,
 ) -> str:
-    """Find job postings: open-web search, Greenhouse/Lever company boards, or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
+    """Find job postings: open-web search, a company board (Greenhouse, Lever, Ashby, Recruitee), or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
     params = locals()
     return await anyio.to_thread.run_sync(lambda: _run("job_search", action, params))
 

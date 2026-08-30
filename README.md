@@ -4,9 +4,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2169%20passing-brightgreen" alt="2169 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2198%20passing-brightgreen" alt="2198 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%2098%20actions-informational" alt="12 domain tools, 98 actions"/>
+  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%20100%20actions-informational" alt="12 domain tools, 100 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -16,7 +16,7 @@
 
 # jobContext
 
-The memory layer for your job search: a desktop app, a hosted cloud workspace, and a mobile companion built on one capability layer. Your resume, pipeline, interview history, outreach context, and portfolio live as structured context that persists across sessions — AI assistants (GitHub Copilot, Claude, Cursor, Windsurf, Zed) plug in over the [Model Context Protocol](https://modelcontextprotocol.io/), while the dashboard, CLI, and mobile app drive the same tools over HTTP. You never re-explain yourself from scratch.
+The memory layer for your job search: a desktop app, a hosted cloud workspace, and a mobile companion built on one capability layer. Your resume, pipeline, interview history, outreach context, and portfolio live as structured context that persists across sessions — AI assistants (GitHub Copilot, Claude, Cursor, Windsurf) plug in over the [Model Context Protocol](https://modelcontextprotocol.io/), in-browser agents (ChatGPT desktop's browser, Chrome origin trial, Edge preview) drive the dashboard itself over [WebMCP](docs/webmcp.md), and the dashboard, CLI, and mobile app drive the same tools over HTTP. You never re-explain yourself from scratch.
 
 Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (dual-write JSON audit trail), a React dashboard, WeasyPrint/LaTeX PDF export, and pluggable LLM generation (OpenAI, Azure AI Foundry, Anthropic Claude, or local Ollama — all BYOK, or run keyless and let your AI client do the writing).
 
@@ -27,7 +27,7 @@ Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLi
 | | What | For |
 |---|---|---|
 | **Desktop** | Tauri 2 app with embedded chat, one-click MCP connect, local SQLite | Daily driver — everything stays on your machine |
-| **Cloud** | Multi-tenant AKS deployment behind Entra ID ([jobcontext.ai](https://jobcontext.ai)) | Remote MCP for Claude.ai/Cursor, sync hub, always-on evals |
+| **Cloud** | Multi-tenant AKS deployment behind Entra ID ([jobcontext.ai](https://jobcontext.ai)) | Remote MCP for Claude.ai/Cursor + in-browser agents via WebMCP (ChatGPT, Chrome/Edge), sync hub, always-on evals |
 | **Mobile** | Expo companion app with share-sheet capture | Queue + assess jobs from your phone, Career Inbox |
 
 ---
@@ -38,15 +38,15 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 | | |
 |---|---|
-| 12 MCP tools | 98 domain actions behind them |
-| 2169 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 12 MCP tools | 100 domain actions behind them |
+| 2198 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
 | Azure AKS multi-tenant deployment | Three-layer eval framework with LLM-as-judge |
 | Journal-based desktop ⇄ cloud sync | Prometheus + Grafana observability |
 
-**Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · Zed · in-browser agents via WebMCP (ChatGPT desktop, Chrome origin trial, Edge) · HTTP clients · CLI automation
+**Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · in-browser agents via WebMCP (ChatGPT desktop, Chrome origin trial, Edge) · HTTP clients · CLI automation
 
 **Jump to:** [Desktop](#jobcontext-desktop) · [Mobile](#jobcontext-mobile--ios-beta-testflight) · [Dashboard & output](#output) · [Tool surface](#the-tool-surface) · [Truth & evals](#truth-evals--observability) · [Setup](#setup) · [Configuration](#configuration) · [Docs](#documentation) · [Releases](#recent-releases)
 
@@ -187,6 +187,7 @@ On the cloud dashboard, the same 12 tools are also registered as in-page **WebMC
 flowchart LR
     subgraph Clients
         AI["MCP clients<br/>(Copilot · Claude · Cursor)"]
+        WMCP["In-browser agents<br/>(ChatGPT · Chrome OT · Edge)"]
         WEB["Dashboard SPA + mobile app"]
         CLI["cli.py / scripts"]
     end
@@ -203,6 +204,7 @@ flowchart LR
         SYNC["Journal-based sync"]
     end
     AI -->|stdio / streamable-http| TOOLS
+    WMCP -->|"WebMCP bridge<br/>(document.modelContext)"| WEB
     WEB --> HTTP
     CLI --> TOOLS
     HTTP --> TOOLS
@@ -297,7 +299,6 @@ Everything the code reads — env vars, `config.json` keys, feature flags, per-d
 | [docs/http-api.md](docs/http-api.md) | HTTP quick start, dashboard, LAN/phone mode, iOS Shortcut, API keys |
 | [docs/client-setup.md](docs/client-setup.md) | Connecting VS Code, Claude Desktop, ChatGPT, Cursor, Windsurf |
 | [docs/webmcp.md](docs/webmcp.md) | WebMCP bridge: in-browser agents driving the dashboard, CSRF model, browser enablement |
-| [docs/webmcp.md](docs/webmcp.md) | WebMCP bridge: the dashboard as a tool surface for in-browser agents |
 | [docs/generation.md](docs/generation.md) | Generation modes, provenance gate, personas, PDF export, feeding the system |
 | [docs/evals.md](docs/evals.md) | Three-layer eval framework, LLM-as-judge, nightly runs, CI gate |
 | [docs/configuration.md](docs/configuration.md) | Every env var and config.json key |
@@ -322,7 +323,7 @@ Full details in the [CHANGELOG](CHANGELOG.md).
 - **v1.3.x** — Desktop ⇄ cloud sync (journal-based, LWW, file manifests), workspace export/import, per-user API keys, Oura OAuth + encryption at rest.
 - **v1.2** — jobContext rebrand, React SPA dashboard, QA environment, desktop app GA (signed macOS/Windows/Linux builds, auto-update).
 - **v1.0–v1.1** — Multi-tenant AKS with Entra ID, per-user isolation, OAuth proxy for remote MCP clients, control plane P0, Prometheus/Grafana monitoring, mobile companion app.
-- **Unreleased** — Per-tenant eval loop as a product surface (own golden set, A/B/C/D triage rulings that persist across runs, configurable judge with honest calibration labels, encrypted BYOK judge key, scoring visuals), versioned ground truth (every run stamps the master it measured; baselines, trends, and the page surface master changes instead of comparing across them silently), entailment critic with contradicted-finding enforcement in the revise pass, write durability + run visibility on the evals screen (failed writes keep your input and say so; launched runs always resolve to a visible state), backup delete propagation + restore-only-onto-empty-volume seed. Earlier: three-layer eval framework with adversarial LLM-as-judge, planted-error fixture corpus with measured per-class catch rates, blind human-label judge calibration, judge/generator model split, judge ⇄ provenance agreement tracking on the wallboard, server-side nightly eval runs, CI eval smoke gate, scraper guards against non-job pages, wallboard GPU rotation, `mcp<2` pin.
+- **Unreleased** — WebMCP bridge (the dashboard republishes the tool surface as `document.modelContext` tools, so in-browser agents — ChatGPT desktop's browser, Chrome origin trial, Edge preview — drive your pipeline with no connector setup), connector resilience (refresh-token scope injection so hosted connectors survive token expiry, deploy-survivable MCP sessions, honest unknown-`kid` key handling), document generation routed through the control plane with provenance stamps — row id, prompt digest, model — on every artifact (P1), control-plane execution policy as data + per-row spend accounting (P2), Grafana eval panels click through to per-run detail, desktop ⇄ cloud sync fixes (personal context and tone samples, HBDI profile, story deletion). Per-tenant eval loop as a product surface (own golden set, A/B/C/D triage rulings that persist across runs, configurable judge with honest calibration labels, encrypted BYOK judge key, scoring visuals), versioned ground truth (every run stamps the master it measured; baselines, trends, and the page surface master changes instead of comparing across them silently), entailment critic with contradicted-finding enforcement in the revise pass, write durability + run visibility on the evals screen (failed writes keep your input and say so; launched runs always resolve to a visible state), backup delete propagation + restore-only-onto-empty-volume seed. Earlier: three-layer eval framework with adversarial LLM-as-judge, planted-error fixture corpus with measured per-class catch rates, blind human-label judge calibration, judge/generator model split, judge ⇄ provenance agreement tracking on the wallboard, server-side nightly eval runs, CI eval smoke gate, scraper guards against non-job pages, wallboard GPU rotation, `mcp<2` pin.
 
 ### What's next
 
