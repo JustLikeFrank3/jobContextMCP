@@ -153,9 +153,14 @@ python -m evals judge --jd jd.txt --output resume.txt -n 5
 python -m evals fixtures -n 5                # planted-error corpus against the synthetic master
 python -m evals suite -n 5 --push            # full golden suite + push results to the server
 python -m evals push                         # re-push the newest results file
+python -m evals consistency -n 5             # cross-run GAPS/RISKS agreement for run_job_assessment
 ```
 
 `--push-url` defaults to `$JOBCONTEXT_EVAL_URL`, `--api-key` to `$JOBCONTEXT_API_KEY`. Write-tagged Layer 1 cases are excluded by default — only use `--include-writes` in an isolated namespace, never against live data.
+
+## Assessment consistency (`python -m evals consistency`)
+
+Motivated by the 2026-08-28 WebMCP bug report (BUG-3 secondary finding): four `run_job_assessment` runs on identical inputs produced divergent GAPS / RISKS lists, and one run uniquely surfaced the most decision-relevant gap. `evals/consistency.py` turns that into a tracked number: run the assessment N times on a fixed input (default: the committed synthetic Harborline JD, so the measurement basis is identical on every machine), extract the GAPS / RISKS bullets, cluster them across runs by token overlap (Jaccard ≥ 0.5 — rewordings of the same gap must not score as divergence), and report **mean pairwise overlap** of the clustered gap sets, **consensus rate** (gaps present in every run), and **singletons** — gaps surfaced by exactly one run, each listed in an alert because each is a finding the other runs would have missed. Assessments run with `auto_save=False` (nothing lands in 07-Job-Assessments or sync) and pass `force=True` once the regeneration guard exists, since post-guard, divergence only matters for deliberate regenerations. Thresholds (0.5 cluster similarity, 60% overlap alert) are design values, not yet validated against data — same status as the variance-table thresholds.
 
 ## Server-side runs
 
