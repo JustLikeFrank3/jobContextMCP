@@ -158,13 +158,13 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 97 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 103 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
 | `applications` | 10 | Pipeline status, evaluation queue, fitment assessments, application events |
-| `job_search` | 4 | Open-web search, Greenhouse/Lever boards, URL scraping |
-| `documents` | 13 | Resume/cover-letter generation, PDF + LaTeX export, diffs, strategy |
+| `job_search` | 6 | Open-web search (Google Jobs), Greenhouse/Lever/Ashby/Recruitee company boards, URL scraping |
+| `documents` | 17 | Resume/cover-letter generation (sync, or background submit-and-poll for short-timeout agents), truth-gate provenance report, PDF + LaTeX export, diffs, strategy |
 | `materials` | 9 | Master resume (read + audited in-place edit), saved materials, semantic search |
 | `interviews` | 9 | Debrief logging, company process context, prep docs, cheatsheets |
 | `people` | 10 | Contacts, referral chains, outreach drafting/review, cross-reference queue |
