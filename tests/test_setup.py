@@ -249,9 +249,31 @@ def test_check_workspace_shows_master_resume_word_count(monkeypatch, tmp_path):
 def test_check_workspace_shows_no_openai_when_missing(monkeypatch, tmp_path):
     import tools.setup as s
     _patch_here(monkeypatch, tmp_path, s)
+    # The check now falls back to probing the runtime resolution generation
+    # actually uses; pin that side too or the host's real env leaks in.
+    # (setup_workspace _reconfigures lib.config._cfg to the written keyless
+    # file, so the runtime side is already hermetic after it runs.)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     s.setup_workspace(**_MINIMAL)
     result = s.check_workspace()
     assert "Copilot-assisted" in result
+
+
+def test_check_workspace_reports_server_level_credentials(monkeypatch, tmp_path):
+    """Keyless tenant config + usable runtime credentials must not report
+    'no usable key' while generation succeeds (2026-08-28 report, BUG-5)."""
+    import lib.config as cfg
+    import tools.setup as s
+    _patch_here(monkeypatch, tmp_path, s)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    s.setup_workspace(**_MINIMAL)  # written config has no key of its own
+    # Patch AFTER setup_workspace: it _reconfigures lib.config._cfg to the
+    # keyless written file, which would clobber an earlier patch.
+    monkeypatch.setattr(cfg, "_cfg", {"llm_provider": "foundry", "azure_foundry_endpoint": "https://hub.openai.azure.com/"})
+    result = s.check_workspace()
+    assert "server-level foundry credentials active" in result
+    assert "auto-generation enabled" in result
 
 
 def test_check_workspace_shows_openai_when_key_set(monkeypatch, tmp_path):

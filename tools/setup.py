@@ -294,7 +294,23 @@ def check_workspace() -> str:  # NOSONAR
             if _ready:
                 lines.append(f"  AI:      {_provider} key configured (auto-generation enabled)")
             else:
-                lines.append("  AI:      no usable key — Copilot-assisted generation mode")
+                # The file having no key is not the whole story: generation
+                # resolves the active runtime config (base ConfigMap + env +
+                # workload identity), so a keyless tenant file can still
+                # generate on server-level credentials. Report what
+                # generation will actually do, and where the credential
+                # lives, instead of contradicting a run that just succeeded.
+                try:
+                    _rt_provider, _rt_ready = llm_generation_status()
+                except Exception:
+                    _rt_provider, _rt_ready = "unknown", False
+                if _rt_ready:
+                    lines.append(
+                        f"  AI:      no key in this config — server-level {_rt_provider} "
+                        "credentials active (auto-generation enabled)"
+                    )
+                else:
+                    lines.append("  AI:      no usable key — Copilot-assisted generation mode")
             lines.append(f"  LeetCode language: {cfg.get('leetcode_language', '(not set)')}")
         except Exception as e:
             lines.append(f"  ⚠ Could not parse config.json: {e}")
