@@ -21,6 +21,17 @@ divergence), then score agreement over the clustered gap identities:
                              BUG-3 signature, each one a finding the
                              other runs would have missed
 
+The bullet-similarity metric is validated against the only real
+divergence corpus available: the three surviving Mercedes-Benz USA
+assessments recovered from 07-Job-Assessments (the BUG-3 duplicates
+themselves, preserved by the very filename collisions the bug was
+about). Full-token Jaccard alone scored that corpus 0% agreement with
+12 singletons against a hand-labeled 6 clusters — production bullets
+carry so much per-run verbiage that whole-set overlap dilutes below any
+usable threshold. The composite in `_similarity` reproduces the
+hand-labeling exactly; the corpus lives on as a regression test in
+tests/test_consistency_eval.py.
+
 Assessments run with ``auto_save=False`` so N eval runs never land in
 07-Job-Assessments (or sync). Where the regeneration guard exists
 (``force`` param, fix/webmcp-bridge-bugs), it is passed ``True`` —
@@ -44,21 +55,50 @@ DEFAULT_JD_FILE = "synthetic_jd.txt"
 DEFAULT_COMPANY = "Harborline Technologies"
 DEFAULT_ROLE = "Senior Backend Engineer, Logistics Platform"
 
-# Two bullets are the same gap when their token Jaccard reaches this.
-# 0.5 merges rewordings ("No formal ML model training" vs "Lacks formal
-# ML model training background") while keeping distinct gaps apart.
-# Design value, not yet validated against data — like the variance
-# thresholds in evals/variance.py.
+# Two bullets are the same gap when _similarity reaches this. Calibrated
+# on the recovered Mercedes BUG-3 corpus (see module docstring): at 0.5
+# the composite merges every hand-labeled same-gap pair and none of the
+# distinct-gap pairs.
 CLUSTER_SIM_THRESHOLD = 0.5
 # Mean pairwise overlap below this → gap lists unstable. Design value.
 OVERLAP_ALERT_PCT = 60.0
 
-# Glue words only. Negations (no/not/without/lacks) are deliberately
-# kept: they carry the meaning of a gap bullet.
+# Glue words and discourse connectives. Negations (no/not/without/lacks)
+# are deliberately kept: they carry the meaning of a gap bullet.
 _STOPWORDS = frozenset(
     "a an the of to in on for and or with at by as is are be that this "
-    "from has have had was were will would".split()
+    "from has have had was were will would rather than while although "
+    "though whether however but may might some does do there about "
+    "beyond also only more most less".split()
 )
+
+# Assessment-boilerplate vocabulary (stemmed): present in gap bullets
+# regardless of topic ("no direct experience", "not mentioned in the
+# JD", "may limit fit for the role"), so it must never ANCHOR a same-gap
+# match — on the Mercedes corpus "no"+"experience" alone tied together
+# unrelated gaps. Still counted in the full-set Jaccard, where it is
+# diluted honestly; excluded only from the topical-anchor overlap.
+_GENERIC = frozenset(
+    "no not none experience mention direct explicit evidence limit lack "
+    "jd job description role candidate resume require requir strong "
+    "appear work fit".split()
+)
+
+
+def _stem(t: str) -> str:
+    """Crude suffix strip so plural/tense rewordings share tokens.
+
+    Consistency matters, not linguistic correctness: 'technologies' and
+    'technology' need not both become a real word, only the same token
+    as each other on both sides of a comparison.
+    """
+    if len(t) > 5 and t.endswith("ing"):
+        t = t[:-3]
+    elif len(t) > 4 and t.endswith("ed"):
+        t = t[:-2]
+    if len(t) > 3 and t.endswith("s") and not t.endswith("ss"):
+        t = t[:-1]
+    return t
 
 _GAPS_HEADER = re.compile(r"^##\s*GAPS\s*/?\s*RISKS.*$", re.IGNORECASE | re.MULTILINE)
 _NEXT_HEADER = re.compile(r"^##\s", re.MULTILINE)
@@ -89,8 +129,11 @@ def extract_bullets(section: str) -> list[str]:
 
 def _tokens(text: str) -> frozenset[str]:
     return frozenset(
-        t for t in re.findall(r"[a-z0-9]+", text.casefold())
+        stemmed
+        for t in re.findall(r"[a-z0-9]+", text.casefold())
         if len(t) > 1 and t not in _STOPWORDS
+        for stemmed in (_stem(t),)
+        if len(stemmed) > 1
     )
 
 
@@ -99,6 +142,42 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
         return 1.0
     union = len(a | b)
     return len(a & b) / union if union else 0.0
+
+
+def _topical(bullet_tokens: list[frozenset[str]], n_runs: int) -> frozenset[str]:
+    """Tokens that can anchor a same-gap match across this corpus.
+
+    A gap's identity lives in mid-rarity tokens: rare enough not to be
+    hedge boilerplate ("no direct experience"), common enough not to be
+    one run's idiosyncratic verbiage. df counts bullets containing the
+    token; the band is [2, n_runs+1] — a gap every run states once lands
+    at df ≈ n_runs, boilerplate at df ≈ bullets-per-run × n_runs.
+    """
+    df: dict[str, int] = {}
+    for toks in bullet_tokens:
+        for t in toks:
+            df[t] = df.get(t, 0) + 1
+    return frozenset(
+        t for t, c in df.items() if 2 <= c <= n_runs + 1 and t not in _GENERIC
+    )
+
+
+def _similarity(a: frozenset[str], b: frozenset[str], topical: frozenset[str]) -> float:
+    """Same-gap similarity: full-set Jaccard OR topical-anchor overlap.
+
+    Jaccard alone scores real (verbose) rewordings of one gap below any
+    usable threshold — unshared verbiage dilutes it. The second component
+    ignores everything but the corpus's topical tokens and scores overlap
+    against the smaller side, but only when at least two distinct topical
+    tokens are shared: one shared keyword ("formal") is coincidence, two
+    ("apache"+"technologies", "api"+"versioning") is a shared subject.
+    """
+    sim = _jaccard(a, b)
+    at, bt = a & topical, b & topical
+    shared = at & bt
+    if len(shared) >= 2:
+        sim = max(sim, len(shared) / min(len(at), len(bt)))
+    return sim
 
 
 @dataclass
@@ -128,13 +207,16 @@ class GapCluster:
 def cluster_gaps(
     runs: list[list[str]], threshold: float = CLUSTER_SIM_THRESHOLD
 ) -> list[GapCluster]:
-    """Greedy single-pass clustering of bullets across runs by token overlap.
+    """Greedy single-pass clustering of bullets across runs by _similarity.
 
     A bullet joins the cluster whose best member-similarity clears the
     threshold (highest wins); otherwise it founds a new cluster. Greedy is
     order-dependent in principle but stable in practice at these sizes
     (~5 bullets × ~5 runs), and deterministic for a given transcript —
-    which is what a tracked metric needs.
+    which is what a tracked metric needs. A bullet that genuinely spans
+    two gaps (the Mercedes corpus had an Apache+EDGE combined bullet)
+    joins whichever it matches best — single assignment, documented
+    limitation.
     """
     clusters: list[GapCluster] = []
     token_cache: dict[str, frozenset[str]] = {}
@@ -144,11 +226,17 @@ def cluster_gaps(
             token_cache[text] = _tokens(text)
         return token_cache[text]
 
+    topical = _topical(
+        [toks(b) for bullets in runs for b in bullets], n_runs=len(runs)
+    )
     for run_idx, bullets in enumerate(runs):
         for bullet in bullets:
             best, best_sim = None, 0.0
             for cluster in clusters:
-                sim = max(_jaccard(toks(bullet), toks(t)) for _, t in cluster.members)
+                sim = max(
+                    _similarity(toks(bullet), toks(t), topical)
+                    for _, t in cluster.members
+                )
                 if sim > best_sim:
                     best, best_sim = cluster, sim
             if best is not None and best_sim >= threshold:

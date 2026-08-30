@@ -140,6 +140,77 @@ def test_overlap_pct_identical_and_empty_runs():
     assert mean_pairwise_overlap_pct(cluster_gaps([[], []]), 2) == pytest.approx(100.0)
 
 
+def test_cluster_real_divergence_corpus_matches_hand_labeling():
+    """The recovered Mercedes BUG-3 corpus (names neutralized), hand-labeled.
+
+    Full-token Jaccard scored this 0% agreement / 12 singletons — verbose
+    production bullets dilute whole-set overlap below any threshold. The
+    composite similarity must reproduce the human clustering: apache,
+    edge, api/sdk-versioning, automotive-domain, ml-training, and one
+    true singleton (side-project scale). The combined apache+edge bullet
+    in run 3 may land in either of those two clusters.
+    """
+    run1 = [
+        "No explicit mention of experience with Apache technologies, which are "
+        "listed in the JD; may require ramp-up or clarification.",
+        "While the candidate has strong AI platform and integration experience, "
+        "there is no direct evidence of working specifically with EDGE computing "
+        "environments, which the JD highlights.",
+        "The role may expect formal experience with API versioning and API "
+        "management platforms; the resume shows API development but less "
+        "explicit API lifecycle/versioning governance.",
+        "No direct mention of Mercedes-Benz or automotive industry experience, "
+        "which may be a cultural or domain gap though mitigated by the "
+        "candidate's automotive affinity.",
+    ]
+    run2 = [
+        "No explicit mention of EDGE computing experience, which is a visible "
+        "keyword in the JD.",
+        "Limited direct experience with Apache technologies (e.g., Kafka is "
+        "mentioned but no Apache API management or SDKs explicitly).",
+        "No formal ML model training or data science experience; focus is on AI "
+        "platform and engineering rather than core ML.",
+        "Some AI platform experience is self-driven side projects rather than "
+        "formal enterprise AI product roles, which may raise questions about "
+        "scale or team collaboration.",
+    ]
+    run3 = [
+        "While the candidate has strong AI platform and engineering experience, "
+        "there is no explicit mention of direct experience with Apache "
+        "technologies (beyond Kafka) or EDGE computing, which are listed "
+        "keywords in the JD.",
+        "The job description's emphasis on SDK development is broad; the "
+        "candidate's experience is primarily API and microservices focused, "
+        "with less explicit mention of SDK packaging or versioning best "
+        "practices.",
+        "No direct mention of working within automotive industry environments "
+        "or Mercedes-Benz-specific systems, which could be a cultural or domain "
+        "knowledge gap.",
+        "Although the candidate has built AI platforms and pipelines, he does "
+        "not appear to have formal ML model training or data science "
+        "experience, which may limit fit if the role expects hands-on ML "
+        "modeling rather than platform engineering.",
+    ]
+    clusters = cluster_gaps([run1, run2, run3])
+    assert len(clusters) == 6
+
+    def cluster_of(text_fragment: str):
+        return next(
+            c for c in clusters if any(text_fragment in t for _, t in c.members)
+        )
+
+    assert cluster_of("Apache technologies, which are listed") is cluster_of("no Apache API management")
+    assert cluster_of("EDGE computing environments") is cluster_of("visible keyword")
+    assert cluster_of("API lifecycle/versioning governance") is cluster_of("SDK packaging")
+    assert cluster_of("automotive affinity") is cluster_of("Mercedes-Benz-specific systems")
+    assert cluster_of("core ML") is cluster_of("hands-on ML modeling")
+    scale = cluster_of("self-driven side projects")
+    assert scale.support == 1  # the one true singleton
+    combined = cluster_of("beyond Kafka")
+    assert combined in (cluster_of("Apache technologies, which are listed"),
+                        cluster_of("visible keyword"))
+
+
 # ── report metrics + alerts ───────────────────────────────────────────────────
 
 def _report_from_runs(runs: list[list[str]]) -> ConsistencyReport:
