@@ -34,7 +34,8 @@ commits — never tag those) → desktop-release workflow → rolling
   `capture_url`, `run_evals`, `certification.weekly`, `generate.*`
   (P1/P2 shipped 2026-08-10; P3 scheduler is backlog).
 - **Sync**: journal-based bidirectional (lib/sync.py), AFTER-triggers into
-  `sync_log`; upsert tables LWW by ts; file sync by sha256 manifest.
+  `sync_log`; upsert tables LWW by ts; file sync by sha256 manifest; file
+  deletes via `file_tombstones` rows (docs/persistence.md).
 - **Telemetry**: `lib/metrics.py` (no deps) → `GET /metrics` (Prometheus);
   in-cluster Prometheus+Grafana under `k8s/monitoring/` (dashboards as code).
 - **LLM calls** all funnel through `lib/openai_calls.create_chat_completion`
@@ -109,9 +110,13 @@ commits — never tag those) → desktop-release workflow → rolling
   unsigned); SmartScreen can still warn until the cert builds reputation.
   Filenames are sanitized at creation
   (`lib.helpers.sanitize_filename`) and sync file transfers skip-and-report
-  per file (`last_summary.files.errors`) — but the cloud has no file-delete
-  propagation, so a bad-named file already in a partition must be renamed
-  there by hand (kubectl exec + mv). Sync manifest rels are POSIX
+  per file (`last_summary.files.errors`). File deletions propagate via
+  `file_tombstones` rows riding the row journal (mtime ≤ deleted_at → stale
+  copy removed; newer → the file wins and the tombstone clears; `/files/put`
+  refuses stale re-uploads from pre-tombstone builds) — but the product's
+  delete surfaces only cover materials files, so a bad-named file elsewhere
+  in a partition still gets renamed by hand (kubectl exec + mv). Sync
+  manifest rels are POSIX
   (`rel.as_posix()`) — `str(rel)` forked every key on Windows and
   re-transferred the whole workspace both ways, littering the cloud with
   flat literal-backslash files (2026-07-13 incident; peers on old builds

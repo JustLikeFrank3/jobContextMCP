@@ -6,8 +6,10 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
 from lib import config
+from lib.helpers import sanitize_filename
 from lib.io import _load_json
 from transport.http.auth import require_api_key
 from .shared import html_page
@@ -87,6 +89,10 @@ def _materials_payload() -> dict:
     return {
         "folders": folders,
         "tracked_applications": len(tracked),
+        # For the associate control: which applications an untracked file can
+        # be attached to (deduped — one application per company+role, but the
+        # filename match is company-level).
+        "tracked_companies": sorted(set(tracked), key=str.lower),
         "optimized_resumes": folders.get("optimized_resumes", {}).get("count", 0),
         "cover_letters": folders.get("cover_letters", {}).get("count", 0),
         "resume_pdfs": folders.get("resume_pdfs", {}).get("count", 0),
@@ -118,6 +124,80 @@ async def materials_file(folder_key: str, file_name: str) -> FileResponse:
 
     media_type = "application/pdf" if target.suffix.lower() == ".pdf" else None
     return FileResponse(target, media_type=media_type)
+
+
+# ── untracked-file management ─────────────────────────────────────────────────
+#
+# The untracked bucket is optimized_resumes files whose name matches no
+# tracked application. Two verbs: associate (rename so the filename-based
+# grouping picks the file up — usually the right call, the file is fine and
+# merely orphaned) and delete. Both go through lib.sync's file tombstones so
+# the change survives sync instead of being resurrected by a peer.
+
+
+def _resolve_untracked(name: str) -> Path:
+    """Resolve a bare filename inside the optimized-resumes folder.
+
+    Single path component only: the untracked bucket is flat, so anything
+    that resolves outside the folder (or into a subdirectory) is rejected.
+    """
+    folder = _folder_path("optimized_resumes")
+    target = (folder / name).resolve()
+    if target.parent != folder.resolve():
+        raise HTTPException(status_code=404, detail="Invalid file path")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {name}")
+    return target
+
+
+def _delete_with_tombstone(target: Path) -> dict:
+    """Delete a workspace file, recording a sync tombstone when possible."""
+    from lib.db import get_connection
+    from lib.sync import active_sync_root, delete_synced_file
+
+    root = active_sync_root()
+    if root is None:
+        # No single-user sync root in this context (e.g. an admin API-key
+        # session on the hosted product) — those files never sync anyway.
+        target.unlink()
+        return {"deleted": True, "rel": None}
+    with get_connection() as con:
+        return delete_synced_file(con, root, target)
+
+
+class UntrackedDeleteRequest(BaseModel):
+    name: str
+
+
+class UntrackedAssociateRequest(BaseModel):
+    name: str
+    company: str
+
+
+@router.post("/materials/untracked/delete")
+async def materials_untracked_delete(request: UntrackedDeleteRequest) -> JSONResponse:
+    target = _resolve_untracked(request.name)
+    info = _delete_with_tombstone(target)
+    return JSONResponse({"status": "deleted", "name": request.name, "synced": bool(info["rel"])})
+
+
+@router.post("/materials/untracked/associate")
+async def materials_untracked_associate(request: UntrackedAssociateRequest) -> JSONResponse:
+    """Attach an untracked file to a tracked application by renaming it to
+    carry the company name. A rename is a delete plus a create as far as file
+    sync is concerned, so the old name gets a tombstone; the copy is written
+    first so a failure can't lose the document."""
+    company = request.company.strip()
+    if company not in _load_tracked_companies():
+        raise HTTPException(status_code=422, detail=f"Not a tracked application: {company}")
+    target = _resolve_untracked(request.name)
+    new_name = sanitize_filename(f"{company} - {request.name}")
+    dest = target.with_name(new_name)
+    if dest.exists():
+        raise HTTPException(status_code=409, detail=f"File already exists: {new_name}")
+    dest.write_bytes(target.read_bytes())
+    info = _delete_with_tombstone(target)
+    return JSONResponse({"status": "associated", "name": new_name, "synced": bool(info["rel"])})
 
 
 @router.get("/materials")

@@ -154,6 +154,10 @@ def fake_home(monkeypatch, tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    # On Windows the registry resolves %APPDATA% directly — without this the
+    # tests operate on the REAL AppData\Roaming (and mcp-connect would rewrite
+    # the user's actual Claude Desktop config).
+    monkeypatch.setenv("APPDATA", str(home / "AppData" / "Roaming"))
     if sys.platform not in ("darwin",) and os.name != "nt":
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     return home
@@ -416,7 +420,13 @@ def _make_export_zip(entries: dict[str, bytes]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         for name, data in entries.items():
-            zf.writestr(name, data)
+            # ZipInfo.__init__ swaps os.sep for "/" — on Windows that would
+            # silently turn a malicious "a\\b.txt" entry into a safe nested
+            # path before the server ever sees it. Restore the raw name so
+            # the archives these tests build are identical on every OS.
+            zi = zipfile.ZipInfo(name)
+            zi.filename = name
+            zf.writestr(zi, data)
     return buf.getvalue()
 
 
@@ -568,14 +578,22 @@ def test_import_workspace_allows_real_world_filenames(desktop_client, desktop_da
             "Frank's resume (v2, final) #1 @draft.pdf").read_bytes() == b"pdf"
 
 
-def test_import_workspace_rejects_absolute_and_contains_backslash_paths(desktop_client, desktop_data_dir_env, tmp_path):
-    # Absolute paths are always rejected.
+def test_import_workspace_rejects_absolute_paths(desktop_client, desktop_data_dir_env):
+    # Absolute paths are always rejected, on every OS.
     payload = _make_export_zip({"config.json": b"{}", "/etc/passwd": b"nope"})
     resp = desktop_client.post(
         "/desktop/import-workspace", content=payload,
         headers={"Content-Type": "application/zip"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX filename semantics — Windows correctly rejects backslashes "
+           "(see test_import_workspace_rejects_colons_on_windows)",
+)
+def test_import_workspace_backslash_is_literal_filename_on_posix(desktop_client, desktop_data_dir_env, tmp_path):
     # On POSIX a backslash is filename content, not a separator: the entry
     # becomes ONE literal file inside the data dir — no traversal happens.
     # (Windows rejects it outright — see the _IS_WINDOWS test.)
@@ -621,6 +639,11 @@ def test_import_workspace_still_rejects_dangerous_parts(desktop_client, desktop_
         assert resp.status_code == 422, evil
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX filename semantics — colons are illegal on NTFS and the "
+           "server correctly rejects them on Windows",
+)
 def test_import_workspace_allows_colons_and_backslashes_on_posix(desktop_client, desktop_data_dir_env):
     """Regression: scraped-job filenames embed URLs ("… https:--jobs… .md");
     colons/backslashes are legal on macOS/Linux and must import there."""
@@ -637,13 +660,28 @@ def test_import_workspace_rejects_colons_on_windows(desktop_client, desktop_data
     import transport.http.desktop.import_workspace as desktop_mod
 
     monkeypatch.setattr(desktop_mod, "_IS_WINDOWS", True)
-    for evil in ("db:alt.db", "a\\b.txt"):
-        payload = _make_export_zip({"config.json": b"{}", evil: b"nope"})
-        resp = desktop_client.post(
-            "/desktop/import-workspace", content=payload,
-            headers={"Content-Type": "application/zip"},
-        )
-        assert resp.status_code == 422, evil
+    payload = _make_export_zip({"config.json": b"{}", "db:alt.db": b"nope"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    assert resp.status_code == 422
+
+    # Backslash entries: Python's zipfile swaps os.sep for "/" when READING an
+    # archive, so on real Windows the server can never observe "a\b.txt" — it
+    # arrives as the safe nested path a/b.txt and extracts inside the root.
+    # The 422 guard is reachable only where os.sep != "\\" (the POSIX-CI
+    # simulation of a Windows host); assert whichever defense this OS exercises.
+    payload = _make_export_zip({"config.json": b"{}", "a\\b.txt": b"nope"})
+    resp = desktop_client.post(
+        "/desktop/import-workspace", content=payload,
+        headers={"Content-Type": "application/zip"},
+    )
+    if os.name == "nt":
+        assert resp.status_code == 200, resp.text
+        assert (desktop_data_dir_env / "a" / "b.txt").read_bytes() == b"nope"
+    else:
+        assert resp.status_code == 422
 
 
 # ── native open (files + URLs) ────────────────────────────────────────────────

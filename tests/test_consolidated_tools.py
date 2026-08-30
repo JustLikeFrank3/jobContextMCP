@@ -81,9 +81,12 @@ def test_action_count_covers_legacy_surface():
     # submit_cover_letter / generation_status (in-browser agents cap a tool
     # call at ~25s while generation takes 60–120s — the synchronous path can
     # never fit, so short-timeout clients enqueue on the control plane and
-    # poll for the finished document).
+    # poll for the finished document);
+    # 103 → 104 when materials gained delete (orphaned generated documents had
+    # no cleanup surface at all, and a filesystem delete was resurrected by
+    # the next sync pass — delete now records a file tombstone).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 103, f"action count changed: {total} — update this pin deliberately"
+    assert total == 104, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():

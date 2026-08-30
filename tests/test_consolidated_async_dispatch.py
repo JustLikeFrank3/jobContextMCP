@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import inspect
 import time
+from pathlib import Path
 
 import anyio
 import pytest
@@ -115,4 +116,6 @@ class TestContextvarsSurviveTheThreadHop:
         result = anyio.run(main)
         assert result == "captured"
         assert seen["oid"] == "tenant-async-test"
-        assert seen["folder"] == "/tmp/tenant-async-test"
+        # get_data_folder_override returns a Path, which stringifies with the
+        # host separator — compare as paths so this holds on Windows too.
+        assert Path(seen["folder"]) == Path("/tmp/tenant-async-test")
