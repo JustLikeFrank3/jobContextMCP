@@ -320,6 +320,8 @@ scrape_job_url = job_scraper.scrape_job_url
 search_jobs = job_scraper.search_jobs
 search_greenhouse_jobs = job_scraper.search_greenhouse_jobs
 search_lever_jobs = job_scraper.search_lever_jobs
+search_ashby_jobs = job_scraper.search_ashby_jobs
+search_recruitee_jobs = job_scraper.search_recruitee_jobs
 
 get_upcoming_interviews = interviews.get_upcoming_interviews
 
