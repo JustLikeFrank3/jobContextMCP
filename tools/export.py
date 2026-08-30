@@ -30,7 +30,10 @@ from jinja2 import Environment, FileSystemLoader
 import weasyprint
 
 from lib import config
-from lib.template_loader import render_resume_to_pdf as _render_resume_to_pdf, VALID_TEMPLATES, VALID_STYLES
+from lib.template_loader import (
+    render_resume_to_pdf as _render_resume_to_pdf,
+    template_style_error,
+)
 from lib.resume_parser import (
     _derive_footer_tag,
     _parse_resume_txt,
@@ -121,16 +124,9 @@ def export_resume_pdf(
     Returns:
         Path to the generated PDF, or an error string.
     """
-    if template and template not in VALID_TEMPLATES:
-        return (
-            f"Error: unknown template {template!r}. "
-            f"Valid options: {sorted(VALID_TEMPLATES)} or leave empty for default."
-        )
-    if style and style not in VALID_STYLES:
-        return (
-            f"Error: unknown style {style!r}. "
-            f"Valid options: {sorted(VALID_STYLES)}."
-        )
+    err = template_style_error(template, style)
+    if err:
+        return err
 
     opt_dir = config.get_active_optimized_resumes_dir()
 
@@ -192,19 +188,11 @@ def export_cover_letter_pdf(
     Returns:
         Path to the generated PDF.
     """
-    from lib.template_loader import (
-        render_cover_letter_to_pdf as _render_cl_to_pdf,
-        VALID_CL_TEMPLATES,
-        VALID_STYLES,
-    )
+    from lib.template_loader import render_cover_letter_to_pdf as _render_cl_to_pdf
 
-    if template and template not in VALID_CL_TEMPLATES:
-        return (
-            f"Error: unknown CL template {template!r}. "
-            f"Valid options: {sorted(VALID_CL_TEMPLATES)} or leave empty for default."
-        )
-    if style and style not in VALID_STYLES:
-        return f"Error: unknown style {style!r}. Valid options: {sorted(VALID_STYLES)}."
+    err = template_style_error(template, style, cover_letter=True)
+    if err:
+        return err
 
     cl_dir = config.get_active_cover_letters_dir()
 

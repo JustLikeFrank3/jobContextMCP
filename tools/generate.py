@@ -18,6 +18,7 @@ import re
 
 from lib import config
 from lib.io import _load_master_context
+from lib.template_loader import template_style_error as _template_style_error
 from lib.openai_calls import create_chat_completion, estimate_cost_usd
 from lib.story_retrieval import (
     RetrievalDiagnostics,
@@ -1441,7 +1442,18 @@ def generate_resume(
     - Bullets must use • (U+2022), not - or *.
     - Job header format: Title | Company, Location | Month YYYY - Month YYYY
     - Target length: 650–800 words (one tight page).
+
+    template: one of modern, executive, sidebar, portfolio (empty = legacy layout).
+    style: one of navy, slate, forest, warm, classic. Unknown values are rejected
+    here, before any generation, with the valid options — the same sets
+    export_resume_pdf accepts.
     """
+    # Fail fast on a bad template/style — before the LLM call — so nothing is
+    # generated and saved that the export step would then refuse to render.
+    err = _template_style_error(template, style)
+    if err:
+        return err
+
     user_msg = _build_resume_user_message(company, role, job_description)
     client = _openai_client()
 
@@ -1542,7 +1554,17 @@ def generate_cover_letter(
     - Salutation must be: Dear Hiring Manager,
     - Voice from the tone samples takes priority over the structure template.
     - Paragraph 4 is a short closer (1-2 sentences) written in the candidate's voice.
+
+    cl_template: one of modern, executive, sidebar, portfolio (empty = legacy
+    layout). cl_style: one of navy, slate, forest, warm, classic. Unknown values
+    are rejected here, before any generation, with the valid options — the same
+    sets export_cover_letter_pdf accepts. (The latex pipeline uses its own fixed
+    template and ignores both.)
     """
+    err = _template_style_error(cl_template, cl_style, cover_letter=True)
+    if err:
+        return err
+
     user_msg = _build_cover_letter_user_message(company, role, job_description)
     client = _openai_client()
 

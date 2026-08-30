@@ -23,7 +23,9 @@ from lib.template_loader import (
     list_templates,
     list_styles,
     list_cl_templates,
+    template_style_error,
     VALID_TEMPLATES,
+    VALID_CL_TEMPLATES,
     VALID_STYLES,
 )
 
@@ -134,6 +136,62 @@ class TestValidation:
     def test_none_style_falls_back_to_default(self):
         html = render_resume(_MINIMAL_RESUME, style=None)
         assert html  # just no crash
+
+
+# ── Generation/export parity via template_style_error ────────────────────────
+
+class TestTemplateStyleErrorParity:
+    """template_style_error is the shared gate for generation, background
+    submit, and export — so everything it accepts must actually render, and
+    its errors must name the valid options so an agent recovers in one step
+    (2026-08-30: an agent passed style 'ai-platform', generation accepted it,
+    export rejected it)."""
+
+    def test_empty_values_mean_default_and_pass(self):
+        assert template_style_error("", "") is None
+        assert template_style_error(None, None) is None
+        assert template_style_error("", "", cover_letter=True) is None
+
+    @pytest.mark.parametrize("template", sorted(VALID_TEMPLATES))
+    @pytest.mark.parametrize("style", sorted(VALID_STYLES))
+    def test_every_accepted_resume_combo_renders(self, template, style):
+        assert template_style_error(template, style) is None
+        html = render_resume(_MINIMAL_RESUME, template=template, style=style)
+        assert "Jane Doe" in html
+
+    @pytest.mark.parametrize("template", sorted(VALID_CL_TEMPLATES))
+    @pytest.mark.parametrize("style", sorted(VALID_STYLES))
+    def test_every_accepted_cl_combo_renders(self, template, style):
+        assert template_style_error(template, style, cover_letter=True) is None
+        html = render_cover_letter(_MINIMAL_CL, template=template, style=style)
+        assert len(html) > 100
+
+    def test_unknown_style_error_names_every_valid_option(self):
+        err = template_style_error("", "ai-platform")
+        assert err is not None
+        assert "ai-platform" in err
+        for style in VALID_STYLES:
+            assert style in err
+
+    def test_unknown_template_error_names_every_valid_option(self):
+        err = template_style_error("ai-platform", "navy")
+        assert err is not None
+        assert "ai-platform" in err
+        for template in VALID_TEMPLATES:
+            assert template in err
+
+    def test_unknown_cl_template_error_names_the_cl_set(self):
+        err = template_style_error("ai-platform", "navy", cover_letter=True)
+        assert err is not None
+        assert "CL template" in err
+        for template in VALID_CL_TEMPLATES:
+            assert template in err
+
+    def test_every_valid_style_has_a_theme_css_file(self):
+        for style in VALID_STYLES:
+            assert (tl._THEMES_DIR / f"{style}.css").exists(), (
+                f"style {style!r} is accepted but has no theme CSS"
+            )
 
 
 # ── Theme injection ──────────────────────────────────────────────────────────

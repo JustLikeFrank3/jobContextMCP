@@ -21,6 +21,7 @@ they answer in one round-trip instead of a poll loop.
 from __future__ import annotations
 
 from lib import work
+from lib.template_loader import template_style_error as _template_style_error
 from tools import generate_work
 
 _POLL_HINT = 'documents(action="generation_status", work_id={id})'
@@ -51,7 +52,14 @@ def submit_resume(
     Use this instead of generate_resume when tool calls are cut off by a
     client-side timeout (in-browser agents allow ~25s; generation takes
     60–120s).
+
+    template: one of modern, executive, sidebar, portfolio (empty = legacy
+    layout). style: one of navy, slate, forest, warm, classic.
     """
+    # Reject a bad template/style now, not minutes later inside the queued run.
+    err = _template_style_error(template, style)
+    if err:
+        return err
     return _submit(generate_work.KIND_RESUME, {
         "company": company,
         "role": role,
@@ -79,7 +87,14 @@ def submit_cover_letter(
     document. Use this instead of generate_cover_letter when tool calls are
     cut off by a client-side timeout (in-browser agents allow ~25s;
     generation takes 60–120s).
+
+    cl_template: one of modern, executive, sidebar, portfolio (empty = legacy
+    layout). cl_style: one of navy, slate, forest, warm, classic. (The latex
+    export_pipeline uses its own fixed template and ignores both.)
     """
+    err = _template_style_error(cl_template, cl_style, cover_letter=True)
+    if err:
+        return err
     return _submit(generate_work.KIND_COVER_LETTER, {
         "company": company,
         "role": role,
