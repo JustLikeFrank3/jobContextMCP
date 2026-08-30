@@ -467,7 +467,8 @@ class TestSearchJobs:
         monkeypatch.setattr(cfg, "SERPAPI_KEY", "bad-key")
         monkeypatch.setattr("httpx.get", self._raise_status(401))
         result = srv.search_jobs("Engineer")
-        assert "401" in result and "API key" in result
+        assert "401" in result
+        assert "API key" in result
 
     def test_serpapi_400_surfaces_error_body_without_blaming_the_key(
         self, isolated_server, monkeypatch
