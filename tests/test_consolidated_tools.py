@@ -72,9 +72,12 @@ def test_action_count_covers_legacy_surface():
     # only be read, never fixed, from MCP clients); 88 → 95 when the
     # certification domain landed (weekly work-search reports, 7 actions);
     # 96 → 97 when insights gained evals_results (an MCP client could trigger
-    # a suite run but never read its outcome — pull path, read-only).
+    # a suite run but never read its outcome — pull path, read-only);
+    # 97 → 98 when documents gained provenance (the truth gate recorded every
+    # run but an agent in chat could never show its user the verdict —
+    # pull path, read-only).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 97, f"action count changed: {total} — update this pin deliberately"
+    assert total == 98, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():

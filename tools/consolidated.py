@@ -100,6 +100,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "write_latex_section": (write_latex_section, "Write a LaTeX resume section file."),
         "customization_strategy": (fitment.get_customization_strategy, "Resume customization strategy for a role type."),
         "preview_story_retrieval": (generate.preview_story_retrieval, "Preview which stories generation would pull."),
+        "provenance": (generate.get_provenance_report, "Truth-gate trust report for the latest generated document (read-only)."),
     },
     "materials": {
         "read_master_resume": (resume.read_master_resume, "Read the master resume."),
@@ -364,7 +365,7 @@ async def job_search(
 
 
 async def documents(
-    action: Literal["generate_resume", "generate_resume_agent", "generate_cover_letter", "export_resume_pdf", "export_cover_letter_pdf", "export_resume_latex", "export_cover_letter_latex", "save_resume", "save_cover_letter", "diff", "write_latex_section", "customization_strategy", "preview_story_retrieval"],
+    action: Literal["generate_resume", "generate_resume_agent", "generate_cover_letter", "export_resume_pdf", "export_cover_letter_pdf", "export_resume_latex", "export_cover_letter_latex", "save_resume", "save_cover_letter", "diff", "write_latex_section", "customization_strategy", "preview_story_retrieval", "provenance"],
     company: str | None = None,
     role: str | None = None,
     job_description: str | None = None,
