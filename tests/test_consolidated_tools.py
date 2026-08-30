@@ -77,9 +77,13 @@ def test_action_count_covers_legacy_surface():
     # run but an agent in chat could never show its user the verdict —
     # pull path, read-only); 98 → 100 when job_search gained ashby + recruitee
     # board browsing (keyless public JSON boards, same shape as
-    # greenhouse/lever).
+    # greenhouse/lever); 100 → 103 when documents gained submit_resume /
+    # submit_cover_letter / generation_status (in-browser agents cap a tool
+    # call at ~25s while generation takes 60–120s — the synchronous path can
+    # never fit, so short-timeout clients enqueue on the control plane and
+    # poll for the finished document).
     total = sum(len(a) for a in DOMAINS.values())
-    assert total == 100, f"action count changed: {total} — update this pin deliberately"
+    assert total == 103, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():
