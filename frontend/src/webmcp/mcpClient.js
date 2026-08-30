@@ -109,3 +109,23 @@ export async function listTools(options) {
 export function callTool(name, args, options) {
   return mcpRequest('tools/call', { name, arguments: args || {} }, options)
 }
+
+/**
+ * Fetch the server's instructions string (the workflow contract MCP clients
+ * receive at connection time — "log every job you evaluate…"). Stateless
+ * transport answers `initialize` as a self-contained exchange, same as any
+ * other request here; no session id comes back and none is needed. Returns
+ * '' when the server declares none.
+ */
+export async function getInstructions(options) {
+  const result = await mcpRequest(
+    'initialize',
+    {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'jobcontext-webmcp-bridge', version: '1.0.0' },
+    },
+    options,
+  )
+  return (result && result.instructions) || ''
+}

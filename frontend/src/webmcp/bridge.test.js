@@ -3,18 +3,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./mcpClient.js', () => ({
   listTools: vi.fn(),
   callTool: vi.fn(),
+  getInstructions: vi.fn(),
 }))
 
-import { listTools, callTool } from './mcpClient.js'
+import { listTools, callTool, getInstructions } from './mcpClient.js'
 import {
   getModelContext,
   injectOriginTrialToken,
   toWebMcpTool,
+  provideInstructions,
   registerJobContextTools,
 } from './bridge.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getInstructions.mockResolvedValue('')
 })
 
 describe('getModelContext', () => {
@@ -137,5 +140,44 @@ describe('registerJobContextTools', () => {
     delete mc.unregisterTool
     const reg = await registerJobContextTools(mc)
     expect(() => reg.unregister()).not.toThrow()
+  })
+
+  it('briefs implementations that accept provideContext with the server instructions', async () => {
+    listTools.mockResolvedValue([{ name: 'a' }])
+    getInstructions.mockResolvedValue('LOG EVERY JOB')
+    const mc = fakeModelContext()
+    mc.provideContext = vi.fn()
+    await registerJobContextTools(mc)
+    expect(mc.provideContext).toHaveBeenCalledTimes(1)
+    const payload = mc.provideContext.mock.calls[0][0]
+    expect(payload.description).toBe('LOG EVERY JOB')
+    // Replacement-semantics implementations must get the identical surface
+    // back, so the registered tool defs ride along with the instructions.
+    expect(payload.tools.map((t) => t.name)).toEqual(['a'])
+  })
+
+  it('a failed instructions fetch does not break registration', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    listTools.mockResolvedValue([{ name: 'a' }])
+    getInstructions.mockRejectedValue(new Error('offline'))
+    const mc = fakeModelContext()
+    mc.provideContext = vi.fn()
+    const reg = await registerJobContextTools(mc)
+    expect(reg.names).toEqual(['a'])
+    expect(mc.provideContext).not.toHaveBeenCalled()
+  })
+})
+
+describe('provideInstructions', () => {
+  it('is a no-op without a provideContext implementation or instructions', () => {
+    expect(provideInstructions({}, 'text', [])).toBe(false)
+    expect(provideInstructions({ provideContext: vi.fn() }, '', [])).toBe(false)
+    expect(provideInstructions(null, 'text', [])).toBe(false)
+  })
+
+  it('a throwing provideContext is swallowed, not fatal', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const mc = { provideContext: vi.fn(() => { throw new Error('unsupported shape') }) }
+    expect(provideInstructions(mc, 'text', [])).toBe(false)
   })
 })

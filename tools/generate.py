@@ -1320,6 +1320,43 @@ def _provenance_note(
         return f"Provenance: ⚠ check skipped — {exc}"
 
 
+def _untracked_note(company: str, role: str) -> str:
+    """One-line nudge when generating for a company with no tracked application.
+
+    MCP clients get the logging contract from the server instructions, but
+    WebMCP delivers only the tool surface — an in-browser agent that generates
+    a document for an untracked company never learns it should log the
+    application, and the file lands in Materials' untracked bucket
+    (2026-08-30: ChatGPT generated a Travelers resume this way). A tool
+    RESULT is the one channel every client acts on, so the contract rides
+    here. Empty string when the company is tracked; fail-soft always — a
+    nudge is never worth failing a generation that succeeded.
+    """
+    try:
+        import json as _json  # noqa: PLC0415 — local: helper must never add import risk
+
+        if not config.STATUS_FILE.exists():
+            tracked: list[str] = []
+        else:
+            data = _json.loads(config.STATUS_FILE.read_text(encoding="utf-8"))
+            tracked = [str(a.get("company", "")).strip()
+                       for a in data.get("applications", []) if a.get("company")]
+        c = (company or "").strip().lower()
+        if not c:
+            return ""
+        for t in (t.lower() for t in tracked):
+            if c == t or c in t or t in c:
+                return ""
+    except Exception:  # noqa: BLE001
+        return ""
+    return (
+        f"\n  ⚠ {company} is not a tracked application — this file will list as "
+        f"untracked in Materials. Log it: applications(action=\"update\", "
+        f"company=\"{company}\", role=\"{role}\", status=\"applied\" or the "
+        "stage that fits)."
+    )
+
+
 def get_provenance_report(company: str = "", role: str = "") -> str:
     """Read-only trust report for the most recent generated document: the
     deterministic truth gate's durable verdict (claims traced against the
@@ -1470,7 +1507,7 @@ def generate_resume(
         f"  {prov_note}",
         f"  correction passes: {revisions}"
         " — full attestation: documents(action=\"provenance\")",
-    ])
+    ]) + _untracked_note(company, role)
 
 
 @_tracked(
@@ -1587,7 +1624,7 @@ def generate_cover_letter(
         f"  {prov_note}",
         f"  correction passes: {revisions}"
         " — full attestation: documents(action=\"provenance\")",
-    ])
+    ]) + _untracked_note(company, role)
 
 
 def preview_story_retrieval(role: str, job_description: str = "") -> str:

@@ -178,7 +178,11 @@ mcp = FastMCP(
         "You have direct filesystem access to the current user's resume materials, job hunt status, "
         "and interview prep files. Use the available tools to retrieve context before "
         "generating resumes, cover letters, prep docs, or assessments. "
-        "Always read the master resume before generating any application material."
+        "Always read the master resume before generating any application material. "
+        "Log every job you evaluate or generate materials for as an application "
+        "(applications tool, action='update') so documents and assessments attach "
+        "to the pipeline — files for companies without a tracked application "
+        "surface as untracked in Materials."
     ),
 )
 
