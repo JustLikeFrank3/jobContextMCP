@@ -86,6 +86,16 @@
         "impact_language": 3,
         "ats_readiness": 4
       }
+    },
+    {
+      "id": "GD-06",
+      "company": "Mercedes-Benz USA",
+      "role": "AI Productization Engineer",
+      "archetype": "Automotive enterprise, AI productization, MLOps/platform delivery",
+      "eval_signal": "Productization vocabulary (versioning, rollback, validation gates); Databricks/MLflow keyword coverage; no ML-modeling overclaim. Live interview target 2026-08 and the BUG-3 divergence case; consistency eval uses the same JD",
+      "reference_file": "Frank MacBride Resume - MBUSA AI Productization Engineer.txt",
+      "jd_file": "GD-06-mercedes-jd.txt",
+      "output_kind": "resume"
     }
   ]
 }

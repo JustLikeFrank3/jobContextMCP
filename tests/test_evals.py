@@ -1458,14 +1458,23 @@ def test_cli_suite_entry_filter(monkeypatch, tmp_path, capsys):
 
 def test_golden_manifest_loads():
     entries = golden_mod.load_golden()
-    assert [e.id for e in entries] == ["GD-01", "GD-02", "GD-03", "GD-04", "GD-05"]
+    assert [e.id for e in entries] == [
+        "GD-01", "GD-02", "GD-03", "GD-04", "GD-05", "GD-06",
+    ]
     assert all(e.output_kind == "resume" for e in entries)
 
 
 def test_golden_labels_are_valid_rubric_scores():
-    """Human calibration labels: every dimension present, integers 1-5."""
+    """Labels, where present, are complete and 1-5; the original blind-labeled
+    calibration set (GD-01..GD-05) must stay labeled — calibrate.py silently
+    skips unlabeled entries, so losing a label shrinks calibration coverage
+    without any test noticing otherwise. Newer entries may await labeling."""
+    calibration_set = {"GD-01", "GD-02", "GD-03", "GD-04", "GD-05"}
     for entry in golden_mod.load_golden():
-        assert entry.labels is not None, f"{entry.id} missing labels"
+        if entry.id in calibration_set:
+            assert entry.labels is not None, f"{entry.id} missing labels"
+        if entry.labels is None:
+            continue
         assert set(entry.labels) == set(judge_mod.JUDGE_DIMENSIONS)
         assert all(isinstance(v, int) and 1 <= v <= 5 for v in entry.labels.values())
 
