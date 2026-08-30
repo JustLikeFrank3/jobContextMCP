@@ -4,9 +4,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2198%20passing-brightgreen" alt="2198 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2217%20passing-brightgreen" alt="2217 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
-  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%20100%20actions-informational" alt="12 domain tools, 100 actions"/>
+  <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%20103%20actions-informational" alt="12 domain tools, 103 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
   <img src="https://img.shields.io/badge/Works%20with-Oura%20Ring-00B5C8" alt="Works with Oura Ring"/>
 </p>
@@ -38,8 +38,8 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 | | |
 |---|---|
-| 12 MCP tools | 100 domain actions behind them |
-| 2198 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 12 MCP tools | 103 domain actions behind them |
+| 2217 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
@@ -158,13 +158,13 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 97 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 103 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
 | `applications` | 10 | Pipeline status, evaluation queue, fitment assessments, application events |
-| `job_search` | 4 | Open-web search, Greenhouse/Lever boards, URL scraping |
-| `documents` | 13 | Resume/cover-letter generation, PDF + LaTeX export, diffs, strategy |
+| `job_search` | 6 | Open-web search (Google Jobs), Greenhouse/Lever/Ashby/Recruitee company boards, URL scraping |
+| `documents` | 17 | Resume/cover-letter generation (sync, or background submit-and-poll for short-timeout agents), truth-gate provenance report, PDF + LaTeX export, diffs, strategy |
 | `materials` | 9 | Master resume (read + audited in-place edit), saved materials, semantic search |
 | `interviews` | 9 | Debrief logging, company process context, prep docs, cheatsheets |
 | `people` | 10 | Contacts, referral chains, outreach drafting/review, cross-reference queue |

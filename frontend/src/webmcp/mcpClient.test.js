@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractResponse, mcpRequest, listTools, callTool, McpError } from './mcpClient.js'
+import { extractResponse, mcpRequest, listTools, callTool, getInstructions, McpError } from './mcpClient.js'
 
 // ── extractResponse ──────────────────────────────────────────────────────────
 
@@ -118,5 +118,25 @@ describe('callTool', () => {
     const body = JSON.parse(capture[0].options.body)
     expect(body.method).toBe('tools/call')
     expect(body.params).toEqual({ name: 'applications', arguments: { action: 'status' } })
+  })
+})
+
+describe('getInstructions', () => {
+  it('initializes and returns the server instructions string', async () => {
+    const capture = []
+    const out = await getInstructions({
+      fetchImpl: jsonFetch(() => ({ result: { instructions: 'Log every job.' } }), { capture }),
+    })
+    expect(out).toBe('Log every job.')
+    const body = JSON.parse(capture[0].options.body)
+    expect(body.method).toBe('initialize')
+    expect(body.params.protocolVersion).toBe('2025-06-18')
+  })
+
+  it('returns an empty string when the server declares none', async () => {
+    const out = await getInstructions({
+      fetchImpl: jsonFetch(() => ({ result: { serverInfo: { name: 'x' } } })),
+    })
+    expect(out).toBe('')
   })
 })

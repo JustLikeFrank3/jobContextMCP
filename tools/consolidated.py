@@ -39,6 +39,7 @@ from tools import (
     export,
     fitment,
     generate,
+    generate_async,
     github,
     hbdi,
     health,
@@ -89,9 +90,12 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "url": (job_scraper.scrape_job_url, "Scrape a specific job posting URL."),
     },
     "documents": {
-        "generate_resume": (generate.generate_resume, "Generate a tailored resume."),
-        "generate_resume_agent": (langgraph_pipeline.generate_resume_agent, "Agentic multi-step resume generation."),
-        "generate_cover_letter": (generate.generate_cover_letter, "Generate a tailored cover letter."),
+        "generate_resume": (generate.generate_resume, "Generate a tailored resume (synchronous, 60-120s — clients with short tool timeouts should use submit_resume instead)."),
+        "generate_resume_agent": (langgraph_pipeline.generate_resume_agent, "Agentic multi-step resume generation (synchronous, 60-120s — clients with short tool timeouts should use submit_resume instead)."),
+        "generate_cover_letter": (generate.generate_cover_letter, "Generate a tailored cover letter (synchronous, 60-120s — clients with short tool timeouts should use submit_cover_letter instead)."),
+        "submit_resume": (generate_async.submit_resume, "Queue resume generation in the background; returns a work id immediately. Use when generate_resume would exceed the client's tool timeout (in-browser agents allow ~25s)."),
+        "submit_cover_letter": (generate_async.submit_cover_letter, "Queue cover-letter generation in the background; returns a work id immediately. Use when generate_cover_letter would exceed the client's tool timeout (in-browser agents allow ~25s)."),
+        "generation_status": (generate_async.generation_status, "Poll a queued generation by work_id; returns the finished document with its attestation once the run succeeds (read-only)."),
         "export_resume_pdf": (export.export_resume_pdf, "Render a resume to PDF."),
         "export_cover_letter_pdf": (export.export_cover_letter_pdf, "Render a cover letter to PDF."),
         "export_resume_latex": (export.export_resume_latex, "Typeset a resume via LaTeX."),
@@ -367,7 +371,7 @@ async def job_search(
 
 
 async def documents(
-    action: Literal["generate_resume", "generate_resume_agent", "generate_cover_letter", "export_resume_pdf", "export_cover_letter_pdf", "export_resume_latex", "export_cover_letter_latex", "save_resume", "save_cover_letter", "diff", "write_latex_section", "customization_strategy", "preview_story_retrieval", "provenance"],
+    action: Literal["generate_resume", "generate_resume_agent", "generate_cover_letter", "submit_resume", "submit_cover_letter", "generation_status", "export_resume_pdf", "export_cover_letter_pdf", "export_resume_latex", "export_cover_letter_latex", "save_resume", "save_cover_letter", "diff", "write_latex_section", "customization_strategy", "preview_story_retrieval", "provenance"],
     company: str | None = None,
     role: str | None = None,
     job_description: str | None = None,
@@ -388,8 +392,9 @@ async def documents(
     file_b: str | None = None,
     role_type: str | None = None,
     section_filename: str | None = None,
+    work_id: int | None = None,
 ) -> str:
-    """Generate, export, and manage application documents: resumes and cover letters (text, PDF, LaTeX), diffs, and customization strategy."""
+    """Generate, export, and manage application documents: resumes and cover letters (text, PDF, LaTeX), diffs, and customization strategy. Long generations can run in the background: submit_resume / submit_cover_letter return a work_id, generation_status polls it."""
     params = locals()
     return await anyio.to_thread.run_sync(lambda: _run("documents", action, params))
 
