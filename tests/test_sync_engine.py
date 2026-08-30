@@ -7,6 +7,7 @@ them, then exchanges batches with export_changes/apply_changes.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -640,11 +641,15 @@ class _FakeHttp:
         fail_put_rel: str = "",
         cloud_contact: dict | None = None,
         contact_404: bool = False,
+        tombstones: dict | None = None,
     ):
         self.remote_files = remote_files
         self.fail_put_rel = fail_put_rel
         self.cloud_contact = dict(cloud_contact or {})
         self.contact_404 = contact_404
+        # None → the manifest response has no "tombstones" key at all,
+        # exactly like a cloud predating file tombstones.
+        self.tombstones = tombstones
         self.contact_posts: list[dict] = []
 
     def __enter__(self):
@@ -675,7 +680,10 @@ class _FakeHttp:
                 rel: {"size": len(data), "mtime": 1.0, "sha256": hashlib.sha256(data).hexdigest()}
                 for rel, data in self.remote_files.items()
             }
-            return _FakeResp({"manifest": manifest})
+            payload = {"manifest": manifest}
+            if self.tombstones is not None:
+                payload["tombstones"] = self.tombstones
+            return _FakeResp(payload)
         if path == "/api/sync/files/get":
             data = self.remote_files[json["rel"]]
             return _FakeResp({
@@ -987,3 +995,257 @@ def test_apply_changes_stamps_and_clears_the_lease(replicas):
         _apply(batch["changes"])
         row = _rows("SELECT applying, applying_since FROM sync_state WHERE id = 1")
         assert row == [{"applying": 0, "applying_since": ""}]
+
+
+# ── file deletion tombstones ───────────────────────────────────────────────────
+#
+# File sync has no delete leg of its own: manifests only describe what exists,
+# and the baseline forgets a deletion after one pass — so a deleted file was
+# re-pulled from (or re-pushed by) the peer forever. Deletions now journal a
+# file_tombstones row and both sides reconcile it against their tree.
+
+_ORPHAN = "workspace/01-Current-Optimized/Orphan_Resume.txt"
+
+
+def _touch(root, rel, content=b"doc", mtime=None):
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(content)
+    if mtime is not None:
+        os.utime(p, (mtime, mtime))
+    return p
+
+
+def test_delete_synced_file_removes_and_journals(replicas):
+    desktop, _ = replicas
+    with desktop:
+        target = _touch(desktop.root, _ORPHAN)
+        with db.get_connection() as con:
+            info = sync.delete_synced_file(con, desktop.root, target)
+        assert info == {"deleted": True, "rel": _ORPHAN}
+        assert not target.exists()
+        log = _rows("SELECT tbl, op, origin FROM sync_log WHERE tbl='file_tombstones'")
+        assert {"tbl": "file_tombstones", "op": "upsert", "origin": "local"} in log
+
+
+def test_file_delete_roundtrip_converges_on_absence(replicas):
+    """Delete on desktop → tombstone row travels → cloud reconcile removes the
+    cloud copy and stops advertising it."""
+    desktop, cloud = replicas
+    old = time.time() - 3600
+    with cloud:
+        cloud_copy = _touch(cloud.root, _ORPHAN, mtime=old)
+    with desktop:
+        target = _touch(desktop.root, _ORPHAN, mtime=old)
+        with db.get_connection() as con:
+            sync.delete_synced_file(con, desktop.root, target)
+        batch = _export()
+        assert any(c["tbl"] == "file_tombstones" for c in batch["changes"]), batch
+    with cloud:
+        _apply(batch["changes"])
+        with db.get_connection() as con:
+            assert _ORPHAN in sync.list_file_tombstones(con)
+            stats = sync.apply_file_tombstones(con, cloud.root)
+        assert stats["removed"] == [_ORPHAN]
+        assert not cloud_copy.exists()
+        assert _ORPHAN not in sync.file_manifest(cloud.root)
+
+
+def test_recreated_file_clears_the_tombstone(replicas):
+    """A file regenerated after its deletion must win: reconcile clears the
+    tombstone (journaled, so the clearing reaches the peer) instead of
+    deleting the new document."""
+    desktop, _ = replicas
+    with desktop:
+        target = _touch(desktop.root, _ORPHAN)
+        with db.get_connection() as con:
+            sync.delete_synced_file(con, desktop.root, target)
+        first = _export()
+        time.sleep(0.02)
+        recreated = _touch(desktop.root, _ORPHAN, content=b"regenerated")
+        with db.get_connection() as con:
+            stats = sync.apply_file_tombstones(con, desktop.root)
+        assert stats["cleared"] == [_ORPHAN]
+        assert recreated.read_bytes() == b"regenerated"
+        with db.get_connection() as con:
+            assert sync.list_file_tombstones(con) == {}
+        second = _export(since=first["last_id"])
+        assert any(
+            c["tbl"] == "file_tombstones" and c["op"] == "delete" for c in second["changes"]
+        ), second
+
+
+def test_peer_tombstones_delete_stale_files_without_becoming_rows(replicas):
+    """The manifest's tombstone list is a file-level safety net (for rows a
+    replica missed on an old build): stale copies go, files newer than the
+    deletion stay, and no local row is ever written from it."""
+    desktop, _ = replicas
+    with desktop:
+        stale = _touch(desktop.root, "notes.md", mtime=time.time() - 3600)
+        fresh = _touch(desktop.root, "fresh.md")
+        peer = {
+            "notes.md": {"sha256": "", "deleted_at": sync._now_ts()},
+            "fresh.md": {"sha256": "", "deleted_at": "2020-01-01T00:00:00.000000Z"},
+        }
+        with db.get_connection() as con:
+            stats = sync.apply_file_tombstones(con, desktop.root, peer)
+        assert stats["removed"] == ["notes.md"]
+        assert not stale.exists() and fresh.exists()
+        with db.get_connection() as con:
+            assert sync.list_file_tombstones(con) == {}
+
+
+def test_tombstone_rels_cannot_escape_the_root(replicas):
+    """rels arrive from the peer via row sync and feed an unlink — traversal,
+    absolute, drive-qualified, and backslash forms must never resolve."""
+    desktop, _ = replicas
+    outside = desktop.root.parent / "victim.txt"
+    outside.write_text("keep me", encoding="utf-8")
+    evil_ts = sync._now_ts()
+    evil = {
+        "../victim.txt": {"sha256": "", "deleted_at": evil_ts},
+        "a/../../victim.txt": {"sha256": "", "deleted_at": evil_ts},
+        "/etc/passwd": {"sha256": "", "deleted_at": evil_ts},
+        "C:/victim.txt": {"sha256": "", "deleted_at": evil_ts},
+        "": {"sha256": "", "deleted_at": evil_ts},
+    }
+    with desktop:
+        with db.get_connection() as con:
+            stats = sync.apply_file_tombstones(con, desktop.root, evil)
+        assert stats["removed"] == []
+        assert outside.exists()
+
+
+def test_retention_prunes_ancient_tombstones(replicas):
+    desktop, _ = replicas
+    with desktop:
+        with db.get_connection() as con:
+            con.execute(
+                "INSERT INTO file_tombstones (rel, sha256, deleted_at) "
+                "VALUES ('long-gone.md', '', '2020-01-01T00:00:00.000000Z')"
+            )
+        with db.get_connection() as con:
+            stats = sync.apply_file_tombstones(con, desktop.root)
+        assert stats["pruned"] == 1
+        with db.get_connection() as con:
+            assert sync.list_file_tombstones(con) == {}
+
+
+def test_strip_tombstoned_entries_blocks_stale_but_not_recreated():
+    tomb = {"gone.md": {"sha256": "", "deleted_at": sync._now_ts()}}
+    stale = {"size": 1, "mtime": time.time() - 3600, "sha256": "x"}
+    recreated = {"size": 1, "mtime": time.time() + 3600, "sha256": "y"}
+    assert sync.strip_tombstoned_entries(
+        {"gone.md": stale, "keep.md": stale}, tomb
+    ) == {"keep.md": stale}
+    assert "gone.md" in sync.strip_tombstoned_entries({"gone.md": recreated}, tomb)
+
+
+def test_run_sync_applies_cloud_tombstones_from_manifest(replicas, monkeypatch):
+    """A tombstone arriving only in the manifest response (row missed while on
+    an old build) still deletes the stale local copy — and the file must not
+    be pushed back afterwards."""
+    desktop, _ = replicas
+    with desktop:
+        stale = _touch(desktop.root, "orphan.md", mtime=time.time() - 3600)
+        http = _FakeHttp(
+            {}, tombstones={"orphan.md": {"sha256": "", "deleted_at": sync._now_ts()}}
+        )
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert not stale.exists()
+        assert summary["files"]["tombstones"] == {"removed": 1, "cleared": 0, "pruned": 0}
+        # Deleted before the local manifest is built, so it can't push back.
+        assert "orphan.md" not in _stored_baseline()
+
+
+def test_run_sync_never_repulls_a_copy_its_tombstone_supersedes(replicas, monkeypatch):
+    """Old-cloud scenario: the cloud can't reconcile server-side and keeps
+    advertising the deleted file. The deleting side must not pull it back —
+    this was the original resurrection loop (baseline forgets after one pass)."""
+    desktop, _ = replicas
+    with desktop:
+        target = _touch(desktop.root, "orphan.md", mtime=time.time() - 3600)
+        with db.get_connection() as con:
+            sync.delete_synced_file(con, desktop.root, target)
+        # The fake cloud still has the copy (manifest mtime=1.0 → ancient) and
+        # sends no "tombstones" key at all, like a build predating them.
+        http = _FakeHttp({"orphan.md": b"doc"})
+        sync_client = _wire_fake_sync(monkeypatch, desktop.root, http)
+
+        summary = sync_client.run_sync()
+
+        assert summary["status"] == "ok", summary
+        assert summary["files"]["pull"] == 0
+        assert not (desktop.root / "orphan.md").exists()
+
+
+def test_files_manifest_endpoint_reconciles_and_reports_tombstones(replicas, monkeypatch):
+    """The cloud reconciles inside /files/manifest — the client pushes rows
+    before requesting it, so a deletion leaves the manifest in the same pass."""
+    import asyncio
+
+    from transport.http.routes import sync as sync_routes
+
+    desktop, _ = replicas
+    with desktop:
+        monkeypatch.setattr(sync_routes, "_user_root", lambda: desktop.root)
+        stale = _touch(desktop.root, "doc.md", mtime=time.time() - 3600)
+        with db.get_connection() as con:
+            con.execute(
+                "INSERT INTO file_tombstones (rel, sha256, deleted_at) VALUES (?, ?, ?)",
+                ("doc.md", "", sync._now_ts()),
+            )
+
+        out = asyncio.run(sync_routes.sync_files_manifest(user=None))
+
+        assert not stale.exists()
+        assert "doc.md" not in out["manifest"]
+        assert "doc.md" in out["tombstones"]
+
+
+def test_files_put_endpoint_refuses_stale_content_but_accepts_recreation(replicas, monkeypatch):
+    """The guard against old-build peers re-pushing a deleted file: content
+    older than the tombstone is refused (success-shaped, so their
+    skip-and-report loop stays quiet); newer content is a deliberate
+    recreation — stored, and the tombstone clears."""
+    import asyncio
+    import base64 as b64
+
+    from transport.http.routes import sync as sync_routes
+
+    desktop, _ = replicas
+    with desktop:
+        monkeypatch.setattr(sync_routes, "_user_root", lambda: desktop.root)
+        with db.get_connection() as con:
+            con.execute(
+                "INSERT INTO file_tombstones (rel, sha256, deleted_at) VALUES (?, ?, ?)",
+                ("doc.md", "", sync._now_ts()),
+            )
+
+        out = asyncio.run(sync_routes.sync_files_put(
+            sync_routes.FilePut(
+                rel="doc.md",
+                content_b64=b64.b64encode(b"stale copy").decode("ascii"),
+                mtime=time.time() - 3600,
+            ),
+            user=None,
+        ))
+        assert out["status"] == "tombstoned"
+        assert not (desktop.root / "doc.md").exists()
+
+        out = asyncio.run(sync_routes.sync_files_put(
+            sync_routes.FilePut(
+                rel="doc.md",
+                content_b64=b64.b64encode(b"recreated").decode("ascii"),
+                mtime=time.time() + 60,
+            ),
+            user=None,
+        ))
+        assert out["status"] == "stored"
+        assert (desktop.root / "doc.md").read_bytes() == b"recreated"
+        with db.get_connection() as con:
+            assert sync.list_file_tombstones(con) == {}

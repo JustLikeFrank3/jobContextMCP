@@ -105,9 +105,19 @@ async def sync_contact(
 async def sync_files_manifest(
     user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
 ) -> dict:
-    from lib.sync import file_manifest
+    from lib.db import get_connection
+    from lib.sync import apply_file_tombstones, file_manifest, list_file_tombstones
 
-    return {"manifest": file_manifest(_user_root())}
+    root = _user_root()
+    with get_connection() as con:
+        # The client pushes rows (its step 2) before requesting this manifest
+        # (step 3), so tombstones it just sent reconcile here — the deleted
+        # file leaves this manifest within the same pass. The tombstone list
+        # rides along for the client's file-level safety net; old clients
+        # read only "manifest" and ignore the extra key.
+        apply_file_tombstones(con, root)
+        tombstones = list_file_tombstones(con)
+    return {"manifest": file_manifest(root), "tombstones": tombstones}
 
 
 class FileRef(BaseModel):
@@ -149,7 +159,26 @@ async def sync_files_put(
     request: FilePut,
     user: Annotated[User, Depends(require_authenticated_user)],  # noqa: ARG001
 ) -> dict:
+    from lib.db import get_connection
+    from lib.sync import tombstone_epoch
+
     target = _resolve_rel(request.rel)
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT deleted_at FROM file_tombstones WHERE rel = ?", (request.rel,)
+        ).fetchone()
+        if row is not None:
+            if request.mtime <= tombstone_epoch({"deleted_at": row[0]}):
+                # A peer on a build without tombstone rows re-pushing the copy
+                # this tombstone deleted — storing it would resurrect the file
+                # on every replica. Answer success-shaped so old clients'
+                # skip-and-report loop stays quiet; the file is simply gone.
+                return {"status": "tombstoned", "rel": request.rel}
+            # Content newer than the deletion was deliberately recreated on
+            # the peer: the file wins, and clearing the tombstone journals so
+            # the clearing propagates.
+            con.execute("DELETE FROM file_tombstones WHERE rel = ?", (request.rel,))
+            con.commit()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(base64.b64decode(request.content_b64))
     if request.mtime:

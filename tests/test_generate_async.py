@@ -36,6 +36,19 @@ class TestSubmit:
         assert row["status"] == "queued"
         assert row["inputs"]["export_pipeline"] == "html"
 
+    def test_submit_resume_rejects_unknown_style_without_enqueueing(self, isolated_server):
+        # A bad style must fail at submit time with the valid options — not
+        # minutes later inside the queued 60–120s run.
+        out = generate_async.submit_resume("Acme", "Staff Eng", "jd", style="ai-platform")
+        assert out.startswith("Error: unknown style 'ai-platform'")
+        assert "navy" in out
+        assert not [r for r in work.list_items() if r["kind"] == generate_work.KIND_RESUME]
+
+    def test_submit_cover_letter_rejects_unknown_template_without_enqueueing(self, isolated_server):
+        out = generate_async.submit_cover_letter("Acme", "Staff Eng", "jd", cl_template="fancy")
+        assert out.startswith("Error: unknown CL template 'fancy'")
+        assert not [r for r in work.list_items() if r["kind"] == generate_work.KIND_COVER_LETTER]
+
     def test_submitted_inputs_execute_against_the_real_signature(self, isolated_server):
         """The dispatcher runs fn(**inputs) — a submit that records a key the
         generator doesn't accept fails at execution time, not enqueue time.

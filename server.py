@@ -234,6 +234,7 @@ update_application = job_hunt.update_application
 read_master_resume = resume.read_master_resume
 update_master_resume = resume.update_master_resume
 list_existing_materials = resume.list_existing_materials
+delete_material = resume.delete_material
 read_existing_resume = resume.read_existing_resume
 read_reference_file = resume.read_reference_file
 
