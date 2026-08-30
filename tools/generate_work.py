@@ -138,7 +138,20 @@ def tracked(
                 return fn(*args, **kwargs)
             artifacts = row.get("artifacts") or {}
             if row.get("status") == "succeeded" and "result" in artifacts:
-                return str(artifacts["result"])
+                result = str(artifacts["result"])
+                # Handled failures come back as ✗-prefixed strings with
+                # status "succeeded" (the generator reported, not raised) —
+                # stamping those with an audit line would dress an error up
+                # as an attested success. Leave them untouched.
+                if result.lstrip().startswith("✗"):
+                    return result
+                # Surface the audit trail on real successes (failures already
+                # name their row): an agent relaying this response can show
+                # its user the run went through the control plane, not around it.
+                return (
+                    f"{result}\n"
+                    f"  control plane: work item #{row.get('id')} ({kind}) — durable audit row"
+                )
             return (
                 f"✗ Generation failed (work item {row.get('id')}): "
                 f"{row.get('error') or 'no result recorded'}"

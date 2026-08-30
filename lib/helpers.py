@@ -15,6 +15,14 @@ def sanitize_filename(name: str) -> str:
     return cleaned or "untitled"
 
 
+def normalize_for_match(text: str) -> str:
+    """Lowercase alphanumerics only, for punctuation-insensitive name
+    matching ('Mercedes-Benz USA' ↔ 'MERCEDES_BENZ_USA_prep.md'). A write
+    path and its read path must use the same rule or files written with a
+    client-chosen name become invisible to retrieval."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
 def _build_story_entry(stories: list, story: str, tags: list, people: list, title: str) -> dict:
     existing_ids = [s.get("id") for s in stories if isinstance(s.get("id"), int)]
     next_id = max(existing_ids) + 1 if existing_ids else 1

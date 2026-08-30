@@ -245,6 +245,7 @@ save_interview_prep = interview.save_interview_prep
 log_interview = interviews.log_interview
 get_interviews = interviews.get_interviews
 get_interview_context = interviews.get_interview_context
+get_company_signal_context = interviews.get_company_signal_context
 
 scan_project_for_skills = project_scanner.scan_project_for_skills
 
@@ -280,6 +281,7 @@ write_latex_section = export.write_latex_section
 generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter
 preview_story_retrieval = generate.preview_story_retrieval
+get_provenance_report = generate.get_provenance_report
 
 log_person = people.log_person
 get_people = people.get_people

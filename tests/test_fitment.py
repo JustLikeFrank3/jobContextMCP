@@ -33,10 +33,14 @@ class TestAssessJobFitmentPersona:
         expected = PersonaService.get("faang_technical").to_prompt_block()
         assert expected in out
 
-    def test_unknown_persona_emits_warning_not_crash(self, isolated_server):
+    def test_unknown_persona_rejected_with_valid_set(self, isolated_server):
+        # A silent fallback ships a persona the caller never asked for; the
+        # rejection carries the valid values so an agent can self-correct.
         out = srv.assess_job_fitment("Stripe", "Staff Engineer", JD, persona="nonexistent")
-        assert "PERSONA LENS" in out
-        assert "warning" in out.lower()
+        assert out.startswith("✗")
+        assert "Available:" in out
+        assert "default" in out
+        assert "FITMENT ASSESSMENT" not in out
 
 
 class TestEvaluateQueuedJobPersona:
@@ -108,16 +112,12 @@ class TestRunJobAssessmentPersona:
         assert PersonaService.get("executive_polish").to_prompt_block() in out
 
     @pytest.mark.live_llm
-    def test_unknown_persona_warning_and_auto_save(self, isolated_server, monkeypatch):
+    def test_unknown_persona_rejected_before_llm_and_save(self, isolated_server, monkeypatch):
         from lib import config
 
         monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
 
         fake_client = MagicMock()
-        fake_response = MagicMock()
-        fake_response.choices = [MagicMock(message=MagicMock(content="FITMENT SCORE: 6/10"))]
-        fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
-        fake_client.chat.completions.create.return_value = fake_response
 
         with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
             out = srv.run_job_assessment(
@@ -128,10 +128,10 @@ class TestRunJobAssessmentPersona:
             )
 
         saved = fitment.config.get_active_job_assessments_dir() / "run_job_assessment" / "ACME-AI AI Platform Engineer - Fitment Assessment.md"
-        assert "persona warning:" in out
-        assert "Saved job assessment" in out
-        assert saved.exists()
-        assert saved.read_text(encoding="utf-8") == "FITMENT SCORE: 6/10"
+        assert out.startswith("✗")
+        assert "Available:" in out
+        fake_client.chat.completions.create.assert_not_called()
+        assert not saved.exists()
 
     @pytest.mark.live_llm
     def test_ai_role_includes_ai_evidence_in_user_message(self, isolated_server, monkeypatch):
@@ -302,3 +302,137 @@ class TestFitmentCoverageExtras:
             out = fitment.run_job_assessment("Stripe", "Staff Engineer", JD, auto_save=False)
 
         assert out == "✗ OpenAI API error: rate limited"
+
+
+class TestWorkspaceSignalInjection:
+    """The assessment path must consult the workspace server-side — a foreign
+    MCP client generated interviewer-blind output because nothing pulled the
+    people domain for it (2026-08-28 report, BUG-1)."""
+
+    def _seed_workspace(self):
+        srv.log_person(
+            "Umesh Misra",
+            "hiring manager",
+            "Mercedes-Benz USA",
+            "Leads the AI productization group.",
+            notes="Interview confirmed for 2099-08-31 2:00 PM ET.",
+        )
+        srv.update_application("Mercedes-Benz USA", "AI Productization Engineer", "interviewing")
+
+    def test_assess_includes_workspace_signal(self, isolated_server):
+        self._seed_workspace()
+        out = srv.assess_job_fitment("Mercedes-Benz USA", "AI Productization Engineer", JD)
+        assert "WORKSPACE SIGNAL" in out
+        assert "Umesh Misra" in out
+        assert "hiring manager" in out
+
+    def test_assess_without_workspace_data_omits_signal_block(self, isolated_server):
+        out = srv.assess_job_fitment("Stripe", "Staff Engineer", JD)
+        assert "WORKSPACE SIGNAL" not in out
+
+    def test_signal_includes_future_interviews_and_events(self, isolated_server):
+        self._seed_workspace()
+        srv.log_application_event(
+            "Mercedes-Benz USA", "AI Productization Engineer", "recruiter_contact",
+            notes="Recruiter confirmed HM round.",
+        )
+        srv.log_interview(
+            company="Mercedes-Benz USA",
+            role="AI Productization Engineer",
+            interview_date="2099-08-31 14:00",
+            interview_type="hiring_manager",
+            interviewer="Umesh Misra",
+            interviewer_role="Hiring Manager",
+        )
+        from tools.interviews import get_company_signal_context
+        block = get_company_signal_context("Mercedes-Benz USA", "AI Productization Engineer")
+        assert "SCHEDULED INTERVIEWS" in block
+        assert "2099-08-31" in block
+        assert "recruiter_contact" in block
+
+    def test_signal_matches_company_name_variants(self, isolated_server):
+        # Record says 'Mercedes-Benz', query says 'Mercedes-Benz USA' — records
+        # and queries disagree on suffixes constantly.
+        srv.log_person("Umesh Misra", "hiring manager", "Mercedes-Benz", "Leads the group.")
+        from tools.interviews import get_company_signal_context
+        assert "Umesh Misra" in get_company_signal_context("Mercedes-Benz USA")
+
+    @pytest.mark.live_llm
+    def test_full_assessment_prompt_carries_interviewer(self, isolated_server, monkeypatch):
+        from lib import config
+
+        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
+        self._seed_workspace()
+
+        fake_client = MagicMock()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content="FITMENT SCORE: 9/10"))]
+        fake_response.usage = None
+        fake_client.chat.completions.create.return_value = fake_response
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
+            srv.run_job_assessment(
+                "Mercedes-Benz USA", "AI Productization Engineer", JD, auto_save=False,
+            )
+
+        user_msg = fake_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        assert "WORKSPACE SIGNAL" in user_msg
+        assert "Umesh Misra" in user_msg
+
+
+class TestAssessmentReuse:
+    """One role produced four near-identical metered assessments in the first
+    live bridge run — regeneration must be a deliberate act (BUG-3)."""
+
+    def test_existing_assessment_returned_without_regenerating(self, isolated_server):
+        srv.save_job_assessment(
+            "Mercedes-Benz USA",
+            "FITMENT SCORE: 9/10 (prior run)",
+            filename="Mercedes-Benz USA AI Productization Engineer - Fitment Assessment.md",
+        )
+        out = srv.run_job_assessment("Mercedes-Benz USA", "AI Productization Engineer", JD)
+        assert "Existing assessment" in out
+        assert "FITMENT SCORE: 9/10 (prior run)" in out
+        assert "force=True" in out
+
+    def test_dedupe_is_punctuation_insensitive(self, isolated_server):
+        srv.save_job_assessment(
+            "ACME/AI",
+            "prior content",
+            filename="ACME-AI Staff Engineer - Fitment Assessment.md",
+        )
+        out = srv.run_job_assessment("ACME/AI", "Staff Engineer", JD)
+        assert "Existing assessment" in out
+
+    def test_different_role_does_not_match(self, isolated_server):
+        srv.save_job_assessment(
+            "ACME",
+            "prior content",
+            filename="ACME Staff Engineer - Fitment Assessment.md",
+        )
+        # Offline stub → falls through to the context pack, proving no reuse hit.
+        out = srv.run_job_assessment("ACME", "Engineering Manager", JD)
+        assert "Existing assessment" not in out
+
+    @pytest.mark.live_llm
+    def test_force_regenerates_over_existing(self, isolated_server, monkeypatch):
+        from lib import config
+
+        monkeypatch.setitem(config._cfg, "openai_api_key", "sk-real-test-key")
+        srv.save_job_assessment(
+            "ACME",
+            "stale content",
+            filename="ACME Staff Engineer - Fitment Assessment.md",
+        )
+
+        fake_client = MagicMock()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content="fresh content"))]
+        fake_response.usage = None
+        fake_client.chat.completions.create.return_value = fake_response
+
+        with patch("lib.config.get_llm_client", return_value=(fake_client, "gpt-4o")):
+            out = srv.run_job_assessment("ACME", "Staff Engineer", JD, auto_save=False, force=True)
+
+        fake_client.chat.completions.create.assert_called_once()
+        assert "fresh content" in out

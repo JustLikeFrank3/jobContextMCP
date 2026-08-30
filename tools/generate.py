@@ -1320,6 +1320,59 @@ def _provenance_note(
         return f"Provenance: ⚠ check skipped — {exc}"
 
 
+def get_provenance_report(company: str = "", role: str = "") -> str:
+    """Read-only trust report for the most recent generated document: the
+    deterministic truth gate's durable verdict (claims traced against the
+    master bundle, unsourced violations, correction passes) plus the
+    entailment critic's enforcement mode. Filter by company and/or role to pin
+    the report to one generation. Reads generation_provenance — the same
+    durable record the dashboard and Prometheus metrics read — so an agent in
+    chat can show its user that the safeguards actually ran and passed.
+    """
+    from lib.provenance import latest_run  # noqa: PLC0415 — lazy like the gate itself
+
+    row = latest_run(company=company, role=role)
+    if row is None:
+        scope = " matching that company/role" if (company or role) else ""
+        return (
+            f"No gate record found{scope}. Every generation records its verdict "
+            "in generation_provenance — generate a document first, then re-run "
+            "this action."
+        )
+
+    try:
+        from evals.critic import enforcement_enabled  # noqa: PLC0415
+
+        critic = (
+            "enforcement ON — contradicted-with-evidence findings are corrected in-pass"
+            if enforcement_enabled()
+            else "advisory — findings reported, not enforced"
+        )
+    except Exception:  # noqa: BLE001 — the critic's absence must not break the report
+        critic = "unavailable"
+
+    verdict = "✓ PASS" if row["verdict"] == "passed" else "⚠ FAILED"
+    lines = [
+        "═══ GENERATION TRUST REPORT ═══",
+        f"Document:  {row['kind']} — {row['company']} / {row['role']}",
+        f"Recorded:  {row['ts']}  (generation_provenance #{row['id']})",
+        f"Truth gate: {verdict} — {len(row['claims'])} claims checked "
+        f"(numbers, years, titles, contact handles), {len(row['violations'])} unsourced",
+        f"Correction passes: {row['revisions']}",
+        f"Entailment critic: {critic}",
+    ]
+    if row["violations"]:
+        lines.append("Unsourced claims:")
+        lines.extend(f"  - {v}" for v in row["violations"][:8])
+        if len(row["violations"]) > 8:
+            lines.append(f"  … and {len(row['violations']) - 8} more")
+    lines.append(
+        "Claims are traced against the master-resume bundle — the same source "
+        "of truth the eval judge scores against."
+    )
+    return "\n".join(lines)
+
+
 @_tracked(
     _work.KIND_RESUME,
     system_prompt=lambda: _RESUME_SYSTEM,
@@ -1415,6 +1468,8 @@ def generate_resume(
         f"  {save_result}",
         f"  {pdf_result}",
         f"  {prov_note}",
+        f"  correction passes: {revisions}"
+        " — full attestation: documents(action=\"provenance\")",
     ])
 
 
@@ -1530,6 +1585,8 @@ def generate_cover_letter(
         f"  {save_result}",
         f"  {pdf_result}",
         f"  {prov_note}",
+        f"  correction passes: {revisions}"
+        " — full attestation: documents(action=\"provenance\")",
     ])
 
 

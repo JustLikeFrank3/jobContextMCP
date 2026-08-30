@@ -64,7 +64,11 @@ class TestTrackedExecution:
     def test_returns_the_functions_value_and_writes_a_row(self, isolated_server, monkeypatch):
         monkeypatch.setattr(generate, "_model", lambda: "gpt-test")
         wrapped = self._decorate(lambda company, role: f"doc for {role} @ {company}")
-        assert wrapped("Acme", "Engineer") == "doc for Engineer @ Acme"
+        out = wrapped("Acme", "Engineer")
+        # The function's value ships first; the wrapper appends the audit line
+        # so chat clients can show the run went THROUGH the control plane.
+        assert out.startswith("doc for Engineer @ Acme")
+        assert "control plane: work item #" in out
 
         rows = [r for r in work.list_items() if r["kind"] == "test.kind"]
         assert len(rows) == 1
@@ -154,7 +158,7 @@ class TestAssessmentKind:
             model=lambda: "assessment-model",
         )(lambda company: "assessed")
 
-        assert wrapped("Acme") == "assessed"
+        assert wrapped("Acme").startswith("assessed")
         row = [r for r in work.list_items() if r["kind"] == "test.assess"][0]
         assert row["artifacts"]["model"] == "assessment-model"
 
@@ -167,7 +171,7 @@ class TestAssessmentKind:
             model=lambda: (_ for _ in ()).throw(RuntimeError("no provider")),
         )(lambda company: "document")
 
-        assert wrapped("Acme") == "document"
+        assert wrapped("Acme").startswith("document")
         row = [r for r in work.list_items() if r["kind"] == "test.nomodel"][0]
         assert row["status"] == "succeeded"
         assert row["artifacts"]["model"] == ""

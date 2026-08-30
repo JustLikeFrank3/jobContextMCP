@@ -4,9 +4,9 @@ import re
 
 from lib.io import _load_master_context
 from lib import config
-from lib.helpers import sanitize_filename
+from lib.helpers import sanitize_filename, normalize_for_match
 from lib.openai_calls import create_chat_completion, estimate_cost_usd
-from tools.interviews import get_interview_context
+from tools.interviews import get_interview_context, get_company_signal_context
 from tools import generate_work as _work
 from tools.generate_work import tracked as _tracked
 
@@ -45,11 +45,18 @@ _ASSESSMENT_SYSTEM = textwrap.dedent("""\
     ## RECOMMENDATION
     One sentence: Apply aggressively / Apply with caveats / Do not apply.
     Follow with 2-3 sentences of reasoning.
+    WORKSPACE SIGNAL RULE: If the input includes a WORKSPACE SIGNAL block
+    (known contacts, application events, scheduled interviews), condition
+    every section on it. Address named interviewers by name, and match the
+    recommendation to the pipeline stage: when an interview is already
+    scheduled or completed, "apply" advice is wrong — advise how to win the
+    scheduled stage instead.
 
     Be direct. No filler. No hedge language. If the fit is weak, say so.
     GLOBAL ANTI-FABRICATION RULE: Every claim in every section must be grounded
-    in either the provided master resume or the provided job description. If a
-    detail is not present in your inputs, do not assert it as fact.
+    in a provided input — the master resume, the job description, or the
+    workspace signal / interview context blocks. If a detail is not present in
+    your inputs, do not assert it as fact.
 
     AI PLATFORM CALIBRATION RULE: If the master resume includes explicit work
     building MCP servers, RAG / semantic search, vector embeddings, LangGraph
@@ -131,7 +138,7 @@ def _extract_ai_platform_evidence(master: str, limit: int = 10) -> str:
 
 
 def assess_job_fitment(company: str, role: str, job_description: str, persona: str = "") -> str:
-    """Package the candidate's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role.
+    """Package the candidate's master resume alongside a job description so the AI can assess fit, identify gaps, and recommend which experience to emphasize for this specific role. The pack automatically includes workspace signal — known contacts at the company, application events, scheduled interviews — plus prior in-room interview context, so the assessment reflects the live pipeline, not just the JD.
 
     When `persona` is set, prepends the persona's prompt block to the context
     pack so the consuming agent reads it as a role-specific lens (e.g.
@@ -140,6 +147,8 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
     master = _load_master_context()
     interview_block = get_interview_context(company=company, role=role)
     interview_section = f"\n\n{interview_block}" if interview_block else ""
+    signal_block = get_company_signal_context(company, role)
+    signal_section = f"{signal_block}\n\n" if signal_block else ""
     ai_evidence_section = ""
     if _is_ai_focused(role, job_description):
         ai_evidence = _extract_ai_platform_evidence(master)
@@ -159,7 +168,9 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
             cfg = PersonaService.get(persona)
             persona_section = f"──── PERSONA LENS ────\n{cfg.to_prompt_block()}\n\n"
         except UnknownPersonaError as exc:
-            persona_section = f"──── PERSONA LENS ────\n[warning: {exc}]\n\n"
+            # Reject, don't degrade: an agent self-corrects on a loud failure
+            # but silently ships the wrong persona on a warning it never reads.
+            return f"✗ {exc}"
 
     return (
         f"═══ FITMENT ASSESSMENT ═══\n"
@@ -167,6 +178,7 @@ def assess_job_fitment(company: str, role: str, job_description: str, persona: s
         f"Role:    {role}\n\n"
         f"{persona_section}"
         f"──── JOB DESCRIPTION ────\n{job_description}\n\n"
+        f"{signal_section}"
         f"{ai_evidence_section}"
         f"──── CANDIDATE MASTER RESUME ────\n{master}"
         f"{interview_section}"
@@ -256,13 +268,36 @@ def _assessment_model() -> str:
     return _resolve_llm_settings(task="assessment")[1]
 
 
+def _find_existing_assessment(company: str, role: str) -> "Path | None":
+    """Newest saved assessment whose filename matches company + role,
+    punctuation-insensitive. Both save paths put company and role (or at
+    least company) in the filename, so a name match is the dedupe key."""
+    folder = config.get_active_job_assessments_dir()
+    if not folder.exists():
+        return None
+    cn, rn = normalize_for_match(company), normalize_for_match(role)
+    if not cn:
+        return None
+    matches = [
+        f
+        for f in folder.rglob("*")
+        if f.is_file()
+        and f.suffix in (".md", ".txt")
+        and cn in normalize_for_match(f.stem)
+        and (not rn or rn in normalize_for_match(f.stem))
+    ]
+    if not matches:
+        return None
+    return max(matches, key=lambda f: f.stat().st_mtime)
+
+
 @_tracked(
     _work.KIND_ASSESSMENT,
     system_prompt=lambda: _ASSESSMENT_SYSTEM,
     model=_assessment_model,
     origin="run_job_assessment",
 )
-def run_job_assessment(company: str, role: str, job_description: str, persona: str = "", auto_save: bool = True) -> str:
+def run_job_assessment(company: str, role: str, job_description: str, persona: str = "", auto_save: bool = True, force: bool = False) -> str:
     """
     Run a real LLM-powered fitment assessment for a job posting.
 
@@ -275,15 +310,10 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
     applies role-specific weighting and tone to the assessment.
 
     If auto_save=True (default), saves the result to 07-Job-Assessments automatically.
+    An existing saved assessment for the same company + role is returned as-is
+    instead of regenerating (each run costs real tokens and drifts); pass
+    force=True for a deliberate fresh run.
     """
-    try:
-        from lib.config import get_llm_client
-        client, model = get_llm_client(task="assessment")
-    except Exception:
-        return "✗ Failed to load LLM client. Check config.json llm_provider settings."
-    if client is None:
-        return assess_job_fitment(company, role, job_description, persona=persona)
-
     system_prompt = _ASSESSMENT_SYSTEM
     persona_note = ""
     if persona:
@@ -293,7 +323,30 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
             system_prompt = f"{cfg.to_prompt_block()}\n\n{_ASSESSMENT_SYSTEM}"
             persona_note = f" (persona: {cfg.name})"
         except UnknownPersonaError as exc:
-            persona_note = f" (persona warning: {exc})"
+            # Reject before spending tokens — see assess_job_fitment.
+            return f"✗ {exc}"
+
+    if not force:
+        existing = _find_existing_assessment(company, role)
+        if existing is not None:
+            try:
+                prior = existing.read_text(encoding="utf-8")
+            except OSError:
+                prior = None
+            if prior is not None:
+                return (
+                    f"✓ Existing assessment for {role} @ {company} — returning it "
+                    f"instead of regenerating. Pass force=True for a fresh run.\n"
+                    f"  {existing.name}\n\n{prior}"
+                )
+
+    try:
+        from lib.config import get_llm_client
+        client, model = get_llm_client(task="assessment")
+    except Exception:
+        return "✗ Failed to load LLM client. Check config.json llm_provider settings."
+    if client is None:
+        return assess_job_fitment(company, role, job_description, persona=persona)
 
     master = _load_master_context()
     candidate_name = config.get_contact_name("the candidate")
@@ -313,6 +366,8 @@ def run_job_assessment(company: str, role: str, job_description: str, persona: s
         f"TARGET ROLE: {role}",
         f"JOB DESCRIPTION:\n{job_description}",
         ai_evidence_msg,
+        get_company_signal_context(company, role),
+        get_interview_context(company=company, role=role),
         f"MASTER RESUME / FULL CAREER CONTEXT:\n{master}",
         "Now produce the fitment assessment.",
     ]).replace("\n\n\n", "\n\n")
