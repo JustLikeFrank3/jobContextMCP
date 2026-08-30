@@ -53,6 +53,7 @@ from tools import (
     export,
     people,
     generate,
+    generate_async,
     langgraph_pipeline,
     setup,
     posts,
@@ -282,6 +283,9 @@ generate_resume = generate.generate_resume
 generate_cover_letter = generate.generate_cover_letter
 preview_story_retrieval = generate.preview_story_retrieval
 get_provenance_report = generate.get_provenance_report
+submit_resume = generate_async.submit_resume
+submit_cover_letter = generate_async.submit_cover_letter
+generation_status = generate_async.generation_status
 
 log_person = people.log_person
 get_people = people.get_people
