@@ -3,6 +3,7 @@ import {
   useApi, Screen, SectionHead, StatGrid, Stat, Badge, EmptyState, EYEBROW,
 } from './_shared.jsx'
 import { Panel } from '../design-system'
+import { apiPost } from '../auth/api.js'
 import useDesktopMode from '../shell/useDesktopMode.js'
 import { openFileNative } from '../shell/nativeOpen.js'
 import { renderMarkdownDoc, MARKDOWN_DOC_CSS } from './markdownPreview.js'
@@ -294,7 +295,115 @@ function FolderBox({ folderKey, folder, query }) {
   )
 }
 
-function UntrackedSection({ files }) {
+/* Small action button for the untracked rows; `tone` colors destructive
+   intent. Disabled while a request is in flight. */
+function RowButton({ label, onClick, disabled, tone = 'var(--cyan-300)' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        appearance: 'none', cursor: disabled ? 'default' : 'pointer', flexShrink: 0,
+        fontSize: 'var(--fs-2xs)', fontWeight: 'var(--fw-semibold)',
+        padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${tone} 35%, transparent)`,
+        color: tone, opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+/* One orphaned file: link it to a tracked application (renames the file so
+   the filename-based grouping picks it up) or delete it (two-step confirm —
+   the backend records a sync tombstone so peers converge on absence).
+   Failures render inline on the row; window.alert is unreliable in the
+   Tauri webview. */
+function UntrackedRow({ name, companies, onChanged }) {
+  const [company, setCompany] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState('')
+
+  const run = async (path, body) => {
+    setBusy(true)
+    setError('')
+    try {
+      await apiPost(path, body)
+      await onChanged()
+    } catch (err) {
+      setError(err.message || 'Request failed')
+      setBusy(false)
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: 'var(--panel)',
+        border: '1px solid color-mix(in srgb, var(--warn) 30%, var(--border))',
+        borderRadius: 'var(--radius-md)', padding: '9px 13px',
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      <span
+        style={{
+          flex: 1, minWidth: 180, fontSize: 'var(--fs-sm)', color: 'var(--warn)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      >
+        {name}
+      </span>
+      {companies.length > 0 && (
+        <>
+          <select
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            disabled={busy}
+            style={{
+              background: 'var(--surface-sunken)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', padding: '4px 8px',
+              color: 'var(--text)', fontSize: 'var(--fs-2xs)', maxWidth: 200,
+            }}
+          >
+            <option value="">Link to application…</option>
+            {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <RowButton
+            label="Link"
+            disabled={busy || !company}
+            onClick={() => run('/dashboard/materials/untracked/associate', { name, company })}
+          />
+        </>
+      )}
+      {confirming ? (
+        <>
+          <RowButton
+            label="Confirm delete"
+            tone="var(--warn)"
+            disabled={busy}
+            onClick={() => run('/dashboard/materials/untracked/delete', { name })}
+          />
+          <RowButton label="Cancel" tone="var(--muted)" disabled={busy} onClick={() => setConfirming(false)} />
+        </>
+      ) : (
+        <RowButton label="Delete" tone="var(--warn)" disabled={busy} onClick={() => setConfirming(true)} />
+      )}
+      {error && (
+        <span style={{ flexBasis: '100%', fontSize: 'var(--fs-2xs)', color: 'var(--warn)' }}>
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function UntrackedSection({ files, companies, onChanged }) {
   const [q, setQ] = useState('')
   const filtered = files.filter((f) => !q || f.toLowerCase().includes(q.toLowerCase()))
 
@@ -302,7 +411,7 @@ function UntrackedSection({ files }) {
     <div style={{ marginTop: 28 }}>
       <SectionHead title="Untracked resume files" right={`${filtered.length}`} />
       <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)', margin: '-4px 0 10px' }}>
-        Resumes with no tracked application — worth linking or archiving.
+        Resumes with no tracked application — link them to one, or delete them.
       </div>
       <input
         value={q}
@@ -318,17 +427,7 @@ function UntrackedSection({ files }) {
       {filtered.length > 0 ? (
         <div style={{ display: 'grid', gap: 6 }}>
           {filtered.map((f) => (
-            <div
-              key={f}
-              style={{
-                background: 'var(--panel)',
-                border: '1px solid color-mix(in srgb, var(--warn) 30%, var(--border))',
-                borderRadius: 'var(--radius-md)', padding: '9px 13px',
-                fontSize: 'var(--fs-sm)', color: 'var(--warn)',
-              }}
-            >
-              {f}
-            </div>
+            <UntrackedRow key={f} name={f} companies={companies} onChanged={onChanged} />
           ))}
         </div>
       ) : (
@@ -341,7 +440,7 @@ function UntrackedSection({ files }) {
 }
 
 export default function Materials() {
-  const { data, loading, error } = useApi('/dashboard/materials/data')
+  const { data, loading, error, reload } = useApi('/dashboard/materials/data')
   const [query, setQuery] = useState('')
   const folders = useMemo(() => data?.folders || {}, [data])
   // Count only the folders this page shows — the TXT intermediates still
@@ -402,7 +501,13 @@ export default function Materials() {
         <EmptyState label={`No files match “${query.trim()}”.`} />
       )}
 
-      {untracked.length > 0 && <UntrackedSection files={untracked} />}
+      {untracked.length > 0 && (
+        <UntrackedSection
+          files={untracked}
+          companies={data?.tracked_companies || []}
+          onChanged={reload}
+        />
+      )}
 
       {totalFiles === 0 && <EmptyState label="No files in any folder yet." />}
     </Screen>

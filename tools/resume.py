@@ -168,6 +168,48 @@ def list_existing_materials(company: str = "") -> str:
     return "\n".join(lines)
 
 
+def delete_material(filename: str) -> str:
+    """Delete a saved resume or cover-letter file from the workspace (e.g. an orphaned generated document that maps to no tracked application). Looks in 01-Current-Optimized/ and 02-Cover-Letters/ — pass the exact filename from list_existing_materials(). Records a sync tombstone so the deletion propagates to synced peers instead of being resurrected on the next sync pass."""
+    filename = Path(filename).name  # bare name only — never a path
+    if "MASTER" in filename.upper():
+        return f"✗ Refusing to delete {filename} — the master resume is not a generated material."
+    candidates = [
+        d / filename
+        for d in (
+            config.get_active_optimized_resumes_dir(),
+            config.get_active_cover_letters_dir(),
+        )
+        if (d / filename).is_file()
+    ]
+    if not candidates:
+        return (
+            f"✗ Not found: {filename}\n"
+            "Use list_existing_materials() to see available files."
+        )
+
+    from lib.db import get_connection
+    from lib.sync import active_sync_root, delete_synced_file
+
+    target = candidates[0]
+    root = active_sync_root()
+    if root is not None:
+        with get_connection() as con:
+            info = delete_synced_file(con, root, target)
+    else:
+        target.unlink()
+        info = {"rel": None}
+
+    note = (
+        "the deletion will propagate to synced peers"
+        if info["rel"]
+        else "file was outside the synced workspace — nothing to propagate"
+    )
+    out = f"✓ Deleted {target.parent.name}/{target.name} ({note})."
+    if len(candidates) > 1:
+        out += f"\nNote: a file with the same name still exists in {candidates[1].parent.name}/."
+    return out
+
+
 def read_existing_resume(filename: str) -> str:
     """Read the full text of an existing resume from 01-Current-Optimized/. Use list_existing_materials() to find available filenames."""
     path = config.get_active_optimized_resumes_dir() / filename

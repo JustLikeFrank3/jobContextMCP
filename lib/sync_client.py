@@ -8,8 +8,10 @@ resolves to the owner's partition. One `run_sync()` pass:
   2. push rows:  local journal since our cursor → cloud applies
      (then the config.json contact block is exchanged fill-empty-only —
      config itself is machine-local and never file-syncs)
-  3. files:      manifest diff (lib.sync.plan_file_sync) → transfer both ways;
-                 true conflicts keep the remote copy as a " (sync conflict…)"
+  3. files:      reconcile deletion tombstones (lib.sync.apply_file_tombstones —
+                 rows pulled in step 1 delete their files here), then manifest
+                 diff (lib.sync.plan_file_sync) → transfer both ways; true
+                 conflicts keep the remote copy as a " (sync conflict…)"
                  sibling instead of overwriting local work
 
 Cursors and the file baseline live in the local sync_meta table, a summary
@@ -96,8 +98,9 @@ def run_sync() -> dict:
     """One full bidirectional pass. Returns a summary dict (also persisted)."""
     from lib.db import get_connection
     from lib.sync import (
-        apply_changes, export_changes, file_manifest, get_cursor,
-        plan_file_sync, set_cursor,
+        apply_changes, apply_file_tombstones, export_changes, file_manifest,
+        get_cursor, list_file_tombstones, plan_file_sync, set_cursor,
+        strip_tombstoned_entries,
     )
 
     settings = sync_settings()
@@ -153,11 +156,26 @@ def run_sync() -> dict:
             # the contact dict so a fresh peer doesn't generate blank headers)
             summary["contact"] = _sync_contact(http)
 
-            # 3. files
-            local = file_manifest(root)
+            # 3. files — reconcile deletion tombstones before manifesting:
+            # rows pulled in step 1 delete their local files here, and the
+            # manifest response carries the cloud's tombstone list as a
+            # file-level safety net for rows this replica missed while
+            # running a build without the table (an older cloud sends no
+            # "tombstones" key — treated as empty).
             resp = http.post("/api/sync/files/manifest", json={})
             resp.raise_for_status()
-            remote = resp.json()["manifest"]
+            files_payload = resp.json()
+            remote = files_payload["manifest"]
+            with get_connection() as con:
+                tomb_stats = apply_file_tombstones(
+                    con, root, files_payload.get("tombstones") or {}
+                )
+                local_tombs = list_file_tombstones(con)
+            local = file_manifest(root)
+            # Never re-pull a copy our own tombstone supersedes — an old
+            # cloud can't reconcile it away server-side, and the baseline
+            # forgets the deletion after one pass.
+            remote = strip_tombstoned_entries(remote, local_tombs)
             with get_connection() as con:
                 row = con.execute(
                     "SELECT value FROM sync_meta WHERE key = ?", (_FILE_BASELINE,)
@@ -196,6 +214,11 @@ def run_sync() -> dict:
                 except Exception as exc:  # noqa: BLE001
                     _record_failure("conflict", rel, exc)
             summary["files"] = {k: len(v) for k, v in plan.items()}
+            if any(tomb_stats.values()):
+                summary["files"]["tombstones"] = {
+                    k: len(v) if isinstance(v, list) else v
+                    for k, v in tomb_stats.items()
+                }
             if files_skipped:
                 summary["files"]["skipped"] = files_skipped
                 summary["files"]["errors"] = file_errors

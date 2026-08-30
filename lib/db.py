@@ -293,6 +293,17 @@ _MIGRATIONS = [
         value      TEXT NOT NULL DEFAULT '{}',
         updated_at TEXT NOT NULL DEFAULT ''
     )""",
+    # v13 — file-deletion tombstones for workspace file sync. File sync has no
+    # delete propagation of its own (manifests only describe what exists), so a
+    # deletion journals here and rides row sync; lib/sync.py owns the
+    # reconciliation rules. rel is the manifest key: POSIX-separated, relative
+    # to the sync root.
+    """CREATE TABLE IF NOT EXISTS file_tombstones (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        rel        TEXT NOT NULL UNIQUE,
+        sha256     TEXT NOT NULL DEFAULT '',
+        deleted_at TEXT NOT NULL
+    )""",
 ]
 
 

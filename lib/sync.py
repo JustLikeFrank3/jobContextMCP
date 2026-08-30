@@ -42,7 +42,9 @@ on export, stamped with the local user's oid on apply.
 File sync (workspace documents) lives in sync_files.py-style helpers below:
 manifests of (relpath, size, sha256, mtime), newest-mtime-wins, and when both
 sides changed since the recorded baseline the loser is kept as a
-" (sync conflict …)" sibling rather than overwritten.
+" (sync conflict …)" sibling rather than overwritten. File deletions
+propagate as ``file_tombstones`` rows riding the row journal — see the
+tombstone section below for the reconciliation rules.
 """
 from __future__ import annotations
 
@@ -50,6 +52,7 @@ import datetime
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -137,6 +140,11 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     # One row per week: which frozen version was actually filed. Upsert so a
     # re-mark (corrected filing) propagates; keyed by week alone.
     TableSpec("certification_submission", "upsert", ("week_ending",)),
+    # File-deletion tombstones (see the file-sync section below). Keyed by the
+    # manifest rel so a deletion rides the existing row journal; a peer on a
+    # build without this table drops the change (apply filters unknown tables)
+    # but still can't resurrect the file — /files/put refuses stale content.
+    TableSpec("file_tombstones", "upsert", ("rel",)),
 )
 
 _SPECS_BY_NAME = {s.name: s for s in TABLE_SPECS}
@@ -568,3 +576,186 @@ def plan_file_sync(local: dict, remote: dict, baseline: dict) -> dict:
                 continue  # remotely deleted → leave deleted
             pushes.append(rel)
     return {"pull": pulls, "push": pushes, "conflict": conflicts}
+
+
+# ── file deletion tombstones ───────────────────────────────────────────────────
+#
+# plan_file_sync suppresses re-copying a deleted file only while the deleting
+# side's baseline still remembers it — and the baseline is rebuilt from the
+# local tree every pass, so the entry vanishes immediately and the peer's copy
+# is pulled straight back (and a peer that never learns of the deletion keeps
+# re-pushing it). A deletion therefore records a row in `file_tombstones` — an
+# ordinary upsert member of TABLE_SPECS, so it travels the existing row
+# journal — and each side reconciles rows against its tree:
+#
+#   file mtime <= deleted_at → a stale copy of what was deleted → remove it
+#   file mtime  > deleted_at → recreated after the deletion → the file wins:
+#                              clear the tombstone (journaled, so the clearing
+#                              propagates and the new file syncs normally)
+#
+# mtime is the right clock here: transfers preserve source mtimes (os.utime in
+# both put paths), so a copy that merely traveled still predates the deletion,
+# while a genuinely regenerated file stamps fresh. Cross-machine clock skew
+# errs toward keeping files, never over-deleting.
+
+_TOMBSTONE_RETENTION_DAYS = 90
+
+
+def active_sync_root() -> "Path | None":
+    """The directory file sync walks in the current context, or None.
+
+    Mirrors the dashboard's _active_user_root but returns None instead of
+    raising: a session with no single-user root (e.g. an admin API key on the
+    hosted product) gets no tombstone — its files never sync anyway.
+    """
+    from lib.user_context import get_data_folder_override
+
+    override = get_data_folder_override()
+    if override is not None:
+        return override
+    from lib.app_dirs import desktop_data_dir, is_desktop_mode
+
+    if is_desktop_mode():
+        return desktop_data_dir()
+    return None
+
+
+def tombstone_epoch(meta: dict) -> float:
+    """A tombstone's deleted_at as epoch seconds (0.0 if unparseable)."""
+    try:
+        return (
+            datetime.datetime.strptime(str(meta.get("deleted_at", "")), _TS_FMT)
+            .replace(tzinfo=datetime.timezone.utc)
+            .timestamp()
+        )
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def list_file_tombstones(con) -> dict[str, dict]:
+    """{rel: {sha256, deleted_at}} for every live tombstone."""
+    return {
+        r["rel"]: {"sha256": r["sha256"], "deleted_at": r["deleted_at"]}
+        for r in con.execute("SELECT rel, sha256, deleted_at FROM file_tombstones")
+    }
+
+
+def _tombstone_target(root: Path, rel: str) -> "Path | None":
+    """Resolve a tombstone rel under root, or None for anything unsafe.
+
+    rels arrive from the peer via row sync and feed an unlink, so they are
+    untrusted: traversal, absolute paths, and drive-qualified or
+    backslash-bearing names (Windows would reinterpret the separator) must
+    never resolve.
+    """
+    if not rel or rel.startswith(("/", "\\")) or os.path.splitdrive(rel)[0]:
+        return None
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return None
+    if os.name == "nt" and "\\" in rel:
+        return None
+    target = (root / rel).resolve()
+    if root.resolve() not in target.parents:
+        return None
+    return target
+
+
+def delete_synced_file(con, root: Path, target: Path) -> dict:
+    """Delete a workspace file so the deletion survives sync.
+
+    Records the tombstone BEFORE unlinking: if the unlink fails, the next
+    reconcile finishes the job, whereas the reverse order can lose the
+    tombstone and resurrect the file everywhere. A file outside the sync root
+    (or one file sync excludes) is just unlinked — it never synced.
+    Returns {"deleted": bool, "rel": tombstoned rel or None}.
+    """
+    target = target.resolve()
+    rel = None
+    try:
+        rel_path = target.relative_to(root.resolve())
+    except ValueError:
+        rel_path = None
+    if rel_path is not None and _file_synced(rel_path):
+        rel = rel_path.as_posix()
+        sha = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ""
+        con.execute(
+            "INSERT INTO file_tombstones (rel, sha256, deleted_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(rel) DO UPDATE SET sha256 = excluded.sha256, "
+            "deleted_at = excluded.deleted_at",
+            (rel, sha, _now_ts()),
+        )
+        con.commit()
+    deleted = target.is_file()
+    if deleted:
+        target.unlink()
+    return {"deleted": deleted, "rel": rel}
+
+
+def apply_file_tombstones(con, root: Path, peer_tombstones: "dict | None" = None) -> dict:
+    """Reconcile tombstones against the local tree (the mtime rule above).
+
+    ``peer_tombstones`` (from the peer's manifest response) are applied at
+    file level only, never written as rows: they are a safety net for rows
+    this replica missed while running a build without the table — the row
+    cursor is already past them, so they will never arrive as rows.
+    Tombstones past retention are pruned; the pruning journals and converges
+    like any other row delete.
+    """
+    removed: list[str] = []
+    cleared: list[str] = []
+    pruned = 0
+    now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    local = list_file_tombstones(con)
+    for rel, meta in local.items():
+        epoch = tombstone_epoch(meta)
+        target = _tombstone_target(root, rel)
+        if target is not None and target.is_file():
+            if target.stat().st_mtime > epoch:
+                con.execute("DELETE FROM file_tombstones WHERE rel = ?", (rel,))
+                cleared.append(rel)
+                continue
+            try:
+                target.unlink()
+            except OSError as exc:
+                _LOG.warning("tombstone reconcile could not delete %r: %s", rel, exc)
+                continue  # keep the tombstone; retry next pass
+            removed.append(rel)
+        if now - epoch > _TOMBSTONE_RETENTION_DAYS * 86400:
+            con.execute("DELETE FROM file_tombstones WHERE rel = ?", (rel,))
+            pruned += 1
+    for rel, meta in (peer_tombstones or {}).items():
+        if rel in local:
+            continue
+        target = _tombstone_target(root, rel)
+        if (
+            target is not None
+            and target.is_file()
+            and target.stat().st_mtime <= tombstone_epoch(meta or {})
+        ):
+            try:
+                target.unlink()
+            except OSError as exc:
+                _LOG.warning("peer tombstone could not delete %r: %s", rel, exc)
+                continue
+            removed.append(rel)
+    con.commit()
+    return {"removed": removed, "cleared": cleared, "pruned": pruned}
+
+
+def strip_tombstoned_entries(manifest: dict, tombstones: dict) -> dict:
+    """Manifest minus entries a live tombstone supersedes (mtime <= deleted_at).
+
+    Applied to the REMOTE manifest before planning: without it, the deleting
+    side re-pulls the peer's stale copy on the pass after its baseline entry
+    ages out — the original resurrection bug. An entry newer than the
+    tombstone survives: that file was recreated and should pull, after which
+    reconcile clears the tombstone.
+    """
+    out = {}
+    for rel, meta in manifest.items():
+        tomb = tombstones.get(rel)
+        if tomb and (meta or {}).get("mtime", 0.0) <= tombstone_epoch(tomb):
+            continue
+        out[rel] = meta
+    return out

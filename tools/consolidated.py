@@ -109,6 +109,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "read_reference": (resume.read_reference_file, "Read a reference-materials file."),
         "read_latex_asset": (read_latex_asset, "Read a LaTeX template/section asset."),
         "list": (resume.list_existing_materials, "List existing materials (optionally by company)."),
+        "delete": (resume.delete_material, "Delete a saved resume/letter file (records a sync tombstone so the deletion propagates to peers)."),
         "search": (rag.search_materials, "Semantic search across materials."),
         "reindex": (rag.reindex_materials, "Rebuild the materials search index."),
         "reindex_stories": (rag.reindex_stories, "Rebuild the story retrieval index."),
@@ -393,7 +394,7 @@ async def documents(
 
 
 async def materials(
-    action: Literal["read_master_resume", "update_master_resume", "read_resume", "read_reference", "read_latex_asset", "list", "search", "reindex", "reindex_stories"],
+    action: Literal["read_master_resume", "update_master_resume", "read_resume", "read_reference", "read_latex_asset", "list", "delete", "search", "reindex", "reindex_stories"],
     filename: str | None = None,
     company: str | None = None,
     query: str | None = None,
@@ -401,7 +402,7 @@ async def materials(
     old_text: str | None = None,
     new_text: str | None = None,
 ) -> str:
-    """Read, search, and maintain your existing materials: master resume (read and in-place edit), saved resumes/letters, reference files, LaTeX assets, and the semantic index."""
+    """Read, search, and maintain your existing materials: master resume (read and in-place edit), saved resumes/letters (list, read, delete), reference files, LaTeX assets, and the semantic index."""
     params = locals()
     return await anyio.to_thread.run_sync(lambda: _run("materials", action, params))
 
