@@ -429,19 +429,59 @@ class TestSearchJobs:
         assert "Stripe" in result
         assert "Plaid" not in result
 
-    def test_serpapi_http_error(self, isolated_server, monkeypatch):
+    def test_num_never_sent_to_serpapi(self, isolated_server, monkeypatch):
+        """google_jobs has no 'num' parameter — SerpAPI 400s the whole request.
+        Every search failed that way until 2026-08-30; pin so it can't return."""
         from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "test-key")
+        captured = {}
+        mock = MagicMock()
+        mock.raise_for_status = MagicMock()
+        mock.json.return_value = _SAMPLE_SERPAPI_RESPONSE
+
+        def _capture(*a, **kw):
+            captured["params"] = kw.get("params", {})
+            return mock
+
+        monkeypatch.setattr("httpx.get", _capture)
+        srv.search_jobs("Engineer", num_results=5)
+        assert "num" not in captured["params"]
+
+    def _raise_status(self, status_code, body=None):
         import httpx
-        monkeypatch.setattr(cfg, "SERPAPI_KEY", "bad-key")
 
         def _raise(*a, **kw):
             mock_resp = MagicMock()
-            mock_resp.status_code = 401
-            raise httpx.HTTPStatusError("401", request=MagicMock(), response=mock_resp)
+            mock_resp.status_code = status_code
+            if body is None:
+                mock_resp.json.side_effect = ValueError("not json")
+            else:
+                mock_resp.json.return_value = body
+            raise httpx.HTTPStatusError(
+                str(status_code), request=MagicMock(), response=mock_resp)
 
-        monkeypatch.setattr("httpx.get", _raise)
+        return _raise
+
+    def test_serpapi_http_error(self, isolated_server, monkeypatch):
+        from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "bad-key")
+        monkeypatch.setattr("httpx.get", self._raise_status(401))
         result = srv.search_jobs("Engineer")
-        assert "401" in result or "API key" in result
+        assert "401" in result and "API key" in result
+
+    def test_serpapi_400_surfaces_error_body_without_blaming_the_key(
+        self, isolated_server, monkeypatch
+    ):
+        """A 400 is a rejected parameter, not a key problem — the old blanket
+        'Check your API key' message misdirected a real outage."""
+        from lib import config as cfg
+        monkeypatch.setattr(cfg, "SERPAPI_KEY", "good-key")
+        monkeypatch.setattr("httpx.get", self._raise_status(
+            400, body={"error": "Unsupported `num` parameter."}))
+        result = srv.search_jobs("Engineer")
+        assert "400" in result
+        assert "Unsupported `num` parameter." in result
+        assert "API key" not in result
 
 
 # ── sample payloads ────────────────────────────────────────────────────────────

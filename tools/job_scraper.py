@@ -492,11 +492,15 @@ def search_jobs(  # NOSONAR
             "Get a free key at https://serpapi.com"
         )
 
+    # No "num" parameter: google_jobs doesn't support it (it belongs to the
+    # google web engine) and SerpAPI rejects the whole request with HTTP 400.
+    # Every search this tool made failed that way until 2026-08-30. The engine
+    # returns one page (~10 results); num_results trims the display below.
+    num_results = min(max(int(num_results), 1), 20)
     params: dict = {
         "engine":  "google_jobs",
         "q":       query,
         "api_key": api_key,
-        "num":     str(min(max(int(num_results), 1), 20)),
     }
     # SerpAPI location must be a real geographic place (e.g. "Seattle, WA").
     # "Remote" / "remote" is not a valid location — fold it into the query.
@@ -511,7 +515,19 @@ def search_jobs(  # NOSONAR
         response.raise_for_status()
         data = response.json()
     except httpx.HTTPStatusError as exc:
-        return f"SerpAPI returned HTTP {exc.response.status_code}. Check your API key."
+        # Surface SerpAPI's own error body — a 400 is a rejected parameter,
+        # not a key problem, and "check your API key" on every status sent a
+        # real outage down a key-rotation rabbit hole.
+        status = exc.response.status_code
+        try:
+            detail = exc.response.json().get("error", "")
+        except Exception:  # noqa: BLE001 — non-JSON error body
+            detail = ""
+        if not isinstance(detail, str):
+            detail = ""
+        hint = " Check your API key." if status in (401, 403) else ""
+        detail_part = f": {detail}" if detail else ""
+        return f"SerpAPI returned HTTP {status}{detail_part}.{hint}"
     except httpx.HTTPError as exc:
         return f"SerpAPI request failed: {exc}"
 
