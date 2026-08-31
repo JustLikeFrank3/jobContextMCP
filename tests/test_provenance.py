@@ -814,3 +814,71 @@ class TestTitleClaims:
         assert "HELD-TITLE RULE" in text
         assert "Do not delete the role entry" in text
         assert "HELD-TITLE" not in format_violation_feedback(["34%"])
+
+
+class TestGateTighteningRound4b:
+    """The 08-31 nightly exposed three evasions: an under-flavored years claim
+    cross-context-backed by an unrelated exact token, a multi-title tagline
+    smuggling the JD's title through the middle segment, and invented
+    'Evangelist' roles under LEADERSHIP (twice in one run — bounced-twice
+    doctrine applies)."""
+
+    MASTER = [
+        "Software Engineer | General Motors | Jan 2022 - Dec 2023\n"
+        "5 years of Angular work across the stack.\n"
+        "LEADERSHIP & COMMUNITY\n"
+        "GM ERG JumpStart President: led the early-career ERG\n"
+        "Angular Developer's Group Admin: facilitated discussions\n"
+    ]
+
+    def test_under_flavored_years_are_their_own_class(self):
+        from lib.provenance import _normalize_years, check_years_claims
+
+        assert _normalize_years("less than 5 years") == "under5years"
+        assert _normalize_years("under 5 years") == "under5years"
+        assert _normalize_years("fewer than 5 years") == "under5years"
+        assert _normalize_years("at least 5 years") == "5+years"
+        # The 08-31 failure: master has an exact "5 years" elsewhere; the
+        # invented "less than 5 years tenure" must no longer ride on it.
+        draft = "Supporting new hires with less than 5 years tenure."
+        assert check_years_claims(draft, self.MASTER) == ["less than 5 years"]
+
+    def test_under_claim_backed_only_by_under_claim(self):
+        from lib.provenance import check_years_claims
+
+        master = ["mentored folks with under 5 years tenure"]
+        assert check_years_claims("less than 5 years tenure", master) == []
+        assert check_years_claims("5 years of tenure", master) == ["5 years"]
+
+    def test_multi_title_tagline_gates_every_segment(self):
+        from lib.provenance import check_title_claims, extract_title_claims
+
+        draft = "SOFTWARE ENGINEER | AI PRODUCTIZATION ENGINEER | Azure • Python • MLflow\n"
+        assert set(extract_title_claims(draft)) == {
+            "SOFTWARE ENGINEER", "AI PRODUCTIZATION ENGINEER"}
+        # Held title passes, smuggled JD title is the violation.
+        assert check_title_claims(draft, self.MASTER) == ["AI PRODUCTIZATION ENGINEER"]
+
+    def test_leadership_labels_are_gated_in_section_only(self):
+        from lib.provenance import check_title_claims
+
+        draft = ("CORE TECHNICAL SKILLS\n"
+                 "AI Tooling: LangGraph, RAG\n"
+                 "LEADERSHIP & COMMUNITY\n"
+                 "GM ERG JumpStart President: led mentoring initiatives\n"
+                 "AI Tooling Evangelist: championed AI adoption org-wide\n"
+                 "──────────\n"
+                 "EDUCATION\n"
+                 "Note: coursework details available\n")
+        # Skills-section label and post-section prose colon are ungated; the
+        # held leadership label passes; the invented evangelist role does not.
+        assert check_title_claims(draft, self.MASTER) == ["AI Tooling Evangelist"]
+
+    def test_leadership_section_ends_at_next_header(self):
+        from lib.provenance import extract_title_claims
+
+        draft = ("LEADERSHIP & COMMUNITY\n"
+                 "Speaker: internal AI guild talks\n"
+                 "PROJECTS\n"
+                 "Deploy notes: rollout was staged\n")
+        assert extract_title_claims(draft) == ["Speaker"]
