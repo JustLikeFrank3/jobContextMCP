@@ -11,14 +11,14 @@ LANDING_HTML: str = r'''<!doctype html>
 <meta property="og:type"        content="website" />
 <meta property="og:url"         content="https://jobcontext.ai/" />
 <meta property="og:title"       content="jobContext &mdash; The memory layer for your career" />
-<meta property="og:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, resume generation, interview prep &mdash; all in one place." />
+<meta property="og:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep &mdash; on desktop, cloud, and mobile." />
 <meta property="og:image"       content="https://jobcontext.ai/og-image.png" />
 <meta property="og:image:width"  content="1200" />
 <meta property="og:image:height" content="627" />
 <!-- Twitter / X card -->
 <meta name="twitter:card"        content="summary_large_image" />
 <meta name="twitter:title"       content="jobContext &mdash; The memory layer for your career" />
-<meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, resume generation, interview prep &mdash; all in one place." />
+<meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep &mdash; on desktop, cloud, and mobile." />
 <meta name="twitter:image"       content="https://jobcontext.ai/og-image.png" />
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -327,6 +327,19 @@ LANDING_HTML: str = r'''<!doctype html>
   .feat.span2 .ministat .n { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; color: var(--cyan-300); line-height: 1; }
   .feat.span2 .ministat .l { color: var(--faint); font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: var(--ls-label); margin-top: 5px; }
 
+  /* ---------- platforms ---------- */
+  .platforms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .plat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; display: flex; flex-direction: column; transition: border-color .18s, transform .18s, background .18s; }
+  .plat:hover { border-color: color-mix(in srgb, var(--cyan-500) 45%, transparent); transform: translateY(-3px); background: var(--surface-raised); }
+  .plat .k { font-family: var(--font-mono); font-size: var(--fs-2xs); font-weight: 700; color: var(--cyan-400); text-transform: uppercase; letter-spacing: var(--ls-label); }
+  .plat h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.18rem; margin: 12px 0 0; color: #fff; }
+  .plat p { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; margin: 8px 0 0; flex: 1; }
+  .plat .plat-cta { margin-top: 18px; }
+  .plat .plat-cta a { color: var(--cyan-400); font-size: var(--fs-sm); font-weight: 600; }
+  .plat .plat-cta a:hover { color: var(--cyan-300); }
+  .plat-motto { text-align: center; margin: 26px 0 0; color: var(--faint); font-family: var(--font-mono); font-size: var(--fs-xs); }
+  .plat-motto b { color: var(--cyan-300); font-weight: 600; }
+
   /* ---------- readiness showcase ---------- */
   .readiness-grid { display: grid; grid-template-columns: 1fr 0.82fr; gap: 52px; align-items: center; }
   .readiness-h { font-family: var(--font-display); font-weight: 700; font-size: 2.3rem; letter-spacing: -0.02em; line-height: 1.12; margin: 12px 0 0; color: #fff; text-wrap: balance; }
@@ -389,7 +402,7 @@ LANDING_HTML: str = r'''<!doctype html>
 
   @media (max-width: 920px) {
     .hero-grid, .problem, .readiness-grid { grid-template-columns: 1fr; }
-    .bento, .pillars, .steps { grid-template-columns: 1fr; }
+    .bento, .pillars, .steps, .platforms { grid-template-columns: 1fr; }
     .feat.span2 { grid-column: span 1; flex-direction: column; align-items: flex-start; }
     h1.hl { font-size: 2.6rem; }
   }
@@ -422,7 +435,8 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="nav-links">
       <a class="lnk" href="/why">Why</a>
       <a class="lnk" href="#features">Features</a>
-      <a class="lnk" href="#how">How it works</a>
+      <a class="lnk" href="#platforms">Platforms</a>
+      <a class="lnk" href="#webmcp">WebMCP</a>
       <a class="lnk" href="#pillars">Why it's safe</a>
       <a class="lnk" href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
@@ -437,7 +451,7 @@ LANDING_HTML: str = r'''<!doctype html>
 <header class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="eyebrow"><span class="dot"></span>Open-source · Model Context Protocol</span>
+      <span class="eyebrow"><span class="dot"></span>Open-source · MCP + WebMCP</span>
       <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
       <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
@@ -446,9 +460,9 @@ LANDING_HTML: str = r'''<!doctype html>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
       <div class="micro">
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Self-hosted &amp; private</span>
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Works with Claude, Copilot, Cursor</span>
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>70+ tools</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Desktop · Cloud · Mobile</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Works with Claude, Copilot, Cursor + in-browser agents</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>12 domain tools · 104 actions</span>
       </div>
     </div>
 
@@ -461,9 +475,10 @@ LANDING_HTML: str = r'''<!doctype html>
         <div class="u">&gt; Draft a cover letter for the CVS role.</div>
         <div class="g">&nbsp;</div>
         <div class="p">claude</div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_resume()</span></div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_job(47)</span></div>
-        <div class="g">↳ calling <span class="tool">jobContext.get_stories()</span></div>
+        <div class="g">↳ calling <span class="tool">materials(&quot;read_master_resume&quot;)</span></div>
+        <div class="g">↳ calling <span class="tool">applications(&quot;status&quot;)</span></div>
+        <div class="g">↳ calling <span class="tool">stories(&quot;star_context&quot;)</span></div>
+        <div class="g">↳ calling <span class="tool">documents(&quot;generate_cover_letter&quot;)</span></div>
         <div class="g">&nbsp;</div>
         <div class="hl2">Done. I used your <span class="ok">master resume</span>, the</div>
         <div class="hl2">CVS assessment (<span class="ok">fitment 9/10</span>), and your</div>
@@ -483,7 +498,7 @@ LANDING_HTML: str = r'''<!doctype html>
     <span class="name">Cursor</span>
     <span class="name">Windsurf</span>
     <span class="name">Zed</span>
-    <span class="lbl">…any MCP client</span>
+    <span class="lbl">…any MCP client — plus in-browser agents over WebMCP (ChatGPT desktop, Chrome, Edge)</span>
   </div>
 </div>
 
@@ -512,7 +527,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></div>
         <h3>Pipeline</h3>
-        <p>Share-sheet intake, AI fitment scoring, resume + cover-letter generation, and an apply queue.</p>
+        <p>Share-sheet intake, AI fitment scoring, truth-gated resume + cover-letter generation, and an apply queue.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h8l4 4v11a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M12 4v4h4"/></svg></div>
@@ -545,8 +560,8 @@ LANDING_HTML: str = r'''<!doctype html>
           <p>Funnel-by-stage, top companies, and the patterns that turn “no” into your next yes.</p>
         </div>
         <div class="ministat">
-          <div><div class="n">70+</div><div class="l">MCP tools</div></div>
-          <div><div class="n">11</div><div class="l">surfaces</div></div>
+          <div><div class="n">12</div><div class="l">domain tools</div></div>
+          <div><div class="n">104</div><div class="l">actions</div></div>
         </div>
       </div>
       <div class="feat">
@@ -555,6 +570,38 @@ LANDING_HTML: str = r'''<!doctype html>
         <p>Your search at a glance: today's priorities, follow-ups due, pipeline health, and daily readiness.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ============ PLATFORMS ============ -->
+<section class="blk" id="platforms" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">One capability layer, three surfaces</div>
+      <h2>Runs where you do</h2>
+      <p>The same tools, the same memory — as a native desktop app, a hosted cloud workspace, and a mobile companion, all kept in sync.</p>
+    </div>
+    <div class="platforms">
+      <div class="plat">
+        <div class="k">Desktop</div>
+        <h3>Your private daily driver</h3>
+        <p>A native app for macOS, Windows, and Linux — no terminal, no account. Embedded AI chat over your own data (bring your own key, or run a local Ollama model with no keys at all), one-click MCP connect for Claude Desktop, VS Code, and Cursor, and local SQLite that never leaves your machine.</p>
+        <div class="plat-cta"><a href="https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&amp;expanded=true">Download the desktop app →</a></div>
+      </div>
+      <div class="plat">
+        <div class="k">Cloud</div>
+        <h3>Your always-on hub</h3>
+        <p>A hosted workspace at jobcontext.ai: remote MCP for Claude.ai, Cursor, and VS Code over OAuth, the dashboard drivable by in-browser agents over WebMCP, the sync hub for your other devices, and always-on evals of your generated documents.</p>
+        <div class="plat-cta"><a href="/login">Sign in to the cloud →</a></div>
+      </div>
+      <div class="plat">
+        <div class="k">Mobile</div>
+        <h3>Your capture device</h3>
+        <p>An iOS companion in TestFlight beta. Share a job posting from Safari or LinkedIn straight into your pipeline — pages are extracted on-device, so it reads postings that block datacenter IPs — then triage and log check-ins from anywhere. Everything syncs back.</p>
+        <div class="plat-cta"><a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/mobile/README.md">About the mobile beta →</a></div>
+      </div>
+    </div>
+    <p class="plat-motto"><b>desktop</b> creates knowledge · <b>mobile</b> captures reality · <b>cloud</b> synchronizes</p>
   </div>
 </section>
 
@@ -604,6 +651,40 @@ LANDING_HTML: str = r'''<!doctype html>
   </div>
 </section>
 
+<!-- ============ WEBMCP ============ -->
+<section class="blk" id="webmcp" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="readiness-grid">
+      <div>
+        <div class="sec-eyebrow">New · WebMCP</div>
+        <h2 class="readiness-h">The dashboard is itself an <span class="c">agent surface.</span></h2>
+        <p class="readiness-p">Sign in to the cloud dashboard in a WebMCP-capable browser and every jobContext tool is registered in-page via <code style="font-family:var(--font-mono);font-size:0.9em;color:var(--cyan-300)">document.modelContext</code> — the W3C draft standard for giving in-browser agents tools. ChatGPT desktop's built-in browser, Chrome's origin trial, and Edge preview can drive your whole workspace while you're on the site: no connector setup, no OAuth dance, no second tool surface. The bridge republishes the server's own tool list verbatim, so what a browser agent sees can never drift from what Claude or Cursor sees.</p>
+        <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works in <strong>ChatGPT desktop · Chrome · Edge</strong></span>
+        <p class="tm-note">Calls ride your signed-in session, same-origin only — a CSRF guard ignores the session cookie on cross-site requests, so a hostile page can't ride your login.</p>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+          <span class="term-title">chatgpt &middot; browsing app.jobcontext.ai</span>
+        </div>
+        <div class="term-body">
+          <div class="u">&gt; What should I do first today?</div>
+          <div class="g">&nbsp;</div>
+          <div class="p">agent <span class="g">(in-page, no connector)</span></div>
+          <div class="g">↳ <span class="tool">document.modelContext</span> found 12 tools</div>
+          <div class="g">↳ calling <span class="tool">insights(&quot;daily_digest&quot;)</span></div>
+          <div class="g">↳ calling <span class="tool">applications(&quot;status&quot;)</span></div>
+          <div class="g">&nbsp;</div>
+          <div class="hl2">Two follow-ups are overdue and your</div>
+          <div class="hl2">CVS interview is Thursday — <span class="ok">prep doc</span></div>
+          <div class="hl2">is ready. Start with the recruiter reply.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ PILLARS ============ -->
 <section class="blk" id="pillars">
   <div class="wrap">
@@ -615,7 +696,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
         <h3>Private &amp; secure</h3>
-        <p>Self-hosted with HTTP-only sessions. Your data never leaves your server.</p>
+        <p>The desktop app keeps everything on your machine; the cloud isolates every tenant's data in its own partition.</p>
       </div>
       <div class="pillar green">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div>
@@ -625,12 +706,12 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></div>
         <h3>Works everywhere</h3>
-        <p>One MCP server, every client: Claude, Copilot, Cursor, Windsurf, Zed.</p>
+        <p>One capability layer, every client: Claude, Copilot, Cursor, Windsurf, Zed — and in-browser agents over WebMCP.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
         <h3>Extensible</h3>
-        <p>70+ open tools and a clean API. Bend it to your own workflow.</p>
+        <p>12 domain tools, 104 actions, a clean HTTP API, and a CLI. Bend it to your own workflow.</p>
       </div>
     </div>
   </div>
@@ -645,8 +726,8 @@ LANDING_HTML: str = r'''<!doctype html>
     </div>
     <div class="steps">
       <div class="step">
-        <h3>Connect your MCP client</h3>
-        <p>Point Claude, Copilot, or Cursor at your jobContext server. One config line.</p>
+        <h3>Connect your way</h3>
+        <p>Add the connector in Claude, Copilot, or Cursor — or just download the desktop app and skip setup entirely.</p>
       </div>
       <div class="step">
         <h3>Import your career</h3>
