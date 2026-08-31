@@ -178,7 +178,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 <div class="wrap">
   <div class="page-eyebrow">Architecture</div>
   <h1>One capability layer, every surface</h1>
-  <p class="subtitle">jobContext is a single Python capability layer &mdash; 12 consolidated domain tools over a shared service layer and SQLite &mdash; shipped three ways: a native desktop app, a multi-tenant cloud, and a mobile companion. AI assistants, in-browser agents, the dashboard, the CLI, and automation all call the same tools.</p>
+  <p class="subtitle">jobContext is a single Python capability layer (12 consolidated domain tools over a shared service layer and SQLite) shipped three ways: a native desktop app, a multi-tenant cloud, and a mobile companion. AI assistants, in-browser agents, the dashboard, the CLI, and automation all call the same tools.</p>
 
   <!-- Big picture -->
   <div class="doc-section">
@@ -187,8 +187,8 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 flowchart TB
   subgraph AGENTS["AI agents"]
     direction LR
-    MCPC["Claude · Copilot · Cursor · Windsurf<br/><i>MCP — stdio / Streamable HTTP</i>"]
-    WEBA["ChatGPT desktop · Chrome OT · Edge<br/><i>WebMCP — document.modelContext</i>"]
+    MCPC["Claude · Copilot · Cursor · Windsurf<br/><i>MCP · stdio / Streamable HTTP</i>"]
+    WEBA["ChatGPT desktop · Chrome OT · Edge<br/><i>WebMCP · document.modelContext</i>"]
   end
   subgraph HUMANS["Human &amp; automation surfaces"]
     direction LR
@@ -198,7 +198,7 @@ flowchart TB
   end
   subgraph CORE["jobContext capability layer"]
     FAC["<b>12 consolidated domain tools · 104 actions</b><br/>applications · job_search · documents · materials · people · interviews<br/>stories · brand · insights · wellbeing · certification · workspace"]
-    SVC["shared service layer — one implementation of every capability,<br/>no logic duplicated per transport"]
+    SVC["shared service layer: one implementation of every capability,<br/>no logic duplicated per transport"]
     DB[("SQLite + JSON audit trail<br/>per-tenant partitions · files")]
     FAC --> SVC
     SVC --> DB
@@ -211,7 +211,7 @@ flowchart TB
   classDef hl stroke:#00B5C8,stroke-width:1.5px;
   class FAC hl
     </pre></div>
-    <p>Each tool takes an <code>action</code> parameter; a coverage test guarantees every capability of the historical 88-function surface stays reachable through the facades, so no client &mdash; AI or human &mdash; ever sees a stale subset. The agent is optional: the same tools serve the CLI, cron jobs, the dashboard, and the mobile app.</p>
+    <p>Each tool takes an <code>action</code> parameter; a coverage test guarantees every capability of the historical 88-function surface stays reachable through the facades, so no client, AI or human, ever sees a stale subset. The agent is optional: the same tools serve the CLI, cron jobs, the dashboard, and the mobile app.</p>
   </div>
 
   <!-- Three deployments -->
@@ -231,7 +231,7 @@ flowchart TB
       <div class="transport-card">
         <div class="tag">Mobile</div>
         <h4>Expo companion (iOS)</h4>
-        <p>Share-sheet capture with on-device page extraction &mdash; the phone reads postings that block datacenter IPs. Talks to the cloud with a keychain-stored API key.</p>
+        <p>Share-sheet capture with on-device page extraction: the phone reads postings that block datacenter IPs. Talks to the cloud with a keychain-stored API key.</p>
       </div>
     </div>
     <p><i style="color:var(--faint)">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
@@ -249,12 +249,12 @@ flowchart TB
       <div class="transport-card">
         <div class="tag">MCP · Streamable HTTP</div>
         <h4>Remote AI clients</h4>
-        <p>Claude.ai, Cursor, and VS Code connect to <code>/mcp</code> over OAuth (dynamic client registration + PKCE proxied to Entra). Runs stateless &mdash; every call is self-contained, so deploys never strand a connector session.</p>
+        <p>Claude.ai, Cursor, and VS Code connect to <code>/mcp</code> over OAuth (dynamic client registration + PKCE proxied to Entra). Runs stateless: every call is self-contained, so deploys never strand a connector session.</p>
       </div>
       <div class="transport-card">
         <div class="tag">WebMCP</div>
         <h4>In-browser agents</h4>
-        <p>The cloud dashboard republishes the server's tool list in-page via <code>document.modelContext</code>. ChatGPT desktop's browser, Chrome's origin trial, and Edge preview drive the workspace with no connector setup.</p>
+        <p>The cloud dashboard republishes the server's tool list in-page via <code>document.modelContext</code>, a W3C community proposal. ChatGPT desktop's browser drives the workspace today with no connector setup; Chrome's origin trial and Edge's preview follow as their support lands.</p>
       </div>
       <div class="transport-card">
         <div class="tag">REST</div>
@@ -267,7 +267,7 @@ flowchart TB
   <!-- WebMCP -->
   <div class="doc-section">
     <h2>The WebMCP bridge</h2>
-    <p>The dashboard is itself an agent surface. On sign-in, the bridge fetches <code>tools/list</code> from <code>/mcp</code> and registers each tool <b>verbatim</b> &mdash; names, descriptions, and schemas &mdash; as in-page WebMCP tools. There is no second tool surface to maintain, so what a browser agent sees can never drift from what an MCP client sees.</p>
+    <p>The dashboard is itself an agent surface. On sign-in, the bridge fetches <code>tools/list</code> from <code>/mcp</code> and registers each tool <b>verbatim</b> (names, descriptions, and schemas) as in-page WebMCP tools. There is no second tool surface to maintain, so what a browser agent sees can never drift from what an MCP client sees.</p>
     <div class="diagram-wrap"><pre class="mermaid">
 sequenceDiagram
   participant A as In-browser agent
@@ -276,20 +276,20 @@ sequenceDiagram
   Note over B: on sign-in: fetch tools/list,<br/>register every tool verbatim
   A->>B: document.modelContext tool call
   B->>M: same-origin POST (session cookie)
-  Note over M: CSRF guard — the cookie is<br/>ignored on cross-site requests
+  Note over M: CSRF guard: the cookie is<br/>ignored on cross-site requests
   M-->>B: JSON-RPC result from the same 12 facades<br/>every MCP client gets
   B-->>A: tool result
     </pre></div>
-    <p><b>Security:</b> an in-page agent acts as the signed-in user, inside their session &mdash; the same trust boundary as the user clicking the dashboard by hand. Because the session cookie is ambient, the middleware ignores it on cross-site <code>/mcp</code> requests (<code>Sec-Fetch-Site</code>, with an <code>Origin</code>/<code>Host</code> fallback), so a hostile page can't ride your login. Bearer auth is untouched.</p>
+    <p><b>Security:</b> an in-page agent acts as the signed-in user, inside their session: the same trust boundary as the user clicking the dashboard by hand. Because the session cookie is ambient, the middleware ignores it on cross-site <code>/mcp</code> requests (<code>Sec-Fetch-Site</code>, with an <code>Origin</code>/<code>Host</code> fallback), so a hostile page can't ride your login. Bearer auth is untouched.</p>
   </div>
 
   <!-- Cloud internals -->
   <div class="doc-section">
     <h2>Inside the cloud</h2>
     <h3>Tenant isolation</h3>
-    <p>Every tenant's data lives under its own partition; per-request context routing pins each request &mdash; and each background job &mdash; to exactly one partition. Background work goes through a <b>control plane</b>: durable work-item rows plus an in-process dispatcher, so long tasks (URL capture, document generation, eval runs, weekly certification) survive restarts and carry their partition with them.</p>
+    <p>Every tenant's data lives under its own partition; per-request context routing pins each request, and each background job, to exactly one partition. Background work goes through a <b>control plane</b>: durable work-item rows plus an in-process dispatcher, so long tasks (URL capture, document generation, eval runs, weekly certification) survive restarts and carry their partition with them.</p>
     <h3>Auth that fails honestly</h3>
-    <p>Entra ID for browsers, OAuth for connectors, personal access tokens for mobile and automation. Token verification distinguishes "invalid" from "can't verify right now": a key-fetch failure returns 503 with <code>Retry-After</code>, never a false 401 &mdash; so a transient outage never logs anyone out or breaks a connector.</p>
+    <p>Entra ID for browsers, OAuth for connectors, personal access tokens for mobile and automation. Token verification distinguishes "invalid" from "can't verify right now": a key-fetch failure returns 503 with <code>Retry-After</code>, never a false 401, so a transient outage never logs anyone out or breaks a connector.</p>
     <h3>Observability</h3>
     <p>A zero-dependency metrics library exports Prometheus metrics; in-cluster Prometheus + Grafana dashboards are checked in as code. Incident history lives in PR post-mortems, not tribal memory.</p>
   </div>
@@ -297,14 +297,14 @@ sequenceDiagram
   <!-- Sync -->
   <div class="doc-section">
     <h2>Desktop &#8646; cloud sync</h2>
-    <p>Journal-based and bidirectional: database triggers append every row change to a sync journal; peers exchange journals and resolve upserts last-writer-wins by timestamp. Files sync by SHA-256 manifest, and deletions propagate as tombstones that out-date stale copies instead of resurrecting them. Capture on your phone, assess on your desktop, connect from the cloud &mdash; same data everywhere.</p>
+    <p>Journal-based and bidirectional: database triggers append every row change to a sync journal; peers exchange journals and resolve upserts last-writer-wins by timestamp. Files sync by SHA-256 manifest, and deletions propagate as tombstones that out-date stale copies instead of resurrecting them. Capture on your phone, assess on your desktop, connect from the cloud; it's the same data everywhere.</p>
   </div>
 
   <!-- Truth -->
   <div class="doc-section">
     <h2>The truth gate &amp; evals</h2>
     <p>Generated resumes and cover letters pass a <b>deterministic provenance gate</b> before they reach you: every claim must trace back to your master resume or your logged history, and the gate's check&rarr;revise loop verifies its own corrections. Edits to the master resume are audited, because the gate validates against it.</p>
-    <p>Behind that sits a three-layer eval framework &mdash; deterministic checks, an adversarial LLM-as-judge calibrated against blind human labels, and a planted-error corpus with measured catch rates. Evals run nightly server-side, gate every cloud deploy, and are a product surface too: run the truth suite on your own applications and triage flagged claims from the dashboard.</p>
+    <p>Behind that sits a three-layer eval framework: deterministic checks, an adversarial LLM-as-judge calibrated against blind human labels, and a planted-error corpus with measured catch rates. Evals run nightly server-side, gate every cloud deploy, and are a product surface too: run the truth suite on your own applications and triage flagged claims from the dashboard.</p>
   </div>
 
   <!-- See also -->
@@ -318,7 +318,7 @@ sequenceDiagram
         </svg>
         <div class="doc-link-text">
           <strong>Getting started</strong>
-          <span>Cloud connector, desktop app, or mobile beta &mdash; connected in minutes.</span>
+          <span>Cloud connector, desktop app, or mobile beta, connected in minutes.</span>
         </div>
       </a>
       <a class="doc-link" href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/webmcp.md" target="_blank">
@@ -346,7 +346,7 @@ sequenceDiagram
 
 <footer>
   <div class="foot-inner">
-    <span class="muted">&copy; 2026 jobContext &mdash; The memory layer for your career.</span>
+    <span class="muted">&copy; 2026 jobContext &middot; The memory layer for your career.</span>
     <div class="foot-links">
       <a href="/">Home</a>
       <a href="/why">Why jobContext</a>

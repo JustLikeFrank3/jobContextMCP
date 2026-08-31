@@ -523,7 +523,7 @@ WHY_HTML: str = r'''<!doctype html>
       <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
       <div class="step"><h3>Just start talking</h3><p>Ask it to log a contact, assess a job, draft a cover letter, or plan your day. It does the rest, and remembers all of it next time.</p></div>
     </div>
-    <p style="text-align:center; color:var(--faint); font-size:var(--fs-sm); margin:26px auto 0; max-width:44em;">New: in a WebMCP-capable browser &mdash; ChatGPT desktop's built-in browser, Chrome's origin trial, Edge preview &mdash; you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own.</p>
+    <p style="text-align:center; color:var(--faint); font-size:var(--fs-sm); margin:26px auto 0; max-width:44em;">New: in ChatGPT desktop's built-in browser you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own, over WebMCP; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out.</p>
   </div>
 </section>
 

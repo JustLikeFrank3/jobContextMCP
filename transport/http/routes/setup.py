@@ -202,7 +202,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 <div class="wrap">
   <div class="page-eyebrow">Getting started</div>
   <h1>Get started with jobContext</h1>
-  <p class="subtitle">Three ways in, all backed by the same memory. Pick the one that fits how you work — you can add the others later, and everything stays in sync.</p>
+  <p class="subtitle">Three ways in, all backed by the same memory. Pick the one that fits how you work; you can add the others later, and everything stays in sync.</p>
 
   <div class="chooser">
     <a class="choice" href="#cloud">
@@ -224,7 +224,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
   <!-- ============ CLOUD ============ -->
   <div class="path" id="cloud">
-    <h2>Cloud — connect your AI in about a minute</h2>
+    <h2>Cloud: connect your AI in about a minute</h2>
     <p class="path-sub">The hosted workspace at jobcontext.ai. No installs, no config files, no infrastructure.</p>
     <div class="steps">
 
@@ -232,7 +232,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
         <div class="step-num">1</div>
         <div class="step-body">
           <h3>Sign in with Microsoft</h3>
-          <p><a href="/login">Sign in</a> with any Microsoft account. Your private, isolated workspace is created on first login &mdash; nobody else's data touches yours.</p>
+          <p><a href="/login">Sign in</a> with any Microsoft account. Your private, isolated workspace is created on first login; nobody else's data touches yours.</p>
         </div>
       </div>
 
@@ -242,15 +242,15 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
           <h3>Add the connector to your AI client</h3>
           <p>In Claude.ai, Cursor, or VS Code, add a remote MCP server pointing at:</p>
           <pre><code>https://jobcontext.ai/mcp</code></pre>
-          <p>Your client opens a sign-in window and OAuth handles the rest &mdash; no keys to copy, no JSON to edit. The client discovers all 12 domain tools automatically.</p>
+          <p>Your client opens a sign-in window and OAuth handles the rest: no keys to copy, no JSON to edit. The client discovers all 12 domain tools automatically.</p>
         </div>
       </div>
 
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-body">
-          <h3>Or skip the connector entirely &mdash; WebMCP</h3>
-          <p>The dashboard is itself an agent surface. Open it in a WebMCP-capable browser &mdash; ChatGPT desktop's built-in browser works out of the box; Chrome (origin trial) and Edge preview too &mdash; while signed in, and the in-page agent discovers every tool via <code>document.modelContext</code>. No setup at all.</p>
+          <h3>Or skip the connector entirely: WebMCP</h3>
+          <p>The dashboard is itself an agent surface. Open it in ChatGPT desktop's built-in browser while signed in and the in-page agent discovers every tool via <code>document.modelContext</code>, with no setup at all. Chrome (behind an origin trial) and Edge's preview gain the same tools as their WebMCP support lands.</p>
         </div>
       </div>
 
@@ -260,7 +260,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
           <h3>Bootstrap your workspace</h3>
           <p>In your AI chat, say:</p>
           <div class="note">"Run workspace setup and walk me through it."</div>
-          <p style="margin-top:.75rem">The <code>workspace</code> tool creates your whole data tree with zero manual setup. Then drop in your resume and start talking &mdash; log contacts, assess postings, generate documents. It remembers all of it next session.</p>
+          <p style="margin-top:.75rem">The <code>workspace</code> tool creates your whole data tree with zero manual setup. Then drop in your resume and start talking: log contacts, assess postings, generate documents. It remembers all of it next session.</p>
         </div>
       </div>
 
@@ -269,7 +269,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
   <!-- ============ DESKTOP ============ -->
   <div class="path" id="desktop">
-    <h2>Desktop — the whole platform as a native app</h2>
+    <h2>Desktop: the whole platform as a native app</h2>
     <p class="path-sub">No terminal, no Python, no account. Local SQLite; everything stays on your machine.</p>
     <div class="steps">
 
@@ -284,7 +284,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-body">
-          <h3>Open it &mdash; that's the setup</h3>
+          <h3>Open it. That's the setup</h3>
           <p>The app runs the full server locally and opens the same dashboard the cloud serves. Chat with an embedded AI over your own data: bring your own OpenAI or Anthropic key, or point it at a local Ollama model and run with no keys and no cloud at all.</p>
         </div>
       </div>
@@ -293,7 +293,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
         <div class="step-num">3</div>
         <div class="step-body">
           <h3>Optional: connect clients and sync</h3>
-          <p><strong>One-click MCP connect</strong> wires Claude Desktop, VS Code, or Cursor to your local server from the Settings screen. Link your cloud workspace and desktop &#8646; cloud sync keeps both sides current &mdash; and feeds the mobile app.</p>
+          <p><strong>One-click MCP connect</strong> wires Claude Desktop, VS Code, or Cursor to your local server from the Settings screen. Link your cloud workspace and desktop &#8646; cloud sync keeps both sides current and feeds the mobile app.</p>
         </div>
       </div>
 
@@ -302,7 +302,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
   <!-- ============ MOBILE ============ -->
   <div class="path" id="mobile">
-    <h2>Mobile — capture from your phone</h2>
+    <h2>Mobile: capture from your phone</h2>
     <p class="path-sub">The iOS companion, in TestFlight beta. Desktop creates knowledge; mobile captures reality.</p>
     <div class="steps">
 
@@ -310,7 +310,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
         <div class="step-num">1</div>
         <div class="step-body">
           <h3>Join the beta</h3>
-          <p>The app is in TestFlight &mdash; see <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/mobile/README.md" target="_blank">mobile/README.md</a> for the current beta link and screens.</p>
+          <p>The app is in TestFlight; see <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/mobile/README.md" target="_blank">mobile/README.md</a> for the current beta link and screens.</p>
         </div>
       </div>
 
@@ -336,7 +336,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
   <!-- ============ SELF-HOST ============ -->
   <div class="path" id="selfhost">
     <h2>Prefer to run it yourself?</h2>
-    <p class="path-sub">It's open source (MIT). Clone, create a venv, and run &mdash; stdio MCP for local clients or the full HTTP server with the dashboard.</p>
+    <p class="path-sub">It's open source (MIT). Clone, create a venv, and run: stdio MCP for local clients or the full HTTP server with the dashboard.</p>
     <pre><code>git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -383,7 +383,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 <footer>
   <div class="foot-inner">
-    <span class="muted">&copy; 2026 jobContext &mdash; The memory layer for your career.</span>
+    <span class="muted">&copy; 2026 jobContext &middot; The memory layer for your career.</span>
     <div class="foot-links">
       <a href="/">Home</a>
       <a href="/why">Why jobContext</a>
