@@ -190,3 +190,80 @@ class TestDeleteMaterialTool:
 
         assert out.startswith("✗ Not found")
         assert secret.exists()
+
+
+class TestMasterProtection:
+    """The master resume must never be deletable or renamable through the
+    untracked verbs: it is the ground truth every generation and eval checks
+    against, and since file tombstones landed, a delete here would propagate
+    to every synced peer and out of the mirrored backup within one tick."""
+
+    def _master(self, opt):
+        master = opt / "Frank Resume - MASTER SOURCE.txt"
+        master.write_text("master", encoding="utf-8")
+        return master
+
+    def test_master_is_excluded_from_the_untracked_list(self, partition):
+        _, opt = partition
+        self._master(opt)
+        (opt / "Orphan_Resume.txt").write_text("orphan", encoding="utf-8")
+        payload = mats._materials_payload()
+        assert payload["untracked_resume_files"] == ["Orphan_Resume.txt"]
+        assert payload["gap"] == 1
+
+    def test_delete_refuses_the_master(self, partition):
+        root, opt = partition
+        master = self._master(opt)
+        with pytest.raises(HTTPException) as exc:
+            _delete(master.name)
+        assert exc.value.status_code == 403
+        assert master.exists()
+        assert not _tombstones(root)
+
+    def test_associate_refuses_the_master(self, partition):
+        _, opt = partition
+        master = self._master(opt)
+        with pytest.raises(HTTPException) as exc:
+            _associate(master.name, "Travelers")
+        assert exc.value.status_code == 403
+        assert master.exists()
+
+    def test_custom_named_master_is_protected_by_its_configured_path(
+        self, partition, monkeypatch
+    ):
+        """A master whose name lacks the MASTER convention is still caught —
+        by resolved-path comparison against the active config."""
+        _, opt = partition
+        custom = opt / "my-resume.txt"
+        custom.write_text("master", encoding="utf-8")
+        monkeypatch.setattr(cfg, "get_active_master_resume_path", lambda: custom)
+
+        payload = mats._materials_payload()
+        assert "my-resume.txt" not in payload["untracked_resume_files"]
+        with pytest.raises(HTTPException) as exc:
+            _delete("my-resume.txt")
+        assert exc.value.status_code == 403
+        assert custom.exists()
+
+    def test_delete_material_tool_refuses_the_configured_master(
+        self, partition, monkeypatch
+    ):
+        """Chat path, custom-named master: the name guard misses it, the
+        config-path guard must not."""
+        from tools.resume import delete_material
+
+        root, opt = partition
+        monkeypatch.setattr(cfg, "get_active_optimized_resumes_dir", lambda: opt)
+        monkeypatch.setattr(
+            cfg, "get_active_cover_letters_dir", lambda: root / "workspace" / "02-Cover-Letters"
+        )
+        custom = opt / "my-resume.txt"
+        custom.write_text("master", encoding="utf-8")
+        monkeypatch.setattr(cfg, "get_active_master_resume_path", lambda: custom)
+
+        out = delete_material("my-resume.txt")
+
+        assert out.startswith("✗ Refusing")
+        assert "master resume" in out
+        assert custom.exists()
+        assert not _tombstones(root)
