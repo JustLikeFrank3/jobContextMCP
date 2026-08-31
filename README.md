@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2304%20passing-brightgreen" alt="2304 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2310%20passing-brightgreen" alt="2310 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%20104%20actions-informational" alt="12 domain tools, 104 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -39,7 +39,7 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 | | |
 |---|---|
 | 12 MCP tools | 104 domain actions behind them |
-| 2304 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 2310 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
