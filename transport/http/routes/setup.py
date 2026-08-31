@@ -1,5 +1,6 @@
-"""Public getting-started / Claude Desktop setup page (served at /setup).
+"""Public getting-started page (served at /setup).
 Self-contained — design tokens + Google Fonts inlined, mirrors landing.py style.
+Covers the three onboarding paths: cloud connector, desktop app, mobile beta.
 """
 from __future__ import annotations
 
@@ -58,12 +59,36 @@ nav {
   text-transform: uppercase; color: var(--cyan-500); margin-bottom: .75rem;
 }
 h1 { font-size: 2.2rem; font-weight: 700; color: var(--text-strong); line-height: 1.15; margin-bottom: 1rem; }
-.subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 3rem; max-width: 600px; }
+.subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 2.5rem; max-width: 640px; }
+
+/* ---- Path chooser ---- */
+.chooser { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 3rem; }
+.choice {
+  display: block; background: var(--ink-700); border: 1px solid var(--line);
+  border-radius: 10px; padding: 1.1rem 1.2rem; text-decoration: none;
+  transition: border-color .15s;
+}
+.choice:hover { border-color: var(--cyan-500); text-decoration: none; }
+.choice .k {
+  font-family: var(--font-mono); font-size: .7rem; font-weight: 700;
+  color: var(--cyan-400); text-transform: uppercase; letter-spacing: .06em;
+}
+.choice strong { display: block; color: var(--text-strong); font-size: .95rem; margin-top: .35rem; }
+.choice span { display: block; color: var(--muted); font-size: .825rem; margin-top: .2rem; }
+@media (max-width: 640px) { .chooser { grid-template-columns: 1fr; } }
+
+/* ---- Path sections ---- */
+.path { margin-bottom: 3rem; }
+.path > h2 {
+  font-size: 1.35rem; font-weight: 700; color: var(--text-strong);
+  padding-bottom: .5rem; border-bottom: 1px solid var(--line); margin-bottom: .35rem;
+}
+.path > .path-sub { color: var(--muted); font-size: .95rem; margin-bottom: .5rem; }
 
 /* ---- Steps ---- */
 .steps { display: flex; flex-direction: column; gap: 0; }
 .step {
-  display: flex; gap: 1.5rem; padding: 1.75rem 0;
+  display: flex; gap: 1.5rem; padding: 1.5rem 0;
   border-bottom: 1px solid var(--line-soft);
 }
 .step:last-child { border-bottom: none; }
@@ -175,83 +200,148 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
 <div class="wrap">
   <div class="page-eyebrow">Getting started</div>
-  <h1>Set up jobContext with Claude Desktop</h1>
-  <p class="subtitle">Five steps from zero to a fully connected AI memory layer for your job search. Takes about five minutes.</p>
+  <h1>Get started with jobContext</h1>
+  <p class="subtitle">Three ways in, all backed by the same memory. Pick the one that fits how you work — you can add the others later, and everything stays in sync.</p>
 
-  <div class="steps">
+  <div class="chooser">
+    <a class="choice" href="#cloud">
+      <span class="k">Fastest</span>
+      <strong>Cloud + your AI</strong>
+      <span>Sign in, add a connector. About a minute.</span>
+    </a>
+    <a class="choice" href="#desktop">
+      <span class="k">Most private</span>
+      <strong>Desktop app</strong>
+      <span>Native app, local data, no account.</span>
+    </a>
+    <a class="choice" href="#mobile">
+      <span class="k">Companion</span>
+      <strong>Mobile (iOS beta)</strong>
+      <span>Capture jobs from your phone's share sheet.</span>
+    </a>
+  </div>
 
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <h3>Install Python 3</h3>
-        <p>Open Terminal and check if Python is already installed:</p>
-        <pre><code>python3 --version</code></pre>
-        <p>If you see "command not found", download Python from <a href="https://python.org/downloads" target="_blank">python.org/downloads</a> and install it.</p>
+  <!-- ============ CLOUD ============ -->
+  <div class="path" id="cloud">
+    <h2>Cloud — connect your AI in about a minute</h2>
+    <p class="path-sub">The hosted workspace at jobcontext.ai. No installs, no config files, no infrastructure.</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Sign in with Microsoft</h3>
+          <p><a href="/login">Sign in</a> with any Microsoft account. Your private, isolated workspace is created on first login &mdash; nobody else's data touches yours.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <h3>Clone the repo</h3>
-        <pre><code>git clone https://github.com/JustLikeFrank3/jobContextMCP
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Add the connector to your AI client</h3>
+          <p>In Claude.ai, Cursor, or VS Code, add a remote MCP server pointing at:</p>
+          <pre><code>https://jobcontext.ai/mcp</code></pre>
+          <p>Your client opens a sign-in window and OAuth handles the rest &mdash; no keys to copy, no JSON to edit. The client discovers all 12 domain tools automatically.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Or skip the connector entirely &mdash; WebMCP</h3>
+          <p>The dashboard is itself an agent surface. Open it in a WebMCP-capable browser &mdash; ChatGPT desktop's built-in browser works out of the box; Chrome (origin trial) and Edge preview too &mdash; while signed in, and the in-page agent discovers every tool via <code>document.modelContext</code>. No setup at all.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Bootstrap your workspace</h3>
+          <p>In your AI chat, say:</p>
+          <div class="note">"Run workspace setup and walk me through it."</div>
+          <p style="margin-top:.75rem">The <code>workspace</code> tool creates your whole data tree with zero manual setup. Then drop in your resume and start talking &mdash; log contacts, assess postings, generate documents. It remembers all of it next session.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ DESKTOP ============ -->
+  <div class="path" id="desktop">
+    <h2>Desktop — the whole platform as a native app</h2>
+    <p class="path-sub">No terminal, no Python, no account. Local SQLite; everything stays on your machine.</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Download and install</h3>
+          <p>Grab the newest <code>desktop-v*</code> build from the <a href="https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&expanded=true" target="_blank">releases page</a>: a signed &amp; notarized <code>.dmg</code> for macOS (Apple Silicon and Intel), an Authenticode-signed installer for Windows, and <code>.AppImage</code>/<code>.deb</code> for Linux. Updates install themselves.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Open it &mdash; that's the setup</h3>
+          <p>The app runs the full server locally and opens the same dashboard the cloud serves. Chat with an embedded AI over your own data: bring your own OpenAI or Anthropic key, or point it at a local Ollama model and run with no keys and no cloud at all.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Optional: connect clients and sync</h3>
+          <p><strong>One-click MCP connect</strong> wires Claude Desktop, VS Code, or Cursor to your local server from the Settings screen. Link your cloud workspace and desktop &#8646; cloud sync keeps both sides current &mdash; and feeds the mobile app.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ MOBILE ============ -->
+  <div class="path" id="mobile">
+    <h2>Mobile — capture from your phone</h2>
+    <p class="path-sub">The iOS companion, in TestFlight beta. Desktop creates knowledge; mobile captures reality.</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Join the beta</h3>
+          <p>The app is in TestFlight &mdash; see <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/mobile/README.md" target="_blank">mobile/README.md</a> for the current beta link and screens.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Paste an API key</h3>
+          <p>Create a personal access token on the dashboard's <strong>API Keys</strong> tab, paste it once into the app's Settings, and it lives in your device keychain. No separate sign-in to go stale while the app sits unopened.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Share postings straight into your pipeline</h3>
+          <p>See a role in Safari or LinkedIn? Share it to jobContext. Pages are extracted <em>on your phone</em>, so it reads postings that block datacenter IPs. Triage the queue and log wellbeing check-ins from anywhere; everything syncs back to desktop and cloud.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ SELF-HOST ============ -->
+  <div class="path" id="selfhost">
+    <h2>Prefer to run it yourself?</h2>
+    <p class="path-sub">It's open source (MIT). Clone, create a venv, and run &mdash; stdio MCP for local clients or the full HTTP server with the dashboard.</p>
+    <pre><code>git clone https://github.com/JustLikeFrank3/jobContextMCP
 cd jobContextMCP
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt</code></pre>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <h3>Create your config file</h3>
-        <pre><code>cp config.example.json config.json</code></pre>
-        <p>Open <code>config.json</code> in any text editor. Fill in your name, email, phone, and LinkedIn. The <code>openai_api_key</code> field can be left blank for now &mdash; it is only needed for RAG search features, not tone samples or outreach.</p>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-body">
-        <h3>Wire it to Claude Desktop</h3>
-        <p>Make sure <a href="https://claude.ai/download" target="_blank">Claude Desktop</a> is installed, then open this file in a text editor (create it if it does not exist):</p>
-        <p>
-          <strong>Mac:</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code><br>
-          <strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code>
-        </p>
-        <p>Paste this, replacing the paths with wherever you cloned the repo:</p>
-        <pre><code>{
-  "mcpServers": {
-    "jobContextMCP": {
-      "command": "/absolute/path/to/jobContextMCP/.venv/bin/python3",
-      "args": ["/absolute/path/to/jobContextMCP/server.py"],
-      "cwd": "/absolute/path/to/jobContextMCP"
-    }
-  }
-}</code></pre>
-        <p>Example on Mac: <code>/Users/yourname/jobContextMCP/.venv/bin/python3</code></p>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">5</div>
-      <div class="step-body">
-        <h3>Bootstrap your workspace</h3>
-        <p>Restart Claude Desktop. Then in a Claude chat, say:</p>
-        <div class="note">"Run setup_workspace and walk me through it."</div>
-        <p style="margin-top:.75rem">The tool will ask for your info and create all your data files from scratch.</p>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">&#43;</div>
-      <div class="step-body">
-        <h3>Add tone samples</h3>
-        <p>Ask Claude to <code>log_tone_sample</code> from any message you write. After a few samples, <code>get_tone_profile</code> will reflect your voice and Claude can draft outreach in your register.</p>
-        <div class="note"><strong>Note on work computers:</strong> IT restrictions may block running local scripts or modifying app config files. If you hit permission walls, Docker is the cleaner option. Check with IT first if unsure.</div>
-      </div>
-    </div>
-
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python server.py          # stdio MCP server
+# or the HTTP server: dashboard + REST + MCP Streamable HTTP at /mcp</code></pre>
+    <p style="color:var(--muted); font-size:.95rem">Per-client walkthroughs (VS Code, Claude Desktop, ChatGPT desktop, Cursor, Windsurf), Docker mode, and deployment guides live in the repo: <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/client-setup.md" target="_blank">docs/client-setup.md</a> and <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/local-development.md" target="_blank">docs/local-development.md</a>.</p>
   </div>
 
   <!-- See also -->
@@ -264,8 +354,8 @@ python3 -m venv .venv
           <path d="M8 21h8M12 17v4"/>
         </svg>
         <div class="doc-link-text">
-          <strong>Remote &amp; Mobile Architecture</strong>
-          <span>How jobContext exposes its tools over HTTP, SSE, and WebSocket for iPad and browser clients.</span>
+          <strong>Architecture</strong>
+          <span>One capability layer behind MCP, WebMCP, HTTP, desktop, and mobile.</span>
         </div>
       </a>
       <a class="doc-link" href="https://github.com/JustLikeFrank3/jobContextMCP" target="_blank">
@@ -274,7 +364,7 @@ python3 -m venv .venv
         </svg>
         <div class="doc-link-text">
           <strong>GitHub Repository</strong>
-          <span>Full source code, issues, and contribution guides.</span>
+          <span>Full source code, docs, issues, and contribution guides.</span>
         </div>
       </a>
     </div>
@@ -282,10 +372,10 @@ python3 -m venv .venv
 
   <div class="cta-band">
     <h2>Ready to connect?</h2>
-    <p>Sign in to the hosted dashboard or run it locally.</p>
+    <p>Sign in to the hosted dashboard, or download the desktop app and keep it all local.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="/login">Open dashboard</a>
-      <a class="btn btn-ghost" href="https://github.com/JustLikeFrank3/jobContextMCP" target="_blank">View on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&expanded=true" target="_blank">Download desktop</a>
     </div>
   </div>
 </div>

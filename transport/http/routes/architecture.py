@@ -1,5 +1,7 @@
-"""Public Remote + Mobile Architecture doc page (served at /architecture).
+"""Public architecture doc page (served at /architecture).
 Self-contained — design tokens + Google Fonts inlined, mirrors landing.py style.
+Describes the shipped system: one capability layer behind MCP, WebMCP, HTTP,
+desktop, and mobile; multi-tenant cloud; sync; truth gate + evals.
 """
 from __future__ import annotations
 
@@ -8,7 +10,7 @@ ARCHITECTURE_HTML: str = r'''<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Remote &amp; Mobile Architecture &mdash; jobContext</title>
+<title>Architecture &mdash; jobContext</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 :root {
@@ -56,7 +58,7 @@ nav {
   text-transform: uppercase; color: var(--cyan-500); margin-bottom: .75rem;
 }
 h1 { font-size: 2.2rem; font-weight: 700; color: var(--text-strong); line-height: 1.15; margin-bottom: 1rem; }
-.subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 3rem; max-width: 640px; }
+.subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 3rem; max-width: 680px; }
 
 /* ---- Section headings ---- */
 .doc-section { margin-bottom: 3rem; }
@@ -72,6 +74,7 @@ h1 { font-size: 2.2rem; font-weight: 700; color: var(--text-strong); line-height
 .doc-section p { color: var(--muted); font-size: .95rem; margin-bottom: .75rem; }
 .doc-section ul { padding-left: 1.5rem; color: var(--muted); font-size: .95rem; }
 .doc-section ul li { margin-bottom: .35rem; }
+.doc-section b { color: var(--text-soft); font-weight: 600; }
 
 /* ---- Diagram ---- */
 .diagram-wrap {
@@ -83,13 +86,17 @@ pre {
   font-family: var(--font-mono); font-size: .82rem;
   color: var(--text-soft); line-height: 1.55; white-space: pre;
 }
+/* Mermaid: before render the source shows as a plain code block (graceful
+   fallback if the CDN script is blocked); once processed, center the SVG. */
+pre.mermaid[data-processed="true"] { display: flex; justify-content: center; }
+pre.mermaid svg { max-width: 100%; height: auto; }
 code {
   font-family: var(--font-mono); font-size: .875rem;
   background: var(--ink-500); border: 1px solid var(--line);
   padding: .15em .4em; border-radius: 4px; color: var(--cyan-300);
 }
 
-/* ---- Transport cards ---- */
+/* ---- Transport / surface cards ---- */
 .transport-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 1rem; margin: 1rem 0;
@@ -107,19 +114,6 @@ code {
   font-size: .75rem; font-weight: 600; margin-bottom: .6rem;
   background: var(--ink-500); color: var(--cyan-300); border: 1px solid var(--line);
 }
-
-/* ---- Non-goals ---- */
-.nongoals {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;
-}
-.ng-box {
-  background: var(--ink-700); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem;
-}
-.ng-box h4 { font-size: .85rem; font-weight: 700; margin-bottom: .5rem; }
-.ng-box.do-not h4 { color: #F87171; }
-.ng-box.do h4 { color: var(--green-500); }
-.ng-box ul { padding-left: 1.2rem; color: var(--muted); font-size: .875rem; }
-.ng-box ul li { margin-bottom: .3rem; }
 
 /* ---- See also ---- */
 .see-also {
@@ -153,10 +147,6 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 .foot-links a { color: var(--muted); font-size: .875rem; }
 .foot-links a:hover { color: var(--text); text-decoration: none; }
 .muted { color: var(--muted); font-size: .875rem; }
-
-@media (max-width: 600px) {
-  .nongoals { grid-template-columns: 1fr; }
-}
 </style>
 </head>
 <body>
@@ -186,157 +176,134 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
 <div class="wrap">
   <div class="page-eyebrow">Architecture</div>
-  <h1>Remote &amp; Mobile Architecture</h1>
-  <p class="subtitle">How jobContext exposes its tools over HTTP, SSE, and WebSocket for iPad, browser, and Open WebUI clients without breaking existing local stdio MCP support.</p>
+  <h1>One capability layer, every surface</h1>
+  <p class="subtitle">jobContext is a single Python capability layer &mdash; 12 consolidated domain tools over a shared service layer and SQLite &mdash; shipped three ways: a native desktop app, a multi-tenant cloud, and a mobile companion. AI assistants, in-browser agents, the dashboard, the CLI, and automation all call the same tools.</p>
 
-  <!-- Current vs Target -->
+  <!-- Big picture -->
   <div class="doc-section">
-    <h2>Goal</h2>
-    <p>Add remote and mobile access so jobContext can be used from iPad, browser clients, Open WebUI, VS Code tunnels, and future web UIs without touching the existing Claude Desktop stdio path.</p>
-    <h3>Current</h3>
-    <div class="diagram-wrap"><pre>Claude Desktop
-    ↓ stdio
-jobContextMCP</pre></div>
-    <h3>Target</h3>
-    <div class="diagram-wrap"><pre>                ┌─────────────────────┐
-                │ Claude Desktop      │
-                │ (existing stdio)    │
-                └──────────┬──────────┘
-                           │ stdio
-                ┌──────────▼──────────┐
-                │   jobContextMCP     │
-                │ core tools/services │
-                └──────────┬──────────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-       REST              SSE             WebSocket
-         │                 │                 │
-         ▼                 ▼                 ▼
-   Open WebUI         Browser UI        iPad clients
-   Custom app         Streaming         Remote agents</pre></div>
+    <h2>The big picture</h2>
+    <div class="diagram-wrap"><pre class="mermaid">
+flowchart TB
+  subgraph AGENTS["AI agents"]
+    direction LR
+    MCPC["Claude · Copilot · Cursor · Windsurf<br/><i>MCP — stdio / Streamable HTTP</i>"]
+    WEBA["ChatGPT desktop · Chrome OT · Edge<br/><i>WebMCP — document.modelContext</i>"]
+  end
+  subgraph HUMANS["Human &amp; automation surfaces"]
+    direction LR
+    DASH["React dashboard<br/><i>web + desktop</i>"]
+    CLI["CLI · REST API<br/><i>automation, CI</i>"]
+    MOB["Mobile app<br/><i>share-sheet capture</i>"]
+  end
+  subgraph CORE["jobContext capability layer"]
+    FAC["<b>12 consolidated domain tools · 104 actions</b><br/>applications · job_search · documents · materials · people · interviews<br/>stories · brand · insights · wellbeing · certification · workspace"]
+    SVC["shared service layer — one implementation of every capability,<br/>no logic duplicated per transport"]
+    DB[("SQLite + JSON audit trail<br/>per-tenant partitions · files")]
+    FAC --> SVC
+    SVC --> DB
+  end
+  MCPC --> FAC
+  WEBA --> FAC
+  DASH --> FAC
+  CLI --> FAC
+  MOB --> FAC
+  classDef hl stroke:#00B5C8,stroke-width:1.5px;
+  class FAC hl
+    </pre></div>
+    <p>Each tool takes an <code>action</code> parameter; a coverage test guarantees every capability of the historical 88-function surface stays reachable through the facades, so no client &mdash; AI or human &mdash; ever sees a stale subset. The agent is optional: the same tools serve the CLI, cron jobs, the dashboard, and the mobile app.</p>
   </div>
 
-  <!-- Design principle -->
+  <!-- Three deployments -->
   <div class="doc-section">
-    <h2>Critical design requirement</h2>
-    <p>Business logic must not be tightly coupled to any transport layer. The layered architecture:</p>
-    <div class="diagram-wrap"><pre>transport/
-    mcp_stdio/    ← existing Claude Desktop path (untouched)
-    http/         ← FastAPI REST + SSE
-    websocket/    ← future iPad/agent clients
-
-services/
-    resume_service.py
-    job_analysis_service.py
-    retrieval_service.py
-    tone_service.py
-    langgraph_service.py
-
-repositories/
-    vector_store/
-    documents/
-    embeddings/
-
-workflows/
-    langgraph/</pre></div>
-    <p>MCP tools become thin wrappers around the shared service layer. No duplicated logic between HTTP and MCP.</p>
+    <h2>Three deployments, one codebase</h2>
+    <div class="transport-grid">
+      <div class="transport-card">
+        <div class="tag">Desktop</div>
+        <h4>Tauri 2 + sidecar</h4>
+        <p>A native shell embedding the full Python server as a signed sidecar. Local SQLite, loopback-only, embedded AI chat (BYOK or local Ollama), one-click MCP connect, automatic updates.</p>
+      </div>
+      <div class="transport-card">
+        <div class="tag">Cloud</div>
+        <h4>Multi-tenant on AKS</h4>
+        <p>The same server behind Microsoft Entra ID at jobcontext.ai. Every tenant gets an isolated data partition; per-request context routing keeps them apart. CI-driven deploys with an eval smoke gate.</p>
+      </div>
+      <div class="transport-card">
+        <div class="tag">Mobile</div>
+        <h4>Expo companion (iOS)</h4>
+        <p>Share-sheet capture with on-device page extraction &mdash; the phone reads postings that block datacenter IPs. Talks to the cloud with a keychain-stored API key.</p>
+      </div>
+    </div>
+    <p><i style="color:var(--faint)">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
   </div>
 
   <!-- Transports -->
   <div class="doc-section">
-    <h2>Transport layers</h2>
+    <h2>Client transports</h2>
     <div class="transport-grid">
       <div class="transport-card">
+        <div class="tag">MCP · stdio</div>
+        <h4>Local AI clients</h4>
+        <p>Claude Desktop, VS Code + Copilot, Cursor, and Windsurf spawn the server directly. The original transport, still first-class.</p>
+      </div>
+      <div class="transport-card">
+        <div class="tag">MCP · Streamable HTTP</div>
+        <h4>Remote AI clients</h4>
+        <p>Claude.ai, Cursor, and VS Code connect to <code>/mcp</code> over OAuth (dynamic client registration + PKCE proxied to Entra). Runs stateless &mdash; every call is self-contained, so deploys never strand a connector session.</p>
+      </div>
+      <div class="transport-card">
+        <div class="tag">WebMCP</div>
+        <h4>In-browser agents</h4>
+        <p>The cloud dashboard republishes the server's tool list in-page via <code>document.modelContext</code>. ChatGPT desktop's browser, Chrome's origin trial, and Edge preview drive the workspace with no connector setup.</p>
+      </div>
+      <div class="transport-card">
         <div class="tag">REST</div>
-        <h4>HTTP API</h4>
-        <p>FastAPI endpoints for job analysis, resume generation, story retrieval, and tone search. JSON in, structured data out.</p>
-      </div>
-      <div class="transport-card">
-        <div class="tag">SSE</div>
-        <h4>Server-Sent Events</h4>
-        <p>Streaming progress for resume generation, live job analysis, and multi-step LangGraph workflows. Essential for browser and iPad UX.</p>
-      </div>
-      <div class="transport-card">
-        <div class="tag">WebSocket</div>
-        <h4>WebSocket</h4>
-        <p>Bidirectional channel for iPad clients and remote agent sessions requiring low-latency two-way communication.</p>
-      </div>
-      <div class="transport-card">
-        <div class="tag">stdio</div>
-        <h4>MCP stdio</h4>
-        <p>Existing Claude Desktop transport. Preserved exactly as-is. MCP tools delegate to services rather than owning logic.</p>
+        <h4>Dashboard, CLI, mobile</h4>
+        <p>FastAPI serves the React dashboard, the HTTP API the mobile app and automation scripts use, and Prometheus metrics.</p>
       </div>
     </div>
   </div>
 
-  <!-- Key endpoints -->
+  <!-- WebMCP -->
   <div class="doc-section">
-    <h2>Key REST endpoints</h2>
-    <h3>Job analysis</h3>
-    <div class="diagram-wrap"><pre>POST /api/jobs/analyze
-{
-  "job_description": "...",
-  "target_role": "...",
-  "resume_id": "default"
-}</pre></div>
-    <p>Returns keyword extraction, match score, missing skills, recommended STAR stories, and suggested resume edits.</p>
-
-    <h3>Resume generation</h3>
-    <div class="diagram-wrap"><pre>POST /api/resumes/generate</pre></div>
-    <p>Returns a tailored resume in markdown and ATS-optimized form. PDF export available via the LaTeX pipeline.</p>
-
-    <h3>Streaming workflow</h3>
-    <div class="diagram-wrap"><pre>GET /api/workflows/stream/{session_id}</pre></div>
-    <p>SSE stream of multi-step LangGraph workflow progress. Resumable sessions planned.</p>
-
-    <h3>Story &amp; tone search</h3>
-    <div class="diagram-wrap"><pre>POST /api/stories/search
-POST /api/tone/search</pre></div>
-    <p>Semantic search over STAR stories and tone samples with relevance scores.</p>
+    <h2>The WebMCP bridge</h2>
+    <p>The dashboard is itself an agent surface. On sign-in, the bridge fetches <code>tools/list</code> from <code>/mcp</code> and registers each tool <b>verbatim</b> &mdash; names, descriptions, and schemas &mdash; as in-page WebMCP tools. There is no second tool surface to maintain, so what a browser agent sees can never drift from what an MCP client sees.</p>
+    <div class="diagram-wrap"><pre class="mermaid">
+sequenceDiagram
+  participant A as In-browser agent
+  participant B as WebMCP bridge (in-page)
+  participant M as /mcp (stateless Streamable HTTP)
+  Note over B: on sign-in: fetch tools/list,<br/>register every tool verbatim
+  A->>B: document.modelContext tool call
+  B->>M: same-origin POST (session cookie)
+  Note over M: CSRF guard — the cookie is<br/>ignored on cross-site requests
+  M-->>B: JSON-RPC result from the same 12 facades<br/>every MCP client gets
+  B-->>A: tool result
+    </pre></div>
+    <p><b>Security:</b> an in-page agent acts as the signed-in user, inside their session &mdash; the same trust boundary as the user clicking the dashboard by hand. Because the session cookie is ambient, the middleware ignores it on cross-site <code>/mcp</code> requests (<code>Sec-Fetch-Site</code>, with an <code>Origin</code>/<code>Host</code> fallback), so a hostile page can't ride your login. Bearer auth is untouched.</p>
   </div>
 
-  <!-- Auth -->
+  <!-- Cloud internals -->
   <div class="doc-section">
-    <h2>Authentication</h2>
-    <p>API keys initially, JWT when needed.</p>
-    <div class="diagram-wrap"><pre>Authorization: Bearer &lt;token&gt;</pre></div>
-    <p>Token stored in <code>.env</code>. Microsoft Entra ID (MSAL) integration for the hosted dashboard.</p>
+    <h2>Inside the cloud</h2>
+    <h3>Tenant isolation</h3>
+    <p>Every tenant's data lives under its own partition; per-request context routing pins each request &mdash; and each background job &mdash; to exactly one partition. Background work goes through a <b>control plane</b>: durable work-item rows plus an in-process dispatcher, so long tasks (URL capture, document generation, eval runs, weekly certification) survive restarts and carry their partition with them.</p>
+    <h3>Auth that fails honestly</h3>
+    <p>Entra ID for browsers, OAuth for connectors, personal access tokens for mobile and automation. Token verification distinguishes "invalid" from "can't verify right now": a key-fetch failure returns 503 with <code>Retry-After</code>, never a false 401 &mdash; so a transient outage never logs anyone out or breaks a connector.</p>
+    <h3>Observability</h3>
+    <p>A zero-dependency metrics library exports Prometheus metrics; in-cluster Prometheus + Grafana dashboards are checked in as code. Incident history lives in PR post-mortems, not tribal memory.</p>
   </div>
 
-  <!-- Remote access -->
+  <!-- Sync -->
   <div class="doc-section">
-    <h2>Remote access</h2>
-    <p>Tailscale-compatible, LAN-safe by default, configurable host binding. Not exposed publicly without explicit opt-in.</p>
-    <div class="diagram-wrap"><pre>HOST=127.0.0.1
-PORT=8000
-ENABLE_REMOTE=false</pre></div>
+    <h2>Desktop &#8646; cloud sync</h2>
+    <p>Journal-based and bidirectional: database triggers append every row change to a sync journal; peers exchange journals and resolve upserts last-writer-wins by timestamp. Files sync by SHA-256 manifest, and deletions propagate as tombstones that out-date stale copies instead of resurrecting them. Capture on your phone, assess on your desktop, connect from the cloud &mdash; same data everywhere.</p>
   </div>
 
-  <!-- Non-goals -->
+  <!-- Truth -->
   <div class="doc-section">
-    <h2>Non-goals &amp; priorities</h2>
-    <div class="nongoals">
-      <div class="ng-box do-not">
-        <h4>Do NOT</h4>
-        <ul>
-          <li>Rewrite the MCP server</li>
-          <li>Remove stdio support</li>
-          <li>Tightly bind UI to backend</li>
-          <li>Make LangGraph the only orchestration path</li>
-          <li>Over-engineer auth initially</li>
-        </ul>
-      </div>
-      <div class="ng-box do">
-        <h4>Prioritize</h4>
-        <ul>
-          <li>Modularity</li>
-          <li>Transport independence</li>
-          <li>Mobile and browser usability</li>
-          <li>Clean service abstraction</li>
-        </ul>
-      </div>
-    </div>
+    <h2>The truth gate &amp; evals</h2>
+    <p>Generated resumes and cover letters pass a <b>deterministic provenance gate</b> before they reach you: every claim must trace back to your master resume or your logged history, and the gate's check&rarr;revise loop verifies its own corrections. Edits to the master resume are audited, because the gate validates against it.</p>
+    <p>Behind that sits a three-layer eval framework &mdash; deterministic checks, an adversarial LLM-as-judge calibrated against blind human labels, and a planted-error corpus with measured catch rates. Evals run nightly server-side, gate every cloud deploy, and are a product surface too: run the truth suite on your own applications and triage flagged claims from the dashboard.</p>
   </div>
 
   <!-- See also -->
@@ -350,7 +317,17 @@ ENABLE_REMOTE=false</pre></div>
         </svg>
         <div class="doc-link-text">
           <strong>Getting started</strong>
-          <span>Set up jobContext with Claude Desktop in five minutes.</span>
+          <span>Cloud connector, desktop app, or mobile beta &mdash; connected in minutes.</span>
+        </div>
+      </a>
+      <a class="doc-link" href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/webmcp.md" target="_blank">
+        <svg class="doc-link-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <div class="doc-link-text">
+          <strong>WebMCP design notes</strong>
+          <span>Bridge internals, security model, and browser enablement.</span>
         </div>
       </a>
       <a class="doc-link" href="https://github.com/JustLikeFrank3/jobContextMCP" target="_blank">
@@ -359,7 +336,7 @@ ENABLE_REMOTE=false</pre></div>
         </svg>
         <div class="doc-link-text">
           <strong>GitHub Repository</strong>
-          <span>Full source code, issues, and contribution guides.</span>
+          <span>Full source, design docs, and incident post-mortems in PR history.</span>
         </div>
       </a>
     </div>
@@ -379,6 +356,43 @@ ENABLE_REMOTE=false</pre></div>
     </div>
   </div>
 </footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  /* Theme mermaid to the jobContext design tokens; if the CDN script failed
+     to load, the raw diagram source stays visible as a code block. */
+  if (window.mermaid) {
+    mermaid.initialize({
+      startOnLoad: true,
+      sequence: { mirrorActors: false },
+      theme: 'base',
+      themeVariables: {
+        darkMode: true,
+        background: '#0F172A',
+        primaryColor: '#16213A',
+        primaryTextColor: '#F2F6FC',
+        primaryBorderColor: '#2E4366',
+        lineColor: '#64748B',
+        secondaryColor: '#1B2A44',
+        tertiaryColor: '#111A2B',
+        clusterBkg: '#111A2B',
+        clusterBorder: '#23324D',
+        edgeLabelBackground: '#0F172A',
+        fontFamily: "'Space Grotesk', system-ui, sans-serif",
+        fontSize: '14px',
+        actorBkg: '#16213A',
+        actorBorder: '#2E4366',
+        actorTextColor: '#F2F6FC',
+        actorLineColor: '#64748B',
+        signalColor: '#9AA8BF',
+        signalTextColor: '#D7E3F8',
+        noteBkgColor: '#1B2A44',
+        noteTextColor: '#D7E3F8',
+        noteBorderColor: '#2E4366'
+      }
+    });
+  }
+</script>
 
 </body>
 </html>
