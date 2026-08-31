@@ -494,6 +494,21 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     provider, model = _resolve_llm_settings(task=task, cfg=active_cfg)
     env_key = _llm_env_api_key(task)
 
+    # Finite request timeout for every REMOTE client. The SDK default is 600s
+    # per request with internal retries on top — a stalled provider connection
+    # holds a dispatcher slot (there are two, shared by every tenant) for the
+    # better part of an hour while the work row honestly reads 'running'
+    # (2026-08-31: two chat-submitted generations wedged the control plane
+    # this way). 120s comfortably covers the slowest observed generation
+    # call; a black-holed socket now fails the attempt instead of the queue.
+    # Ollama is exempt: local inference is legitimately slow, a localhost
+    # socket cannot black-hole the cloud dispatcher, and desktop users on CPU
+    # models routinely exceed any remote-sized budget.
+    remote_kwargs = {
+        "timeout": float(os.getenv("LLM_REQUEST_TIMEOUT", "120")),
+        "max_retries": 2,
+    }
+
     if provider == "ollama":
         ollama_base = active_cfg.get("ollama_base_url", "http://localhost:11434/v1")
         client = OpenAI(base_url=ollama_base, api_key="ollama")
@@ -506,7 +521,8 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
         api_key = env_key or active_cfg.get("anthropic_api_key", "")
         if not api_key:
             return None, ""
-        client = OpenAI(base_url="https://api.anthropic.com/v1/", api_key=api_key)
+        client = OpenAI(base_url="https://api.anthropic.com/v1/", api_key=api_key,
+                        **remote_kwargs)
         return client, model
 
     if provider == "foundry":
@@ -530,6 +546,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
                 azure_endpoint=endpoint,
                 api_key=api_key,
                 api_version=api_version,
+                **remote_kwargs,
             )
         else:
             try:
@@ -542,6 +559,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
                 azure_endpoint=endpoint,
                 azure_ad_token_provider=token_provider,
                 api_version=api_version,
+                **remote_kwargs,
             )
         return client, model
 
@@ -550,7 +568,7 @@ def get_llm_client(task: str = "") -> tuple[Any, str]:  # NOSONAR
     api_key = env_key or active_cfg.get("openai_api_key", "")
     if not api_key:
         return None, ""
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, **remote_kwargs)
     return client, model
 
 
