@@ -191,6 +191,17 @@ def delete_material(filename: str) -> str:
     from lib.sync import active_sync_root, delete_synced_file
 
     target = candidates[0]
+    # The name guard above catches the MASTER convention; this catches a
+    # master configured under a custom name — deleting it would break every
+    # generation and (post-tombstones) propagate to all synced peers.
+    try:
+        if target.resolve() == config.get_active_master_resume_path().resolve():
+            return (
+                f"✗ Refusing to delete {filename} — it is the configured "
+                "master resume, the source every generation checks against."
+            )
+    except OSError:
+        pass
     root = active_sync_root()
     if root is not None:
         with get_connection() as con:

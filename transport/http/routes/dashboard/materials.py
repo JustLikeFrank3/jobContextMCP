@@ -77,8 +77,14 @@ def _materials_payload() -> dict:
     folders = _scan_folders()
     tracked = _load_tracked_companies()
     opt_files = [f["name"] for f in folders.get("optimized_resumes", {}).get("files", [])]
+    opt_folder = _folder_path("optimized_resumes")
     untracked_files = []
     for fname in opt_files:
+        # The master resume is source material, not an orphaned application
+        # artifact — it never belongs in a list whose contract is "safe to
+        # delete" (its delete/associate routes refuse it too).
+        if opt_folder is not None and _protected_material(opt_folder / fname):
+            continue
         fname_lower = fname.lower()
         found = any(
             company.lower() in fname_lower or fname_lower.startswith(company.lower().replace(" ", ""))
@@ -135,6 +141,25 @@ async def materials_file(folder_key: str, file_name: str) -> FileResponse:
 # the change survives sync instead of being resurrected by a peer.
 
 
+def _protected_material(target: Path) -> bool:
+    """True for files the untracked verbs must never touch.
+
+    The master resume is not an orphaned artifact — it is the ground truth
+    every generation and eval measures against, and since file tombstones
+    landed, a delete here would propagate to every synced peer and (via the
+    mirroring backup) out of the blob container within one backup tick.
+    "Start over" deserves a deliberate flow, not a click in a cleanup list.
+    Match both the configured path and the MASTER naming convention so a
+    custom-named master and a conventionally-named copy are both covered.
+    """
+    if "MASTER" in target.name.upper():
+        return True
+    try:
+        return target.resolve() == config.get_active_master_resume_path().resolve()
+    except OSError:
+        return False
+
+
 def _resolve_untracked(name: str) -> Path:
     """Resolve a bare filename inside the optimized-resumes folder.
 
@@ -147,6 +172,13 @@ def _resolve_untracked(name: str) -> Path:
         raise HTTPException(status_code=404, detail="Invalid file path")
     if not target.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {name}")
+    if _protected_material(target):
+        raise HTTPException(
+            status_code=403,
+            detail="The master resume cannot be deleted or renamed from the "
+                   "untracked list — it is the source every generation checks "
+                   "against.",
+        )
     return target
 
 
