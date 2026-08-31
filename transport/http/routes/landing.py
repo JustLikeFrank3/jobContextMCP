@@ -224,7 +224,8 @@ LANDING_HTML: str = r'''<!doctype html>
 </style>
 <style>
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  /* scroll-padding-top keeps anchored section headings clear of the 66px sticky nav */
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
   body {
     margin: 0;
     background: var(--bg-app);

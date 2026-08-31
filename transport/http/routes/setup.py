@@ -25,7 +25,8 @@ SETUP_HTML: str = r'''<!doctype html>
   --font-mono: 'JetBrains Mono', monospace;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; scroll-behavior: smooth; }
+/* scroll-padding-top keeps anchored headings clear of the 54px sticky nav */
+html { font-size: 16px; scroll-behavior: smooth; scroll-padding-top: 78px; }
 body {
   background: linear-gradient(160deg, var(--ink-900) 0%, var(--ink-850) 100%);
   color: var(--text); font-family: var(--font-body);
