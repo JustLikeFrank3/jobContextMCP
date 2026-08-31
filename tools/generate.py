@@ -1178,93 +1178,113 @@ def _correct_unsourced_claims(
     content: str,
     **create_kwargs,
 ) -> "tuple[str, int]":
-    """One bounded correction pass when the truth gate flags fabricated numbers.
+    """Bounded check→revise loop (budget two) when the truth gate or critic flags.
 
     Returns ``(content, revisions)``. Until 2026-08-10 the single-shot paths
     detected violations *after* the document was already saved and rendered to
     PDF, so the gate was a report line on a shipped artifact: the 2026-08-10
     nightly flagged fabricated numbers in 92% of runs and every one of them
-    shipped. The agent path already re-drafts on violations
-    (langgraph_pipeline.route_after_review); this gives single-shot the same
-    correction step, at a budget of one rather than the agent's two — a
-    dashboard-triggered generation is latency-sensitive and the second pass
-    there is the one that rarely changes the verdict.
+    shipped. This pass fixed that at a budget of one — but a budget of one
+    ships whatever the revise produced, unverified. The 08-26 and 08-31
+    nightlies measured the cost: contradicted-with-evidence placement claims
+    (Fabric-in-Level-5, Angular-dating) reached FINAL documents with
+    enforcement ON, because the single critique either missed the claim or
+    the revise failed to fix it — and nothing looked at the revised text.
+
+    Now the loop re-checks after each revise: iteration two's check IS the
+    verification pass, re-running the numeric gate AND a fresh critique
+    against the revised content — catching unfixed findings, first-sample
+    critic misses, and anything the revise newly introduced. Documents clean
+    on the first check keep the old cost exactly (one critique, no revise);
+    a dirty document costs at most two critiques and two revisions, and the
+    loop returns immediately after the second revise rather than paying for
+    a third critique whose verdict nothing would act on — the provenance
+    note re-checks the final text for the record anyway.
 
     Deliberately non-blocking on failure. Every exit that isn't a clean
-    correction returns the ORIGINAL content: the gate must never be the reason
-    a generation produces nothing, and a document with a ⚠ marker is more
-    useful than an error string. Callers re-check the returned content, so a
-    correction that fails to fix everything is still reported honestly.
+    correction returns the best content so far (a pass-two failure keeps the
+    pass-one revision): the gate must never be the reason a generation
+    produces nothing, and a document with a ⚠ marker is more useful than an
+    error string. Callers re-check the returned content, so a correction
+    that fails to fix everything is still reported honestly.
 
     The draft is replayed as an assistant turn followed by the correction as a
     user turn — ordinary conversation history, not a trailing-assistant prefill
     (which 400s on Claude 4.6+ and would break the anthropic provider).
     """
+    max_revisions = 2
+    revisions = 0
     try:
         from lib.provenance import check_claims, format_violation_feedback  # noqa: PLC0415
 
-        # master_sources = the unbudgeted bundle: a superset of what the
-        # prompt carried, which is safe — a years claim backed by master text
-        # the model didn't see is still TRUE. The JD (inside user_msg) stays
-        # a source for everything except years claims.
-        bundle = _load_master_context()
-        violations = check_claims(content, [user_msg], master_sources=[bundle])
-
-        # Phase-3 entailment enforcement: contradicted-with-evidence findings
-        # join the numeric violations in the same single correction pass. The
-        # critic earned this on 2026-08-21 (11/11 maiden precision with quoted
-        # evidence, zero C-class over-reach); unsupported findings stay
-        # advisory. Fail-soft — a critic outage must not block generation or
-        # discard the numeric gate's verdict.
-        critic_feedback = ""
         from evals.critic import (  # noqa: PLC0415
             enforceable_findings,
             enforcement_enabled,
             format_contradiction_feedback,
         )
 
-        if enforcement_enabled():
-            try:
-                from evals.critic import critique_document  # noqa: PLC0415
+        # master_sources = the unbudgeted bundle: a superset of what the
+        # prompt carried, which is safe — a years claim backed by master text
+        # the model didn't see is still TRUE. The JD (inside user_msg) stays
+        # a source for everything except years claims.
+        bundle = _load_master_context()
+        while True:
+            violations = check_claims(content, [user_msg], master_sources=[bundle])
 
-                critic_feedback = format_contradiction_feedback(
-                    enforceable_findings(critique_document(bundle, content))
-                )
-            except Exception:  # noqa: BLE001 — enforcement is best-effort by design
-                critic_feedback = ""
+            # Phase-3 entailment enforcement: contradicted-with-evidence
+            # findings join the numeric violations in the same correction
+            # pass. The critic earned this on 2026-08-21 (11/11 maiden
+            # precision with quoted evidence, zero C-class over-reach);
+            # unsupported findings stay advisory. Fail-soft — a critic outage
+            # must not block generation or discard the numeric gate's verdict.
+            critic_feedback = ""
+            if enforcement_enabled():
+                try:
+                    from evals.critic import critique_document  # noqa: PLC0415
 
-        if not violations and not critic_feedback:
-            return content, 0
-        feedback = "\n\n".join(
-            part for part in (format_violation_feedback(violations), critic_feedback) if part
-        )
-        response = _chat_completion_create(
-            client,
-            label=f"{label}_correct",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-                {"role": "assistant", "content": content},
-                {
-                    "role": "user",
-                    "content": (
-                        f"{feedback}\n\nReturn the corrected document in full, in the "
-                        "same format. Change nothing except what is required to fix "
-                        "the violations listed above: unsourced numbers are removed "
-                        "or replaced with sourced ones; entailment violations are "
-                        "relocated or restated to match their quoted source — never "
-                        "deleted."
-                    ),
-                },
-            ],
-            **create_kwargs,
-        )
-        revised = (response.choices[0].message.content or "").strip()
-        # An empty or truncated correction is worse than the original draft —
-        # keep what we had rather than saving a stub over it.
-        return (revised, 1) if revised else (content, 0)
+                    critic_feedback = format_contradiction_feedback(
+                        enforceable_findings(critique_document(bundle, content))
+                    )
+                except Exception:  # noqa: BLE001 — enforcement is best-effort by design
+                    critic_feedback = ""
+
+            if not violations and not critic_feedback:
+                return content, revisions
+            feedback = "\n\n".join(
+                part for part in (format_violation_feedback(violations), critic_feedback) if part
+            )
+            response = _chat_completion_create(
+                client,
+                label=f"{label}_correct",
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": content},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"{feedback}\n\nReturn the corrected document in full, in the "
+                            "same format. Change nothing except what is required to fix "
+                            "the violations listed above: unsourced numbers are removed "
+                            "or replaced with sourced ones; entailment violations are "
+                            "relocated or restated to match their quoted source — never "
+                            "deleted."
+                        ),
+                    },
+                ],
+                **create_kwargs,
+            )
+            revised = (response.choices[0].message.content or "").strip()
+            # An empty or truncated correction is worse than what we have —
+            # keep it rather than saving a stub over it.
+            if not revised:
+                return content, revisions
+            content = revised
+            revisions += 1
+            if revisions >= max_revisions:
+                return content, revisions
     except Exception:  # noqa: BLE001 — correction is best-effort, never fatal
-        return content, 0
+        return content, revisions
 
 
 def _provenance_note(

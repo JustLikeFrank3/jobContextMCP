@@ -395,6 +395,76 @@ class TestCorrectUnsourcedClaims:
             user_msg=self.USER, content=draft,
         ) == (draft, 0)
 
+    # ── verification pass (2026-08-31): the revised text gets re-checked ──
+
+    def test_unfixed_violation_gets_a_second_and_final_pass(self, monkeypatch):
+        """A revise that fails to fix everything used to ship unverified —
+        the 08-26/08-31 nightlies measured contradicted placement claims
+        reaching final documents. The loop now re-checks and pays for one
+        more pass, then stops: never a third correction call."""
+        bodies = ["Cut 34% and uptime 98%.", "Cut 34% and uptime 97%."]
+        calls = []
+
+        def _fake(_client, **kwargs):
+            calls.append(kwargs)
+            return _FakeResponse(bodies[len(calls) - 1])
+
+        monkeypatch.setattr(generate, "_chat_completion_create", _fake)
+        out, n = generate._correct_unsourced_claims(
+            self._client(), label="l", system=self.SYSTEM,
+            user_msg=self.USER, content="Cut 34% and uptime 99.99%.",
+        )
+        assert (out, n) == ("Cut 34% and uptime 97%.", 2)
+        assert len(calls) == 2, "budget is two revisions, hard stop"
+        assert "98%" in calls[1]["messages"][-1]["content"], (
+            "the second pass must name the SURVIVING violation from the revised text")
+
+    def test_critic_finding_on_revised_text_is_caught_by_verification(self, monkeypatch):
+        """The verification pass re-runs the critic on what the revise
+        produced — a first-sample miss or an unfixed contradicted finding no
+        longer ships silently."""
+        critiques = []
+
+        def _fake_critique(_bundle, _content):
+            critiques.append(_content)
+            if len(critiques) == 1:
+                return {"model": "m", "findings": [{
+                    "claim": "Fabric migration under Level 5",
+                    "verdict": "contradicted",
+                    "evidence": "master: Fabric migration was Level 6 work",
+                }]}
+            return {"model": "m", "findings": []}
+
+        monkeypatch.setattr("evals.critic.critique_document", _fake_critique)
+        monkeypatch.setattr("evals.critic.enforcement_enabled", lambda: True)
+        monkeypatch.setattr(generate, "_chat_completion_create",
+                            lambda *a, **k: _FakeResponse("Cut latency 34%. Relocated."))
+        out, n = generate._correct_unsourced_claims(
+            self._client(), label="l", system=self.SYSTEM,
+            user_msg=self.USER, content="Cut latency 34%.",  # numerically clean
+        )
+        assert (out, n) == ("Cut latency 34%. Relocated.", 1)
+        assert len(critiques) == 2, "revised content must get its own critique"
+        assert critiques[1] == "Cut latency 34%. Relocated."
+
+    def test_second_pass_failure_keeps_the_first_revision(self, monkeypatch):
+        """Fail-soft direction matters: a pass-two error returns the pass-one
+        revision (strictly better than the draft), never the original."""
+        calls = []
+
+        def _fake(_client, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 2:
+                raise RuntimeError("429")
+            return _FakeResponse("Cut 34% and uptime 98%.")  # still dirty
+
+        monkeypatch.setattr(generate, "_chat_completion_create", _fake)
+        out, n = generate._correct_unsourced_claims(
+            self._client(), label="l", system=self.SYSTEM,
+            user_msg=self.USER, content="Cut 34% and uptime 99.99%.",
+        )
+        assert (out, n) == ("Cut 34% and uptime 98%.", 1)
+
 
 def test_generate_resume_corrects_before_saving(isolated_server, monkeypatch):
     """The whole point: what reaches save_resume_txt is the corrected text."""
@@ -482,14 +552,18 @@ class TestCriticEnforcementInCorrectionPass:
         monkeypatch.setenv("CRITIC_ENFORCE", enforce)
         monkeypatch.setattr(generate, "_load_master_context",
                             lambda *a, **k: "BUNDLE")
-        monkeypatch.setattr(prov_mod, "check_claims",
-                            lambda *a, **k: list(numeric_violations))
-        if isinstance(critic_result, Exception):
-            def critique(*a, **k):
+        # Content-sensitive mocks: the flags apply to the DRAFT; the corrected
+        # text checks clean — otherwise the verification pass (2026-08-31)
+        # would rightly see the "still-dirty" constant and spend its second
+        # revision, which is the loop working, not these contracts.
+        monkeypatch.setattr(
+            prov_mod, "check_claims",
+            lambda draft, *a, **k: list(numeric_violations) if draft == "DRAFT" else [])
+
+        def critique(_bundle, doc, *a, **k):
+            if isinstance(critic_result, Exception):
                 raise critic_result
-        else:
-            def critique(*a, **k):
-                return critic_result
+            return critic_result if doc == "DRAFT" else {"findings": []}
         monkeypatch.setattr(critic_mod, "critique_document", critique)
 
         calls = []
