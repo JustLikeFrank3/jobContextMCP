@@ -23,13 +23,17 @@ def _track(*companies: str) -> None:
 
 
 class TestUntrackedNote:
-    def test_untracked_company_gets_the_nudge(self, isolated_server):
+    def test_untracked_company_gets_auto_logged(self, isolated_server):
+        # 2026-08-31: the nudge became an auto-log — a document generated FOR
+        # a company is a pipeline event; the user shouldn't do homework to
+        # make their own artifact tracked. (The nudge survives as the
+        # degraded path when the auto-log itself fails.)
         _track("Acme")
         note = _untracked_note("Travelers", "AI Engineer")
-        assert "Travelers is not a tracked application" in note
-        assert 'applications(action="update"' in note
-        assert 'company="Travelers"' in note
-        assert 'role="AI Engineer"' in note
+        assert "auto-logged" in note and "materials drafted" in note
+        apps = json.loads(config.STATUS_FILE.read_text(encoding="utf-8"))["applications"]
+        added = [a for a in apps if a["company"] == "Travelers"]
+        assert added and added[0]["status"] == "materials drafted"
 
     def test_tracked_company_is_silent(self, isolated_server):
         _track("Travelers")
@@ -41,10 +45,11 @@ class TestUntrackedNote:
         _track("Travelers")
         assert _untracked_note("Travelers Insurance", "x") == ""
 
-    def test_no_status_file_yields_the_nudge(self, isolated_server):
+    def test_no_status_file_still_auto_logs(self, isolated_server):
         if config.STATUS_FILE.exists():
             config.STATUS_FILE.unlink()
-        assert "not a tracked application" in _untracked_note("Acme", "SWE")
+        assert "auto-logged" in _untracked_note("Acme", "SWE")
+        assert config.STATUS_FILE.exists()  # the log created the tracker
 
     def test_malformed_status_file_fails_soft(self, isolated_server):
         config.STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -64,4 +69,6 @@ class TestUntrackedNote:
         from tools import generate
 
         src = inspect.getsource(generate)
-        assert src.count("]) + _untracked_note(company, role)") == 2
+        # filename rides along so EVAL artifacts can be excluded from the
+        # auto-log — eval runs must never seed phantom pipeline entries.
+        assert src.count("]) + _untracked_note(company, role, filename)") == 2
