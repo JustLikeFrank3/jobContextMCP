@@ -125,21 +125,32 @@ def _contains_claim(corpus: str, needle: str) -> bool:
 # only. Single-digit "N+ years" never matched the numeric patterns above
 # (no %, no suffix, under two digits), so this class was entirely ungated.
 _YEARS_CLAIM_RE = re.compile(
-    r"\b(?:(?:over|more than)\s+)?\d{1,2}(?:\.\d)?\s*\+?\s*years?\b",
+    r"\b(?:(?:over|more than|at least|under|less than|fewer than)\s+)?"
+    r"\d{1,2}(?:\.\d)?\s*\+?\s*years?\b",
     re.IGNORECASE,
 )
 
 
 def _normalize_years(token: str) -> str:
-    """Canonical form: '5+years' for any ≥-flavored claim, '5years' exact.
+    """Canonical form: '5+years' ≥-flavored, 'under5years' <-flavored, '5years' exact.
 
-    'over 5 years', 'more than 5 years', '5+ years', and '5 + years' all
-    claim the same thing; '5 years' claims something stricter and is NOT
-    backed by a source saying '5+ years' (nor vice versa — rule 1 is
-    verbatim, and '5 years'→'5+ years' is precisely the inflation move).
+    'over 5 years', 'more than 5 years', 'at least 5 years', '5+ years', and
+    '5 + years' all claim the same thing; '5 years' claims something stricter
+    and is NOT backed by a source saying '5+ years' (nor vice versa — rule 1
+    is verbatim, and '5 years'→'5+ years' is precisely the inflation move).
+
+    Under-flavored claims ('under 5 years', 'less than 5 years', 'fewer
+    than 5 years') are their own class, distinct from BOTH others: the
+    08-31 nightly shipped an invented 'less than 5 years tenure' because
+    the old regex saw only the bare '5 years', which an unrelated exact
+    '5 years' elsewhere in the master cross-context-backed. An
+    under-claim is only backed by an under-claim of the same number.
     """
     t = token.lower().strip()
-    plus = "+" in t or t.startswith(("over", "more than"))
+    if t.startswith(("under", "less than", "fewer than")):
+        n = re.search(r"\d{1,2}(?:\.\d)?", t).group(0)
+        return f"under{n}years"
+    plus = "+" in t or t.startswith(("over", "more than", "at least"))
     n = re.search(r"\d{1,2}(?:\.\d)?", t).group(0)
     return f"{n}+years" if plus else f"{n}years"
 
@@ -233,28 +244,60 @@ def _normalize_title(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 
 
+# LEADERSHIP & COMMUNITY's `Role/label: description` lines joined the gate
+# on 2026-08-31: v1 scoped them out (fuzzy-label worry), and the invented-
+# evangelist class promptly recurred twice in one nightly ("AI Evangelist",
+# "AI Tooling Evangelist" — presented as named roles parallel to real ones).
+# Scoped strictly to the LEADERSHIP section so skills lines (`Label: value`
+# under CORE TECHNICAL SKILLS) and prose colons stay ungated.
+_LEADERSHIP_HEADER_RE = re.compile(r"^\s*LEADERSHIP\b[A-Z &]*\s*$")
+_ALLCAPS_SECTION_RE = re.compile(r"^\s*[A-Z][A-Z &]{2,}\s*$")
+_LEADER_LABEL_RE = re.compile(r"^([A-Za-z][A-Za-z0-9 .&'/-]{1,60}):\s+\S")
+
+
 def extract_title_claims(draft: str) -> list[str]:
-    """Titles the draft presents as HELD: job-header first segments and the
-    headline tagline. Original spelling, deduped on normalized form."""
+    """Titles the draft presents as HELD: job-header first segments, every
+    headline-tagline title, and LEADERSHIP role labels. Original spelling,
+    deduped on normalized form."""
     seen: dict[str, str] = {}
+
+    def _add(title: str) -> None:
+        key = _normalize_title(title)
+        if key and key not in seen:
+            seen[key] = title
+
+    in_leadership = False
     for line in (draft or "").splitlines():
+        if _LEADERSHIP_HEADER_RE.match(line):
+            in_leadership = True
+            continue
+        if in_leadership and _ALLCAPS_SECTION_RE.match(line):
+            in_leadership = False
+        if in_leadership and "|" not in line:
+            m = _LEADER_LABEL_RE.match(line.strip())
+            if m:
+                _add(m.group(1))
+            continue
         if "|" not in line:
             continue
         parts = [p.strip() for p in line.split("|")]
-        title = ""
         if len(parts) == 3 and parts[0]:
             years = _YEAR_RE.findall(parts[2])
             # Job headers span time: two year tokens ("2019 - 2021") or a
             # year plus a month/Present ("Jan 2024 - Present"). Projects and
             # education carry exactly ONE bare year and stay ungated.
             if len(years) >= 2 or (years and _TITLE_DATE_RANGE_RE.search(parts[2])):
-                title = parts[0]
-        elif len(parts) == 2 and parts[0] and "•" in parts[1]:
-            title = parts[0]  # headline tagline
-        if title:
-            key = _normalize_title(title)
-            if key and key not in seen:
-                seen[key] = title
+                _add(parts[0])
+                continue
+        # Headline tagline: the •-separated stack is the LAST segment, and
+        # every segment before it is a claimed title. v1 only handled the
+        # spec's two-part shape and parts[0] — the 08-31 nightly shipped
+        # "SOFTWARE ENGINEER | AI PRODUCTIZATION ENGINEER | …• MLflow •…",
+        # smuggling the JD's title through the middle segment.
+        if len(parts) >= 2 and "•" in parts[-1]:
+            for p in parts[:-1]:
+                if p:
+                    _add(p)
     return list(seen.values())
 
 
