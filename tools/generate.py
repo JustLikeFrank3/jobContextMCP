@@ -1321,18 +1321,27 @@ def _provenance_note(
         return f"Provenance: ⚠ check skipped — {exc}"
 
 
-def _untracked_note(company: str, role: str) -> str:
-    """One-line nudge when generating for a company with no tracked application.
+def _untracked_note(company: str, role: str, filename: str = "") -> str:
+    """Auto-log the application when generating for an untracked company.
 
-    MCP clients get the logging contract from the server instructions, but
-    WebMCP delivers only the tool surface — an in-browser agent that generates
-    a document for an untracked company never learns it should log the
-    application, and the file lands in Materials' untracked bucket
-    (2026-08-30: ChatGPT generated a Travelers resume this way). A tool
-    RESULT is the one channel every client acts on, so the contract rides
-    here. Empty string when the company is tracked; fail-soft always — a
-    nudge is never worth failing a generation that succeeded.
+    History: this started as a one-line NUDGE (2026-08-30, after ChatGPT via
+    WebMCP generated a Travelers resume that landed in Materials' untracked
+    bucket — a tool RESULT is the one channel every client acts on). The
+    2026-08-31 report closed the loop: the nudge still left the file
+    untracked unless the user did homework, and a document generated FOR a
+    company IS a pipeline event — so log it. The application is created at
+    status "materials drafted" (honest: nothing has been submitted), which
+    makes the file tracked in Materials the moment it lands; the user
+    promotes the status when they actually apply.
+
+    Never for EVAL artifacts: eval generations are deleted after scoring and
+    must not seed phantom pipeline entries in the partition (the golden set's
+    companies are real employers). Fail-soft in both directions — if the
+    auto-log fails, degrade to the old nudge; nothing here is worth failing
+    a generation that succeeded.
     """
+    if (filename or "").startswith("EVAL"):
+        return ""
     try:
         import json as _json  # noqa: PLC0415 — local: helper must never add import risk
 
@@ -1350,12 +1359,27 @@ def _untracked_note(company: str, role: str) -> str:
                 return ""
     except Exception:  # noqa: BLE001
         return ""
-    return (
-        f"\n  ⚠ {company} is not a tracked application — this file will list as "
-        f"untracked in Materials. Log it: applications(action=\"update\", "
-        f"company=\"{company}\", role=\"{role}\", status=\"applied\" or the "
-        "stage that fits)."
-    )
+    try:
+        from tools.job_hunt import update_application  # noqa: PLC0415 — lazy: avoid import cycle
+
+        update_application(
+            company, role, "materials drafted",
+            notes="Auto-logged: a document was generated for this company "
+                  "before the application was tracked. Update the status "
+                  "when you apply.",
+        )
+        return (
+            f"\n  ✓ {company} — {role} auto-logged in the pipeline as "
+            "\"materials drafted\" — this file is tracked in Materials; "
+            "update the application status when you apply."
+        )
+    except Exception:  # noqa: BLE001 — tracking must never break generation
+        return (
+            f"\n  ⚠ {company} is not a tracked application — this file will list as "
+            f"untracked in Materials. Log it: applications(action=\"update\", "
+            f"company=\"{company}\", role=\"{role}\", status=\"applied\" or the "
+            "stage that fits)."
+        )
 
 
 def get_provenance_report(company: str = "", role: str = "") -> str:
@@ -1519,7 +1543,7 @@ def generate_resume(
         f"  {prov_note}",
         f"  correction passes: {revisions}"
         " — full attestation: documents(action=\"provenance\")",
-    ]) + _untracked_note(company, role)
+    ]) + _untracked_note(company, role, filename)
 
 
 @_tracked(
@@ -1646,7 +1670,7 @@ def generate_cover_letter(
         f"  {prov_note}",
         f"  correction passes: {revisions}"
         " — full attestation: documents(action=\"provenance\")",
-    ]) + _untracked_note(company, role)
+    ]) + _untracked_note(company, role, filename)
 
 
 def preview_story_retrieval(role: str, job_description: str = "") -> str:
