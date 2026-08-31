@@ -298,11 +298,11 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 
     <div class="panel-mid">
       <h2>Welcome back to your <span class="c">career memory.</span></h2>
-      <p>Every application, contact, post, and interview — remembered and ready for any AI assistant.</p>
+      <p>Every application, contact, post, and interview, remembered and ready for any AI assistant.</p>
       <div class="blist">
-        <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></span>Self-hosted &amp; private — your data never leaves your server</div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></span>Private by design: your workspace is isolated to you</div>
         <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></span>Works with Claude, Copilot, Cursor, Windsurf &amp; Zed</div>
-        <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></span>70+ tools across 11 career surfaces</div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h10M3 15h6"/></svg></span>12 domain tools &middot; 104 actions across your whole search</div>
       </div>
       <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works with <strong>Oura Ring</strong></span>
     </div>
