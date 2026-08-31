@@ -27,6 +27,23 @@ from tools import generate_work
 _POLL_HINT = 'documents(action="generation_status", work_id={id})'
 
 
+def _running_minutes(row: dict) -> "int | None":
+    """Whole minutes a running row has been executing, from its started_at
+    stamp ('YYYY-MM-DD HH:MM:SS', UTC). None when the stamp is absent or
+    unparseable — the honesty note is best-effort, never a failure source."""
+    from datetime import datetime, timezone
+
+    stamp = row.get("started_at") or row.get("created_at")
+    if not stamp:
+        return None
+    try:
+        started = datetime.strptime(str(stamp), "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return int((datetime.now(timezone.utc) - started).total_seconds() // 60)
+
+
 def _submit(kind: str, inputs: dict) -> str:
     item_id = work.enqueue(kind, inputs, origin="chat_async")
     return (
@@ -127,11 +144,25 @@ def generation_status(work_id: int) -> str:
         )
     status = row.get("status")
     if status in ("queued", "running"):
-        return (
+        out = (
             f"⧗ Work item #{row['id']} ({kind}) is {status} "
             f"(attempt {row.get('attempt', 0)}/{row.get('max_attempts', 1)}, "
             f"created {row.get('created_at')} UTC). Poll again in ~15 seconds."
         )
+        age = _running_minutes(row)
+        if status == "running" and age is not None and age >= 5:
+            # Don't chirp "15 more seconds" at a run that is far past the
+            # typical window — say what is actually happening. The LLM client
+            # carries a finite request timeout, so a stalled provider call
+            # fails the attempt rather than holding the row open forever.
+            out += (
+                f"\n⚠ This run has been executing for ~{age} minutes — well past "
+                "the typical 60–120s. The provider call is slow or retrying; it "
+                "will either complete or fail the attempt when the request "
+                "timeout elapses. Keep polling at a relaxed interval, or check "
+                "back later."
+            )
+        return out
     if status == "succeeded":
         artifacts = row.get("artifacts") or {}
         result = str(artifacts.get("result") or "")
