@@ -439,6 +439,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <a class="lnk" href="#platforms">Platforms</a>
       <a class="lnk" href="#webmcp">WebMCP</a>
       <a class="lnk" href="#pillars">Why it's safe</a>
+      <a class="lnk" href="/architecture">Architecture</a>
       <a class="lnk" href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
       <a class="btn btn-primary" href="/login">Get started</a>
