@@ -11,14 +11,14 @@ LANDING_HTML: str = r'''<!doctype html>
 <meta property="og:type"        content="website" />
 <meta property="og:url"         content="https://jobcontext.ai/" />
 <meta property="og:title"       content="jobContext &mdash; The memory layer for your career" />
-<meta property="og:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep &mdash; on desktop, cloud, and mobile." />
+<meta property="og:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep, on desktop, cloud, and mobile." />
 <meta property="og:image"       content="https://jobcontext.ai/og-image.png" />
 <meta property="og:image:width"  content="1200" />
 <meta property="og:image:height" content="627" />
 <!-- Twitter / X card -->
 <meta name="twitter:card"        content="summary_large_image" />
 <meta name="twitter:title"       content="jobContext &mdash; The memory layer for your career" />
-<meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep &mdash; on desktop, cloud, and mobile." />
+<meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep, on desktop, cloud, and mobile." />
 <meta name="twitter:image"       content="https://jobcontext.ai/og-image.png" />
 <style id="ds-tokens">
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -224,7 +224,8 @@ LANDING_HTML: str = r'''<!doctype html>
 </style>
 <style>
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  /* scroll-padding-top keeps anchored section headings clear of the 66px sticky nav */
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
   body {
     margin: 0;
     background: var(--bg-app);
@@ -438,6 +439,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <a class="lnk" href="#platforms">Platforms</a>
       <a class="lnk" href="#webmcp">WebMCP</a>
       <a class="lnk" href="#pillars">Why it's safe</a>
+      <a class="lnk" href="/architecture">Architecture</a>
       <a class="lnk" href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
       <a class="btn btn-primary" href="/login">Get started</a>
@@ -498,7 +500,7 @@ LANDING_HTML: str = r'''<!doctype html>
     <span class="name">Cursor</span>
     <span class="name">Windsurf</span>
     <span class="name">Zed</span>
-    <span class="lbl">…any MCP client — plus in-browser agents over WebMCP (ChatGPT desktop, Chrome, Edge)</span>
+    <span class="lbl">…any MCP client, plus in-browser agents over WebMCP (ChatGPT desktop today; Chrome and Edge as previews land)</span>
   </div>
 </div>
 
@@ -579,13 +581,13 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="sec-head">
       <div class="sec-eyebrow">One capability layer, three surfaces</div>
       <h2>Runs where you do</h2>
-      <p>The same tools, the same memory — as a native desktop app, a hosted cloud workspace, and a mobile companion, all kept in sync.</p>
+      <p>The same tools and the same memory, delivered as a native desktop app, a hosted cloud workspace, and a mobile companion, all kept in sync.</p>
     </div>
     <div class="platforms">
       <div class="plat">
         <div class="k">Desktop</div>
         <h3>Your private daily driver</h3>
-        <p>A native app for macOS, Windows, and Linux — no terminal, no account. Embedded AI chat over your own data (bring your own key, or run a local Ollama model with no keys at all), one-click MCP connect for Claude Desktop, VS Code, and Cursor, and local SQLite that never leaves your machine.</p>
+        <p>A native app for macOS, Windows, and Linux: no terminal, no account. Embedded AI chat over your own data (bring your own key, or run a local Ollama model with no keys at all), one-click MCP connect for Claude Desktop, VS Code, and Cursor, and local SQLite that never leaves your machine.</p>
         <div class="plat-cta"><a href="https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&amp;expanded=true">Download the desktop app →</a></div>
       </div>
       <div class="plat">
@@ -597,7 +599,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="plat">
         <div class="k">Mobile</div>
         <h3>Your capture device</h3>
-        <p>An iOS companion in TestFlight beta. Share a job posting from Safari or LinkedIn straight into your pipeline — pages are extracted on-device, so it reads postings that block datacenter IPs — then triage and log check-ins from anywhere. Everything syncs back.</p>
+        <p>An iOS companion in TestFlight beta. Share a job posting from Safari or LinkedIn straight into your pipeline (pages are extracted on-device, so it reads postings that block datacenter IPs), then triage and log check-ins from anywhere. Everything syncs back.</p>
         <div class="plat-cta"><a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/mobile/README.md">About the mobile beta →</a></div>
       </div>
     </div>
@@ -658,9 +660,9 @@ LANDING_HTML: str = r'''<!doctype html>
       <div>
         <div class="sec-eyebrow">New · WebMCP</div>
         <h2 class="readiness-h">The dashboard is itself an <span class="c">agent surface.</span></h2>
-        <p class="readiness-p">Sign in to the cloud dashboard in a WebMCP-capable browser and every jobContext tool is registered in-page via <code style="font-family:var(--font-mono);font-size:0.9em;color:var(--cyan-300)">document.modelContext</code> — the W3C draft standard for giving in-browser agents tools. ChatGPT desktop's built-in browser, Chrome's origin trial, and Edge preview can drive your whole workspace while you're on the site: no connector setup, no OAuth dance, no second tool surface. The bridge republishes the server's own tool list verbatim, so what a browser agent sees can never drift from what Claude or Cursor sees.</p>
-        <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works in <strong>ChatGPT desktop · Chrome · Edge</strong></span>
-        <p class="tm-note">Calls ride your signed-in session, same-origin only — a CSRF guard ignores the session cookie on cross-site requests, so a hostile page can't ride your login.</p>
+        <p class="readiness-p">Sign in to the cloud dashboard in a WebMCP-capable browser and every jobContext tool is registered in-page via <code style="font-family:var(--font-mono);font-size:0.9em;color:var(--cyan-300)">document.modelContext</code>, an emerging web standard (a W3C community proposal) for giving in-browser agents tools. ChatGPT desktop's built-in browser drives your whole workspace today, with no connector setup, no OAuth dance, and no second tool surface; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out. The bridge republishes the server's own tool list verbatim, so what a browser agent sees can never drift from what Claude or Cursor sees.</p>
+        <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works in <strong>ChatGPT desktop</strong> today · Chrome &amp; Edge next</span>
+        <p class="tm-note">Calls ride your signed-in session and are same-origin only: a CSRF guard ignores the session cookie on cross-site requests, so a hostile page can't ride your login.</p>
       </div>
 
       <div class="term">
@@ -677,7 +679,7 @@ LANDING_HTML: str = r'''<!doctype html>
           <div class="g">↳ calling <span class="tool">applications(&quot;status&quot;)</span></div>
           <div class="g">&nbsp;</div>
           <div class="hl2">Two follow-ups are overdue and your</div>
-          <div class="hl2">CVS interview is Thursday — <span class="ok">prep doc</span></div>
+          <div class="hl2">CVS interview is Thursday. The <span class="ok">prep doc</span></div>
           <div class="hl2">is ready. Start with the recruiter reply.</div>
         </div>
       </div>
@@ -706,7 +708,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 18H7z"/></svg></div>
         <h3>Works everywhere</h3>
-        <p>One capability layer, every client: Claude, Copilot, Cursor, Windsurf, Zed — and in-browser agents over WebMCP.</p>
+        <p>One capability layer, every client: Claude, Copilot, Cursor, Windsurf, Zed, and in-browser agents over WebMCP.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
@@ -727,7 +729,7 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="steps">
       <div class="step">
         <h3>Connect your way</h3>
-        <p>Add the connector in Claude, Copilot, or Cursor — or just download the desktop app and skip setup entirely.</p>
+        <p>Add the connector in Claude, Copilot, or Cursor. Prefer zero setup? Just download the desktop app.</p>
       </div>
       <div class="step">
         <h3>Import your career</h3>
