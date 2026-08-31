@@ -167,6 +167,12 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
+          # Chrome origin-trial token for WebMCP (subdomain-matched for
+          # jobcontext.ai). Empty until the secret exists — then plain
+          # Chrome exposes document.modelContext on the dashboard with no
+          # flags. Trial runs through Chrome 156 / Nov 16, 2026.
+          build-args: |
+            VITE_WEBMCP_OT_TOKEN=${{ secrets.WEBMCP_OT_TOKEN }}
 
       - name: Azure login
         uses: azure/login@v2
