@@ -214,7 +214,8 @@ WHY_HTML: str = r'''<!doctype html>
 </style>
 <style>
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  /* scroll-padding-top keeps anchored section headings clear of the 66px sticky nav */
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
   body {
     margin: 0;
     background: var(--bg-app);
@@ -515,13 +516,14 @@ WHY_HTML: str = r'''<!doctype html>
     <div class="sec-head">
       <div class="sec-eyebrow">How it works</div>
       <h2>Connected in about a minute</h2>
-      <p>The hosted version needs no setup files and no infrastructure. Add the connector, sign in, and start talking.</p>
+      <p>The hosted version needs no setup files and no infrastructure. Add the connector, sign in, and start talking. Prefer everything local? The desktop app runs it all on your machine, no account needed.</p>
     </div>
     <div class="steps">
       <div class="step"><h3>Add the connector</h3><p>In Claude, Copilot, Cursor, or Windsurf, add jobContext as a connector. One click. No config files to edit, nothing to install.</p></div>
       <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
       <div class="step"><h3>Just start talking</h3><p>Ask it to log a contact, assess a job, draft a cover letter, or plan your day. It does the rest, and remembers all of it next time.</p></div>
     </div>
+    <p style="text-align:center; color:var(--faint); font-size:var(--fs-sm); margin:26px auto 0; max-width:44em;">New: in ChatGPT desktop's built-in browser you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own, over WebMCP; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out.</p>
   </div>
 </section>
 
@@ -576,7 +578,7 @@ WHY_HTML: str = r'''<!doctype html>
       <h2>Built to be trusted with your career</h2>
       <p>You are handing it the story of your professional life. It is built to earn that.</p>
     </div>
-    <div class="pillars"><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>It will not make things up</h3><p>A no-fabrication guardrail lives in the system, not a prompt. It cannot invent metrics to flatter you. Everything traces back to your real record.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><h3>Your data is isolated</h3><p>Multi-tenant with per-user separation. Your search is yours. Nobody else can see it, and your data never leaks into anyone else's.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-4 1.3-4-2.2-6-2.7M15 21v-3.4a3 3 0 0 0-.8-2.3c2.8-.3 5.6-1.4 5.6-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6.6 1.6 5.6 1.9 5.6 1.9a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 4.2 8.3c0 4.6 2.8 5.7 5.6 6a3 3 0 0 0-.8 2.3V21"/></svg></div><h3>Open and inspectable</h3><p>The whole thing is open source. You can read exactly how it works, run your own copy, or just trust the hosted version. No black box.</p></div><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-7"/></svg></div><h3>Built and battle-tested</h3><p>Running in production on Azure with hundreds of automated tests behind it. This is a real system, not a weekend demo.</p></div></div>
+    <div class="pillars"><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>It will not make things up</h3><p>A no-fabrication guardrail lives in the system, not a prompt. It cannot invent metrics to flatter you. Everything traces back to your real record.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><h3>Your data is isolated</h3><p>Multi-tenant with per-user separation. Your search is yours. Nobody else can see it, and your data never leaks into anyone else's.</p></div><div class="pillar"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-4 1.3-4-2.2-6-2.7M15 21v-3.4a3 3 0 0 0-.8-2.3c2.8-.3 5.6-1.4 5.6-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6.6 1.6 5.6 1.9 5.6 1.9a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 4.2 8.3c0 4.6 2.8 5.7 5.6 6a3 3 0 0 0-.8 2.3V21"/></svg></div><h3>Open and inspectable</h3><p>The whole thing is open source. You can read exactly how it works, run your own copy, or just trust the hosted version. No black box.</p></div><div class="pillar green"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-7"/></svg></div><h3>Built and battle-tested</h3><p>Running in production on Azure with 2,300+ automated tests behind it, and a deterministic truth gate on every generated document. This is a real system, not a weekend demo.</p></div></div>
   </div>
 </section>
 
@@ -601,6 +603,8 @@ WHY_HTML: str = r'''<!doctype html>
     <div class="foot-links">
       <a href="/">Home</a>
       <a href="#how">How it works</a>
+      <a href="/setup">Getting started</a>
+      <a href="/architecture">Architecture</a>
       <a href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a href="/login">Sign in</a>
     </div>
