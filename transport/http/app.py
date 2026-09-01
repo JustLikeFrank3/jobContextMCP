@@ -39,6 +39,7 @@ from transport.http.routes.dashboard import router as dashboard_router
 from transport.http.routes.dashboard.api import router as dashboard_api_router
 from transport.http.routes.architecture import architecture_html
 from transport.http.routes.landing import landing_html
+from transport.http.routes.llms import llms_txt
 from transport.http.routes.login_page import login_html
 from transport.http.routes.privacy import privacy_html
 from transport.http.routes.setup import setup_html
@@ -465,6 +466,12 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     async def _root_landing() -> HTMLResponse:
         return HTMLResponse(landing_html())
+
+    # Breadcrumb for agents that read rendered HTML and can't see WebMCP
+    # registrations — points them at the MCP endpoint instead.
+    @app.get("/llms.txt", include_in_schema=False)
+    async def _llms_txt() -> PlainTextResponse:
+        return PlainTextResponse(llms_txt(), media_type="text/plain; charset=utf-8")
 
     @app.get("/why", include_in_schema=False)
     async def _why_page() -> HTMLResponse:
