@@ -488,6 +488,13 @@ class TestPublicPages:
         assert "text/html" in ct
         assert len(r.text) > 500
 
+    def test_llms_txt_is_public_plaintext(self, http_client_noauth):
+        r = http_client_noauth.get("/llms.txt")
+        assert r.status_code == 200
+        assert "text/plain" in r.headers.get("content-type", "")
+        assert "document.modelContext" in r.text
+        assert "https://jobcontext.ai/mcp" in r.text
+
     def test_landing_page_contains_jobcontext(self, http_client_noauth):
         r = http_client_noauth.get("/")
         assert r.status_code == 200

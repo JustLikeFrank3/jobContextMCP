@@ -9,6 +9,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>jobContext — Dashboard</title>
+    <meta
+      name="description"
+      content="jobContext dashboard. For AI agents: this page registers 12 MCP domain tools (104 actions) via document.modelContext (WebMCP) when the user is signed in — the registrations are headless and leave no trace in the DOM. Agents without WebMCP support: see /llms.txt, or connect over MCP at https://jobcontext.ai/mcp."
+    />
+    <meta name="ai-tools" content="webmcp:document.modelContext; mcp:https://jobcontext.ai/mcp; manifest:/llms.txt" />
+    <!--
+      Note for agents reading this page as HTML: jobContext's 12 tools
+      (applications, brand, certification, documents, insights, interviews,
+      job_search, materials, people, stories, wellbeing, workspace) are
+      registered in-page via document.modelContext and are invisible to DOM
+      inspection. Absence of visual evidence is not absence of tools.
+      Details: /llms.txt
+    -->
     <!-- Design-system typefaces: Space Grotesk (UI), JetBrains Mono (counts/IDs) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
