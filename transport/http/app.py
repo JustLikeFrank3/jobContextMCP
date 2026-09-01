@@ -256,6 +256,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             # LAN readability of eval detail on purpose.
             "/wallboard",
             "/terms",            "/og-image",            "/logged-out",
+            "/llms.txt",      # agent breadcrumb — public plaintext, no user data
             "/login",
             "/why",
             "/app",              # React SPA shell + hashed assets (data APIs stay protected)

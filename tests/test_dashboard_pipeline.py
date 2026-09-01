@@ -714,6 +714,19 @@ class TestPipelineAuth:
         assert r.status_code == 303
         assert r.headers["location"] == "/"
 
+    def test_llms_txt_public_even_with_auth_enabled(self, http_client_authed):
+        # /llms.txt is the agent breadcrumb — it must be served to
+        # unauthenticated browser/agent navigations, not swept into the
+        # redirect-to-landing branch (2026-09-01 report: it 303'd to /).
+        r = http_client_authed.get(
+            "/llms.txt",
+            headers={"Accept": "text/html,text/plain"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "text/plain" in r.headers.get("content-type", "")
+        assert "document.modelContext" in r.text
+
     def test_non_dashboard_fetch_unauthenticated_still_gets_json_401(self, http_client_authed):
         r = http_client_authed.get(
             "/evals",
