@@ -78,6 +78,19 @@ spec:
           env:
             - name: START_MODE
               value: "http"
+            # qa is the eval lab during prod freezes (first: 2026-09-01 →
+            # 09-21): eval-side changes merge to qa, deploy here, and the
+            # nightly measures them — prod's suite keeps running unchanged
+            # code as the control. 09:00 UTC, one hour after prod's 08:00,
+            # so two N=5 suites never hit the shared judge key at the same
+            # minute. Same MWF cadence; delete DAYS to go daily while
+            # actively iterating. Ground truth must be seeded into the qa
+            # owner partition (workspace import) — master_sha on every run
+            # says whether qa and prod are measuring the same master.
+            - name: EVALS_NIGHTLY_HOUR_UTC
+              value: "9"
+            - name: EVALS_NIGHTLY_DAYS_UTC
+              value: "mon,wed,fri"
             - name: USE_SQLITE
               value: "1"
             # SQLite is the sole source of truth in the cloud. Reads already
