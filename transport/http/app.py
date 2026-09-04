@@ -255,6 +255,10 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             # serves content here, and that operator is choosing login-free
             # LAN readability of eval detail on purpose.
             "/wallboard",
+            # Alexa skill webhook. Alexa can't send an Authorization header;
+            # the route proves origin itself (cert chain + body signature)
+            # and resolves the tenant from the account-linked key in the body.
+            "/alexa",
             "/terms",            "/og-image",            "/logged-out",
             "/llms.txt",      # agent breadcrumb — public plaintext, no user data
             "/login",
@@ -447,6 +451,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         from transport.http.routes import chat as chat_routes
         app.include_router(desktop_routes.router)
         app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
+    from transport.http.routes import alexa as alexa_routes
     from transport.http.routes import evals as evals_routes
     from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
@@ -455,6 +460,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
+    app.include_router(alexa_routes.router)  # classic-skill webhook (signature-verified)
     app.include_router(work_routes.router)  # control-plane work-item status
     app.include_router(evals_routes.router)  # eval results ingest → eval_* gauges
     app.include_router(wallboard_routes.router)  # kiosk eval-detail page (404 unless WALLBOARD_EVALS_* set)
