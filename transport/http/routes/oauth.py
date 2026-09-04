@@ -63,9 +63,15 @@ router = APIRouter(tags=["oauth-discovery"])
 _BRIDGE_CODE_PREFIX = "jcac_"
 _BRIDGE_CODE_TTL_SECONDS = 120
 _BRIDGE_KEY_LABEL = "ChatGPT connector"
-_BRIDGE_DEFAULT_REDIRECTS = (
-    "https://chatgpt.com/connector_platform_oauth_redirect",
-    "https://chat.openai.com/connector_platform_oauth_redirect",
+# ChatGPT's callback is PER-CONNECTOR — https://chatgpt.com/connector/oauth/
+# followed by an opaque connector id (observed live 2026-09-04, AADSTS50011
+# from the Entra fallback showed the shape) — so the allowlist matches on
+# prefix, not exact URI.  Prefix matching is safe here because the prefix
+# pins scheme, host, and path root: a minted code can only ever be delivered
+# to a chatgpt.com/chat.openai.com connector callback.
+_BRIDGE_DEFAULT_REDIRECT_PREFIXES = (
+    "https://chatgpt.com/connector/oauth/",
+    "https://chat.openai.com/connector/oauth/",
 )
 
 # Pending one-time codes: code → {oid, redirect_uri, code_challenge, expires}.
@@ -82,14 +88,34 @@ def _bridge_enabled() -> bool:
     return bool(os.environ.get("ENTRA_CLIENT_ID"))
 
 
-def _bridge_redirect_uris() -> frozenset[str]:
-    """Exact-match allowlist of callback URIs the bridge will release codes
-    to.  Overridable via KEYBRIDGE_REDIRECT_URIS (comma-separated) in case
-    ChatGPT's callback changes."""
+def _bridge_redirect_rules() -> tuple[frozenset[str], tuple[str, ...]]:
+    """(exact URIs, prefixes) the bridge will release codes to.
+
+    Overridable via KEYBRIDGE_REDIRECT_URIS (comma-separated) in case
+    ChatGPT's callback shape changes: an entry ending in ``*`` is a prefix
+    rule (the ``*`` is stripped), anything else must match exactly.
+    """
     raw = os.environ.get("KEYBRIDGE_REDIRECT_URIS", "")
     if raw.strip():
-        return frozenset(u.strip() for u in raw.split(",") if u.strip())
-    return frozenset(_BRIDGE_DEFAULT_REDIRECTS)
+        entries = [u.strip() for u in raw.split(",") if u.strip()]
+        exacts = frozenset(u for u in entries if not u.endswith("*"))
+        prefixes = tuple(u[:-1] for u in entries if u.endswith("*"))
+        return exacts, prefixes
+    return frozenset(), _BRIDGE_DEFAULT_REDIRECT_PREFIXES
+
+
+def _is_bridge_redirect_uri(uri: str) -> bool:
+    """True when the bridge may deliver a code to *uri*.
+
+    Prefix rules make hygiene checks load-bearing: no query/fragment (a code
+    must arrive as OUR ?code=… append, nothing pre-baked), no whitespace or
+    backslashes, and no dot-segments that could resolve above the pinned
+    path root after the prefix check passed.
+    """
+    if not uri or any(ch in uri for ch in ("?", "#", "\\", " ")) or ".." in uri:
+        return False
+    exacts, prefixes = _bridge_redirect_rules()
+    return uri in exacts or any(uri.startswith(p) for p in prefixes)
 
 
 def _mint_bridge_code(oid: str, redirect_uri: str, code_challenge: str) -> str:
@@ -372,7 +398,7 @@ async def oauth_bridge_approve(request: Request) -> Response:
     state = str(form.get("state", ""))
     code_challenge = str(form.get("code_challenge", ""))
 
-    if redirect_uri not in _bridge_redirect_uris() or not code_challenge:
+    if not _is_bridge_redirect_uri(redirect_uri) or not code_challenge:
         return JSONResponse({"error": "invalid_request"}, status_code=400)
 
     code = _mint_bridge_code(oid, redirect_uri, code_challenge)
@@ -423,7 +449,7 @@ async def oauth_authorize_proxy(request: Request) -> Response:
     """
     # ChatGPT's callback URIs divert to the key bridge; everything else
     # (Claude.ai, Cursor, VS Code, mcp-remote) proceeds to Entra unchanged.
-    if _bridge_enabled() and request.query_params.get("redirect_uri", "") in _bridge_redirect_uris():
+    if _bridge_enabled() and _is_bridge_redirect_uri(request.query_params.get("redirect_uri", "")):
         return _bridge_consent_response(request)
 
     tenant_id = os.environ.get("ENTRA_TENANT_ID", "")

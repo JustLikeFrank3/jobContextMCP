@@ -24,7 +24,8 @@ from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 
-_CHATGPT_REDIRECT = "https://chatgpt.com/connector_platform_oauth_redirect"
+# ChatGPT's callback is per-connector: an opaque id under /connector/oauth/.
+_CHATGPT_REDIRECT = "https://chatgpt.com/connector/oauth/h4dVACDiDUTH"
 _VERIFIER = "test-verifier-" + "x" * 43
 
 
@@ -245,7 +246,7 @@ class TestTokenExchange:
         code = _code_from(_approve(bridge_client))
         r = _exchange(
             bridge_client, code,
-            redirect_uri="https://chat.openai.com/connector_platform_oauth_redirect",
+            redirect_uri="https://chatgpt.com/connector/oauth/DIFFERENTconn",
         )
         assert r.status_code == 400
 
@@ -277,11 +278,39 @@ class TestBridgeGating:
         assert _bridge_enabled() is False
 
     def test_redirect_allowlist_env_override(self, monkeypatch):
-        from transport.http.routes.oauth import _bridge_redirect_uris
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
 
-        monkeypatch.setenv("KEYBRIDGE_REDIRECT_URIS", "https://a.example/cb, https://b.example/cb")
-        assert _bridge_redirect_uris() == frozenset(
-            {"https://a.example/cb", "https://b.example/cb"}
+        monkeypatch.setenv(
+            "KEYBRIDGE_REDIRECT_URIS",
+            "https://a.example/cb, https://b.example/oauth/*",
         )
-        monkeypatch.delenv("KEYBRIDGE_REDIRECT_URIS")
-        assert _CHATGPT_REDIRECT in _bridge_redirect_uris()
+        assert _is_bridge_redirect_uri("https://a.example/cb") is True
+        assert _is_bridge_redirect_uri("https://a.example/cb2") is False  # exact
+        assert _is_bridge_redirect_uri("https://b.example/oauth/anything") is True
+        # Override REPLACES the defaults — ChatGPT's callback is out until listed.
+        assert _is_bridge_redirect_uri(_CHATGPT_REDIRECT) is False
+
+
+class TestRedirectMatching:
+    def test_any_connector_id_matches_default_prefix(self):
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
+
+        assert _is_bridge_redirect_uri("https://chatgpt.com/connector/oauth/AbC123xyz")
+        assert _is_bridge_redirect_uri("https://chat.openai.com/connector/oauth/Zz9")
+
+    def test_other_hosts_and_roots_rejected(self):
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
+
+        assert not _is_bridge_redirect_uri("https://evil.example/connector/oauth/x")
+        assert not _is_bridge_redirect_uri("https://chatgpt.com.evil.example/connector/oauth/x")
+        assert not _is_bridge_redirect_uri("https://chatgpt.com/other/path")
+        assert not _is_bridge_redirect_uri("http://chatgpt.com/connector/oauth/x")  # scheme pinned
+
+    def test_hygiene_rules_on_prefix_matches(self):
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
+
+        assert not _is_bridge_redirect_uri("https://chatgpt.com/connector/oauth/x?code=fake")
+        assert not _is_bridge_redirect_uri("https://chatgpt.com/connector/oauth/x#frag")
+        assert not _is_bridge_redirect_uri("https://chatgpt.com/connector/oauth/../../evil")
+        assert not _is_bridge_redirect_uri("https://chatgpt.com/connector/oauth/x\\y")
+        assert not _is_bridge_redirect_uri("")
