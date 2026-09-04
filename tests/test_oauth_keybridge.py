@@ -1,10 +1,12 @@
-"""ChatGPT key bridge: OAuth code flow fronting the per-user API-key system.
+"""Connector key bridge: OAuth code flow fronting the per-user API-key system.
 
-ChatGPT's MCP connector only speaks OAuth (authorization-code + PKCE) — it
-cannot present a static API key. The bridge in transport/http/routes/oauth.py
-serves a consent page (jc_session-authenticated) for allowlisted ChatGPT
-callback URIs, mints a one-time code, and exchanges it for a freshly created
-jcmcp_ key, which /mcp already accepts.
+ChatGPT's MCP connector and Alexa+ add-ons only speak OAuth
+(authorization-code + PKCE) — neither can present a static API key. The
+bridge in transport/http/routes/oauth.py serves a consent page
+(jc_session-authenticated) for allowlisted callback URIs, mints a one-time
+code, and exchanges it for a freshly created jcmcp_ key, which /mcp already
+accepts. Keys are labeled per client so the dashboard's API Keys tab shows
+which connector holds which credential.
 
 Covers:
 - unauthenticated consent GET bounces through /dashboard/login with next intact
@@ -289,6 +291,76 @@ class TestBridgeGating:
         assert _is_bridge_redirect_uri("https://b.example/oauth/anything") is True
         # Override REPLACES the defaults — ChatGPT's callback is out until listed.
         assert _is_bridge_redirect_uri(_CHATGPT_REDIRECT) is False
+
+
+# Alexa's account-linking callback is per-region + per-vendor under the
+# documented skill-link path roots.
+_ALEXA_REDIRECT = "https://pitangui.amazon.com/api/skill/link/M2VENDOR123"
+
+
+class TestAlexaClient:
+    def test_regional_callback_hosts_match_default_prefixes(self):
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
+
+        assert _is_bridge_redirect_uri(_ALEXA_REDIRECT)
+        assert _is_bridge_redirect_uri("https://layla.amazon.com/api/skill/link/M2X")
+        assert _is_bridge_redirect_uri("https://alexa.amazon.co.jp/api/skill/link/M2X")
+        # Host and path root stay pinned.
+        assert not _is_bridge_redirect_uri("https://pitangui.amazon.com/other/path")
+        assert not _is_bridge_redirect_uri("https://pitangui.amazon.com.evil.example/api/skill/link/x")
+
+    def test_consent_page_names_alexa(self, bridge_client, alice_cookie):
+        r = bridge_client.get(
+            "/oauth/authorize",
+            params=_authorize_query(redirect_uri=_ALEXA_REDIRECT),
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "Connect Alexa+" in r.text
+        assert "ChatGPT" not in r.text
+
+    def test_full_flow_labels_key_per_client(self, bridge_client, alice_cookie):
+        from lib.api_keys import list_keys, lookup_key
+
+        r = _approve(bridge_client, redirect_uri=_ALEXA_REDIRECT)
+        assert r.status_code == 303
+        assert r.headers["location"].startswith(_ALEXA_REDIRECT)
+        code = parse_qs(urlparse(r.headers["location"]).query)["code"][0]
+
+        rx = _exchange(bridge_client, code, redirect_uri=_ALEXA_REDIRECT)
+        assert rx.status_code == 200
+        token = rx.json()["access_token"]
+        assert lookup_key(token) == "oid-alice"
+        labels = [k.label for k in list_keys("oid-alice")]
+        assert "Alexa+ connector" in labels
+        assert "ChatGPT connector" not in labels
+
+    def test_env_override_redirect_gets_generic_label(
+        self, bridge_client, alice_cookie, monkeypatch
+    ):
+        from lib.api_keys import list_keys
+
+        monkeypatch.setenv("KEYBRIDGE_REDIRECT_URIS", "https://c.example/oauth/*")
+        uri = "https://c.example/oauth/cb"
+        r = _approve(bridge_client, redirect_uri=uri)
+        assert r.status_code == 303
+        code = parse_qs(urlparse(r.headers["location"]).query)["code"][0]
+        assert _exchange(bridge_client, code, redirect_uri=uri).status_code == 200
+        assert "MCP connector" in [k.label for k in list_keys("oid-alice")]
+
+
+class TestUnauthChallenge:
+    def test_401_carries_resource_metadata_pointer(self, bridge_client):
+        """RFC 9728 §5.1 — Alexa+ discovery starts from a bare 401 and follows
+        the resource_metadata parameter to our PRM document."""
+        bridge_client.cookies.clear()
+        r = bridge_client.get("/api/work", headers={"Accept": "application/json"})
+        assert r.status_code == 401
+        challenge = r.headers["WWW-Authenticate"]
+        assert (
+            'resource_metadata="http://testserver/.well-known/oauth-protected-resource"'
+            in challenge
+        )
 
 
 class TestRedirectMatching:

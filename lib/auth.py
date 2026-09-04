@@ -402,10 +402,20 @@ class EntraAuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
+            # RFC 9728 §5.1: carry the Protected Resource Metadata URL so a
+            # client can start OAuth discovery from this bare 401 (Alexa+
+            # probes unauthenticated and follows exactly this pointer).
+            proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            host = request.headers.get("x-forwarded-host", request.url.netloc)
+            prm_url = f"{proto}://{host}/.well-known/oauth-protected-resource"
             return JSONResponse(
                 {"error": "unauthorized", "message": "Bearer token required"},
                 status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="jobContextMCP"'},
+                headers={
+                    "WWW-Authenticate": (
+                        f'Bearer realm="jobContextMCP", resource_metadata="{prm_url}"'
+                    )
+                },
             )
 
         token = auth_header.removeprefix("Bearer ")

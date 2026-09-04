@@ -175,6 +175,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     },
     "insights": {
         "daily_digest": (digest.get_daily_digest, "Morning briefing: pipeline + action items."),
+        "briefing": (digest.get_voice_briefing, "Speakable one-breath briefing (plain prose, no markdown) for voice assistants; fast local reads only."),
         "weekly_summary": (digest.weekly_summary, "Week-in-review summary."),
         "session_context": (session.get_session_context, "Session startup context bundle."),
         "rejection_log": (rejections.log_rejection, "Log a rejection."),
@@ -564,7 +565,7 @@ async def brand(
 
 
 async def insights(
-    action: Literal["daily_digest", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
+    action: Literal["daily_digest", "briefing", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
     company: str | None = None,
     role: str | None = None,
     stage: str | None = None,
