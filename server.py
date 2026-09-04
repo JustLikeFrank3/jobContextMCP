@@ -304,6 +304,7 @@ log_rejection = rejections.log_rejection
 get_rejections = rejections.get_rejections
 
 get_daily_digest = digest.get_daily_digest
+get_voice_briefing = digest.get_voice_briefing
 weekly_summary = digest.weekly_summary
 
 update_compensation = compensation.update_compensation

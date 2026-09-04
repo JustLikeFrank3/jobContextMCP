@@ -288,6 +288,115 @@ def get_daily_digest() -> str:  # NOSONAR
     return "\n".join(lines)
 
 
+# ── voice briefing ─────────────────────────────────────────────────────────────
+
+def get_voice_briefing() -> str:
+    """
+    Speakable one-breath briefing for voice assistants (Alexa+, in-car, etc.).
+
+    Same data as get_daily_digest, different contract: 2-5 plain-prose
+    sentences, no markdown, no box art, no lists — text a TTS engine can read
+    aloud verbatim. Pure local reads (no LLM, no network) so it stays well
+    inside voice platforms' round-trip budgets (Alexa+ cuts tools off at
+    500ms).
+
+    Sentence order mirrors what matters spoken: next interview, pipeline
+    shape, the single most urgent action, one recent positive signal.
+    """
+    today = datetime.date.today()
+    week_ago_iso = (today - datetime.timedelta(days=7)).isoformat()
+
+    apps = _load_apps()
+    people = _load_people()
+    queue_jobs = _load_queue()
+
+    active = [
+        a for a in apps
+        if not _is_closed(a)
+        and not (
+            _days_since(a.get("last_updated", "")) >= 60
+            and not a.get("next_steps")
+        )
+    ]
+    waiting = [a for a in active if _is_waiting(a)]
+
+    sentences: list[str] = []
+
+    # Next scheduled interview — the highest-value spoken fact.
+    interviews = _load_json(config.INTERVIEWS_FILE, {"interviews": []}).get(
+        "interviews", []
+    )
+    upcoming = []
+    for iv in interviews:
+        try:
+            d = datetime.date.fromisoformat(iv.get("interview_date", "")[:10])
+        except ValueError:
+            continue
+        if d >= today:
+            upcoming.append((d, iv))
+    if upcoming:
+        upcoming.sort(key=lambda t: t[0])
+        d, nxt = upcoming[0]
+        when = "today" if d == today else (
+            "tomorrow" if d == today + datetime.timedelta(days=1)
+            else f"on {d.strftime('%A')}"
+        )
+        kind = (nxt.get("interview_type") or "interview").replace("_", " ")
+        sentences.append(
+            f"Your next interview is {when}: {kind} with {nxt.get('company', 'a company')}."
+        )
+
+    # Pipeline shape.
+    if active:
+        sentences.append(
+            f"You have {len(active)} active application{'s' if len(active) != 1 else ''}, "
+            f"{len(waiting)} waiting on a response."
+        )
+    else:
+        sentences.append("Your pipeline is empty right now.")
+
+    # Single most urgent action, same priority order the digest uses.
+    overdue = _check_overdue_followups(active)
+    drafted_unsent = [
+        p for p in people if p.get("outreach_status", "").lower() == "drafted"
+    ]
+    undecided = [
+        j for j in queue_jobs if j.get("status") in ("pending", "evaluated")
+    ]
+    if overdue:
+        first = overdue[0]
+        company = first.split("]")[-1].split("—")[0].strip() if "]" in first else ""
+        sentences.append(
+            f"Most urgent: a follow-up is due{' with ' + company if company else ''}."
+        )
+    elif drafted_unsent:
+        p = drafted_unsent[0]
+        sentences.append(
+            f"Most urgent: your drafted message to {p['name']} at "
+            f"{p.get('company', 'their company')} hasn't been sent."
+        )
+    elif undecided:
+        j = undecided[0]
+        sentences.append(
+            f"Most urgent: {j['company']}'s {j['role']} role is in your queue "
+            "awaiting a decision."
+        )
+
+    # One recent positive signal from the last week.
+    progress = []
+    for app in apps:
+        for ev in app.get("events", []):
+            if ev.get("type") in _PROGRESS_EVENT_TYPES and ev.get("date", "") >= week_ago_iso:
+                progress.append((ev["date"], app["company"],
+                                 _PROGRESS_LABELS.get(ev["type"], ev["type"].replace("_", " "))))
+    if progress:
+        progress.sort(reverse=True)
+        _, company, label = progress[0]
+        sentences.append(f"Recent progress: {label.lower()} from {company}.")
+
+    return " ".join(sentences)
+
+
 # ── weekly_summary ─────────────────────────────────────────────────────────────
 
 def weekly_summary() -> str:

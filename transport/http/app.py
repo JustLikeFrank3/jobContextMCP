@@ -340,10 +340,22 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         from starlette.responses import JSONResponse as _JSONResponse
         has_candidate = bool((authorization and authorization.strip()) or (session and session.strip()))
         detail = "Invalid credentials" if has_candidate else "Missing credentials"
+        # RFC 9728 §5.1: point the client at our Protected Resource Metadata so
+        # OAuth discovery works from a bare 401 (Alexa+ probes exactly this way;
+        # other MCP clients guess the well-known path).  Only the header's
+        # CONTENT grows — its presence/absence semantics (401 challenge vs
+        # 503 can't-verify, docs/connector-resilience.md) are untouched.
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.url.netloc)
+        prm_url = f"{proto}://{host}/.well-known/oauth-protected-resource"
         return _JSONResponse(
             {"error": "unauthorized", "message": "Authentication required", "detail": detail},
             status_code=401,
-            headers={"WWW-Authenticate": 'Bearer realm="jobContextMCP"'},
+            headers={
+                "WWW-Authenticate": (
+                    f'Bearer realm="jobContextMCP", resource_metadata="{prm_url}"'
+                )
+            },
         )
 
 

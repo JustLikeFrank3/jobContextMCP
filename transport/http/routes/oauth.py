@@ -45,10 +45,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 router = APIRouter(tags=["oauth-discovery"])
 
 
-# ── ChatGPT key bridge ────────────────────────────────────────────────────────
-# ChatGPT's MCP connector speaks only OAuth (authorization-code + PKCE) or
-# no-auth — it has nowhere to paste a static API key, and it cannot complete
-# the Entra proxy flow unless its callback URI is registered on the Entra app.
+# ── Connector key bridge (ChatGPT, Alexa+) ───────────────────────────────────
+# Some MCP clients speak only OAuth (authorization-code + PKCE) or no-auth —
+# they have nowhere to paste a static API key, and they cannot complete the
+# Entra proxy flow unless their callback URI is registered on the Entra app.
+# ChatGPT's connector is one; Alexa+ add-ons are another (Alexa+ additionally
+# does NOT support the Dynamic Client Registration our Entra proxy relies on).
 # This bridge fronts the EXISTING per-user API-key system (lib.api_keys) with
 # a minimal code flow instead: consent is the jc_session cookie, and the
 # access_token the client walks away with IS a freshly minted jcmcp_ key —
@@ -58,20 +60,44 @@ router = APIRouter(tags=["oauth-discovery"])
 #
 # The issued key never expires (no refresh_token is returned) — the same
 # deliberate trade the mobile app made on 2026-07-17 — and shows up on the
-# dashboard's API Keys tab labeled "ChatGPT connector", revocable there.
+# dashboard's API Keys tab labeled per client ("ChatGPT connector",
+# "Alexa+ connector"), revocable there.
 
 _BRIDGE_CODE_PREFIX = "jcac_"
 _BRIDGE_CODE_TTL_SECONDS = 120
-_BRIDGE_KEY_LABEL = "ChatGPT connector"
+_BRIDGE_FALLBACK_LABEL = "MCP connector"
+# Known bridge clients: (display name, dashboard key label, redirect prefixes).
 # ChatGPT's callback is PER-CONNECTOR — https://chatgpt.com/connector/oauth/
 # followed by an opaque connector id (observed live 2026-09-04, AADSTS50011
 # from the Entra fallback showed the shape) — so the allowlist matches on
 # prefix, not exact URI.  Prefix matching is safe here because the prefix
 # pins scheme, host, and path root: a minted code can only ever be delivered
-# to a chatgpt.com/chat.openai.com connector callback.
-_BRIDGE_DEFAULT_REDIRECT_PREFIXES = (
-    "https://chatgpt.com/connector/oauth/",
-    "https://chat.openai.com/connector/oauth/",
+# to an allowlisted host's callback path.
+# Alexa's account-linking callbacks are per-region vendor hosts (NA/EU/FE) —
+# the documented shape for add-on account linking.  If Alexa+ onboarding
+# surfaces a different callback (the MCP Toolkit is new), extend via the
+# KEYBRIDGE_REDIRECT_URIS env override without a deploy.
+_BRIDGE_CLIENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "ChatGPT",
+        "ChatGPT connector",
+        (
+            "https://chatgpt.com/connector/oauth/",
+            "https://chat.openai.com/connector/oauth/",
+        ),
+    ),
+    (
+        "Alexa+",
+        "Alexa+ connector",
+        (
+            "https://pitangui.amazon.com/api/skill/link/",
+            "https://layla.amazon.com/api/skill/link/",
+            "https://alexa.amazon.co.jp/api/skill/link/",
+        ),
+    ),
+)
+_BRIDGE_DEFAULT_REDIRECT_PREFIXES = tuple(
+    prefix for _, _, prefixes in _BRIDGE_CLIENTS for prefix in prefixes
 )
 
 # Pending one-time codes: code → {oid, redirect_uri, code_challenge, expires}.
@@ -104,6 +130,19 @@ def _bridge_redirect_rules() -> tuple[frozenset[str], tuple[str, ...]]:
     return frozenset(), _BRIDGE_DEFAULT_REDIRECT_PREFIXES
 
 
+def _bridge_client_for(uri: str) -> tuple[str, str]:
+    """(display name, key label) for the client behind *uri*.
+
+    Falls back to a generic identity for redirects admitted only through the
+    KEYBRIDGE_REDIRECT_URIS env override — the flow works the same, the
+    dashboard label is just less specific.
+    """
+    for display, label, prefixes in _BRIDGE_CLIENTS:
+        if any(uri.startswith(p) for p in prefixes):
+            return display, label
+    return _BRIDGE_FALLBACK_LABEL, _BRIDGE_FALLBACK_LABEL
+
+
 def _is_bridge_redirect_uri(uri: str) -> bool:
     """True when the bridge may deliver a code to *uri*.
 
@@ -124,10 +163,12 @@ def _mint_bridge_code(oid: str, redirect_uri: str, code_challenge: str) -> str:
     for stale in [c for c, rec in _bridge_codes.items() if rec["expires"] < now]:
         _bridge_codes.pop(stale, None)
     code = _BRIDGE_CODE_PREFIX + secrets.token_urlsafe(24)
+    _, key_label = _bridge_client_for(redirect_uri)
     _bridge_codes[code] = {
         "oid": oid,
         "redirect_uri": redirect_uri,
         "code_challenge": code_challenge,
+        "key_label": key_label,
         "expires": now + _BRIDGE_CODE_TTL_SECONDS,
     }
     return code
@@ -327,13 +368,14 @@ def _bridge_consent_response(request: Request) -> Response:
         return RedirectResponse(url=f"/dashboard/login?next={next_url}", status_code=303)
 
     esc = _html.escape
+    display, key_label = _bridge_client_for(redirect_uri)
     cancel_qs = urlencode({"error": "access_denied", "state": state} if state else {"error": "access_denied"})
     page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connect ChatGPT — jobContextMCP</title>
+  <title>Connect {esc(display)} — jobContextMCP</title>
   <style>
     body {{ font-family: -apple-system, sans-serif; max-width: 480px;
            margin: 80px auto; padding: 0 24px; color: #1a1a1a; }}
@@ -350,9 +392,9 @@ def _bridge_consent_response(request: Request) -> Response:
   </style>
 </head>
 <body>
-  <h1>Connect ChatGPT to your jobContext workspace?</h1>
-  <p>ChatGPT is asking for access to the workspace you are signed in to.
-     Approving creates an API key labeled &ldquo;{esc(_BRIDGE_KEY_LABEL)}&rdquo;
+  <h1>Connect {esc(display)} to your jobContext workspace?</h1>
+  <p>{esc(display)} is asking for access to the workspace you are signed in to.
+     Approving creates an API key labeled &ldquo;{esc(key_label)}&rdquo;
      that you can revoke any time from the dashboard&rsquo;s API Keys tab.</p>
   <form method="post" action="/oauth/authorize/approve">
     <input type="hidden" name="redirect_uri" value="{esc(redirect_uri)}">
@@ -424,7 +466,9 @@ def _bridge_token_response(payload: dict) -> JSONResponse:
     if not _pkce_matches(str(payload.get("code_verifier", "")), rec["code_challenge"]):
         return JSONResponse({"error": "invalid_grant"}, status_code=400)
 
-    _key_id, plaintext = create_key(rec["oid"], label=_BRIDGE_KEY_LABEL)
+    _key_id, plaintext = create_key(
+        rec["oid"], label=rec.get("key_label", _BRIDGE_FALLBACK_LABEL)
+    )
     return JSONResponse(
         {"access_token": plaintext, "token_type": "bearer"},
         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
