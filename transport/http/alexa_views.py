@@ -78,7 +78,7 @@ def render_directive(view: dict) -> dict:
     data = {key: escape(str(view.get(key, ""))) for key in ("title", "summary", "footer")}
     data["rows"] = [{key: escape(value) for key, value in row.items()}
                     for row in view["rows"]]
-    return {
+    directive = {
         "type": "Alexa.Presentation.APL.RenderDocument",
         "token": "jobcontext-view",
         "document": {
@@ -92,7 +92,9 @@ def render_directive(view: dict) -> dict:
                     {"type": "Text", "text": "${payload.view.title}", "color": "#FFFFFF",
                      "fontSize": "${viewport.width >= 960 ? 48 : 32}", "maxLines": 2},
                     {"type": "ScrollView", "width": "100%", "grow": 1, "shrink": 1,
-                     "item": {"type": "Container", "width": "100%", "items": [
+                     # Reserve room for scrollbars; the browser APL renderer
+                     # otherwise adds a horizontal bar and clips the footer.
+                     "item": {"type": "Container", "width": "${viewport.width * 0.9 - 24}", "paddingBottom": "24dp", "items": [
                          {"type": "Text", "width": "100%", "text": "${payload.view.summary}",
                           "color": "#E6EDF7", "fontSize": "${viewport.width >= 960 ? 32 : 26}", "spacing": "16dp"},
                          {"type": "Container", "width": "100%", "data": "${payload.view.rows}", "items": [{
@@ -103,10 +105,19 @@ def render_directive(view: dict) -> dict:
                              ]}]},
                          {"type": "Text", "text": "${payload.view.footer}", "fontSize": "20dp", "color": "#CAD4E2"}
                      ]}},
-                    {"type": "Text", "text": "Try: Alexa, show my pipeline · upcoming interviews",
+                    {"type": "Text", "text": "Say help for commands · stop to finish",
                      "color": "#CAD4E2", "fontSize": "18dp", "maxLines": 2}
                 ]
             }]}
         },
         "datasources": {"view": data}
     }
+    if view.get("search_id"):
+        search_id = str(view["search_id"])
+        directive["token"] = "jobcontext-search-" + search_id
+        data["searchId"] = search_id
+        rows = directive["document"]["mainTemplate"]["items"][0]["items"][2]["item"]["items"][1]
+        original = rows["items"][0]
+        rows["items"] = [{"type": "TouchWrapper", "width": "100%", "item": original,
+                          "onPress": {"type": "SendEvent", "arguments": ["job_detail", "${payload.view.searchId}", "${data.number}"]}}]
+    return directive

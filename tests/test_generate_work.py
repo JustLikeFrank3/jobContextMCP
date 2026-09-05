@@ -26,7 +26,7 @@ _REAL_ASSESSMENT = _fitment.run_job_assessment
 
 class TestPromptVersion:
     def test_stable_for_identical_text(self):
-        assert generate_work.prompt_version("abc") == generate_work.prompt_version("abc")
+        assert generate_work.prompt_version("abc") == "ba7816bf8f01"
 
     def test_changes_when_the_prompt_changes(self):
         assert generate_work.prompt_version("abc") != generate_work.prompt_version("abd")

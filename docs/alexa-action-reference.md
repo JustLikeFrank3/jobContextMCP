@@ -16,7 +16,13 @@ See [the dialogue guide](alexa-action-transport.md) for parameters, confirmation
 | `applications.assess` | assess a saved job | read | company, role, persona |
 | `applications.full_assessment` | create a full job assessment | confirm | company, role, persona, auto_save, force |
 | `applications.save_assessment` | save an assessment document | handoff | Save the complete assessment text in the dashboard. To create one from a saved job, ask me to create a full job assessment. |
-| `job_search.web` | search for jobs | read | query, location, num_results |
+| `job_search.web` | search google jobs | read | query, location, num_results |
+| `job_search.discover` | find new jobs | read | query, location, num_results, include_known |
+| `job_search.boards` | list my job boards | read | No fields |
+| `job_search.save_board` | save a job board | confirm | provider, company_slug, company |
+| `job_search.remove_board` | remove a job board | confirm | provider, company_slug |
+| `job_search.result` | read a job result | read | result_number |
+| `job_search.queue_result` | queue a job result | confirm | result_number |
 | `job_search.greenhouse` | search a greenhouse board | read | company_slug, query, num_results |
 | `job_search.lever` | search a lever board | read | company_slug, query, num_results |
 | `job_search.ashby` | search an ashby board | read | company_slug, query, num_results |

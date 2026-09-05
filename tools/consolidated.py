@@ -49,6 +49,7 @@ from tools import (
     job_hunt,
     job_queue,
     job_scraper,
+    job_discovery,
     langgraph_pipeline,
     oura,
     outreach,
@@ -82,6 +83,12 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "save_assessment": (fitment.save_job_assessment, "Persist an assessment to the workspace."),
     },
     "job_search": {
+        "discover": (job_discovery.discover_jobs, "Find new jobs across your saved public boards; returns a search ID and numbered matches, without queuing."),
+        "boards": (job_discovery.list_boards, "List your saved boards and supported board sources inferred from your queue."),
+        "save_board": (job_discovery.save_board, "Save a company board for discovery."),
+        "remove_board": (job_discovery.remove_board, "Remove a board from future searches."),
+        "result": (job_discovery.read_result, "Read one numbered result's fetched description."),
+        "queue_result": (job_discovery.queue_result, "Queue one selected search result for evaluation; does not submit an application."),
         "web": (job_scraper.search_jobs, "Search job boards on the open web."),
         "greenhouse": (job_scraper.search_greenhouse_jobs, "Search a company's Greenhouse board."),
         "lever": (job_scraper.search_lever_jobs, "Search a company's Lever board."),
@@ -358,7 +365,7 @@ async def applications(
 
 
 async def job_search(
-    action: Literal["web", "greenhouse", "lever", "ashby", "recruitee", "url"],
+    action: Literal["web", "greenhouse", "lever", "ashby", "recruitee", "url", "discover", "boards", "save_board", "remove_board", "result", "queue_result"],
     query: str | None = None,
     location: str | None = None,
     num_results: int | None = None,
@@ -366,6 +373,11 @@ async def job_search(
     url: str | None = None,
     auto_queue: bool | None = None,
     page_text: str | None = None,
+    provider: Literal["greenhouse", "lever", "ashby", "recruitee"] | None = None,
+    company: str | None = None,
+    search_id: str | None = None,
+    result_number: int | None = None,
+    include_known: bool | None = None,
 ) -> str:
     """Find job postings: open-web search, a company board (Greenhouse, Lever, Ashby, Recruitee), or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
     params = locals()

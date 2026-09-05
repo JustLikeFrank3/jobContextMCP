@@ -1,7 +1,7 @@
 # Alexa action transport
 
-The custom-skill HTTPS transport now has an explicit policy for all 105 MCP
-actions: 52 reads, 40 confirmed actions, and 13 handoffs. This is development
+The custom-skill HTTPS transport now has an explicit policy for all 111 MCP
+actions: 55 reads, 43 confirmed actions, and 13 handoffs. This is development
 code targeting QA. Production remains frozen for the WebMCP challenge.
 Native Alexa+ MCP toolkit onboarding remains a separate integration.
 
@@ -66,7 +66,7 @@ Optional structured/exact-content fields on other actions are also excluded;
 for example full JSON Oura payloads and post audience objects need the MCP
 client or dashboard. Certification rules support get/set through a confirmed
 request; search tools always force auto_queue off. To queue found jobs, use
-the mobile/dashboard capture flow. Drafting context never sends a message.
+the [saved-board search and selected queue flow](alexa-job-search.md). Drafting context never sends a message.
 
 ## Isolation and confirmation guarantees
 
