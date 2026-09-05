@@ -243,7 +243,16 @@ async def alexa_webhook(request: Request) -> JSONResponse:
         _verify_timestamp(payload)
     except AlexaVerificationError as exc:
         metrics.inc("alexa_requests_total", result="rejected")
-        _logger.warning("alexa: rejected request (%s)", exc)
+        # Header NAMES only — never values: Authorization or cookie-like
+        # headers may carry credentials. Names + UA are enough to tell a
+        # classic signed webhook from whatever Alexa+'s pipeline sends.
+        _logger.warning(
+            "alexa: rejected request (%s) ua=%r headers=%s body_bytes=%d",
+            exc,
+            request.headers.get("user-agent", ""),
+            sorted(request.headers.keys()),
+            len(raw_body),
+        )
         # Amazon's certification probe expects invalid requests to fail
         # with a non-2xx; 400 is the documented choice.
         return JSONResponse({"error": "invalid_request"}, status_code=400)
