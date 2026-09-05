@@ -444,9 +444,9 @@ _EXTRA_CSS = """
 """
 
 
-def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]]":
-    """(cards_html, entries_html, claims) — claims feed the triage section."""
-    from evals.tenant import claim_key, judge_calibration_label  # noqa: PLC0415
+def _results_section(payload: dict) -> tuple[str, str]:
+    """Return rendered HTML only; raw claims are collected separately."""
+    from evals.tenant import judge_calibration_label  # noqa: PLC0415
 
     suite = payload.get("suite") or {}
     rows = suite.get("rows") or []
@@ -454,7 +454,7 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
     if not rows:
         empty = ('<div class="empty">No eval run stored yet. Add golden entries below, '
                  'then hit <b>Run evals</b> — results land here when the run finishes.</div>')
-        return "", empty, []
+        return "", empty
 
     total_flags = sum(int((agg or {}).get("hallucination_flags") or 0) for agg in detail.values())
     means = [float(r.get("mean") or 0) for r in rows if "mean" in r]
@@ -492,6 +492,17 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
             f"<td class='num'>{len(row.get('alerts') or [])}</td></tr>"
         )
     body.append("</table>")
+    return cards, "".join(body)
+
+
+def _result_claims(payload: dict, triage: dict) -> list[dict]:
+    """Collect unescaped claim data for the triage renderer."""
+    from evals.tenant import claim_key  # noqa: PLC0415
+
+    suite = payload.get("suite") or {}
+    if not suite.get("rows"):
+        return []
+    detail = suite.get("detail") or {}
 
     claims: list[dict] = []
     for gd_id, agg in detail.items():
@@ -509,7 +520,7 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
         rec = triage.get(c["key"]) or {}
         c["ruling"] = rec.get("ruling", "")
         c["note"] = rec.get("note", "")
-    return cards, "".join(body), claims
+    return claims
 
 
 def _triage_section(claims: list[dict], has_run: bool) -> str:
@@ -613,7 +624,7 @@ def _judge_section(prefs: dict) -> str:
                       "sent back, but it sits in cleartext at rest; clear the provider to "
                       "remove it if that is not acceptable.</div>")
     cal_json = json.dumps({"map": JUDGE_CALIBRATION, "default": JUDGE_UNCALIBRATED,
-                           "install_default": default_cal}).replace("</", "<\\/")
+                           "install_default": default_cal})
     opts = "".join(
         f"<option value='{v}'{' selected' if provider == v else ''}>{label}</option>"
         for v, label in (("", "Default judge for this install"), ("openai", "OpenAI (your key)"),
@@ -633,7 +644,7 @@ def _judge_section(prefs: dict) -> str:
     {clear_warn}
     <button class="btn-primary" id="j-save">Save judge</button>
     <span class="status-line" id="j-status"></span>
-    <script>window.__cal = {cal_json};</script>"""
+    <div id="judge-data" data-calibration="{_e(cal_json)}" hidden></div>"""
 
 
 _PAGE_JS = """
@@ -690,12 +701,13 @@ document.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('cli
 }));
 
 // judge
+const calibration = JSON.parse(document.getElementById('judge-data').dataset.calibration);
 const jModel = document.getElementById('j-model');
 const jProv = document.getElementById('j-provider');
 function refreshCal() {
   const el = document.getElementById('j-cal');
-  if (!jProv.value) { el.textContent = window.__cal.install_default; return; }
-  el.textContent = (window.__cal.map[jModel.value.trim()] || window.__cal.default);
+  if (!jProv.value) { el.textContent = calibration.install_default; return; }
+  el.textContent = (calibration.map[jModel.value.trim()] || calibration.default);
 }
 if (jModel) { jModel.addEventListener('input', refreshCal); jProv.addEventListener('change', refreshCal); }
 const jSave = document.getElementById('j-save');
@@ -752,7 +764,8 @@ async def evals_page() -> HTMLResponse:
 
     payload = _payload()
     triage = load_triage()
-    cards, entries_html, claims = _results_section(payload, triage)
+    cards, entries_html = _results_section(payload)
+    claims = _result_claims(payload, triage)
     tenant_entries = list_tenant_entries()
     history = results_history()
     visuals = ""

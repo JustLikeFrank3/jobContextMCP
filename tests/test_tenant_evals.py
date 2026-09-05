@@ -384,13 +384,19 @@ class TestScreens:
 
         class ClaimParser(HTMLParser):
             claims = None
+            calibration = None
 
             def handle_starttag(self, tag, attrs):
                 attributes = dict(attrs)
                 if attributes.get("id") == "claim-data":
                     self.claims = json.loads(attributes["data-claims"])
+                if attributes.get("id") == "judge-data":
+                    self.calibration = json.loads(attributes["data-calibration"])
 
         attack = "</script><script>alert('injected')</script>\" & <!--"
+        from lib import config
+
+        monkeypatch.setattr(config, "_resolve_llm_settings", lambda **kwargs: ("openai", attack))
         monkeypatch.setattr(lab, "_payload", lambda: {"suite": {
             "rows": [{"gd_id": "GD-T01", "mean": 3.0}],
             "detail": {"GD-T01": {"hallucinations": [attack]}},
@@ -400,8 +406,10 @@ class TestScreens:
         parser = ClaimParser()
         parser.feed(page.text)
         assert parser.claims[0]["claim"] == attack
+        assert attack in parser.calibration["install_default"]
         assert "<script>alert('injected')" not in page.text
         assert "window.__claims" not in page.text
+        assert "window.__cal" not in page.text
 
     def test_invalid_golden_path_returns_validation_error(self, client):
         for route in ("/dashboard/evals/golden", "/dashboard/evals/golden/delete"):

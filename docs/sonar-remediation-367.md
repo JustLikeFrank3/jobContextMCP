@@ -28,3 +28,7 @@ cannot leave the workflow green while the separate Sonar check is red.
 The scanner action is updated from unsupported v5 to v8.2.1, and material
 copying runs through AnyIO's context-preserving thread helper so synchronous
 file I/O does not block the async route.
+
+The results renderer returns HTML separately from raw claim metadata. Both
+claims and judge calibration data use escaped HTML attributes, and the only
+remaining dynamic inline-script value is a server-computed boolean.
