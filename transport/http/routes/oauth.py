@@ -30,13 +30,162 @@ Entra app registration requirements (one-time, done in Azure Portal):
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import html as _html
 import os
-from urllib.parse import urlencode
+import secrets
+import time
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 router = APIRouter(tags=["oauth-discovery"])
+
+
+# ── Connector key bridge (ChatGPT, Alexa+) ───────────────────────────────────
+# Some MCP clients speak only OAuth (authorization-code + PKCE) or no-auth —
+# they have nowhere to paste a static API key, and they cannot complete the
+# Entra proxy flow unless their callback URI is registered on the Entra app.
+# ChatGPT's connector is one; Alexa+ add-ons are another (Alexa+ additionally
+# does NOT support the Dynamic Client Registration our Entra proxy relies on).
+# This bridge fronts the EXISTING per-user API-key system (lib.api_keys) with
+# a minimal code flow instead: consent is the jc_session cookie, and the
+# access_token the client walks away with IS a freshly minted jcmcp_ key —
+# which /mcp already accepts and partition-scopes via lookup_key().  Entra is
+# never involved; requests whose redirect_uri is not on the bridge allowlist
+# take the Entra proxy path below, byte-for-byte unchanged.
+#
+# The issued key never expires (no refresh_token is returned) — the same
+# deliberate trade the mobile app made on 2026-07-17 — and shows up on the
+# dashboard's API Keys tab labeled per client ("ChatGPT connector",
+# "Alexa+ connector"), revocable there.
+
+_BRIDGE_CODE_PREFIX = "jcac_"
+_BRIDGE_CODE_TTL_SECONDS = 120
+_BRIDGE_FALLBACK_LABEL = "MCP connector"
+# Known bridge clients: (display name, dashboard key label, redirect prefixes).
+# ChatGPT's callback is PER-CONNECTOR — https://chatgpt.com/connector/oauth/
+# followed by an opaque connector id (observed live 2026-09-04, AADSTS50011
+# from the Entra fallback showed the shape) — so the allowlist matches on
+# prefix, not exact URI.  Prefix matching is safe here because the prefix
+# pins scheme, host, and path root: a minted code can only ever be delivered
+# to an allowlisted host's callback path.
+# Alexa's account-linking callbacks are per-region vendor hosts (NA/EU/FE) —
+# the documented shape for add-on account linking.  If Alexa+ onboarding
+# surfaces a different callback (the MCP Toolkit is new), extend via the
+# KEYBRIDGE_REDIRECT_URIS env override without a deploy.
+_BRIDGE_CLIENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "ChatGPT",
+        "ChatGPT connector",
+        (
+            "https://chatgpt.com/connector/oauth/",
+            "https://chat.openai.com/connector/oauth/",
+        ),
+    ),
+    (
+        "Alexa+",
+        "Alexa+ connector",
+        (
+            "https://pitangui.amazon.com/api/skill/link/",
+            "https://layla.amazon.com/api/skill/link/",
+            "https://alexa.amazon.co.jp/api/skill/link/",
+        ),
+    ),
+)
+_BRIDGE_DEFAULT_REDIRECT_PREFIXES = tuple(
+    prefix for _, _, prefixes in _BRIDGE_CLIENTS for prefix in prefixes
+)
+
+# Pending one-time codes: code → {oid, redirect_uri, code_challenge, expires}.
+# In-process is sufficient: deploys are single-pod (Recreate strategy) and a
+# code only lives for the seconds between consent redirect and token exchange;
+# a deploy in that window just means clicking Connect again.
+_bridge_codes: dict[str, dict] = {}
+
+
+def _bridge_enabled() -> bool:
+    """The bridge only makes sense where the jc_session cookie carries a
+    per-user identity — i.e. Entra mode.  In API-key/desktop mode there is
+    no per-user consent to give."""
+    return bool(os.environ.get("ENTRA_CLIENT_ID"))
+
+
+def _bridge_redirect_rules() -> tuple[frozenset[str], tuple[str, ...]]:
+    """(exact URIs, prefixes) the bridge will release codes to.
+
+    Overridable via KEYBRIDGE_REDIRECT_URIS (comma-separated) in case
+    ChatGPT's callback shape changes: an entry ending in ``*`` is a prefix
+    rule (the ``*`` is stripped), anything else must match exactly.
+    """
+    raw = os.environ.get("KEYBRIDGE_REDIRECT_URIS", "")
+    if raw.strip():
+        entries = [u.strip() for u in raw.split(",") if u.strip()]
+        exacts = frozenset(u for u in entries if not u.endswith("*"))
+        prefixes = tuple(u[:-1] for u in entries if u.endswith("*"))
+        return exacts, prefixes
+    return frozenset(), _BRIDGE_DEFAULT_REDIRECT_PREFIXES
+
+
+def _bridge_client_for(uri: str) -> tuple[str, str]:
+    """(display name, key label) for the client behind *uri*.
+
+    Falls back to a generic identity for redirects admitted only through the
+    KEYBRIDGE_REDIRECT_URIS env override — the flow works the same, the
+    dashboard label is just less specific.
+    """
+    for display, label, prefixes in _BRIDGE_CLIENTS:
+        if any(uri.startswith(p) for p in prefixes):
+            return display, label
+    return _BRIDGE_FALLBACK_LABEL, _BRIDGE_FALLBACK_LABEL
+
+
+def _is_bridge_redirect_uri(uri: str) -> bool:
+    """True when the bridge may deliver a code to *uri*.
+
+    Prefix rules make hygiene checks load-bearing: no query/fragment (a code
+    must arrive as OUR ?code=… append, nothing pre-baked), no whitespace or
+    backslashes, and no dot-segments that could resolve above the pinned
+    path root after the prefix check passed.
+    """
+    if not uri or any(ch in uri for ch in ("?", "#", "\\", " ")) or ".." in uri:
+        return False
+    exacts, prefixes = _bridge_redirect_rules()
+    return uri in exacts or any(uri.startswith(p) for p in prefixes)
+
+
+def _mint_bridge_code(oid: str, redirect_uri: str, code_challenge: str) -> str:
+    now = time.time()
+    # Opportunistic purge so abandoned consents don't accumulate.
+    for stale in [c for c, rec in _bridge_codes.items() if rec["expires"] < now]:
+        _bridge_codes.pop(stale, None)
+    code = _BRIDGE_CODE_PREFIX + secrets.token_urlsafe(24)
+    _, key_label = _bridge_client_for(redirect_uri)
+    _bridge_codes[code] = {
+        "oid": oid,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "key_label": key_label,
+        "expires": now + _BRIDGE_CODE_TTL_SECONDS,
+    }
+    return code
+
+
+def _consume_bridge_code(code: str) -> dict | None:
+    """Single-use: the code is removed whether or not it is still valid."""
+    rec = _bridge_codes.pop(code, None)
+    if rec is None or rec["expires"] < time.time():
+        return None
+    return rec
+
+
+def _pkce_matches(code_verifier: str, code_challenge: str) -> bool:
+    digest = hashlib.sha256(code_verifier.encode("ascii", "ignore")).digest()
+    computed = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return hmac.compare_digest(computed, code_challenge)
 
 
 def _granted_scope(client_id: str) -> str:
@@ -191,8 +340,143 @@ async def oauth_dynamic_register(request: Request) -> JSONResponse:
     )
 
 
+def _bridge_consent_response(request: Request) -> Response:
+    """Consent step of the key bridge (see module comment above).
+
+    Identity comes ONLY from the middleware-established user context (the
+    validated jc_session cookie) — never from anything in the query string.
+    Unauthenticated browsers bounce through /dashboard/login and land back
+    here with the full authorize query intact.
+    """
+    from lib.user_context import get_current_user_oid
+
+    qp = request.query_params
+    redirect_uri = qp.get("redirect_uri", "")
+    state = qp.get("state", "")
+    code_challenge = qp.get("code_challenge", "")
+    method = qp.get("code_challenge_method", "")
+
+    if not code_challenge or method != "S256":
+        return JSONResponse(
+            {"error": "invalid_request", "error_description": "PKCE with S256 is required"},
+            status_code=400,
+        )
+
+    oid = get_current_user_oid()
+    if not oid:
+        next_url = quote(f"{request.url.path}?{request.url.query}", safe="")
+        return RedirectResponse(url=f"/dashboard/login?next={next_url}", status_code=303)
+
+    esc = _html.escape
+    display, key_label = _bridge_client_for(redirect_uri)
+    cancel_qs = urlencode({"error": "access_denied", "state": state} if state else {"error": "access_denied"})
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect {esc(display)} — jobContextMCP</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; max-width: 480px;
+           margin: 80px auto; padding: 0 24px; color: #1a1a1a; }}
+    h1 {{ font-size: 1.3rem; margin-bottom: 8px; }}
+    p  {{ color: #555; line-height: 1.6; }}
+    .actions {{ display: flex; gap: 12px; margin-top: 28px; }}
+    .approve {{ background: #1a1a1a; color: #fff; border: none;
+               border-radius: 8px; padding: 10px 22px; font-size: .95rem;
+               cursor: pointer; }}
+    .approve:hover {{ background: #333; }}
+    .cancel {{ display: inline-block; color: #555; text-decoration: none;
+              border: 1px solid #ccc; border-radius: 8px; padding: 10px 22px;
+              font-size: .95rem; }}
+  </style>
+</head>
+<body>
+  <h1>Connect {esc(display)} to your jobContext workspace?</h1>
+  <p>{esc(display)} is asking for access to the workspace you are signed in to.
+     Approving creates an API key labeled &ldquo;{esc(key_label)}&rdquo;
+     that you can revoke any time from the dashboard&rsquo;s API Keys tab.</p>
+  <form method="post" action="/oauth/authorize/approve">
+    <input type="hidden" name="redirect_uri" value="{esc(redirect_uri)}">
+    <input type="hidden" name="state" value="{esc(state)}">
+    <input type="hidden" name="code_challenge" value="{esc(code_challenge)}">
+    <div class="actions">
+      <button class="approve" type="submit">Approve</button>
+      <a class="cancel" href="{esc(redirect_uri)}?{esc(cancel_qs)}">Cancel</a>
+    </div>
+  </form>
+</body>
+</html>"""
+    return HTMLResponse(page)
+
+
+@router.post("/oauth/authorize/approve", include_in_schema=False)
+async def oauth_bridge_approve(request: Request) -> Response:
+    """Mint a one-time code after the user approves the bridge consent page.
+
+    The oid is read from the authenticated request context; the form only
+    carries the OAuth round-trip parameters, and the redirect_uri is
+    re-validated against the allowlist so a tampered form can't aim the
+    code anywhere else.
+    """
+    from lib.user_context import get_current_user_oid
+
+    if not _bridge_enabled():
+        return JSONResponse({"error": "invalid_request"}, status_code=404)
+
+    # The only legitimate sender is our own consent page. A cross-site form
+    # POST carries Sec-Fetch-Site: cross-site (same stance as the /mcp guard:
+    # no header at all means a non-browser client, which can't be CSRF'd).
+    fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+    if fetch_site and fetch_site not in ("same-origin", "none"):
+        return JSONResponse({"error": "invalid_request"}, status_code=403)
+
+    oid = get_current_user_oid()
+    if not oid:
+        return JSONResponse({"error": "access_denied"}, status_code=401)
+
+    form = await request.form()
+    redirect_uri = str(form.get("redirect_uri", ""))
+    state = str(form.get("state", ""))
+    code_challenge = str(form.get("code_challenge", ""))
+
+    if not _is_bridge_redirect_uri(redirect_uri) or not code_challenge:
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+
+    code = _mint_bridge_code(oid, redirect_uri, code_challenge)
+    params = {"code": code, "state": state} if state else {"code": code}
+    return RedirectResponse(url=f"{redirect_uri}?{urlencode(params)}", status_code=303)
+
+
+def _bridge_token_response(payload: dict) -> JSONResponse:
+    """Exchange a bridge code for a freshly minted jcmcp_ API key."""
+    from lib.api_keys import create_key
+
+    if payload.get("grant_type") != "authorization_code":
+        # The bridge issues no refresh tokens; a jcmcp_ key doesn't expire.
+        return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
+
+    rec = _consume_bridge_code(str(payload.get("code", "")))
+    if rec is None:
+        return JSONResponse({"error": "invalid_grant"}, status_code=400)
+
+    if str(payload.get("redirect_uri", "")) != rec["redirect_uri"]:
+        return JSONResponse({"error": "invalid_grant"}, status_code=400)
+
+    if not _pkce_matches(str(payload.get("code_verifier", "")), rec["code_challenge"]):
+        return JSONResponse({"error": "invalid_grant"}, status_code=400)
+
+    _key_id, plaintext = create_key(
+        rec["oid"], label=rec.get("key_label", _BRIDGE_FALLBACK_LABEL)
+    )
+    return JSONResponse(
+        {"access_token": plaintext, "token_type": "bearer"},
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
 @router.get("/oauth/authorize", include_in_schema=False)
-async def oauth_authorize_proxy(request: Request) -> RedirectResponse:
+async def oauth_authorize_proxy(request: Request) -> Response:
     """Strip the 'resource' param and proxy to Entra's authorize endpoint.
 
     mcp-remote takes the PRM 'resource' value and adds it as a query param
@@ -207,6 +491,11 @@ async def oauth_authorize_proxy(request: Request) -> RedirectResponse:
     preserved — this is completely transparent to both the browser and
     mcp-remote's local callback server.
     """
+    # ChatGPT's callback URIs divert to the key bridge; everything else
+    # (Claude.ai, Cursor, VS Code, mcp-remote) proceeds to Entra unchanged.
+    if _bridge_enabled() and _is_bridge_redirect_uri(request.query_params.get("redirect_uri", "")):
+        return _bridge_consent_response(request)
+
     tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
     entra_authorize = (
         f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
@@ -244,6 +533,10 @@ async def oauth_token_proxy(request: Request):
     # Parse the form body and strip 'resource'
     form = await request.form()
     payload = {k: v for k, v in form.multi_items() if k != "resource"}
+
+    # Bridge codes are exchanged locally — Entra never sees them.
+    if str(payload.get("code", "")).startswith(_BRIDGE_CODE_PREFIX):
+        return _bridge_token_response(payload)
 
     if payload.get("grant_type") == "refresh_token" and not payload.get("scope"):
         scope = _scope_for_refresh()

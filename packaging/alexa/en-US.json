@@ -1,0 +1,1681 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "job context",
+      "intents": [
+        {
+          "name": "BriefingIntent",
+          "slots": [],
+          "samples": [
+            "my briefing",
+            "give me my briefing",
+            "what should I focus on today"
+          ]
+        },
+        {
+          "name": "PipelineIntent",
+          "slots": [],
+          "samples": [
+            "my pipeline",
+            "show my pipeline",
+            "how are my applications doing",
+            "show my applications"
+          ]
+        },
+        {
+          "name": "UpcomingInterviewsIntent",
+          "slots": [],
+          "samples": [
+            "upcoming interviews",
+            "show my interviews",
+            "what interviews are coming up",
+            "when is my next interview"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "ActionApplicationsStatusIntent",
+          "slots": [],
+          "samples": [
+            "show my full application history"
+          ]
+        },
+        {
+          "name": "ActionApplicationsUpdateIntent",
+          "slots": [],
+          "samples": [
+            "update an application"
+          ]
+        },
+        {
+          "name": "ActionApplicationsLogEventIntent",
+          "slots": [],
+          "samples": [
+            "log an application event"
+          ]
+        },
+        {
+          "name": "ActionApplicationsQueueIntent",
+          "slots": [],
+          "samples": [
+            "queue a job description"
+          ]
+        },
+        {
+          "name": "ActionApplicationsGetQueueIntent",
+          "slots": [],
+          "samples": [
+            "show my job queue"
+          ]
+        },
+        {
+          "name": "ActionApplicationsEvaluateIntent",
+          "slots": [],
+          "samples": [
+            "evaluate a queued job"
+          ]
+        },
+        {
+          "name": "ActionApplicationsDecideIntent",
+          "slots": [],
+          "samples": [
+            "record my application decision"
+          ]
+        },
+        {
+          "name": "ActionApplicationsAssessIntent",
+          "slots": [],
+          "samples": [
+            "assess a saved job"
+          ]
+        },
+        {
+          "name": "ActionApplicationsFullAssessmentIntent",
+          "slots": [],
+          "samples": [
+            "create a full job assessment"
+          ]
+        },
+        {
+          "name": "ActionApplicationsSaveAssessmentIntent",
+          "slots": [],
+          "samples": [
+            "save an assessment document"
+          ]
+        },
+        {
+          "name": "ActionJobSearchWebIntent",
+          "slots": [],
+          "samples": [
+            "search for jobs"
+          ]
+        },
+        {
+          "name": "ActionJobSearchGreenhouseIntent",
+          "slots": [],
+          "samples": [
+            "search a greenhouse board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchLeverIntent",
+          "slots": [],
+          "samples": [
+            "search a lever board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchAshbyIntent",
+          "slots": [],
+          "samples": [
+            "search an ashby board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchRecruiteeIntent",
+          "slots": [],
+          "samples": [
+            "search a recruitee board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchUrlIntent",
+          "slots": [],
+          "samples": [
+            "capture a job link"
+          ]
+        },
+        {
+          "name": "ActionDocumentsGenerateResumeIntent",
+          "slots": [],
+          "samples": [
+            "generate a resume"
+          ]
+        },
+        {
+          "name": "ActionDocumentsGenerateResumeAgentIntent",
+          "slots": [],
+          "samples": [
+            "generate an agentic resume"
+          ]
+        },
+        {
+          "name": "ActionDocumentsGenerateCoverLetterIntent",
+          "slots": [],
+          "samples": [
+            "generate a cover letter"
+          ]
+        },
+        {
+          "name": "ActionDocumentsSubmitResumeIntent",
+          "slots": [],
+          "samples": [
+            "queue resume generation"
+          ]
+        },
+        {
+          "name": "ActionDocumentsSubmitCoverLetterIntent",
+          "slots": [],
+          "samples": [
+            "queue cover letter generation"
+          ]
+        },
+        {
+          "name": "ActionDocumentsGenerationStatusIntent",
+          "slots": [],
+          "samples": [
+            "check document generation"
+          ]
+        },
+        {
+          "name": "ActionDocumentsExportResumePdfIntent",
+          "slots": [],
+          "samples": [
+            "export a resume to pdf"
+          ]
+        },
+        {
+          "name": "ActionDocumentsExportCoverLetterPdfIntent",
+          "slots": [],
+          "samples": [
+            "export a cover letter to pdf"
+          ]
+        },
+        {
+          "name": "ActionDocumentsExportResumeLatexIntent",
+          "slots": [],
+          "samples": [
+            "typeset a resume"
+          ]
+        },
+        {
+          "name": "ActionDocumentsExportCoverLetterLatexIntent",
+          "slots": [],
+          "samples": [
+            "typeset a cover letter"
+          ]
+        },
+        {
+          "name": "ActionDocumentsSaveResumeIntent",
+          "slots": [],
+          "samples": [
+            "save resume text"
+          ]
+        },
+        {
+          "name": "ActionDocumentsSaveCoverLetterIntent",
+          "slots": [],
+          "samples": [
+            "save cover letter text"
+          ]
+        },
+        {
+          "name": "ActionDocumentsDiffIntent",
+          "slots": [],
+          "samples": [
+            "compare two resumes"
+          ]
+        },
+        {
+          "name": "ActionDocumentsWriteLatexSectionIntent",
+          "slots": [],
+          "samples": [
+            "edit a latex section"
+          ]
+        },
+        {
+          "name": "ActionDocumentsCustomizationStrategyIntent",
+          "slots": [],
+          "samples": [
+            "suggest a resume strategy"
+          ]
+        },
+        {
+          "name": "ActionDocumentsPreviewStoryRetrievalIntent",
+          "slots": [],
+          "samples": [
+            "preview resume stories"
+          ]
+        },
+        {
+          "name": "ActionDocumentsProvenanceIntent",
+          "slots": [],
+          "samples": [
+            "check document provenance"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReadMasterResumeIntent",
+          "slots": [],
+          "samples": [
+            "read my master resume"
+          ]
+        },
+        {
+          "name": "ActionMaterialsUpdateMasterResumeIntent",
+          "slots": [],
+          "samples": [
+            "edit my master resume"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReadResumeIntent",
+          "slots": [],
+          "samples": [
+            "read a saved resume"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReadReferenceIntent",
+          "slots": [],
+          "samples": [
+            "read reference material"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReadLatexAssetIntent",
+          "slots": [],
+          "samples": [
+            "read latex source"
+          ]
+        },
+        {
+          "name": "ActionMaterialsListIntent",
+          "slots": [],
+          "samples": [
+            "list my documents"
+          ]
+        },
+        {
+          "name": "ActionMaterialsDeleteIntent",
+          "slots": [],
+          "samples": [
+            "delete a saved document"
+          ]
+        },
+        {
+          "name": "ActionMaterialsSearchIntent",
+          "slots": [],
+          "samples": [
+            "search my documents"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReindexIntent",
+          "slots": [],
+          "samples": [
+            "rebuild document search"
+          ]
+        },
+        {
+          "name": "ActionMaterialsReindexStoriesIntent",
+          "slots": [],
+          "samples": [
+            "rebuild story search"
+          ]
+        },
+        {
+          "name": "ActionInterviewsLogIntent",
+          "slots": [],
+          "samples": [
+            "log an interview debrief"
+          ]
+        },
+        {
+          "name": "ActionInterviewsListIntent",
+          "slots": [],
+          "samples": [
+            "show interview history"
+          ]
+        },
+        {
+          "name": "ActionInterviewsContextIntent",
+          "slots": [],
+          "samples": [
+            "show a company interview process"
+          ]
+        },
+        {
+          "name": "ActionInterviewsUpcomingIntent",
+          "slots": [],
+          "samples": [
+            "find scheduled interviews"
+          ]
+        },
+        {
+          "name": "ActionInterviewsPrepContextIntent",
+          "slots": [],
+          "samples": [
+            "prepare for an interview"
+          ]
+        },
+        {
+          "name": "ActionInterviewsSavePrepIntent",
+          "slots": [],
+          "samples": [
+            "save interview prep text"
+          ]
+        },
+        {
+          "name": "ActionInterviewsGetPrepIntent",
+          "slots": [],
+          "samples": [
+            "read saved interview prep"
+          ]
+        },
+        {
+          "name": "ActionInterviewsQuickReferenceIntent",
+          "slots": [],
+          "samples": [
+            "show my interview quick reference"
+          ]
+        },
+        {
+          "name": "ActionInterviewsLeetcodeCheatsheetIntent",
+          "slots": [],
+          "samples": [
+            "show coding interview patterns"
+          ]
+        },
+        {
+          "name": "ActionPeopleLogIntent",
+          "slots": [],
+          "samples": [
+            "save a contact"
+          ]
+        },
+        {
+          "name": "ActionPeopleListIntent",
+          "slots": [],
+          "samples": [
+            "list my contacts"
+          ]
+        },
+        {
+          "name": "ActionPeopleGetIntent",
+          "slots": [],
+          "samples": [
+            "look up a contact"
+          ]
+        },
+        {
+          "name": "ActionPeopleReferralChainsIntent",
+          "slots": [],
+          "samples": [
+            "find referrals to a company"
+          ]
+        },
+        {
+          "name": "ActionPeopleDraftOutreachIntent",
+          "slots": [],
+          "samples": [
+            "prepare outreach drafting context"
+          ]
+        },
+        {
+          "name": "ActionPeopleDraftReplyIntent",
+          "slots": [],
+          "samples": [
+            "prepare reply drafting context"
+          ]
+        },
+        {
+          "name": "ActionPeopleReviewMessageIntent",
+          "slots": [],
+          "samples": [
+            "review a message"
+          ]
+        },
+        {
+          "name": "ActionPeopleCrossrefRunIntent",
+          "slots": [],
+          "samples": [
+            "scan facebook contact files"
+          ]
+        },
+        {
+          "name": "ActionPeopleCrossrefGetIntent",
+          "slots": [],
+          "samples": [
+            "show contact connections"
+          ]
+        },
+        {
+          "name": "ActionPeopleFbQueueIntent",
+          "slots": [],
+          "samples": [
+            "show my outreach queue"
+          ]
+        },
+        {
+          "name": "ActionStoriesLogIntent",
+          "slots": [],
+          "samples": [
+            "save a personal story"
+          ]
+        },
+        {
+          "name": "ActionStoriesUpdateIntent",
+          "slots": [],
+          "samples": [
+            "update a story"
+          ]
+        },
+        {
+          "name": "ActionStoriesDeleteIntent",
+          "slots": [],
+          "samples": [
+            "delete a story"
+          ]
+        },
+        {
+          "name": "ActionStoriesIngestIntent",
+          "slots": [],
+          "samples": [
+            "capture an anecdote"
+          ]
+        },
+        {
+          "name": "ActionStoriesPersonalContextIntent",
+          "slots": [],
+          "samples": [
+            "find a personal story"
+          ]
+        },
+        {
+          "name": "ActionStoriesStarContextIntent",
+          "slots": [],
+          "samples": [
+            "find an interview story"
+          ]
+        },
+        {
+          "name": "ActionStoriesStarAllIntent",
+          "slots": [],
+          "samples": [
+            "show my star stories"
+          ]
+        },
+        {
+          "name": "ActionStoriesToneLogIntent",
+          "slots": [],
+          "samples": [
+            "save a writing sample"
+          ]
+        },
+        {
+          "name": "ActionStoriesToneProfileIntent",
+          "slots": [],
+          "samples": [
+            "describe my writing style"
+          ]
+        },
+        {
+          "name": "ActionStoriesToneScanIntent",
+          "slots": [],
+          "samples": [
+            "learn from my writing samples"
+          ]
+        },
+        {
+          "name": "ActionWellbeingCheckinIntent",
+          "slots": [],
+          "samples": [
+            "record a wellbeing check in"
+          ]
+        },
+        {
+          "name": "ActionWellbeingLogIntent",
+          "slots": [],
+          "samples": [
+            "read my wellbeing history"
+          ]
+        },
+        {
+          "name": "ActionWellbeingOuraSyncIntent",
+          "slots": [],
+          "samples": [
+            "sync my readiness"
+          ]
+        },
+        {
+          "name": "ActionWellbeingOuraLogIntent",
+          "slots": [],
+          "samples": [
+            "record readiness scores"
+          ]
+        },
+        {
+          "name": "ActionWellbeingOuraGetIntent",
+          "slots": [],
+          "samples": [
+            "read my readiness"
+          ]
+        },
+        {
+          "name": "ActionWellbeingHbdiRunIntent",
+          "slots": [],
+          "samples": [
+            "take the thinking style assessment"
+          ]
+        },
+        {
+          "name": "ActionWellbeingHbdiProfileIntent",
+          "slots": [],
+          "samples": [
+            "read my thinking style profile"
+          ]
+        },
+        {
+          "name": "ActionBrandPostLogIntent",
+          "slots": [],
+          "samples": [
+            "log a social post"
+          ]
+        },
+        {
+          "name": "ActionBrandPostMetricsIntent",
+          "slots": [],
+          "samples": [
+            "update post metrics"
+          ]
+        },
+        {
+          "name": "ActionBrandPostsIntent",
+          "slots": [],
+          "samples": [
+            "show my social posts"
+          ]
+        },
+        {
+          "name": "ActionBrandGithubStatsIntent",
+          "slots": [],
+          "samples": [
+            "check github contributions"
+          ]
+        },
+        {
+          "name": "ActionBrandPortfolioIntent",
+          "slots": [],
+          "samples": [
+            "show portfolio metrics"
+          ]
+        },
+        {
+          "name": "ActionBrandPortfolioRefreshIntent",
+          "slots": [],
+          "samples": [
+            "refresh portfolio metrics"
+          ]
+        },
+        {
+          "name": "ActionBrandScanProjectSkillsIntent",
+          "slots": [],
+          "samples": [
+            "scan local project folders"
+          ]
+        },
+        {
+          "name": "ActionInsightsDailyDigestIntent",
+          "slots": [],
+          "samples": [
+            "read my daily digest"
+          ]
+        },
+        {
+          "name": "ActionInsightsBriefingIntent",
+          "slots": [],
+          "samples": [
+            "read my voice briefing"
+          ]
+        },
+        {
+          "name": "ActionInsightsWeeklySummaryIntent",
+          "slots": [],
+          "samples": [
+            "summarize my week"
+          ]
+        },
+        {
+          "name": "ActionInsightsSessionContextIntent",
+          "slots": [],
+          "samples": [
+            "review my workspace context"
+          ]
+        },
+        {
+          "name": "ActionInsightsRejectionLogIntent",
+          "slots": [],
+          "samples": [
+            "record a rejection"
+          ]
+        },
+        {
+          "name": "ActionInsightsRejectionsIntent",
+          "slots": [],
+          "samples": [
+            "review rejection patterns"
+          ]
+        },
+        {
+          "name": "ActionInsightsCompensationUpdateIntent",
+          "slots": [],
+          "samples": [
+            "record compensation"
+          ]
+        },
+        {
+          "name": "ActionInsightsCompensationCompareIntent",
+          "slots": [],
+          "samples": [
+            "compare compensation"
+          ]
+        },
+        {
+          "name": "ActionInsightsEvalsResultsIntent",
+          "slots": [],
+          "samples": [
+            "show evaluation results"
+          ]
+        },
+        {
+          "name": "ActionWorkspaceCheckIntent",
+          "slots": [],
+          "samples": [
+            "check workspace setup"
+          ]
+        },
+        {
+          "name": "ActionWorkspaceSetupIntent",
+          "slots": [],
+          "samples": [
+            "set up my workspace"
+          ]
+        },
+        {
+          "name": "ActionCertificationWeeklyReportIntent",
+          "slots": [],
+          "samples": [
+            "prepare a weekly certification report"
+          ]
+        },
+        {
+          "name": "ActionCertificationListReportsIntent",
+          "slots": [],
+          "samples": [
+            "list certification reports"
+          ]
+        },
+        {
+          "name": "ActionCertificationExportIntent",
+          "slots": [],
+          "samples": [
+            "export a certification report"
+          ]
+        },
+        {
+          "name": "ActionCertificationSwapEntryIntent",
+          "slots": [],
+          "samples": [
+            "replace a certification entry"
+          ]
+        },
+        {
+          "name": "ActionCertificationMarkSubmittedIntent",
+          "slots": [],
+          "samples": [
+            "mark a certification report submitted"
+          ]
+        },
+        {
+          "name": "ActionCertificationEmployerLookupIntent",
+          "slots": [],
+          "samples": [
+            "look up an employer"
+          ]
+        },
+        {
+          "name": "ActionCertificationEmployerOverrideIntent",
+          "slots": [],
+          "samples": [
+            "edit employer directory fields"
+          ]
+        },
+        {
+          "name": "ActionCertificationStateProfileIntent",
+          "slots": [],
+          "samples": [
+            "manage certification rules"
+          ]
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AnswerIntent",
+          "slots": [
+            {
+              "name": "Answer",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "my answer is {Answer}"
+          ]
+        },
+        {
+          "name": "NumberAnswerIntent",
+          "slots": [
+            {
+              "name": "Answer",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "the number is {Answer}"
+          ]
+        },
+        {
+          "name": "DateAnswerIntent",
+          "slots": [
+            {
+              "name": "Answer",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "the date is {Answer}"
+          ]
+        },
+        {
+          "name": "ChangeFieldIntent",
+          "slots": [
+            {
+              "name": "Field",
+              "type": "ActionField"
+            }
+          ],
+          "samples": [
+            "change {Field}",
+            "set {Field}"
+          ]
+        },
+        {
+          "name": "RunActionIntent",
+          "slots": [],
+          "samples": [
+            "run it",
+            "review my request"
+          ]
+        },
+        {
+          "name": "ActionStatusIntent",
+          "slots": [],
+          "samples": [
+            "check my last request",
+            "is my request finished"
+          ]
+        },
+        {
+          "name": "MoreResultIntent",
+          "slots": [],
+          "samples": [
+            "read more",
+            "next page"
+          ]
+        },
+        {
+          "name": "ActionCatalogIntent",
+          "slots": [],
+          "samples": [
+            "what can you do",
+            "list available actions"
+          ]
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
+        }
+      ],
+      "types": [
+        {
+          "name": "ActionField",
+          "values": [
+            {
+              "id": "accepted_activity_kinds",
+              "name": {
+                "value": "accepted activity kinds"
+              }
+            },
+            {
+              "id": "auto_log_tone",
+              "name": {
+                "value": "auto log tone"
+              }
+            },
+            {
+              "id": "auto_save",
+              "name": {
+                "value": "auto save"
+              }
+            },
+            {
+              "id": "base",
+              "name": {
+                "value": "base"
+              }
+            },
+            {
+              "id": "bonus_target_pct",
+              "name": {
+                "value": "bonus target pct"
+              }
+            },
+            {
+              "id": "category",
+              "name": {
+                "value": "category"
+              }
+            },
+            {
+              "id": "cl_style",
+              "name": {
+                "value": "cl style"
+              }
+            },
+            {
+              "id": "cl_template",
+              "name": {
+                "value": "cl template"
+              }
+            },
+            {
+              "id": "comments",
+              "name": {
+                "value": "comments"
+              }
+            },
+            {
+              "id": "comp_signals",
+              "name": {
+                "value": "comp signals"
+              }
+            },
+            {
+              "id": "company",
+              "name": {
+                "value": "company"
+              }
+            },
+            {
+              "id": "company_slug",
+              "name": {
+                "value": "company slug"
+              }
+            },
+            {
+              "id": "confirmation_number",
+              "name": {
+                "value": "confirmation number"
+              }
+            },
+            {
+              "id": "contact",
+              "name": {
+                "value": "contact"
+              }
+            },
+            {
+              "id": "contact_info",
+              "name": {
+                "value": "contact info"
+              }
+            },
+            {
+              "id": "context",
+              "name": {
+                "value": "context"
+              }
+            },
+            {
+              "id": "counts_inbound_recruiter",
+              "name": {
+                "value": "counts inbound recruiter"
+              }
+            },
+            {
+              "id": "counts_materials_prep",
+              "name": {
+                "value": "counts materials prep"
+              }
+            },
+            {
+              "id": "date",
+              "name": {
+                "value": "date"
+              }
+            },
+            {
+              "id": "days",
+              "name": {
+                "value": "days"
+              }
+            },
+            {
+              "id": "days_ahead",
+              "name": {
+                "value": "days ahead"
+              }
+            },
+            {
+              "id": "decision",
+              "name": {
+                "value": "decision"
+              }
+            },
+            {
+              "id": "duration_minutes",
+              "name": {
+                "value": "duration minutes"
+              }
+            },
+            {
+              "id": "energy",
+              "name": {
+                "value": "energy"
+              }
+            },
+            {
+              "id": "equity_total",
+              "name": {
+                "value": "equity total"
+              }
+            },
+            {
+              "id": "equity_vest_years",
+              "name": {
+                "value": "equity vest years"
+              }
+            },
+            {
+              "id": "event_type",
+              "name": {
+                "value": "event type"
+              }
+            },
+            {
+              "id": "export_pipeline",
+              "name": {
+                "value": "export pipeline"
+              }
+            },
+            {
+              "id": "file_a",
+              "name": {
+                "value": "file a"
+              }
+            },
+            {
+              "id": "file_b",
+              "name": {
+                "value": "file b"
+              }
+            },
+            {
+              "id": "filename",
+              "name": {
+                "value": "filename"
+              }
+            },
+            {
+              "id": "fitment_score",
+              "name": {
+                "value": "fitment score"
+              }
+            },
+            {
+              "id": "follow_up_commitments",
+              "name": {
+                "value": "follow up commitments"
+              }
+            },
+            {
+              "id": "followers_gained",
+              "name": {
+                "value": "followers gained"
+              }
+            },
+            {
+              "id": "footer_tag",
+              "name": {
+                "value": "footer tag"
+              }
+            },
+            {
+              "id": "force",
+              "name": {
+                "value": "force"
+              }
+            },
+            {
+              "id": "format",
+              "name": {
+                "value": "format"
+              }
+            },
+            {
+              "id": "hashtag",
+              "name": {
+                "value": "hashtag"
+              }
+            },
+            {
+              "id": "hashtags",
+              "name": {
+                "value": "hashtags"
+              }
+            },
+            {
+              "id": "hrv",
+              "name": {
+                "value": "hrv"
+              }
+            },
+            {
+              "id": "impressions",
+              "name": {
+                "value": "impressions"
+              }
+            },
+            {
+              "id": "in_entry",
+              "name": {
+                "value": "in entry"
+              }
+            },
+            {
+              "id": "include_full",
+              "name": {
+                "value": "include full"
+              }
+            },
+            {
+              "id": "include_pattern_analysis",
+              "name": {
+                "value": "include pattern analysis"
+              }
+            },
+            {
+              "id": "include_pending",
+              "name": {
+                "value": "include pending"
+              }
+            },
+            {
+              "id": "include_text",
+              "name": {
+                "value": "include text"
+              }
+            },
+            {
+              "id": "incoming_message",
+              "name": {
+                "value": "incoming message"
+              }
+            },
+            {
+              "id": "insight",
+              "name": {
+                "value": "insight"
+              }
+            },
+            {
+              "id": "intent",
+              "name": {
+                "value": "intent"
+              }
+            },
+            {
+              "id": "interview_date",
+              "name": {
+                "value": "interview date"
+              }
+            },
+            {
+              "id": "interview_format",
+              "name": {
+                "value": "interview format"
+              }
+            },
+            {
+              "id": "interview_type",
+              "name": {
+                "value": "interview type"
+              }
+            },
+            {
+              "id": "interviewer",
+              "name": {
+                "value": "interviewer"
+              }
+            },
+            {
+              "id": "interviewer_role",
+              "name": {
+                "value": "interviewer role"
+              }
+            },
+            {
+              "id": "letter_date",
+              "name": {
+                "value": "letter date"
+              }
+            },
+            {
+              "id": "level",
+              "name": {
+                "value": "level"
+              }
+            },
+            {
+              "id": "limit",
+              "name": {
+                "value": "limit"
+              }
+            },
+            {
+              "id": "link_clicks",
+              "name": {
+                "value": "link clicks"
+              }
+            },
+            {
+              "id": "links",
+              "name": {
+                "value": "links"
+              }
+            },
+            {
+              "id": "location",
+              "name": {
+                "value": "location"
+              }
+            },
+            {
+              "id": "members_reached",
+              "name": {
+                "value": "members reached"
+              }
+            },
+            {
+              "id": "message_type",
+              "name": {
+                "value": "message type"
+              }
+            },
+            {
+              "id": "min_activities_per_week",
+              "name": {
+                "value": "min activities per week"
+              }
+            },
+            {
+              "id": "min_reactions",
+              "name": {
+                "value": "min reactions"
+              }
+            },
+            {
+              "id": "mode",
+              "name": {
+                "value": "mode"
+              }
+            },
+            {
+              "id": "mood",
+              "name": {
+                "value": "mood"
+              }
+            },
+            {
+              "id": "name",
+              "name": {
+                "value": "name"
+              }
+            },
+            {
+              "id": "next_steps",
+              "name": {
+                "value": "next steps"
+              }
+            },
+            {
+              "id": "notes",
+              "name": {
+                "value": "notes"
+              }
+            },
+            {
+              "id": "num_results",
+              "name": {
+                "value": "num results"
+              }
+            },
+            {
+              "id": "offset",
+              "name": {
+                "value": "offset"
+              }
+            },
+            {
+              "id": "out_entry",
+              "name": {
+                "value": "out entry"
+              }
+            },
+            {
+              "id": "output_filename",
+              "name": {
+                "value": "output filename"
+              }
+            },
+            {
+              "id": "outreach_status",
+              "name": {
+                "value": "outreach status"
+              }
+            },
+            {
+              "id": "people",
+              "name": {
+                "value": "people"
+              }
+            },
+            {
+              "id": "person",
+              "name": {
+                "value": "person"
+              }
+            },
+            {
+              "id": "persona",
+              "name": {
+                "value": "persona"
+              }
+            },
+            {
+              "id": "post_id",
+              "name": {
+                "value": "post id"
+              }
+            },
+            {
+              "id": "posted_date",
+              "name": {
+                "value": "posted date"
+              }
+            },
+            {
+              "id": "process_details",
+              "name": {
+                "value": "process details"
+              }
+            },
+            {
+              "id": "productive",
+              "name": {
+                "value": "productive"
+              }
+            },
+            {
+              "id": "profile_views_from_post",
+              "name": {
+                "value": "profile views from post"
+              }
+            },
+            {
+              "id": "q1_no_spec_project",
+              "name": {
+                "value": "q1 no spec project"
+              }
+            },
+            {
+              "id": "q2_critical_feedback",
+              "name": {
+                "value": "q2 critical feedback"
+              }
+            },
+            {
+              "id": "q3_tedious_finish",
+              "name": {
+                "value": "q3 tedious finish"
+              }
+            },
+            {
+              "id": "q4_senior_disagreement",
+              "name": {
+                "value": "q4 senior disagreement"
+              }
+            },
+            {
+              "id": "query",
+              "name": {
+                "value": "query"
+              }
+            },
+            {
+              "id": "raw",
+              "name": {
+                "value": "raw"
+              }
+            },
+            {
+              "id": "reactions",
+              "name": {
+                "value": "reactions"
+              }
+            },
+            {
+              "id": "readiness_score",
+              "name": {
+                "value": "readiness score"
+              }
+            },
+            {
+              "id": "reason",
+              "name": {
+                "value": "reason"
+              }
+            },
+            {
+              "id": "recovery_index",
+              "name": {
+                "value": "recovery index"
+              }
+            },
+            {
+              "id": "relationship",
+              "name": {
+                "value": "relationship"
+              }
+            },
+            {
+              "id": "remote",
+              "name": {
+                "value": "remote"
+              }
+            },
+            {
+              "id": "report_id",
+              "name": {
+                "value": "report id"
+              }
+            },
+            {
+              "id": "reposts",
+              "name": {
+                "value": "reposts"
+              }
+            },
+            {
+              "id": "role",
+              "name": {
+                "value": "role"
+              }
+            },
+            {
+              "id": "role_title",
+              "name": {
+                "value": "role title"
+              }
+            },
+            {
+              "id": "role_type",
+              "name": {
+                "value": "role type"
+              }
+            },
+            {
+              "id": "saves",
+              "name": {
+                "value": "saves"
+              }
+            },
+            {
+              "id": "score_a",
+              "name": {
+                "value": "score a"
+              }
+            },
+            {
+              "id": "score_b",
+              "name": {
+                "value": "score b"
+              }
+            },
+            {
+              "id": "score_c",
+              "name": {
+                "value": "score c"
+              }
+            },
+            {
+              "id": "score_d",
+              "name": {
+                "value": "score d"
+              }
+            },
+            {
+              "id": "section",
+              "name": {
+                "value": "section"
+              }
+            },
+            {
+              "id": "self_rating",
+              "name": {
+                "value": "self rating"
+              }
+            },
+            {
+              "id": "since",
+              "name": {
+                "value": "since"
+              }
+            },
+            {
+              "id": "sleep_score",
+              "name": {
+                "value": "sleep score"
+              }
+            },
+            {
+              "id": "slim",
+              "name": {
+                "value": "slim"
+              }
+            },
+            {
+              "id": "sort_by",
+              "name": {
+                "value": "sort by"
+              }
+            },
+            {
+              "id": "source",
+              "name": {
+                "value": "source"
+              }
+            },
+            {
+              "id": "stage",
+              "name": {
+                "value": "stage"
+              }
+            },
+            {
+              "id": "state",
+              "name": {
+                "value": "state"
+              }
+            },
+            {
+              "id": "status",
+              "name": {
+                "value": "status"
+              }
+            },
+            {
+              "id": "story",
+              "name": {
+                "value": "story"
+              }
+            },
+            {
+              "id": "story_id",
+              "name": {
+                "value": "story id"
+              }
+            },
+            {
+              "id": "style",
+              "name": {
+                "value": "style"
+              }
+            },
+            {
+              "id": "surfaced_priorities",
+              "name": {
+                "value": "surfaced priorities"
+              }
+            },
+            {
+              "id": "tag",
+              "name": {
+                "value": "tag"
+              }
+            },
+            {
+              "id": "tags",
+              "name": {
+                "value": "tags"
+              }
+            },
+            {
+              "id": "target_company",
+              "name": {
+                "value": "target company"
+              }
+            },
+            {
+              "id": "template",
+              "name": {
+                "value": "template"
+              }
+            },
+            {
+              "id": "text",
+              "name": {
+                "value": "text"
+              }
+            },
+            {
+              "id": "title",
+              "name": {
+                "value": "title"
+              }
+            },
+            {
+              "id": "tone_sample",
+              "name": {
+                "value": "tone sample"
+              }
+            },
+            {
+              "id": "url",
+              "name": {
+                "value": "url"
+              }
+            },
+            {
+              "id": "username",
+              "name": {
+                "value": "username"
+              }
+            },
+            {
+              "id": "week_ending",
+              "name": {
+                "value": "week ending"
+              }
+            },
+            {
+              "id": "week_ends_on",
+              "name": {
+                "value": "week ends on"
+              }
+            },
+            {
+              "id": "what_didnt",
+              "name": {
+                "value": "what didnt"
+              }
+            },
+            {
+              "id": "what_landed",
+              "name": {
+                "value": "what landed"
+              }
+            },
+            {
+              "id": "work_id",
+              "name": {
+                "value": "work id"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
