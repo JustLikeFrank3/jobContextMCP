@@ -46,7 +46,10 @@ def test_generated_model_covers_dispatch_and_search_query_rules():
     names = [i["name"] for i in lm["intents"]]
     assert len(names) == len(set(names))
     assert set(INTENTS) <= set(names)
+    slot_types = {}
     for intent in lm["intents"]:
+        for slot in intent.get("slots", []):
+            assert slot_types.setdefault(slot["name"], slot["type"]) == slot["type"]
         if any(s["type"] == "AMAZON.SearchQuery" for s in intent.get("slots", [])):
             assert all(sample.count("{") == 1 and not sample.startswith("{") for sample in intent["samples"])
 
@@ -221,7 +224,7 @@ def test_model_parameter_answers_dates_lists_and_resolved_field(isolated_server)
     answer("Acme")
     answer("Engineer")
     assert "complete date" in answer("next month")["speech"]
-    result = aa.handle(payload("DateAnswerIntent", "2026-09-10"))
+    result = aa.handle(payload("DateAnswerIntent", "2026-09-10", "DateAnswer"))
     assert "interview type" in result["speech"]
     answer("phone_screen")
     change = payload("ChangeFieldIntent", "notes", "Field")
@@ -236,7 +239,7 @@ def test_prompt_types_number_validation_and_status_before_execution(isolated_ser
     begin("wellbeing.checkin")
     assert "the number is" in answer("good")["speech"]
     assert "number" in answer("invalid")["speech"]
-    aa.handle(payload("NumberAnswerIntent", "7"))
+    aa.handle(payload("NumberAnswerIntent", "7", "NumberAnswer"))
     aa.handle(payload("AMAZON.YesIntent"))
     assert "queued" in aa.handle(payload("ActionStatusIntent"))["speech"]
     assert work.list_items()[0]["inputs"]["params"]["energy"] == 7
