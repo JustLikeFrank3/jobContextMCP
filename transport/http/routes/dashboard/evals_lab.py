@@ -549,7 +549,7 @@ def _triage_section(claims: list[dict], has_run: bool) -> str:
         )
     claims_json = json.dumps(
         [{"key": c["key"], "gd_id": c["gd_id"], "claim": c["claim"]} for c in claims]
-    ).replace("</", "<\\/")
+    )
     return (
         f"<div class='legend-grid'>{legend}</div>"
         f"<div class='hint' style='margin-bottom:10px'>{ruled}/{len(claims)} ruled. "
@@ -557,7 +557,7 @@ def _triage_section(claims: list[dict], has_run: bool) -> str:
         "Every <b>D</b> is a to-do — document the fact in your master resume, and the flag "
         "converts to a citable strength on the next run.</div>"
         + "".join(cards)
-        + f"<script>window.__claims = {claims_json};</script>"
+        + f"<div id='claim-data' data-claims='{_e(claims_json)}' hidden></div>"
     )
 
 
@@ -645,9 +645,10 @@ async function post(url, body) {
 }
 
 // triage
+const claims = JSON.parse(document.getElementById('claim-data')?.dataset.claims || '[]');
 document.querySelectorAll('.claim-card').forEach(card => {
   const key = card.dataset.key;
-  const meta = (window.__claims || []).find(c => c.key === key);
+  const meta = claims.find(c => c.key === key);
   if (!meta) return;
   const note = card.querySelector('.rule-note');
   const send = (ruling) => post('/dashboard/evals/triage',

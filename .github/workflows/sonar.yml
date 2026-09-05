@@ -48,7 +48,7 @@ jobs:
         run: pytest -m "not live_llm" --cov --cov-report=xml
 
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
         with:
           # Upload success alone is not a passing quality gate.
           args: -Dsonar.qualitygate.wait=true

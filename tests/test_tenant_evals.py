@@ -378,6 +378,31 @@ class TestScreens:
         assert attack not in page.text
         assert "window.__run_inflight = false" in page.text
 
+    def test_claim_data_roundtrips_as_html_attribute_not_script(self, client, monkeypatch):
+        from html.parser import HTMLParser
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        class ClaimParser(HTMLParser):
+            claims = None
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if attributes.get("id") == "claim-data":
+                    self.claims = json.loads(attributes["data-claims"])
+
+        attack = "</script><script>alert('injected')</script>\" & <!--"
+        monkeypatch.setattr(lab, "_payload", lambda: {"suite": {
+            "rows": [{"gd_id": "GD-T01", "mean": 3.0}],
+            "detail": {"GD-T01": {"hallucinations": [attack]}},
+        }})
+        page = client.get("/dashboard/evals")
+        assert page.status_code == 200
+        parser = ClaimParser()
+        parser.feed(page.text)
+        assert parser.claims[0]["claim"] == attack
+        assert "<script>alert('injected')" not in page.text
+        assert "window.__claims" not in page.text
+
     def test_invalid_golden_path_returns_validation_error(self, client):
         for route in ("/dashboard/evals/golden", "/dashboard/evals/golden/delete"):
             result = client.post(route, json={"entry_id": "../outside", "company": "C",

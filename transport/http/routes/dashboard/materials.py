@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import quote
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -214,6 +215,15 @@ async def materials_untracked_delete(request: UntrackedDeleteRequest) -> JSONRes
     return JSONResponse({"status": "deleted", "name": request.name, "synced": bool(info["rel"])})
 
 
+def _copy_new_material(target: Path, dest: Path) -> None:
+    """Copy without clobbering a destination created by a concurrent request."""
+    try:
+        with target.open("rb") as source, dest.open("xb") as output:
+            shutil.copyfileobj(source, output)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"File already exists: {dest.name}") from exc
+
+
 @router.post("/materials/untracked/associate")
 async def materials_untracked_associate(request: UntrackedAssociateRequest) -> JSONResponse:
     """Attach an untracked file to a tracked application by renaming it to
@@ -230,11 +240,7 @@ async def materials_untracked_associate(request: UntrackedAssociateRequest) -> J
         raise HTTPException(status_code=409, detail=f"File already exists: {new_name}")
     # Exclusive creation prevents a concurrent association (or a dangling
     # symlink) from overwriting a document between the check and the copy.
-    try:
-        with target.open("rb") as source, dest.open("xb") as output:
-            shutil.copyfileobj(source, output)
-    except FileExistsError as exc:
-        raise HTTPException(status_code=409, detail=f"File already exists: {new_name}") from exc
+    await anyio.to_thread.run_sync(_copy_new_material, target, dest)
     info = _delete_with_tombstone(target)
     return JSONResponse({"status": "associated", "name": new_name, "synced": bool(info["rel"])})
 
