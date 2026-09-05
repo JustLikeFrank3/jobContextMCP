@@ -34,7 +34,13 @@ applications.decide|record my application decision|confirm
 applications.assess|assess a saved job|read
 applications.full_assessment|create a full job assessment|confirm
 applications.save_assessment|save an assessment document|handoff
-job_search.web|search for jobs|read
+job_search.web|search google jobs|read
+job_search.discover|find new jobs|read
+job_search.boards|list my job boards|read
+job_search.save_board|save a job board|confirm
+job_search.remove_board|remove a job board|confirm
+job_search.result|read a job result|read
+job_search.queue_result|queue a job result|confirm
 job_search.greenhouse|search a greenhouse board|read
 job_search.lever|search a lever board|read
 job_search.ashby|search an ashby board|read
@@ -162,7 +168,7 @@ FIXED = {"job_search." + action: {"auto_queue": False}
 def fields(action):
     return {name: param for name, param in action.parameters.items()
             if name not in BLOCKED_FIELDS and name not in FIXED.get(action.key, {})
-            and name not in {"jd", "job_description"}}
+            and name not in {"jd", "job_description", "search_id"}}
 
 
 def model():
@@ -174,6 +180,15 @@ def model():
     lm["intents"] = [i for i in lm["intents"] if not i["name"].startswith("Action")
                      and i["name"] not in {"AnswerIntent", "NumberAnswerIntent", "DateAnswerIntent", "ChangeFieldIntent", "RunActionIntent", "ActionStatusIntent", "MoreResultIntent", "ActionCatalogIntent", "AMAZON.YesIntent", "AMAZON.NoIntent"}]
     lm["intents"] += [{"name": a.intent, "slots": [], "samples": [a.phrase]} for a in ACTIONS.values()]
+    for intent in lm["intents"]:
+        if intent["name"] == ACTIONS["job_search.discover"].intent:
+            intent["slots"] = [{"name": "JobQuery", "type": "AMAZON.SearchQuery"}]
+            intent["samples"] += ["search for jobs", "search job boards", "find a new job", "find jobs for {JobQuery}", "search my boards for {JobQuery}"]
+        if intent["name"] in {ACTIONS["job_search.result"].intent, ACTIONS["job_search.queue_result"].intent}:
+            intent["slots"] = [{"name": "JobNumber", "type": "AMAZON.NUMBER"}]
+            intent["samples"] += (["tell me about job {JobNumber}", "read job {JobNumber}"]
+                                  if intent["name"] == ACTIONS["job_search.result"].intent
+                                  else ["queue job {JobNumber}", "add job {JobNumber} to my queue"])
     if not any(i["name"] == "AMAZON.NavigateHomeIntent" for i in lm["intents"]):
         lm["intents"].append({"name": "AMAZON.NavigateHomeIntent", "samples": []})
     lm["intents"] += [

@@ -38,7 +38,7 @@ def test_every_mcp_action_has_reviewed_policy_and_utterance():
         if action.mode != "handoff":
             for name, p in action.parameters.items():
                 if p.default is inspect.Parameter.empty:
-                    assert name in fields(action) or name == "job_description", action.key
+                    assert name in fields(action) or name in {"job_description", "search_id"}, action.key
 
 
 def test_generated_model_covers_dispatch_and_search_query_rules():
@@ -51,7 +51,8 @@ def test_generated_model_covers_dispatch_and_search_query_rules():
         for slot in intent.get("slots", []):
             assert slot_types.setdefault(slot["name"], slot["type"]) == slot["type"]
         if any(s["type"] == "AMAZON.SearchQuery" for s in intent.get("slots", [])):
-            assert all(sample.count("{") == 1 and not sample.startswith("{") for sample in intent["samples"])
+            assert all(sample.count("{") <= 1 and not sample.startswith("{") for sample in intent["samples"])
+            assert any(sample.count("{") == 1 for sample in intent["samples"])
 
 
 @pytest.mark.parametrize("key", [key for key, a in ACTIONS.items() if a.mode == "handoff"])

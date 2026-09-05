@@ -285,18 +285,20 @@ async def alexa_webhook(request: Request) -> JSONResponse:
         metrics.inc("alexa_requests_total", result="session_ended")
         return JSONResponse({"version": "1.0", "response": {}})
 
-    if req_type in ("Alexa.Presentation.APL.UserEvent", "Alexa.Presentation.APL.RuntimeError"):
-        # No touch actions in this version. Display lifecycle requests must
-        # never fall through to a tool or read the user's briefing aloud.
+    job_touch = (req_type == "Alexa.Presentation.APL.UserEvent"
+                 and isinstance(req.get("arguments"), list)
+                 and req["arguments"][:1] == ["job_detail"])
+    if req_type in ("Alexa.Presentation.APL.UserEvent", "Alexa.Presentation.APL.RuntimeError") and not job_touch:
+        # Unrecognized display events cannot dispatch actions.
         metrics.inc("alexa_requests_total", result="display_event")
         return JSONResponse({"version": "1.0", "response": {}})
 
     intent = (req.get("intent") or {}).get("name", "")
     from transport.http.alexa_actions import CONTROL_INTENTS, INTENTS
 
-    extended = intent in INTENTS or intent in CONTROL_INTENTS
+    extended = intent in INTENTS or intent in CONTROL_INTENTS or job_touch
     cancel = intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent")
-    if req_type == "IntentRequest" and (extended or (cancel and payload.get("session", {}).get("sessionId"))):
+    if job_touch or (req_type == "IntentRequest" and (extended or (cancel and payload.get("session", {}).get("sessionId")))):
         oid = _linked_oid(payload)
         if not oid:
             return _speech(_LINK_SPEECH, link_account=True) if extended else _speech("Goodbye.")

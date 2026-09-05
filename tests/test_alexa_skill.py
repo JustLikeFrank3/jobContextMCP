@@ -485,3 +485,25 @@ class TestWebhook:
         payload["request"]["intent"] = {"name": ACTIONS["applications.update"].intent}
         response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
         assert response["card"]["type"] == "LinkAccount"
+
+    @pytest.mark.parametrize("linked", [False, True])
+    def test_job_touch_requires_link_and_preserves_tenant(self, alexa_client, signing_pair, monkeypatch, linked):
+        from lib.user_context import get_current_user_oid
+        from transport.http import alexa_actions
+        def handle(payload):
+            assert get_current_user_oid() == "touch-user"
+            assert payload["request"]["arguments"] == ["job_detail", "snapshot", "2"]
+            return {"title": "Job two", "summary": "Details", "speech": "Job two details", "rows": [], "listen": True}
+        monkeypatch.setattr(alexa_actions, "handle", handle)
+        payload = _fresh_payload()
+        payload["request"].update(type="Alexa.Presentation.APL.UserEvent", arguments=["job_detail", "snapshot", "2"], token="jobcontext-search-snapshot")
+        payload["context"]["System"]["device"] = {"deviceId": "show", "supportedInterfaces": {"Alexa.Presentation.APL": {}}}
+        if linked:
+            _with_token(payload, self._linked_key("touch-user"))
+        response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
+        if linked:
+            assert response["outputSpeech"]["text"] == "Job two details"
+            assert response["shouldEndSession"] is False
+        else:
+            assert response["card"]["type"] == "LinkAccount"
+            assert "directives" not in response

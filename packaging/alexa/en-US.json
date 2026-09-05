@@ -126,7 +126,73 @@
           "name": "ActionJobSearchWebIntent",
           "slots": [],
           "samples": [
-            "search for jobs"
+            "search google jobs"
+          ]
+        },
+        {
+          "name": "ActionJobSearchDiscoverIntent",
+          "slots": [
+            {
+              "name": "JobQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "find new jobs",
+            "search for jobs",
+            "search job boards",
+            "find a new job",
+            "find jobs for {JobQuery}",
+            "search my boards for {JobQuery}"
+          ]
+        },
+        {
+          "name": "ActionJobSearchBoardsIntent",
+          "slots": [],
+          "samples": [
+            "list my job boards"
+          ]
+        },
+        {
+          "name": "ActionJobSearchSaveBoardIntent",
+          "slots": [],
+          "samples": [
+            "save a job board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchRemoveBoardIntent",
+          "slots": [],
+          "samples": [
+            "remove a job board"
+          ]
+        },
+        {
+          "name": "ActionJobSearchResultIntent",
+          "slots": [
+            {
+              "name": "JobNumber",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "read a job result",
+            "tell me about job {JobNumber}",
+            "read job {JobNumber}"
+          ]
+        },
+        {
+          "name": "ActionJobSearchQueueResultIntent",
+          "slots": [
+            {
+              "name": "JobNumber",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "queue a job result",
+            "queue job {JobNumber}",
+            "add job {JobNumber} to my queue"
           ]
         },
         {
@@ -1140,6 +1206,12 @@
               }
             },
             {
+              "id": "include_known",
+              "name": {
+                "value": "include known"
+              }
+            },
+            {
               "id": "include_pattern_analysis",
               "name": {
                 "value": "include pattern analysis"
@@ -1374,6 +1446,12 @@
               }
             },
             {
+              "id": "provider",
+              "name": {
+                "value": "provider"
+              }
+            },
+            {
               "id": "q1_no_spec_project",
               "name": {
                 "value": "q1 no spec project"
@@ -1455,6 +1533,12 @@
               "id": "reposts",
               "name": {
                 "value": "reposts"
+              }
+            },
+            {
+              "id": "result_number",
+              "name": {
+                "value": "result number"
               }
             },
             {

@@ -1,7 +1,8 @@
 # jobContext voice and Echo Show integration
 
 The broader implementation is documented in [Alexa action transport](alexa-action-transport.md),
-with a [complete 105-action reference](alexa-action-reference.md). The three
+with a [complete 111-action reference](alexa-action-reference.md). The
+[job search flow](alexa-job-search.md) adds numbered results and confirmed queuing. The three
 fast views below remain available alongside that guided transport.
 
 ## What is implemented
@@ -23,7 +24,8 @@ core components, a scrollable content area, and escaped data sources. No
 remote images or layout packages are required. Only requests advertising
 `Alexa.Presentation.APL` get RenderDocument; voice-only devices keep their
 existing response. Display sessions leave the microphone closed rather
-than repeatedly prompting the user. No touch actions are shipped yet.
+than repeatedly prompting the user. Search results additionally support
+read-only touch selection; the original three fast views do not have touch actions.
 
 Unknown intents receive help. APL lifecycle events do not trigger reads.
 All reads run in the linked user's partition in an AnyIO worker thread.
@@ -37,9 +39,9 @@ The Alexa, view-adapter, voice-briefing, OAuth bridge and consolidated MCP
 regression suites pass: 118 tests, with 96% combined coverage of the Alexa
 handler and view adapters. Amazon's APL authoring preview rendered synthetic
 pipeline data on Echo Show 2 and Show 5 profiles; vertical scrolling was
-checked on Show 5. The web preview still shows a horizontal scrollbar, so
-physical-device layout verification remains required. No APL document or
-new interaction model has been deployed to the live skill yet.
+checked on Show 5. The later job-search increment reserves scrollbar space
+and resolves the horizontal scrollbar/footer clipping in the web preview.
+Physical-device layout verification remains required for that increment.
 
 ## Review of the wider MCP surface
 
