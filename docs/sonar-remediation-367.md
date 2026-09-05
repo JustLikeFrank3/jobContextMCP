@@ -32,3 +32,30 @@ file I/O does not block the async route.
 The results renderer returns HTML separately from raw claim metadata. Both
 claims and judge calibration data use escaped HTML attributes, and the only
 remaining dynamic inline-script value is a server-computed boolean.
+
+## Remaining issue review
+
+Issue `AaA0Zu4I9-6hPvk4hzNw` (S5131, the eval page's `HTMLResponse`) remains
+open after the code fixes. Its reported flow contains only the JSON file read
+and final response; it identifies no intervening unescaped value. Review of
+the current renderer found:
+
+- Result and triage text passes through `_e` (`html.escape` with quote escaping).
+- Claim and judge metadata is encoded into escaped HTML attributes and parsed
+  from the DOM, rather than interpolated into executable JavaScript.
+- Scores, counts, and chart coordinates are numeric conversions or numeric
+  formatting; conditional classes come from fixed strings.
+- Page title, CSS, and JavaScript are static; the dynamic script value is a boolean.
+
+`test_all_stored_result_text_stays_inert_in_html` injects closing script tags,
+new elements, quotes, and ampersands into the timestamp, judge name, master hash,
+entry ID, role, displayed result columns, errors, claims, critic verdicts, and
+triage notes. The parsed HTML contains no injected element or attribute.
+Separate tests verify exact round trips of hostile claim/judge metadata and
+the timestamp case. All 69 tenant-eval tests pass locally.
+
+Proposed disposition: **False Positive for this issue only**, based on the
+current code and tests. It has **not** been applied: automatic approval review
+requires Frank's explicit authorization because the disposition removes the
+blocker from the quality gate. The quality gate and rule configuration remain
+unchanged; no source suppression has been added.

@@ -417,6 +417,41 @@ class TestScreens:
                                              "role": "R", "jd_text": "malicious"})
             assert result.status_code == 422
 
+    def test_all_stored_result_text_stays_inert_in_html(self, client, monkeypatch):
+        from html.parser import HTMLParser
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        class InjectionParser(HTMLParser):
+            injected = False
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "jc-injected" or any(name == "data-injected" for name, _ in attrs):
+                    self.injected = True
+
+        attack = '</script><jc-injected data-injected="yes">&\'</jc-injected><script>'
+        monkeypatch.setattr(lab, "_payload", lambda: {
+            "updated_at": attack, "suite": {
+                "judge_model": attack, "master_sha": attack,
+                "rows": [{"gd_id": attack, "role": attack, "mean": 3.0,
+                          "accuracy": attack, "cov_pct": attack,
+                          "flip_rate_pct": attack, "alerts": [attack]},
+                         {"gd_id": "error-row", "error": attack}],
+                "detail": {attack: {"hallucination_flags": 1,
+                                   "hallucinations": [attack],
+                                   "critic": {"findings": [{"claim": attack, "verdict": attack}]}}},
+            },
+        })
+        monkeypatch.setattr(tenant, "load_triage", lambda: {
+            tenant.claim_key(attack, attack): {"ruling": "D", "note": attack},
+        })
+        page = client.get("/dashboard/evals")
+        assert page.status_code == 200
+        parser = InjectionParser()
+        parser.feed(page.text)
+        assert not parser.injected
+        assert attack not in page.text
+        assert "&lt;jc-injected" in page.text
+
     def test_rejection_logs_do_not_include_user_supplied_lines(self, client, caplog):
         attack = "injected\r\nFAKE LOG ENTRY"
         client.post("/dashboard/evals/golden", json={
