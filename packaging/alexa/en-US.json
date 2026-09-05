@@ -49,6 +49,10 @@
           "samples": []
         },
         {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
           "name": "ActionApplicationsStatusIntent",
           "slots": [],
           "samples": [
@@ -784,10 +788,6 @@
           ]
         },
         {
-          "name": "AMAZON.NavigateHomeIntent",
-          "samples": []
-        },
-        {
           "name": "AnswerIntent",
           "slots": [
             {
@@ -803,24 +803,24 @@
           "name": "NumberAnswerIntent",
           "slots": [
             {
-              "name": "Answer",
+              "name": "NumberAnswer",
               "type": "AMAZON.NUMBER"
             }
           ],
           "samples": [
-            "the number is {Answer}"
+            "the number is {NumberAnswer}"
           ]
         },
         {
           "name": "DateAnswerIntent",
           "slots": [
             {
-              "name": "Answer",
+              "name": "DateAnswer",
               "type": "AMAZON.DATE"
             }
           ],
           "samples": [
-            "the date is {Answer}"
+            "the date is {DateAnswer}"
           ]
         },
         {

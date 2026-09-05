@@ -178,8 +178,8 @@ def model():
         lm["intents"].append({"name": "AMAZON.NavigateHomeIntent", "samples": []})
     lm["intents"] += [
         {"name": "AnswerIntent", "slots": [{"name": "Answer", "type": "AMAZON.SearchQuery"}], "samples": ["my answer is {Answer}"]},
-        {"name": "NumberAnswerIntent", "slots": [{"name": "Answer", "type": "AMAZON.NUMBER"}], "samples": ["the number is {Answer}"]},
-        {"name": "DateAnswerIntent", "slots": [{"name": "Answer", "type": "AMAZON.DATE"}], "samples": ["the date is {Answer}"]},
+        {"name": "NumberAnswerIntent", "slots": [{"name": "NumberAnswer", "type": "AMAZON.NUMBER"}], "samples": ["the number is {NumberAnswer}"]},
+        {"name": "DateAnswerIntent", "slots": [{"name": "DateAnswer", "type": "AMAZON.DATE"}], "samples": ["the date is {DateAnswer}"]},
         {"name": "ChangeFieldIntent", "slots": [{"name": "Field", "type": "ActionField"}], "samples": ["change {Field}", "set {Field}"]},
         {"name": "RunActionIntent", "slots": [], "samples": ["run it", "review my request"]},
         {"name": "ActionStatusIntent", "slots": [], "samples": ["check my last request", "is my request finished"]},

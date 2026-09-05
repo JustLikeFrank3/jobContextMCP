@@ -81,7 +81,13 @@ def _coerce(name, value, param):
 
 
 def _slot(req, name):
-    slot = (req.get("intent", {}).get("slots") or {}).get(name) or {}
+    intent = req.get("intent") or {}
+    slots = intent.get("slots") or {}
+    if name == "Answer":
+        typed = {"NumberAnswerIntent": "NumberAnswer", "DateAnswerIntent": "DateAnswer"}.get(intent.get("name"))
+        slot = slots.get(typed) or slots.get(name) or {}
+    else:
+        slot = slots.get(name) or {}
     if name == "Field":
         for authority in (slot.get("resolutions") or {}).get("resolutionsPerAuthority", []):
             if authority.get("status", {}).get("code") == "ER_SUCCESS_MATCH":
