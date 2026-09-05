@@ -92,6 +92,13 @@ Console setup (developer.amazon.com/alexa/console/ask → Create Skill):
    (goes through the bridge consent page → dashboard login).
 6. On the Echo: "Alexa, open job context."
 
+During a prod freeze, substitute `qa.jobcontext.ai` for `app.jobcontext.ai`
+in the endpoint and both account-linking URIs — dev-stage skills are
+per-account, so pointing one at qa affects nobody. Note the linked key and
+the briefing's data both live in that environment's partition (qa's data is
+not prod's), and switching hosts later means updating the three URIs and
+relinking the account.
+
 Caveat: Echos migrated to Alexa+ early access have reported flaky custom
 skill invocation; opting the device out of early access restores classic
 behavior. `/alexa` requests surface in metrics as `alexa_requests_total`
