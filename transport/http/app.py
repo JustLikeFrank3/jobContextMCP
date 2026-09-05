@@ -381,6 +381,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from lib import work as _work
+        # Register before recovery sweeps queued Alexa work after a restart.
+        from transport.http import alexa_actions  # noqa: F401
 
         # Control plane: durable background work (capture, doc generation).
         await _work.start_dispatcher()

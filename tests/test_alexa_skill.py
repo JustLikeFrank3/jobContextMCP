@@ -460,3 +460,28 @@ class TestWebhook:
         response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
         assert response["card"]["type"] == "LinkAccount"
         assert "directives" not in response
+
+    @pytest.mark.parametrize("display", [False, True])
+    def test_action_dialogue_is_linked_and_keeps_microphone_open(self, alexa_client, signing_pair, display):
+        from transport.http.alexa_catalog import ACTIONS
+
+        payload = _with_token(_fresh_payload(), self._linked_key())
+        payload["session"]["sessionId"] = "guided-test"
+        payload["request"]["type"] = "IntentRequest"
+        payload["request"]["intent"] = {"name": ACTIONS["applications.update"].intent}
+        if display:
+            payload["context"]["System"]["device"] = {"supportedInterfaces": {"Alexa.Presentation.APL": {}}}
+        response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
+        assert "company" in response["outputSpeech"]["text"]
+        assert response["shouldEndSession"] is False
+        assert "reprompt" in response
+        assert ("directives" in response) is display
+
+    def test_action_requires_linking(self, alexa_client, signing_pair):
+        from transport.http.alexa_catalog import ACTIONS
+
+        payload = _fresh_payload()
+        payload["request"]["type"] = "IntentRequest"
+        payload["request"]["intent"] = {"name": ACTIONS["applications.update"].intent}
+        response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
+        assert response["card"]["type"] == "LinkAccount"

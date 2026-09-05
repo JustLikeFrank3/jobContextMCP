@@ -1,5 +1,9 @@
 # jobContext voice and Echo Show integration
 
+The broader implementation is documented in [Alexa action transport](alexa-action-transport.md),
+with a [complete 105-action reference](alexa-action-reference.md). The three
+fast views below remain available alongside that guided transport.
+
 ## What is implemented
 
 The classic custom skill uses signed HTTPS requests at `/alexa`. It calls

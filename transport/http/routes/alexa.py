@@ -181,13 +181,14 @@ _LINK_SPEECH = (
     "After linking, say: Alexa, launch the job context skill."
 )
 _HELP_SPEECH = (
-    "You can ask for your briefing, your application pipeline, or upcoming interviews. "
-    "To start again, say: Alexa, launch the job context skill."
+    "Ask for your briefing, pipeline, or interviews. You can also search jobs, "
+    "prepare for an interview, generate a resume, or record an update. "
+    "Say what can you do for more options."
 )
 
 
 def _speech(text: str, *, end_session: bool = True, link_account: bool = False,
-            view: dict | None = None) -> JSONResponse:
+            view: dict | None = None, reprompt: str | None = None) -> JSONResponse:
     response: dict = {
         "outputSpeech": {"type": "PlainText", "text": text},
         "shouldEndSession": end_session,
@@ -199,9 +200,10 @@ def _speech(text: str, *, end_session: bool = True, link_account: bool = False,
 
         response["directives"] = [render_directive(view)]
         # Keep the visual session available with the microphone closed.
-        response.pop("shouldEndSession")
-    elif not end_session:
-        response["reprompt"] = {"outputSpeech": {"type": "PlainText", "text": _HELP_SPEECH}}
+        if end_session:
+            response.pop("shouldEndSession")
+    if not end_session:
+        response["reprompt"] = {"outputSpeech": {"type": "PlainText", "text": reprompt or _HELP_SPEECH}}
     return JSONResponse({"version": "1.0", "response": response})
 
 
@@ -219,7 +221,7 @@ def _linked_oid(payload: dict) -> str | None:
     return lookup_key(token)
 
 
-def _view_for(oid: str, action: str) -> dict:
+def _view_for(oid: str, action: str, payload: dict | None = None) -> dict:
     """Run a read-only view inside *oid*'s partition, middleware-style."""
     import lib.config as _cfg_module
     from lib.user_context import (
@@ -236,6 +238,12 @@ def _view_for(oid: str, action: str) -> dict:
     oid_token = set_user_oid(oid)
     folder_token = set_data_folder(data_dir)
     try:
+        if payload is not None:
+            from transport.http.alexa_actions import handle, clear_pending
+
+            if action == "action":
+                return handle(payload)
+            clear_pending(payload)
         return build_view(action)
     finally:
         reset_data_folder(folder_token)
@@ -284,6 +292,20 @@ async def alexa_webhook(request: Request) -> JSONResponse:
         return JSONResponse({"version": "1.0", "response": {}})
 
     intent = (req.get("intent") or {}).get("name", "")
+    from transport.http.alexa_actions import CONTROL_INTENTS, INTENTS
+
+    extended = intent in INTENTS or intent in CONTROL_INTENTS
+    cancel = intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent")
+    if req_type == "IntentRequest" and (extended or (cancel and payload.get("session", {}).get("sessionId"))):
+        oid = _linked_oid(payload)
+        if not oid:
+            return _speech(_LINK_SPEECH, link_account=True) if extended else _speech("Goodbye.")
+        view = await anyio.to_thread.run_sync(_view_for, oid, "action", payload)
+        device = ((payload.get("context") or {}).get("System") or {}).get("device") or {}
+        display = "Alexa.Presentation.APL" in (device.get("supportedInterfaces") or {})
+        return _speech(view["speech"], end_session=not view.get("listen", False),
+                       view=view if display else None, reprompt=view["speech"])
+
     if req_type == "IntentRequest" and intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
         metrics.inc("alexa_requests_total", result="stop")
         return _speech("Goodbye.")
@@ -306,7 +328,7 @@ async def alexa_webhook(request: Request) -> JSONResponse:
 
     # anyio preserves contextvars; blocking workspace reads must not hold the
     # HTTP event loop and delay health probes or unrelated requests.
-    view = await anyio.to_thread.run_sync(_view_for, oid, action)
+    view = await anyio.to_thread.run_sync(_view_for, oid, action, payload)
     interfaces = (((payload.get("context") or {}).get("System") or {}).get("device") or {}).get("supportedInterfaces") or {}
     display = "Alexa.Presentation.APL" in interfaces
     metrics.inc("alexa_requests_total", result="ok")
