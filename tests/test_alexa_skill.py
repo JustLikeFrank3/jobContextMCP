@@ -19,6 +19,7 @@ import base64
 import datetime as _dt
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 from cryptography import x509
@@ -340,7 +341,8 @@ class TestWebhook:
         assert body["response"]["outputSpeech"]["text"] == "Two interviews this week."
         assert body["response"]["shouldEndSession"] is True
         assert seen["oid"] == "oid-echo"
-        assert seen["folder"].endswith("users/oid-echo")
+        assert Path(seen["folder"]).parts[-2:] == ("users", "oid-echo")
+        assert "directives" not in body["response"]
 
     def test_legacy_sha1_signature_accepted(
         self, alexa_client, monkeypatch, signing_pair
@@ -418,3 +420,43 @@ class TestWebhook:
             "/alexa", content=b"{}", headers={"Content-Type": "application/json"}
         )
         assert resp.status_code == 400
+
+    @pytest.mark.parametrize("intent,action", [("PipelineIntent", "pipeline"),
+                                              ("UpcomingInterviewsIntent", "interviews")])
+    def test_view_dispatch_keeps_tenant_context(self, alexa_client, signing_pair, monkeypatch, intent, action):
+        from lib.user_context import get_current_user_oid, get_data_folder_override
+        from transport.http import alexa_views
+
+        def view(requested):
+            assert requested == action
+            assert get_current_user_oid() == "oid-show"
+            assert get_data_folder_override().parts[-2:] == ("users", "oid-show")
+            return {"title": "Test", "summary": "Safe summary", "speech": "Safe summary", "rows": []}
+
+        monkeypatch.setattr(alexa_views, "build_view", view)
+        payload = _with_token(_fresh_payload(), self._linked_key("oid-show"))
+        payload["request"].update(type="IntentRequest", intent={"name": intent})
+        payload["context"]["System"]["device"] = {"supportedInterfaces": {"Alexa.Presentation.APL": {}}}
+        response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
+        assert response["outputSpeech"]["text"] == "Safe summary"
+        assert "shouldEndSession" not in response
+        assert response["directives"][0]["type"] == "Alexa.Presentation.APL.RenderDocument"
+        assert get_current_user_oid() != "oid-show"
+
+    @pytest.mark.parametrize("kind,intent", [("IntentRequest", "DeleteEverythingIntent"),
+                                             ("Alexa.Presentation.APL.UserEvent", ""),
+                                             ("Alexa.Presentation.APL.RuntimeError", "")])
+    def test_unknown_and_display_events_never_read_workspace(self, alexa_client, signing_pair, monkeypatch, kind, intent):
+        def forbidden(*args):
+            pytest.fail("unexpected workspace read")
+        monkeypatch.setattr(alexa, "_view_for", forbidden)
+        payload = _fresh_payload()
+        payload["request"].update(type=kind, intent={"name": intent})
+        assert _post_signed(alexa_client, payload, signing_pair[0]).status_code == 200
+
+    def test_unlinked_show_never_receives_workspace_visuals(self, alexa_client, signing_pair):
+        payload = _fresh_payload()
+        payload["context"]["System"]["device"] = {"supportedInterfaces": {"Alexa.Presentation.APL": {}}}
+        response = _post_signed(alexa_client, payload, signing_pair[0]).json()["response"]
+        assert response["card"]["type"] == "LinkAccount"
+        assert "directives" not in response
