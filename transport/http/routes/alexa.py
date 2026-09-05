@@ -16,7 +16,7 @@ and every request must prove it came from Alexa before the body is trusted
    (path-normalized so ``..`` can't escape the prefix).
 2. The certificate chain must validate to the system trust store with
    ``echo-api.amazon.com`` in the leaf's SAN.
-3. ``Signature-256`` (or legacy SHA-1 ``Signature``) must verify over the
+3. ``Signature-256`` must verify over the
    raw body with the leaf's RSA key.
 4. ``request.timestamp`` must be within ±150s (replay window).
 
@@ -31,6 +31,7 @@ import datetime as _dt
 import json
 import logging
 import posixpath
+import re
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -70,16 +71,28 @@ class AlexaVerificationError(Exception):
 
 # ── request verification ───────────────────────────────────────────────────────
 
-def _validate_cert_url(url: str) -> None:
-    parsed = urlparse(url)
+def _validate_cert_url(url: str) -> str:
+    """Return a canonical, pinned Amazon certificate URL."""
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError as exc:
+        raise AlexaVerificationError("invalid cert URL") from exc
     if parsed.scheme != "https":
         raise AlexaVerificationError("cert URL must be https")
     if (parsed.hostname or "").lower() != _CERT_HOST:
         raise AlexaVerificationError("cert URL host is not s3.amazonaws.com")
-    if parsed.port not in (None, 443):
+    if port not in (None, 443):
         raise AlexaVerificationError("cert URL must use port 443")
-    if not posixpath.normpath(parsed.path).startswith(_CERT_PATH_PREFIX):
+    if parsed.username or parsed.password or parsed.query or parsed.params:
+        raise AlexaVerificationError("cert URL must not contain credentials or parameters")
+    path = posixpath.normpath(parsed.path)
+    if not path.startswith(_CERT_PATH_PREFIX):
         raise AlexaVerificationError("cert URL path is not under /echo.api/")
+    if not re.fullmatch(r"/echo\.api/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.pem", path):
+        raise AlexaVerificationError("invalid certificate path")
+    # Rebuild with a constant origin; never send the raw header to HTTPX.
+    return "https://s3.amazonaws.com" + path
 
 
 def _trust_store() -> Store:
@@ -112,12 +125,12 @@ def _verify_chain(certs: list[x509.Certificate]) -> x509.Certificate:
 
 async def _verified_signing_cert(url: str) -> x509.Certificate:
     """Validate the cert URL, fetch (cached) and chain-verify, return leaf."""
-    _validate_cert_url(url)
+    url = _validate_cert_url(url)
     cached = _cert_cache.get(url)
     if cached and time.monotonic() - cached[1] < _CERT_CACHE_TTL_S:
         return cached[0]
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
             resp = await client.get(url)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -164,14 +177,10 @@ async def _verify_request(request: Request, raw_body: bytes) -> None:
     if not cert_url:
         raise AlexaVerificationError("missing SignatureCertChainUrl header")
     sig_256 = request.headers.get("signature-256", "")
-    sig_sha1 = request.headers.get("signature", "")
-    if not sig_256 and not sig_sha1:
-        raise AlexaVerificationError("missing Signature header")
+    if not sig_256:
+        raise AlexaVerificationError("missing Signature-256 header")
     cert = await _verified_signing_cert(cert_url)
-    if sig_256:
-        _verify_signature(cert, sig_256, raw_body, hashes.SHA256())
-    else:
-        _verify_signature(cert, sig_sha1, raw_body, hashes.SHA1())  # noqa: S303 — Alexa's legacy header
+    _verify_signature(cert, sig_256, raw_body, hashes.SHA256())
 
 
 # ── response shapes ────────────────────────────────────────────────────────────

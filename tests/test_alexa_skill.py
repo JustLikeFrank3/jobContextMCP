@@ -6,7 +6,7 @@ contract under test is layered:
 - SignatureCertChainUrl must be pinned to https://s3.amazonaws.com/echo.api/
   (normalized path — no ``..`` escapes, no odd ports, no lookalike hosts)
 - the body signature must verify against the chain's leaf cert (SHA-256
-  preferred, legacy SHA-1 accepted); a self-signed chain must NOT verify
+  required, legacy-only headers rejected); a self-signed chain must NOT verify
 - request.timestamp outside the ±150s replay window is rejected with 400
 - the account-linked accessToken is a jcmcp_ key: missing/unknown keys get
   a LinkAccount card, a valid key runs the briefing inside that user's
@@ -82,7 +82,12 @@ def _with_token(payload: dict, token: str) -> dict:
 
 class TestCertUrl:
     def test_canonical_url_accepted(self):
-        alexa._validate_cert_url(_CERT_URL)
+        assert alexa._validate_cert_url(_CERT_URL) == _CERT_URL
+
+    def test_normalized_url_is_used(self):
+        assert alexa._validate_cert_url(
+            "https://s3.amazonaws.com:443/echo.api//old/../echo-api-cert-12.pem#ignored"
+        ) == _CERT_URL
 
     def test_explicit_443_accepted(self):
         alexa._validate_cert_url(
@@ -96,6 +101,13 @@ class TestCertUrl:
             "https://notamazon.example.com/echo.api/cert.pem",  # wrong host
             "https://s3.amazonaws.com.evil.example/echo.api/cert.pem",  # lookalike
             "https://s3.amazonaws.com:8443/echo.api/cert.pem",  # odd port
+            "https://s3.amazonaws.com:invalid/echo.api/cert.pem",
+            "https://user@s3.amazonaws.com/echo.api/cert.pem",
+            "https://s3.amazonaws.com/echo.api/cert.pem?redirect=evil",
+            "https://s3.amazonaws.com/echo.api/%2e%2e/bucket/cert.pem",
+            "https://s3.amazonaws.com/echo.api/%252e%252e/cert.pem",
+            "https://s3.amazonaws.com/echo.api/cert.pem;parameters",
+            "https://s3.amazonaws.com/echo.api/cert\\..\\other.pem",
             "https://s3.amazonaws.com/EcHo.aPi/cert.pem",  # case-mangled path
             "https://s3.amazonaws.com/bucket/cert.pem",  # wrong path
             "https://s3.amazonaws.com/echo.api/../bucket/cert.pem",  # traversal
@@ -192,7 +204,7 @@ class TestCertFetch:
 
         class _Client:
             def __init__(self, **kwargs):
-                pass
+                assert kwargs["follow_redirects"] is False
 
             async def __aenter__(self):
                 return self
@@ -202,6 +214,7 @@ class TestCertFetch:
 
             async def get(self, url):
                 calls["n"] += 1
+                calls["url"] = url
                 return _Resp()
 
         monkeypatch.setattr(alexa.httpx, "AsyncClient", _Client)
@@ -220,6 +233,15 @@ class TestCertFetch:
         second = asyncio.run(alexa._verified_signing_cert(_CERT_URL))
         assert first == cert and second == cert
         assert calls["n"] == 1, "second hit must come from the cache"
+
+    def test_fetch_uses_normalized_pinned_url(self, fetch_env):
+        import asyncio
+
+        _, calls = fetch_env
+        asyncio.run(alexa._verified_signing_cert(
+            "https://s3.amazonaws.com:443/echo.api//old/../echo-api-cert-12.pem#ignored"
+        ))
+        assert calls["url"] == _CERT_URL
 
     def test_non_pem_body_rejected(self, fetch_env, monkeypatch):
         import asyncio
@@ -344,7 +366,7 @@ class TestWebhook:
         assert Path(seen["folder"]).parts[-2:] == ("users", "oid-echo")
         assert "directives" not in body["response"]
 
-    def test_legacy_sha1_signature_accepted(
+    def test_legacy_sha1_signature_rejected(
         self, alexa_client, monkeypatch, signing_pair
     ):
         key, _ = signing_pair
@@ -355,7 +377,7 @@ class TestWebhook:
         resp = _post_signed(
             alexa_client, _with_token(_fresh_payload(), token), key, sha1=True
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
 
     def test_missing_token_gets_link_account_card(self, alexa_client, signing_pair):
         key, _ = signing_pair

@@ -1,6 +1,7 @@
 """Materials dashboard — GET /dashboard/materials and /dashboard/materials/data."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from urllib.parse import quote
 
@@ -225,9 +226,15 @@ async def materials_untracked_associate(request: UntrackedAssociateRequest) -> J
     target = _resolve_untracked(request.name)
     new_name = sanitize_filename(f"{company} - {request.name}")
     dest = target.with_name(new_name)
-    if dest.exists():
+    if dest.exists() or dest.is_symlink():
         raise HTTPException(status_code=409, detail=f"File already exists: {new_name}")
-    dest.write_bytes(target.read_bytes())
+    # Exclusive creation prevents a concurrent association (or a dangling
+    # symlink) from overwriting a document between the check and the copy.
+    try:
+        with target.open("rb") as source, dest.open("xb") as output:
+            shutil.copyfileobj(source, output)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"File already exists: {new_name}") from exc
     info = _delete_with_tombstone(target)
     return JSONResponse({"status": "associated", "name": new_name, "synced": bool(info["rel"])})
 

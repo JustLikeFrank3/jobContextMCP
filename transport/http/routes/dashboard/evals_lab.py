@@ -120,10 +120,9 @@ async def evals_golden_upsert(body: GoldenBody) -> JSONResponse:
         # Every rejected golden-set write leaves a server-side trace — the
         # 2026-08-24 report's first finding was that a dropped write had no
         # record anywhere.
-        _LOG.warning("golden-set write rejected (company=%r, role=%r, jd_len=%d): %s",
-                     body.company[:40], body.role[:40], len(body.jd_text), e)
+        _LOG.warning("golden-set write rejected (jd_len=%d)", len(body.jd_text))
         return JSONResponse({"error": str(e)}, status_code=422)
-    _LOG.info("golden-set entry saved: %s (%s)", row["id"], row["company"])
+    _LOG.info("golden-set entry saved")
     return JSONResponse({"entry": row})
 
 
@@ -135,7 +134,11 @@ class GoldenDeleteBody(BaseModel):
 async def evals_golden_delete(body: GoldenDeleteBody) -> JSONResponse:
     from evals.tenant import delete_golden_entry  # noqa: PLC0415
 
-    return JSONResponse({"deleted": delete_golden_entry(body.entry_id)})
+    try:
+        deleted = delete_golden_entry(body.entry_id)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    return JSONResponse({"deleted": deleted})
 
 
 class TriageBody(BaseModel):
@@ -152,7 +155,7 @@ async def evals_triage(body: TriageBody) -> JSONResponse:
     try:
         record = save_ruling(body.gd_id, body.claim, body.ruling, body.note)
     except ValueError as e:
-        _LOG.warning("triage ruling rejected (gd_id=%s, ruling=%r): %s", body.gd_id, body.ruling, e)
+        _LOG.warning("triage ruling rejected")
         return JSONResponse({"error": str(e)}, status_code=422)
     return JSONResponse({"stored": record})
 
@@ -754,7 +757,6 @@ async def evals_page() -> HTMLResponse:
     visuals = ""
     if history:
         visuals = _svg_trend(history) + _svg_dimensions(history[-1].get("dimensions") or {})
-    stamp = json.dumps(str(payload.get("updated_at") or ""))
     # A launched run always renders a state here — in flight, failed, or its
     # stored results above. Before this, the ONLY record of an in-flight or
     # failed run was ephemeral post-click JS state: a reload forgot a running
@@ -816,7 +818,7 @@ async def evals_page() -> HTMLResponse:
       <div class="section-title">Judge</div>
       {_judge_section(load_judge_prefs())}
     </div>
-    <script>window.__stamp = {stamp}; window.__run_inflight = {json.dumps(run_inflight)};</script>
+    <script>window.__run_inflight = {json.dumps(run_inflight)};</script>
     {_PAGE_JS}
     """
     return HTMLResponse(html_page(

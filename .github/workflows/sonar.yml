@@ -49,6 +49,9 @@ jobs:
 
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          # Upload success alone is not a passing quality gate.
+          args: -Dsonar.qualitygate.wait=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

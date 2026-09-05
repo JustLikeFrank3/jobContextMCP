@@ -56,6 +56,28 @@ class TestGoldenCrud:
         with pytest.raises(ValueError):
             tenant.upsert_golden_entry("C", "R", "jd", output_kind="poem")
 
+    @pytest.mark.parametrize("entry_id", ["../outside", "../../outside", "/tmp/outside",
+                                         "C:\\outside", "a/b", "a\\b", "bad\nentry"])
+    def test_entry_id_cannot_escape_golden_folder(self, workspace, entry_id):
+        with pytest.raises(ValueError, match="entry_id"):
+            tenant.upsert_golden_entry("C", "R", "untrusted", entry_id=entry_id)
+        with pytest.raises(ValueError, match="entry_id"):
+            tenant.delete_golden_entry(entry_id)
+        assert not (workspace / "evals").exists()
+
+    def test_entry_symlink_cannot_overwrite_outside_file(self, workspace):
+        root = workspace / "evals" / "golden"
+        root.mkdir(parents=True)
+        outside = workspace / "outside.txt"
+        outside.write_text("keep", encoding="utf-8")
+        try:
+            (root / "GD-T01-jd.txt").symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        with pytest.raises(ValueError, match="inside the golden folder"):
+            tenant.upsert_golden_entry("C", "R", "overwrite", entry_id="GD-T01")
+        assert outside.read_text(encoding="utf-8") == "keep"
+
     def test_delete_removes_row_and_jd(self, workspace):
         tenant.upsert_golden_entry("A", "R", "jd")
         assert tenant.delete_golden_entry("GD-T01") is True
@@ -300,7 +322,7 @@ class TestTriage:
         assert key not in tenant.load_triage()
 
     def test_same_claim_same_key_across_runs(self, workspace):
-        assert tenant.claim_key("GD-1", "x") == tenant.claim_key("GD-1", "x")
+        assert tenant.claim_key("GD-1", "x") == "6c36cfdb95ec4c52"
         assert tenant.claim_key("GD-1", "x") != tenant.claim_key("GD-2", "x")
 
     def test_bad_ruling_rejected(self, workspace):
@@ -345,6 +367,32 @@ class TestScreens:
         monkeypatch.setattr(lab, "_payload", lambda: {})
         page = client.get("/dashboard/evals")
         assert "No eval run stored yet" in page.text
+
+    def test_stored_timestamp_cannot_inject_script(self, client, monkeypatch):
+        import transport.http.routes.dashboard.evals_lab as lab
+
+        attack = "</script><script>alert('injected')</script>"
+        monkeypatch.setattr(lab, "_payload", lambda: {"updated_at": attack})
+        page = client.get("/dashboard/evals")
+        assert page.status_code == 200
+        assert attack not in page.text
+        assert "window.__run_inflight = false" in page.text
+
+    def test_invalid_golden_path_returns_validation_error(self, client):
+        for route in ("/dashboard/evals/golden", "/dashboard/evals/golden/delete"):
+            result = client.post(route, json={"entry_id": "../outside", "company": "C",
+                                             "role": "R", "jd_text": "malicious"})
+            assert result.status_code == 422
+
+    def test_rejection_logs_do_not_include_user_supplied_lines(self, client, caplog):
+        attack = "injected\r\nFAKE LOG ENTRY"
+        client.post("/dashboard/evals/golden", json={
+            "company": attack, "role": attack, "jd_text": ""})
+        client.post("/dashboard/evals/triage", json={
+            "gd_id": attack, "claim": "claim", "ruling": attack})
+        assert "golden-set write rejected" in caplog.text
+        assert "triage ruling rejected" in caplog.text
+        assert "FAKE LOG ENTRY" not in caplog.text
 
     def test_triage_post_persists(self, client):
         out = client.post("/dashboard/evals/triage", json={
