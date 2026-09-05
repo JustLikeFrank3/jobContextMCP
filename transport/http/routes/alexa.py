@@ -36,6 +36,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import certifi
+import anyio
 import httpx
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -176,22 +177,31 @@ async def _verify_request(request: Request, raw_body: bytes) -> None:
 # ── response shapes ────────────────────────────────────────────────────────────
 
 _LINK_SPEECH = (
-    "Please link your job context account first. I've sent a card to the "
-    "Alexa app to get you started."
+    "Please open job context in the Alexa app, tap Settings, then Link Account. "
+    "After linking, say: Alexa, launch the job context skill."
 )
 _HELP_SPEECH = (
-    "I read out your job search briefing: your next interview, how the "
-    "pipeline looks, and the most urgent action. Just say, open job context."
+    "You can ask for your briefing, your application pipeline, or upcoming interviews. "
+    "To start again, say: Alexa, launch the job context skill."
 )
 
 
-def _speech(text: str, *, end_session: bool = True, link_account: bool = False) -> JSONResponse:
+def _speech(text: str, *, end_session: bool = True, link_account: bool = False,
+            view: dict | None = None) -> JSONResponse:
     response: dict = {
         "outputSpeech": {"type": "PlainText", "text": text},
         "shouldEndSession": end_session,
     }
     if link_account:
         response["card"] = {"type": "LinkAccount"}
+    if view is not None:
+        from transport.http.alexa_views import render_directive
+
+        response["directives"] = [render_directive(view)]
+        # Keep the visual session available with the microphone closed.
+        response.pop("shouldEndSession")
+    elif not end_session:
+        response["reprompt"] = {"outputSpeech": {"type": "PlainText", "text": _HELP_SPEECH}}
     return JSONResponse({"version": "1.0", "response": response})
 
 
@@ -209,8 +219,8 @@ def _linked_oid(payload: dict) -> str | None:
     return lookup_key(token)
 
 
-def _briefing_for(oid: str) -> str:
-    """Run the voice briefing inside *oid*'s partition, middleware-style."""
+def _view_for(oid: str, action: str) -> dict:
+    """Run a read-only view inside *oid*'s partition, middleware-style."""
     import lib.config as _cfg_module
     from lib.user_context import (
         reset_data_folder,
@@ -219,14 +229,14 @@ def _briefing_for(oid: str) -> str:
         set_user_oid,
     )
     from lib.user_provisioning import provision_user_data
-    from tools import digest
+    from transport.http.alexa_views import build_view
 
     data_dir = Path(str(_cfg_module.DATA_FOLDER)) / "users" / oid
     provision_user_data(data_dir)
     oid_token = set_user_oid(oid)
     folder_token = set_data_folder(data_dir)
     try:
-        return digest.get_voice_briefing()
+        return build_view(action)
     finally:
         reset_data_folder(folder_token)
         reset_user_oid(oid_token)
@@ -267,6 +277,12 @@ async def alexa_webhook(request: Request) -> JSONResponse:
         metrics.inc("alexa_requests_total", result="session_ended")
         return JSONResponse({"version": "1.0", "response": {}})
 
+    if req_type in ("Alexa.Presentation.APL.UserEvent", "Alexa.Presentation.APL.RuntimeError"):
+        # No touch actions in this version. Display lifecycle requests must
+        # never fall through to a tool or read the user's briefing aloud.
+        metrics.inc("alexa_requests_total", result="display_event")
+        return JSONResponse({"version": "1.0", "response": {}})
+
     intent = (req.get("intent") or {}).get("name", "")
     if req_type == "IntentRequest" and intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
         metrics.inc("alexa_requests_total", result="stop")
@@ -275,13 +291,23 @@ async def alexa_webhook(request: Request) -> JSONResponse:
         metrics.inc("alexa_requests_total", result="help")
         return _speech(_HELP_SPEECH, end_session=False)
 
+    actions = {"BriefingIntent": "briefing", "PipelineIntent": "pipeline",
+               "UpcomingInterviewsIntent": "interviews"}
+    action = "briefing" if req_type == "LaunchRequest" else (
+        actions.get(intent) if req_type == "IntentRequest" else None)
+    if action is None:
+        metrics.inc("alexa_requests_total", result="unsupported")
+        return _speech(_HELP_SPEECH, end_session=False)
+
     oid = _linked_oid(payload)
     if not oid:
         metrics.inc("alexa_requests_total", result="unlinked")
         return _speech(_LINK_SPEECH, link_account=True)
 
-    # LaunchRequest and every remaining intent (BriefingIntent today) speak
-    # the briefing — it's a single-purpose skill.
-    text = _briefing_for(oid)
+    # anyio preserves contextvars; blocking workspace reads must not hold the
+    # HTTP event loop and delay health probes or unrelated requests.
+    view = await anyio.to_thread.run_sync(_view_for, oid, action)
+    interfaces = (((payload.get("context") or {}).get("System") or {}).get("device") or {}).get("supportedInterfaces") or {}
+    display = "Alexa.Presentation.APL" in interfaces
     metrics.inc("alexa_requests_total", result="ok")
-    return _speech(text)
+    return _speech(view["speech"], view=view if display else None)

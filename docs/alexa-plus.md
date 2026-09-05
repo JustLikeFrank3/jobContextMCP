@@ -4,6 +4,9 @@ Alexa+ connects to self-hosted MCP servers via its MCP Toolkit
 (spec ≥ 2025-11-25, Streamable HTTP — both already true of this server).
 This doc covers what's server-side vs. what's done in Amazon's tooling.
 
+For the classic skill's briefing, pipeline and interview views, Echo Show
+visuals, and the review of all MCP domains, see [the Alexa roadmap](alexa-roadmap.md).
+
 ## Server side (this repo)
 
 - **Auth**: Alexa+ speaks OAuth 2.1 + PKCE (S256) only, and does NOT support
@@ -19,11 +22,12 @@ This doc covers what's server-side vs. what's done in Amazon's tooling.
   shape, extend without a deploy via `KEYBRIDGE_REDIRECT_URIS`
   (comma-separated; trailing `*` = prefix rule). Keys minted for
   override-admitted callbacks get the generic "MCP connector" label.
-- **Discovery**: a credential-less 401 now carries
-  `resource_metadata="…/.well-known/oauth-protected-resource"` (RFC 9728 §5.1)
-  so Alexa's probe walks itself to the PRM. Header presence semantics are
-  unchanged — can't-verify is still 503, never 401
-  (docs/connector-resilience.md).
+- **Discovery (native add-on compatibility unresolved)**: the server adds
+  `resource_metadata="…/.well-known/oauth-protected-resource"` to its
+  `WWW-Authenticate` challenge. Amazon's current MCP quickstart lists that
+  header as unsupported. Do not treat #361 as verified Alexa+ onboarding;
+  validate discovery with the actual toolkit before changing shared auth
+  behavior. This does not affect the classic `/alexa` webhook.
 - **Latency**: Alexa+ cuts tool calls off at ~500ms round-trip. Long work must
   go through the durable submit-and-poll actions; `insights.briefing` exists
   specifically as a fast, speakable (plain-prose, no markdown) summary for
@@ -53,10 +57,13 @@ This doc covers what's server-side vs. what's done in Amazon's tooling.
 Console: developer.amazon.com/alexa/console/ask/addons
 Docs: developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart.html
 
-## Classic custom skill (works on a real Echo today)
+## Classic custom skill (development setup)
 
-Classic skills stay self-serve: a *development-stage* skill runs on any Echo
-signed into the developer account, no certification, no preview access.
+Classic skills stay self-serve. Development testing requires the developer
+account on the device and Alexa app, a built interaction model in the device's
+locale, and testing enabled in the console. Verify invocation in the simulator
+and on the target device; these server changes do not establish Alexa+
+availability or create a native Alexa+ add-on.
 Server side is `transport/http/routes/alexa.py` — a public `/alexa` webhook
 that proves Alexa origin itself (SignatureCertChainUrl pinning, cert-chain
 trust + `echo-api.amazon.com` SAN, RSA signature over the raw body, ±150s
@@ -71,17 +78,22 @@ in the allowlist. The linked token is a non-expiring `jcmcp_` key labeled
 
 Console setup (developer.amazon.com/alexa/console/ask → Create Skill):
 
+The URLs below target **QA**, where #361–363 are merged. Keep the webhook
+and both OAuth URLs in the same environment. Use production only after the
+QA promotion has deployed successfully; switching environments requires
+relinking because keys and workspace data belong to that environment.
+
 1. **Custom** model, **Provision your own** hosting, any template (the model
    is replaced next step).
 2. Interaction model: invocation name `job context`; one custom intent
    `BriefingIntent` with samples like "my briefing", "what's my job search
    looking like", "give me the update" (built-ins Stop/Cancel/Help/Fallback
    are handled server-side). Build the model.
-3. Endpoint: **HTTPS**, `https://app.jobcontext.ai/alexa`, certificate type
+3. Endpoint: **HTTPS**, `https://qa.jobcontext.ai/alexa`, certificate type
    *"trusted by a certificate authority"*.
 4. Account linking: **Auth Code Grant**.
-   - Authorization URI `https://app.jobcontext.ai/oauth/authorize`
-   - Access Token URI `https://app.jobcontext.ai/oauth/token`
+   - Authorization URI `https://qa.jobcontext.ai/oauth/authorize`
+   - Access Token URI `https://qa.jobcontext.ai/oauth/token`
    - Client ID/Secret: any non-empty values (the bridge identifies clients
      by callback prefix, not client_id, and checks PKCE instead of the
      secret) — auth scheme *"Credentials in request body"*.
@@ -90,16 +102,47 @@ Console setup (developer.amazon.com/alexa/console/ask → Create Skill):
 5. Test tab → set skill testing to **Development**. On the phone's Alexa
    app: More → Skills & Games → Your Skills → Dev → enable + Link Account
    (goes through the bridge consent page → dashboard login).
-6. On the Echo: "Alexa, open job context."
+6. On the Echo: "Alexa, launch the job context skill." This phrase returned
+   a linked-account briefing in the simulator. Both `open job context` and
+   `ask job context for my briefing` have also received general conversational
+   responses instead of reaching the webhook; check logs before blaming auth.
 
-During a prod freeze, substitute `qa.jobcontext.ai` for `app.jobcontext.ai`
-in the endpoint and both account-linking URIs — dev-stage skills are
-per-account, so pointing one at qa affects nobody. Note the linked key and
-the briefing's data both live in that environment's partition (qa's data is
-not prod's), and switching hosts later means updating the three URIs and
-relinking the account.
+### Diagnose before changing the webhook
 
-Caveat: Echos migrated to Alexa+ early access have reported flaky custom
-skill invocation; opting the device out of early access restores classic
-behavior. `/alexa` requests surface in metrics as `alexa_requests_total`
+1. In the console's Development simulator, select the built locale and enter
+   `launch the job context skill`. Record the UTC time and simulator response.
+2. Correlate that attempt with ingress `/alexa` traffic and application logs.
+   No matching request means the failure is before this handler: check skill
+   activation, account, locale, endpoint, and Amazon-side availability.
+3. A matching 400 means request verification failed; inspect the rejection
+   reason. Never disable signature verification to accommodate an unsigned
+   probe. A 200 with a LinkAccount card means invocation works and linking
+   is the next step. A spoken briefing completes the backend path.
+4. Repeat on the Echo. Simulator success alone does not establish device
+   availability. Compare account and locale if only the device fails.
+
+**Observed 2026-09-05:** the retained ingress entries for 02:27, 02:41,
+16:50, and 17:00 UTC were all `curl/8.18.0` requests. In particular, the
+02:41 request cited in #363 is not evidence of an Alexa-originated call.
+The 17:00 rejection also reports a two-byte body. These probes do not prove
+Alexa+ omits signing headers.
+
+**Verified later that day (18:34:36 UTC):** the Development simulator's
+`ask job context for my briefing` request reached QA and returned HTTP 200
+in 118 ms, with the skill's account-linking speech and card. The deployed
+signature/certificate/timestamp verifier accepted the request unchanged.
+`open job context` had received a general conversational clarification
+instead. Account linking and a successful briefing on the physical Echo
+remained to be verified at that point; this does not establish native Alexa+
+add-on access.
+
+**Linked-account verification (18:44:28 UTC):** after the phone completed
+OAuth (token exchange HTTP 200), the simulator answered `ask job context
+for my briefing` with an account-linking suggestion without calling `/alexa`.
+`launch the job context skill` then returned the actual QA pipeline briefing
+with HTTP 200 in 34 ms. No backend auth changes were necessary. Physical
+Echo invocation remains a separate check; simulator speech is not proof of
+device playback.
+
+`/alexa` requests surface in metrics as `alexa_requests_total`
 (result: ok / unlinked / rejected / stop / help / session_ended).

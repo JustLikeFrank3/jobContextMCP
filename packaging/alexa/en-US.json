@@ -1,0 +1,17 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "job context",
+      "intents": [
+        {"name": "BriefingIntent", "slots": [], "samples": ["my briefing", "give me my briefing", "what should I focus on today"]},
+        {"name": "PipelineIntent", "slots": [], "samples": ["my pipeline", "show my pipeline", "how are my applications doing", "show my applications"]},
+        {"name": "UpcomingInterviewsIntent", "slots": [], "samples": ["upcoming interviews", "show my interviews", "what interviews are coming up", "when is my next interview"]},
+        {"name": "AMAZON.HelpIntent", "samples": []},
+        {"name": "AMAZON.StopIntent", "samples": []},
+        {"name": "AMAZON.CancelIntent", "samples": []},
+        {"name": "AMAZON.FallbackIntent", "samples": []}
+      ],
+      "types": []
+    }
+  }
+}
