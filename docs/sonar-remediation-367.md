@@ -54,8 +54,8 @@ triage notes. The parsed HTML contains no injected element or attribute.
 Separate tests verify exact round trips of hostile claim/judge metadata and
 the timestamp case. All 69 tenant-eval tests pass locally.
 
-Proposed disposition: **False Positive for this issue only**, based on the
-current code and tests. It has **not** been applied: automatic approval review
-requires Frank's explicit authorization because the disposition removes the
-blocker from the quality gate. The quality gate and rule configuration remain
-unchanged; no source suppression has been added.
+Disposition: **False Positive for this issue only**, applied September 5 after
+Frank explicitly authorized it. Sonar confirms `RESOLVED / FALSE-POSITIVE`.
+The issue activity records the rendering audit and regression-test evidence.
+The quality gate and rule configuration remain unchanged; no source
+suppression has been added.
