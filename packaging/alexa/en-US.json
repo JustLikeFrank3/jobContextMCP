@@ -150,7 +150,14 @@
           "name": "ActionJobSearchBoardsIntent",
           "slots": [],
           "samples": [
-            "list my job boards"
+            "list my job boards",
+            "what job boards do I have",
+            "what are my job boards",
+            "show my job boards",
+            "list job boards",
+            "show saved job boards",
+            "which job boards are saved",
+            "what boards can I search"
           ]
         },
         {

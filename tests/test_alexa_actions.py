@@ -55,6 +55,16 @@ def test_generated_model_covers_dispatch_and_search_query_rules():
             assert any(sample.count("{") == 1 for sample in intent["samples"])
 
 
+def test_board_questions_target_board_listing():
+    intents = model()["interactionModel"]["languageModel"]["intents"]
+    board = next(i for i in intents if i["name"] == ACTIONS["job_search.boards"].intent)
+    assert "what job boards do I have" in board["samples"]
+    assert "show my job boards" in board["samples"]
+    assert "list my job boards" in board["samples"]
+    assert all("what job boards do I have" not in i.get("samples", [])
+               for i in intents if i != board)
+
+
 @pytest.mark.parametrize("key", [key for key, a in ACTIONS.items() if a.mode == "handoff"])
 def test_handoff_never_enqueues(isolated_server, key):
     result = begin(key)
