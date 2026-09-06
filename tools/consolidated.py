@@ -141,7 +141,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     "people": {
         "log": (people.log_person, "Add/update a contact."),
         "list": (people.get_people, "List contacts (filterable)."),
-        "get": (people.get_person, "Full profile for one contact."),
+        "get": (people.get_person, "Full profile for one contact; include_context adds exact-name stories and logged outreach with source IDs."),
         "referral_chains": (people.get_referral_chains, "Referral paths into a company."),
         "draft_outreach": (outreach.draft_outreach_message, "Draft an outreach message in your voice."),
         "draft_reply": (outreach.draft_reply, "Draft a reply to an incoming message."),
@@ -159,7 +159,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "star_context": (star.get_star_story_context, "STAR stories for a company/role."),
         "star_all": (star.get_all_star_context, "All STAR story context."),
         "tone_log": (tone.log_tone_sample, "Log a writing-tone sample."),
-        "tone_profile": (tone.get_tone_profile, "Current tone profile."),
+        "tone_profile": (tone.get_tone_profile, "Retrieve writing samples by sample_id, exact source, or text query; defaults to five newest, page with offset."),
         "tone_scan": (tone.scan_materials_for_tone, "Scan materials for tone samples."),
     },
     "wellbeing": {
@@ -473,6 +473,8 @@ async def people_tool(
     outreach_status: str | None = None,
     notes: str | None = None,
     sent_message: str | None = None,
+    sent_subject: str | None = None,
+    include_context: bool | None = None,
     tag: str | None = None,
     slim: bool | None = None,
     target_company: str | None = None,
@@ -496,6 +498,9 @@ async def people_tool(
 async def stories(
     action: Literal["log", "update", "delete", "ingest", "personal_context", "star_context", "star_all", "tone_log", "tone_profile", "tone_scan"],
     story_id: str | None = None,
+    sample_id: int | None = None,
+    query: str | None = None,
+    offset: int | None = None,
     story: str | None = None,
     tags: str | None = None,
     people: str | None = None,
