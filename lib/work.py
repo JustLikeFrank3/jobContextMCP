@@ -121,6 +121,30 @@ def enqueue(kind: str, inputs: dict, origin: str = "", max_attempts: int = 0) ->
     return item_id
 
 
+def prepare_transactional_enqueue() -> None:
+    """Prepare the current partition before a caller opens its transaction."""
+    _ensure_schema()
+
+
+def enqueue_in_transaction(con, kind: str, inputs: dict, origin: str = "", max_attempts: int = 1) -> int:
+    """Insert work atomically with a caller's confirmation/idempotency record.
+
+    Call prepare_transactional_enqueue before BEGIN, and notify_committed
+    only after COMMIT. Confirmed commands deliberately get one attempt.
+    """
+    if kind not in _KINDS:
+        raise ValueError(f"unknown work kind: {kind}")
+    cur = con.execute(
+        "INSERT INTO work_items (kind, inputs_json, origin, max_attempts) VALUES (?, ?, ?, ?)",
+        (kind, json.dumps(inputs), origin, max(1, max_attempts)))
+    return int(cur.lastrowid)
+
+
+def notify_committed(item_id: int) -> None:
+    """Wake the dispatcher after the caller's transaction has committed."""
+    _notify(get_data_folder_override(), item_id)
+
+
 def run_now(kind: str, inputs: dict, origin: str = "") -> dict:
     """Create a work row and execute it INLINE, in the caller's thread.
 
@@ -143,7 +167,12 @@ def run_now(kind: str, inputs: dict, origin: str = "") -> dict:
     raises produces a 'failed' row with the traceback in ``error`` rather than
     propagating, so a caller that assumes success reads ``artifacts`` as None.
     """
-    item_id = enqueue(kind, inputs, origin=origin)
+    # Inline work must not also wake a dispatcher worker. Alexa background
+    # actions can call tracked generators that use run_now internally.
+    prepare_transactional_enqueue()
+    with get_connection() as con:
+        item_id = enqueue_in_transaction(con, kind, inputs, origin,
+                                         work_policy.for_kind(kind).max_attempts)
     _execute(get_data_folder_override(), item_id)
     return get_item(item_id) or {"id": item_id, "status": "failed",
                                  "error": "work row vanished after execution"}
@@ -186,13 +215,15 @@ def list_items(status: str = "", limit: int = 50) -> list[dict]:
 # (desktop single-tenant / dev).
 _queue: "asyncio.Queue[tuple[str | None, int]] | None" = None
 _workers: list[asyncio.Task] = []
+_dispatcher_loop: "asyncio.AbstractEventLoop | None" = None
 
 
 def _notify(partition: "Path | str | None", item_id: int) -> None:
     """Hand a claimed-able item to the dispatcher; no-op when not running
     (tests / CLI): the startup sweep will find it later."""
-    if _queue is not None:
-        _queue.put_nowait((str(partition) if partition else None, item_id))
+    queue = _queue
+    if queue is not None and _dispatcher_loop is not None:
+        _dispatcher_loop.call_soon_threadsafe(queue.put_nowait, (str(partition) if partition else None, item_id))
 
 
 def _in_partition(partition: "str | None", fn: Callable[[], Any]) -> Any:
@@ -238,8 +269,9 @@ def _execute(partition: "str | None", item_id: int) -> None:
     def _claim() -> "tuple[str, dict, int, int] | None":
         _ensure_schema()
         with get_connection() as con:
+            con.execute("BEGIN IMMEDIATE")
             row = con.execute(
-                "SELECT * FROM work_items WHERE id = ? AND status IN ('queued','running')",
+                "SELECT * FROM work_items WHERE id = ? AND status = 'queued'",
                 (item_id,),
             ).fetchone()
             if row is None:
@@ -394,6 +426,7 @@ def _sweep_partitions() -> list[tuple["str | None", int]]:
                             (r["id"],),
                         )
                     else:
+                        con.execute("UPDATE work_items SET status='queued' WHERE id=?", (r["id"],))
                         ids.append(int(r["id"]))
                 con.commit()
                 return ids
@@ -410,10 +443,11 @@ def _sweep_partitions() -> list[tuple["str | None", int]]:
 
 
 async def start_dispatcher() -> None:
-    global _queue
+    global _queue, _dispatcher_loop
     if _queue is not None:
         return
     _queue = asyncio.Queue()
+    _dispatcher_loop = asyncio.get_running_loop()
     for _ in range(MAX_CONCURRENCY):
         _workers.append(asyncio.create_task(_worker_loop()))
     try:
@@ -425,8 +459,9 @@ async def start_dispatcher() -> None:
 
 
 async def stop_dispatcher() -> None:
-    global _queue
+    global _queue, _dispatcher_loop
     for t in _workers:
         t.cancel()
     _workers.clear()
     _queue = None
+    _dispatcher_loop = None

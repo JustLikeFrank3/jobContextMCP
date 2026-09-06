@@ -255,6 +255,10 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             # serves content here, and that operator is choosing login-free
             # LAN readability of eval detail on purpose.
             "/wallboard",
+            # Alexa skill webhook. Alexa can't send an Authorization header;
+            # the route proves origin itself (cert chain + body signature)
+            # and resolves the tenant from the account-linked key in the body.
+            "/alexa",
             "/terms",            "/og-image",            "/logged-out",
             "/llms.txt",      # agent breadcrumb — public plaintext, no user data
             "/login",
@@ -340,10 +344,22 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         from starlette.responses import JSONResponse as _JSONResponse
         has_candidate = bool((authorization and authorization.strip()) or (session and session.strip()))
         detail = "Invalid credentials" if has_candidate else "Missing credentials"
+        # RFC 9728 §5.1: point the client at our Protected Resource Metadata so
+        # OAuth discovery works from a bare 401 (Alexa+ probes exactly this way;
+        # other MCP clients guess the well-known path).  Only the header's
+        # CONTENT grows — its presence/absence semantics (401 challenge vs
+        # 503 can't-verify, docs/connector-resilience.md) are untouched.
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.url.netloc)
+        prm_url = f"{proto}://{host}/.well-known/oauth-protected-resource"
         return _JSONResponse(
             {"error": "unauthorized", "message": "Authentication required", "detail": detail},
             status_code=401,
-            headers={"WWW-Authenticate": 'Bearer realm="jobContextMCP"'},
+            headers={
+                "WWW-Authenticate": (
+                    f'Bearer realm="jobContextMCP", resource_metadata="{prm_url}"'
+                )
+            },
         )
 
 
@@ -365,6 +381,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from lib import work as _work
+        # Register before recovery sweeps queued Alexa work after a restart.
+        from transport.http import alexa_actions  # noqa: F401
 
         # Control plane: durable background work (capture, doc generation).
         await _work.start_dispatcher()
@@ -435,6 +453,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         from transport.http.routes import chat as chat_routes
         app.include_router(desktop_routes.router)
         app.include_router(chat_routes.router)  # embedded chat — desktop-only in v1
+    from transport.http.routes import alexa as alexa_routes
     from transport.http.routes import evals as evals_routes
     from transport.http.routes import mobile as mobile_routes
     from transport.http.routes import sync as sync_routes
@@ -443,6 +462,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
 
     app.include_router(sync_routes.router)  # desktop⇄cloud sync (auth-gated)
     app.include_router(mobile_routes.router)  # Career Inbox / push / capture
+    app.include_router(alexa_routes.router)  # classic-skill webhook (signature-verified)
     app.include_router(work_routes.router)  # control-plane work-item status
     app.include_router(evals_routes.router)  # eval results ingest → eval_* gauges
     app.include_router(wallboard_routes.router)  # kiosk eval-detail page (404 unless WALLBOARD_EVALS_* set)

@@ -102,6 +102,43 @@ class TestDelete:
 
 
 class TestAssociate:
+    def test_dangling_destination_symlink_is_not_followed(self, partition):
+        root, opt = partition
+        original = opt / "Orphan_Resume.txt"
+        original.write_text("keep", encoding="utf-8")
+        outside = root / "outside.txt"
+        try:
+            (opt / "Travelers - Orphan_Resume.txt").symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        with pytest.raises(HTTPException) as exc:
+            _associate(original.name, "Travelers")
+        assert exc.value.status_code == 409
+        assert original.read_text(encoding="utf-8") == "keep"
+        assert not outside.exists()
+
+    def test_destination_created_during_copy_is_not_overwritten(self, partition, monkeypatch):
+        from pathlib import Path
+
+        _, opt = partition
+        source = opt / "Orphan_Resume.txt"
+        source.write_text("keep", encoding="utf-8")
+        destination = opt / "Travelers - Orphan_Resume.txt"
+        real_open = Path.open
+
+        def raced_open(path, mode="r", *args, **kwargs):
+            if path == destination and mode == "xb":
+                with real_open(path, "w") as stream:
+                    stream.write("concurrent document")
+            return real_open(path, mode, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", raced_open)
+        with pytest.raises(HTTPException) as exc:
+            _associate(source.name, "Travelers")
+        assert exc.value.status_code == 409
+        assert source.read_text(encoding="utf-8") == "keep"
+        assert destination.read_text(encoding="utf-8") == "concurrent document"
+
     def test_associate_renames_and_tombstones_the_old_name(self, partition):
         root, opt = partition
         (opt / "Orphan_Resume.txt").write_text("orphan body", encoding="utf-8")

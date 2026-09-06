@@ -49,6 +49,7 @@ from tools import (
     job_hunt,
     job_queue,
     job_scraper,
+    job_discovery,
     langgraph_pipeline,
     oura,
     outreach,
@@ -82,6 +83,12 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "save_assessment": (fitment.save_job_assessment, "Persist an assessment to the workspace."),
     },
     "job_search": {
+        "discover": (job_discovery.discover_jobs, "Find new jobs across your saved public boards; returns a search ID and numbered matches, without queuing."),
+        "boards": (job_discovery.list_boards, "List your saved boards and supported board sources inferred from your queue."),
+        "save_board": (job_discovery.save_board, "Save a company board for discovery."),
+        "remove_board": (job_discovery.remove_board, "Remove a board from future searches."),
+        "result": (job_discovery.read_result, "Read one numbered result's fetched description."),
+        "queue_result": (job_discovery.queue_result, "Queue one selected search result for evaluation; does not submit an application."),
         "web": (job_scraper.search_jobs, "Search job boards on the open web."),
         "greenhouse": (job_scraper.search_greenhouse_jobs, "Search a company's Greenhouse board."),
         "lever": (job_scraper.search_lever_jobs, "Search a company's Lever board."),
@@ -134,7 +141,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     "people": {
         "log": (people.log_person, "Add/update a contact."),
         "list": (people.get_people, "List contacts (filterable)."),
-        "get": (people.get_person, "Full profile for one contact."),
+        "get": (people.get_person, "Full profile for one contact; include_context adds exact-name stories and logged outreach with source IDs."),
         "referral_chains": (people.get_referral_chains, "Referral paths into a company."),
         "draft_outreach": (outreach.draft_outreach_message, "Draft an outreach message in your voice."),
         "draft_reply": (outreach.draft_reply, "Draft a reply to an incoming message."),
@@ -152,7 +159,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "star_context": (star.get_star_story_context, "STAR stories for a company/role."),
         "star_all": (star.get_all_star_context, "All STAR story context."),
         "tone_log": (tone.log_tone_sample, "Log a writing-tone sample."),
-        "tone_profile": (tone.get_tone_profile, "Current tone profile."),
+        "tone_profile": (tone.get_tone_profile, "Retrieve writing samples by sample_id, exact source, or text query; defaults to five newest, page with offset."),
         "tone_scan": (tone.scan_materials_for_tone, "Scan materials for tone samples."),
     },
     "wellbeing": {
@@ -175,6 +182,7 @@ DOMAINS: dict[str, dict[str, tuple]] = {
     },
     "insights": {
         "daily_digest": (digest.get_daily_digest, "Morning briefing: pipeline + action items."),
+        "briefing": (digest.get_voice_briefing, "Speakable one-breath briefing (plain prose, no markdown) for voice assistants; fast local reads only."),
         "weekly_summary": (digest.weekly_summary, "Week-in-review summary."),
         "session_context": (session.get_session_context, "Session startup context bundle."),
         "rejection_log": (rejections.log_rejection, "Log a rejection."),
@@ -357,7 +365,7 @@ async def applications(
 
 
 async def job_search(
-    action: Literal["web", "greenhouse", "lever", "ashby", "recruitee", "url"],
+    action: Literal["web", "greenhouse", "lever", "ashby", "recruitee", "url", "discover", "boards", "save_board", "remove_board", "result", "queue_result"],
     query: str | None = None,
     location: str | None = None,
     num_results: int | None = None,
@@ -365,6 +373,11 @@ async def job_search(
     url: str | None = None,
     auto_queue: bool | None = None,
     page_text: str | None = None,
+    provider: Literal["greenhouse", "lever", "ashby", "recruitee"] | None = None,
+    company: str | None = None,
+    search_id: str | None = None,
+    result_number: int | None = None,
+    include_known: bool | None = None,
 ) -> str:
     """Find job postings: open-web search, a company board (Greenhouse, Lever, Ashby, Recruitee), or scrape a posting URL (pass page_text with copied page content for sites that block server fetches, e.g. LinkedIn)."""
     params = locals()
@@ -460,6 +473,8 @@ async def people_tool(
     outreach_status: str | None = None,
     notes: str | None = None,
     sent_message: str | None = None,
+    sent_subject: str | None = None,
+    include_context: bool | None = None,
     tag: str | None = None,
     slim: bool | None = None,
     target_company: str | None = None,
@@ -483,6 +498,9 @@ async def people_tool(
 async def stories(
     action: Literal["log", "update", "delete", "ingest", "personal_context", "star_context", "star_all", "tone_log", "tone_profile", "tone_scan"],
     story_id: str | None = None,
+    sample_id: int | None = None,
+    query: str | None = None,
+    offset: int | None = None,
     story: str | None = None,
     tags: str | None = None,
     people: str | None = None,
@@ -564,7 +582,7 @@ async def brand(
 
 
 async def insights(
-    action: Literal["daily_digest", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
+    action: Literal["daily_digest", "briefing", "weekly_summary", "session_context", "rejection_log", "rejections", "compensation_update", "compensation_compare", "evals_results"],
     company: str | None = None,
     role: str | None = None,
     stage: str | None = None,
