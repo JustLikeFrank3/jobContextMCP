@@ -181,6 +181,10 @@ def model():
                      and i["name"] not in {"AnswerIntent", "NumberAnswerIntent", "DateAnswerIntent", "ChangeFieldIntent", "RunActionIntent", "ActionStatusIntent", "MoreResultIntent", "ActionCatalogIntent", "AMAZON.YesIntent", "AMAZON.NoIntent"}]
     lm["intents"] += [{"name": a.intent, "slots": [], "samples": [a.phrase]} for a in ACTIONS.values()]
     for intent in lm["intents"]:
+        if intent["name"] == ACTIONS["job_search.boards"].intent:
+            intent["samples"] += ["what job boards do I have", "what are my job boards",
+                                  "show my job boards", "list job boards", "show saved job boards",
+                                  "which job boards are saved", "what boards can I search"]
         if intent["name"] == ACTIONS["job_search.discover"].intent:
             intent["slots"] = [{"name": "JobQuery", "type": "AMAZON.SearchQuery"}]
             intent["samples"] += ["search for jobs", "search job boards", "find a new job", "find jobs for {JobQuery}", "search my boards for {JobQuery}"]
