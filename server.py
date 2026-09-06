@@ -182,7 +182,12 @@ mcp = FastMCP(
         "Log every job you evaluate or generate materials for as an application "
         "(applications tool, action='update') so documents and assessments attach "
         "to the pipeline — files for companies without a tracked application "
-        "surface as untracked in Materials."
+        "surface as untracked in Materials. "
+        "For business-development or other non-job outreach, use people/log without "
+        "creating an application. Retrieve people/get with include_context=True before "
+        "drafting; use stories/tone_profile with sample_id or query to retrieve specific "
+        "writing. After the user confirms a message was sent, log its exact sent_message "
+        "and sent_subject. Workspace records alone do not verify delivery."
     ),
 )
 

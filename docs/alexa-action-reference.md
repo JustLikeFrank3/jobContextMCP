@@ -64,9 +64,9 @@ See [the dialogue guide](alexa-action-transport.md) for parameters, confirmation
 | `interviews.get_prep` | read saved interview prep | read | company |
 | `interviews.quick_reference` | show my interview quick reference | read | No fields |
 | `interviews.leetcode_cheatsheet` | show coding interview patterns | read | section |
-| `people.log` | save a contact | confirm | name, relationship, company, context, tags, contact_info, outreach_status, notes |
+| `people.log` | save a contact | confirm | name, relationship, company, context, tags, contact_info, outreach_status, notes, sent_subject |
 | `people.list` | list my contacts | read | name, company, tag, outreach_status, slim |
-| `people.get` | look up a contact | read | name |
+| `people.get` | look up a contact | read | name, include_context |
 | `people.referral_chains` | find referrals to a company | read | target_company |
 | `people.draft_outreach` | prepare outreach drafting context | read | contact, company, context, message_type |
 | `people.draft_reply` | prepare reply drafting context | read | incoming_message, contact, company, intent |
@@ -82,7 +82,7 @@ See [the dialogue guide](alexa-action-transport.md) for parameters, confirmation
 | `stories.star_context` | find an interview story | read | tag, company, role_type |
 | `stories.star_all` | show my star stories | read | No fields |
 | `stories.tone_log` | save a writing sample | confirm | text, source, context |
-| `stories.tone_profile` | describe my writing style | read | No fields |
+| `stories.tone_profile` | describe my writing style | read | sample_id, source, query, limit, offset |
 | `stories.tone_scan` | learn from my writing samples | confirm | category, limit, company, force |
 | `wellbeing.checkin` | record a wellbeing check in | confirm | mood, energy, notes, productive |
 | `wellbeing.log` | read my wellbeing history | read | days |

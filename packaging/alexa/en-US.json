@@ -1200,6 +1200,12 @@
               }
             },
             {
+              "id": "include_context",
+              "name": {
+                "value": "include context"
+              }
+            },
+            {
               "id": "include_full",
               "name": {
                 "value": "include full"
@@ -1560,6 +1566,12 @@
               }
             },
             {
+              "id": "sample_id",
+              "name": {
+                "value": "sample id"
+              }
+            },
+            {
               "id": "saves",
               "name": {
                 "value": "saves"
@@ -1599,6 +1611,12 @@
               "id": "self_rating",
               "name": {
                 "value": "self rating"
+              }
+            },
+            {
+              "id": "sent_subject",
+              "name": {
+                "value": "sent subject"
               }
             },
             {
