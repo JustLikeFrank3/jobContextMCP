@@ -412,7 +412,7 @@ def write_findings(path: Path, rep: Report, as_of: str) -> bool:
     return True
 
 
-def write_snapshot(ledger_path: Path, rep: Report, as_of: str) -> Path:
+def write_snapshot(ledger_path: Path, _rep: Report, as_of: str) -> Path:
     # Freeze committed WAL data so records, counts and hash describe one view.
     day = date.fromisoformat(as_of).isoformat()
     out = ledger_path.with_name(f"discovery_snapshot_{day}_{uuid.uuid4().hex}.json")
@@ -421,14 +421,14 @@ def write_snapshot(ledger_path: Path, rep: Report, as_of: str) -> Path:
             frozen.row_factory = sqlite3.Row
             source.backup(frozen)
             ledger = load_ledger(frozen)
-    rep = build_report(ledger)
-    if not rep.ok:
+    snapshot_report = build_report(ledger)
+    if not snapshot_report.ok:
         raise ValueError("Cannot snapshot an invalid ledger")
     payload = json.dumps(ledger, sort_keys=True, separators=(",", ":"))
     with out.open("x", encoding="utf-8") as fh:
         json.dump({"as_of": day, "ledger_sha256": hashlib.sha256(payload.encode()).hexdigest(),
-                   "ledger": ledger, "numbers": rep.numbers, "provenance": rep.provenance,
-                   "breakdowns": rep.breakdowns, "warnings": rep.warnings}, fh, indent=2)
+                   "ledger": ledger, "numbers": snapshot_report.numbers, "provenance": snapshot_report.provenance,
+                   "breakdowns": snapshot_report.breakdowns, "warnings": snapshot_report.warnings}, fh, indent=2)
         fh.write("\n")
     return out
 
