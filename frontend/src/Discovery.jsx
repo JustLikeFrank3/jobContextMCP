@@ -132,5 +132,6 @@ function Review() {
 
 export default function Discovery() {
   const review = window.location.pathname === '/discovery/review'
+  useEffect(() => { document.title = review ? 'jobContext: Discovery review' : 'jobContext: Customer discovery' }, [review])
   return <main className={`discovery ${review ? 'discovery-review' : ''}`}>{review ? <Review /> : <Signup />}</main>
 }

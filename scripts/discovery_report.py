@@ -56,7 +56,7 @@ Usage:
         --reference amazon-XXXX [--pending]
     python scripts/discovery_report.py report            # default when no command given
     python scripts/discovery_report.py check
-    python scripts/discovery_report.py snapshot          # data/discovery_snapshot_<date>.json
+    python scripts/discovery_report.py snapshot          # data/discovery_snapshot_<date>_<uuid>.json
     python scripts/discovery_report.py findings docs/discovery-findings.md
 
 The snapshot is the provenance record for an application: the numbers, the

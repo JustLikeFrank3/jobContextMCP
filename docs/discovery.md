@@ -17,7 +17,7 @@ be recomputed from the ledger, it isn't quoted.
 | `lib/discovery.py` | yes | the DDL, `add_signup()`, `load_ledger()`, the counting rules, snapshot and findings writers |
 | `data/discovery.db` | **no** (`*.db` is git-ignored) | participants, sessions, quotes, incentives — names, contacts, quotes. Override the path with `DISCOVERY_DB`; never inside a tenant partition |
 | `data/discovery/*.md` | **no** (`/data/discovery/` is git-ignored) | per-session notes and transcripts |
-| `data/discovery_snapshot_<date>.json` | **no** | frozen numbers + record ids + ledger sha256 at the moment a form was filled in |
+| `data/discovery_snapshot_<date>_<uuid>.json` | **no** | frozen numbers + record ids + ledger sha256 at the moment a form was filled in |
 | `docs/discovery-findings.md` | yes | aggregates and consented, unattributed quotes only |
 | `templates/discovery/` | yes | screener, consent, interview guide, session-notes template |
 | `scripts/discovery_report.py` | yes | the CLI: `init`, `import-signups`, `consent`, `session add/done`, `quote`, `incentive`, `report`, `check`, `snapshot`, `findings` |
@@ -94,7 +94,7 @@ python scripts/discovery_report.py init
    the row through `add_signup()`, or you export the form's CSV and run
    `import-signups signups.csv`. Status `screened`.
 2. Send the consent form (`templates/discovery/consent.md`). When it comes
-   back: `consent <participant-id> [--no-recording] [--no-quotes]`. No
+   back: `consent <participant-id> [--recording-ok] [--quote-ok]`. No
    consent, no session gets counted, so do this before scheduling.
 3. Schedule: `session add <participant-id> --when 2026-09-18T18:00`.
 4. Run the call from `templates/discovery/interview_guide.md`; record if
