@@ -45,6 +45,7 @@ from tools import (
     health,
     ingest,
     interview,
+    interview_prep,
     interviews,
     job_hunt,
     job_queue,
@@ -128,6 +129,8 @@ DOMAINS: dict[str, dict[str, tuple]] = {
         "reindex_stories": (rag.reindex_stories, "Rebuild the story retrieval index."),
     },
     "interviews": {
+        "prepare": (interview_prep.prepare_interview, "Generate and save interview prep for any saved job; disambiguate by role, then poll documents/generation_status."),
+        "read_prepared": (interview_prep.read_prepared_interview, "Read the latest generated prep for an exact saved company and role."),
         "log": (interviews.log_interview, "Log an interview debrief."),
         "list": (interviews.get_interviews, "List logged interviews (filterable)."),
         "context": (interviews.get_interview_context, "Everything known about a company's process."),
@@ -428,7 +431,7 @@ async def materials(
 
 
 async def interviews_tool(
-    action: Literal["log", "list", "context", "upcoming", "prep_context", "save_prep", "get_prep", "quick_reference", "leetcode_cheatsheet"],
+    action: Literal["log", "list", "context", "upcoming", "prepare", "read_prepared", "prep_context", "save_prep", "get_prep", "quick_reference", "leetcode_cheatsheet"],
     company: str | None = None,
     role: str | None = None,
     stage: str | None = None,

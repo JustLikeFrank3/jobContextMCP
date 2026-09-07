@@ -59,7 +59,9 @@ See [the dialogue guide](alexa-action-transport.md) for parameters, confirmation
 | `interviews.list` | show interview history | read | company, role, interviewer, interview_type, tag, since, include_full |
 | `interviews.context` | show a company interview process | read | company, role |
 | `interviews.upcoming` | find scheduled interviews | read | days_ahead |
-| `interviews.prep_context` | prepare for an interview | read | company, role, stage |
+| `interviews.prepare` | prepare for an interview | confirm | company, role, stage |
+| `interviews.read_prepared` | read my interview prep | read | company, role |
+| `interviews.prep_context` | get interview preparation context | read | company, role, stage |
 | `interviews.save_prep` | save interview prep text | handoff | Save the full prep document in the dashboard. I can read saved interview prep or prepare interview context. |
 | `interviews.get_prep` | read saved interview prep | read | company |
 | `interviews.quick_reference` | show my interview quick reference | read | No fields |
