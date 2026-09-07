@@ -118,6 +118,11 @@ def _ready(action, state, con):
     if missing:
         state["phase"], state["field"] = "collect", missing[0]
         return _question(action, state)
+    if action.key in {"interviews.prepare", "interviews.read_prepared"}:
+        from transport.http.alexa_prep import select_prep_job
+        prompt = select_prep_job(state)
+        if prompt:
+            return reply(prompt, title="Choose an interview role")
     state["phase"] = "ready"
     if action.key in {"job_search.result", "job_search.queue_result"}:
         from transport.http.alexa_jobs import selected_job, detail_view
@@ -175,6 +180,16 @@ def execute(inputs):
     # insufficient; persist the verified identity, never an Alexa slot value.
     token = set_user_oid(inputs.get("oid", ""))
     try:
+        if action.key in {"interviews.prepare", "interviews.read_prepared"}:
+            from tools import interview_prep
+            if action.key == "interviews.prepare":
+                data = interview_prep.generate(params)
+            else:
+                job = interview_prep.resolve_job(params["company"], params.get("role", ""))
+                data = _load_json(interview_prep._record_path(job), {})
+            if data:
+                return {"interview_prep": data, "title": "Interview prep", "text": data["summary"]}
+            return {"title": "Interview prep", "text": "No saved prep for this job yet. Say prepare for an interview."}
         result = _run(domain, name, params)
     finally:
         reset_user_oid(token)
@@ -195,6 +210,9 @@ def _result(con, state, more=False):
     if row["status"] != "succeeded":
         return reply(f"Request {item_id} is {row['status']}." + (" Check the dashboard for details." if row["status"] == "failed" else " Say check my last request in a moment."), listen=False)
     artifact = json.loads(row["artifacts_json"] or "{}")
+    if "interview_prep" in artifact:
+        from transport.http.alexa_prep import prep_view
+        return prep_view(artifact["interview_prep"], state, more)
     if "job_search" in artifact:
         from transport.http.alexa_jobs import search_view
         from tools.job_discovery import lookup_result
@@ -242,6 +260,10 @@ def _turn(con, state, req):
         if action.mode == "handoff":
             return reply(action.reason, title=action.phrase, listen=False), None
         state.update(action=action.key, params={}, phase="collect")
+        if action.key == "interviews.prepare":
+            company = _slot(req, "PrepCompany")
+            if company:
+                state["params"]["company"] = company
         if action.key == "job_search.discover":
             state["search_id"] = None
             value = _slot(req, "JobQuery")

@@ -77,7 +77,9 @@ interviews.log|log an interview debrief|confirm
 interviews.list|show interview history|read
 interviews.context|show a company interview process|read
 interviews.upcoming|find scheduled interviews|read
-interviews.prep_context|prepare for an interview|read
+interviews.prepare|prepare for an interview|confirm
+interviews.read_prepared|read my interview prep|read
+interviews.prep_context|get interview preparation context|read
 interviews.save_prep|save interview prep text|handoff
 interviews.get_prep|read saved interview prep|read
 interviews.quick_reference|show my interview quick reference|read
@@ -181,6 +183,10 @@ def model():
                      and i["name"] not in {"AnswerIntent", "NumberAnswerIntent", "DateAnswerIntent", "ChangeFieldIntent", "RunActionIntent", "ActionStatusIntent", "MoreResultIntent", "ActionCatalogIntent", "AMAZON.YesIntent", "AMAZON.NoIntent"}]
     lm["intents"] += [{"name": a.intent, "slots": [], "samples": [a.phrase]} for a in ACTIONS.values()]
     for intent in lm["intents"]:
+        if intent["name"] == ACTIONS["interviews.prepare"].intent:
+            intent["slots"] = [{"name": "PrepCompany", "type": "AMAZON.SearchQuery"}]
+            intent["samples"] += ["prepare for my interview", "help me prepare for an interview",
+                                  "prepare for an interview with {PrepCompany}", "prepare for my interview at {PrepCompany}"]
         if intent["name"] == ACTIONS["job_search.boards"].intent:
             intent["samples"] += ["what job boards do I have", "what are my job boards",
                                   "show my job boards", "list job boards", "show saved job boards",

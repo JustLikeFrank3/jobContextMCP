@@ -91,7 +91,7 @@ def test_action_count_covers_legacy_surface():
     # TTS engine).
     total = sum(len(a) for a in DOMAINS.values())
     # 105 → 111: saved boards, discovery, stable details and selected queuing.
-    assert total == 111, f"action count changed: {total} — update this pin deliberately"
+    assert total == 113, f"action count changed: {total} — update this pin deliberately"
 
 
 def test_facade_params_cover_every_target_param():

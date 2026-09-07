@@ -455,10 +455,33 @@
           ]
         },
         {
+          "name": "ActionInterviewsPrepareIntent",
+          "slots": [
+            {
+              "name": "PrepCompany",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepare for an interview",
+            "prepare for my interview",
+            "help me prepare for an interview",
+            "prepare for an interview with {PrepCompany}",
+            "prepare for my interview at {PrepCompany}"
+          ]
+        },
+        {
+          "name": "ActionInterviewsReadPreparedIntent",
+          "slots": [],
+          "samples": [
+            "read my interview prep"
+          ]
+        },
+        {
           "name": "ActionInterviewsPrepContextIntent",
           "slots": [],
           "samples": [
-            "prepare for an interview"
+            "get interview preparation context"
           ]
         },
         {
