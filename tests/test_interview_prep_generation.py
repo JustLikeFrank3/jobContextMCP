@@ -139,3 +139,32 @@ def test_missing_master_cannot_generate(jobs, monkeypatch):
     monkeypatch.setattr(prep, "_read", lambda path: "[Error reading master: missing]")
     with pytest.raises(ValueError, match="master resume"):
         prep.generate({"company": "Acme", "role": "Java Engineer"})
+
+
+def test_alexa_sqlite_job_selection_uses_dialogue_transaction(jobs, monkeypatch):
+    from lib import io
+    from lib.db import get_connection
+    from lib.user_provisioning import _SCHEMA_SQL
+    with get_connection() as con:
+        con.executescript(_SCHEMA_SQL)
+    monkeypatch.setattr(io, "_USE_SQLITE", True)
+    _save_json(config.STATUS_FILE, {"applications": [
+        {"company": "Acme", "role": "Java Engineer"},
+        {"company": "Acme", "role": "Python Engineer"}]})
+    _save_json(config.JOB_QUEUE_FILE, {"jobs": [
+        {"company": "Queue Only", "role": "Engineer", "jd": "Build software"}]})
+
+    # The old path tried a second schema-initializing connection while the
+    # dialogue held BEGIN IMMEDIATE; SQLite errors became empty job lists.
+    def no_nested_load(*args, **kwargs):
+        pytest.fail("Saved-job selection must reuse Alexa's open transaction")
+    monkeypatch.setattr(prep, "_load_json", no_nested_load)
+    begin = aa.handle(payload(ACTIONS["interviews.prepare"].intent, "Acme", "PrepCompany"))
+    assert "2 saved roles" in begin["speech"]
+    ready = aa.handle(payload("AnswerIntent", "Java Engineer"))
+    assert "Java Engineer" in ready["speech"]
+    assert "yes to confirm" in ready["speech"]
+    queued = aa.handle(payload(ACTIONS["interviews.prepare"].intent, "Queue Only", "PrepCompany"))
+    assert "yes to confirm" in queued["speech"]
+    missing = aa.handle(payload(ACTIONS["interviews.prepare"].intent, "Absent", "PrepCompany"))
+    assert "couldn't match" in missing["speech"]

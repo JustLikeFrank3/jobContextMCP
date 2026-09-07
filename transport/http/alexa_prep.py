@@ -2,9 +2,9 @@
 from tools.interview_prep import saved_jobs
 
 
-def select_prep_job(state):
+def select_prep_job(state, connection=None):
     params = state["params"]
-    jobs = saved_jobs(params.get("company", ""), params.get("role", ""))
+    jobs = saved_jobs(params.get("company", ""), params.get("role", ""), connection=connection)
     if len(jobs) == 1:
         params.update(company=jobs[0]["company"], role=jobs[0]["role"])
         return ""

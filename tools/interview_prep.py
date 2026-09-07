@@ -14,10 +14,18 @@ KIND = "generate.interview_prep"
 SECTIONS = ("Positioning", "Likely questions", "Technical practice", "Questions to ask", "Gaps and unknowns")
 
 
-def saved_jobs(company, role=""):
+def saved_jobs(company, role="", *, connection=None):
     """Exact normalized identity wins; partial matches are never silently selected."""
-    records = _load_json(config.STATUS_FILE, {"applications": []}).get("applications", [])
-    records += _load_json(config.JOB_QUEUE_FILE, {"jobs": []}).get("jobs", [])
+    from lib import io
+    if connection is not None and io._USE_SQLITE:
+        # Alexa already holds BEGIN IMMEDIATE. Opening another connection runs
+        # schema setup writes and locks against the dialogue transaction.
+        from lib.io_sqlite import _load_status, _load_job_queue
+        records = _load_status(connection)["applications"]
+        records += _load_job_queue(connection)["jobs"]
+    else:
+        records = _load_json(config.STATUS_FILE, {"applications": []}).get("applications", [])
+        records += _load_json(config.JOB_QUEUE_FILE, {"jobs": []}).get("jobs", [])
     company_key, role_key = normalize_for_match(company), normalize_for_match(role)
     if not company_key:
         return []

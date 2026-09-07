@@ -120,7 +120,7 @@ def _ready(action, state, con):
         return _question(action, state)
     if action.key in {"interviews.prepare", "interviews.read_prepared"}:
         from transport.http.alexa_prep import select_prep_job
-        prompt = select_prep_job(state)
+        prompt = select_prep_job(state, con)
         if prompt:
             return reply(prompt, title="Choose an interview role")
     state["phase"] = "ready"
