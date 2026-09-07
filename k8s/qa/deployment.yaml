@@ -76,6 +76,16 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            # Founder discovery remains QA-only, including after the freeze.
+            - name: DISCOVERY_ENABLED
+              value: "qa"
+            - name: DISCOVERY_DB
+              value: "/app/data/discovery/discovery.db"
+            - name: DISCOVERY_ADMIN_OIDS
+              valueFrom:
+                configMapKeyRef:
+                  name: jcmcp-qa-config
+                  key: entra_owner_oid
             - name: START_MODE
               value: "http"
             # qa is the eval lab during prod freezes (first: 2026-09-01 →

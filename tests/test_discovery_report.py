@@ -222,7 +222,7 @@ def test_load_ledger_roundtrips_consent_themes_and_quotes(ledger):
     assert rep.public_quotes[0]["text"] == "I retype everything"
 
 
-def test_cli_end_to_end(tmp_path, capsys):
+def test_cli_end_to_end(tmp_path, capsys, monkeypatch):
     path = tmp_path / "discovery.db"
     run = lambda *a: cli.main(["--ledger", str(path), *a])  # noqa: E731
     assert run("init") == 0
@@ -240,11 +240,12 @@ def test_cli_end_to_end(tmp_path, capsys):
     con = dr.connect(path); con.execute("UPDATE incentives SET reference='amz-1'"); con.commit(); con.close()
     assert run("check") == 0
     assert run("--as-of", "2026-10-01", "snapshot") == 0
-    snap = json.loads((tmp_path / "discovery_snapshot_2026-10-01.json").read_text(encoding="utf-8"))
+    snap = json.loads(next(tmp_path.glob("discovery_snapshot_2026-10-01_*.json")).read_text(encoding="utf-8"))
     assert snap["numbers"]["customer_interviews_completed"] == 1
     assert snap["provenance"]["customer_interviews_completed"] == [1]
     assert snap["ledger_sha256"] == dr.ledger_sha256(path)
     page = tmp_path / "f.md"
+    monkeypatch.setattr(dr, "FINDINGS_PATH", page)
     page.write_text(f"intro\n{dr.FINDINGS_BEGIN}\nold\n{dr.FINDINGS_END}\noutro\n", encoding="utf-8")
     assert run("--as-of", "2026-10-01", "findings", str(page)) == 0
     text = page.read_text(encoding="utf-8")
@@ -256,8 +257,9 @@ def test_findings_page_has_managed_block():
     assert dr.FINDINGS_BEGIN in text and dr.FINDINGS_END in text
 
 
-def test_findings_writer_fails_without_block(tmp_path):
+def test_findings_writer_fails_without_block(tmp_path, monkeypatch):
     rep = dr.build_report(_ledger([_consented(1)], [_interview(1, 1)]))
     bare = tmp_path / "bare.md"; bare.write_text("no block", encoding="utf-8")
+    monkeypatch.setattr(dr, "FINDINGS_PATH", bare)
     with pytest.raises(SystemExit):
         dr.write_findings(bare, rep, "2026-10-01")

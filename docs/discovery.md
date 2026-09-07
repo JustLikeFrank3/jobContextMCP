@@ -128,3 +128,52 @@ untouched. A public signup route and a founder-only review page can sit on
 top of `lib/discovery.py` without changing any of that. If discovery ever needs to become a product
 feature (coaches running their own interviews, say), it gets designed as one
 then; this ledger is the evidence that would justify it.
+
+## Web surface (permanently QA-only)
+
+The public interview signup is https://qa.jobcontext.ai/discovery. For beta
+interest use https://qa.jobcontext.ai/discovery?program=beta. Add `?c=referral`
+(or `&c=referral` with another query) to attribute recruitment. Supported
+channels: network_free, linkedin_paid, discord, referral, other; default other.
+Both links record screened interest, not a completed interview or beta enrollment.
+
+The founder review page is https://qa.jobcontext.ai/discovery/review. Sign in to
+the QA dashboard first, then open this URL. Anonymous visitors and other tenants
+receive 404. `DISCOVERY_ADMIN_OIDS` is an explicit comma-separated Entra OID
+allowlist; QA uses its existing founder OID. API-key/no-auth identities cannot
+open the page. Review POSTs require a same-origin Origin header and reject
+cross-site browser requests. Pages and API responses are not cached or indexed.
+
+`DISCOVERY_ENABLED=qa` enables these routes; absent that explicit setting they
+return 404, including on production. `DISCOVERY_DB=/app/data/discovery/discovery.db`
+keeps the ledger on QA's persistent volume outside all tenant partitions and
+sync. The web form and ledger stay on QA after the production freeze ends.
+No production settings, MCP tools or action schemas are changed.
+
+Signup strips cookies before FastAPI routing and uses credential-free fetches.
+Email duplicates and honeypots receive the same thank-you response. Signup is
+limited to ten requests per ten minutes per ingress-supplied client IP; the
+in-memory limiter is bounded and resets on restart. The body is limited to 8 KiB.
+The confirmation promises manual follow-up within a day; no emails are sent by
+this feature. Send the consent form and calendar link yourself.
+
+`lib/discovery_ops.py` owns all founder mutations for both the CLI and HTTP API:
+consent, schedule, complete/no-show, quote, incentive and dropped/declined status.
+Recording and quote consent default to false. CLI opt-ins are `--recording-ok`
+and `--quote-ok`; record only permissions actually granted on the consent form.
+
+Review shows participant screener answers, consent, sessions, quotes and
+incentives, with status/segment/channel filters and newest-first ordering.
+Validation errors appear verbatim. Displayed figures are provisional when errors
+exist; report publication and snapshots are blocked. Counts are always computed
+by `build_report` from stored rows, with supporting row IDs in provenance.
+
+Snapshots use SQLite backup to include committed WAL data and generate an
+exclusive UUID filename. Each private JSON snapshot contains the frozen ledger,
+its counts, provenance and SHA-256 of its canonical JSON, so the same records can
+reproduce the numbers. Snapshots contain personal information: keep them private.
+The PVC persists restarts; tenant sync does not back up this separate ledger.
+
+Findings writes are restricted to `docs/discovery-findings.md`. Review all free
+text themes and quotes for identifying details before sharing. A consent flag
+permits a quote but cannot establish that the text itself is anonymous.

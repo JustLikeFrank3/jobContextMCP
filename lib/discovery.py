@@ -17,6 +17,7 @@ import csv
 import hashlib
 import json
 import sqlite3
+import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -132,7 +133,12 @@ def connect(path: Path) -> sqlite3.Connection:
 
 
 def ledger_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as source:
+        with sqlite3.connect(":memory:") as snapshot:
+            snapshot.row_factory = sqlite3.Row
+            source.backup(snapshot)
+            payload = json.dumps(load_ledger(snapshot), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 # --- read the ledger into plain records --------------------------------------
@@ -337,6 +343,8 @@ def build_report(ledger: dict) -> Report:
 # --- rendering ---------------------------------------------------------------
 
 def render_text(rep: Report) -> str:
+    if not rep.ok:
+        return "DISCOVERY LEDGER REPORT WITHHELD\n" + "\n".join(rep.errors) + "\n"
     out = ["DISCOVERY LEDGER REPORT", ""]
     for k, v in rep.numbers.items():
         out.append(f"  {k:<34} {v}")
@@ -356,10 +364,12 @@ def render_text(rep: Report) -> str:
 
 
 def render_findings_block(rep: Report, as_of: str) -> str:
+    if not rep.ok:
+        raise ValueError("Cannot publish findings from an invalid ledger")
     n = rep.numbers
     lines = [
         FINDINGS_BEGIN,
-        f"_Aggregates as of {as_of}. Generated from the private ledger; no participant is identifiable here._",
+        f"_Aggregates as of {as_of}. Generated from the private ledger; review themes and quotes for identifying details before sharing._",
         "",
         "| Metric | Value |",
         "|---|---|",
@@ -383,7 +393,13 @@ def render_findings_block(rep: Report, as_of: str) -> str:
     return "\n".join(lines)
 
 
+FINDINGS_PATH = Path(__file__).resolve().parent.parent / "docs" / "discovery-findings.md"
+
+
 def write_findings(path: Path, rep: Report, as_of: str) -> bool:
+    if path.resolve() != FINDINGS_PATH.resolve():
+        raise ValueError("Findings may only update docs/discovery-findings.md")
+    path = FINDINGS_PATH
     text = path.read_text(encoding="utf-8")
     start, end = text.find(FINDINGS_BEGIN), text.find(FINDINGS_END)
     if start < 0 or end < 0 or end < start:
@@ -397,15 +413,23 @@ def write_findings(path: Path, rep: Report, as_of: str) -> bool:
 
 
 def write_snapshot(ledger_path: Path, rep: Report, as_of: str) -> Path:
-    out = ledger_path.with_name(f"discovery_snapshot_{as_of}.json")
-    out.write_text(json.dumps({
-        "as_of": as_of,
-        "ledger_sha256": ledger_sha256(ledger_path),
-        "numbers": rep.numbers,
-        "provenance": rep.provenance,
-        "breakdowns": rep.breakdowns,
-        "warnings": rep.warnings,
-    }, indent=2) + "\n", encoding="utf-8")
+    # Freeze committed WAL data so records, counts and hash describe one view.
+    day = date.fromisoformat(as_of).isoformat()
+    out = ledger_path.with_name(f"discovery_snapshot_{day}_{uuid.uuid4().hex}.json")
+    with sqlite3.connect(ledger_path.resolve().as_uri() + "?mode=ro", uri=True) as source:
+        with sqlite3.connect(":memory:") as frozen:
+            frozen.row_factory = sqlite3.Row
+            source.backup(frozen)
+            ledger = load_ledger(frozen)
+    rep = build_report(ledger)
+    if not rep.ok:
+        raise ValueError("Cannot snapshot an invalid ledger")
+    payload = json.dumps(ledger, sort_keys=True, separators=(",", ":"))
+    with out.open("x", encoding="utf-8") as fh:
+        json.dump({"as_of": day, "ledger_sha256": hashlib.sha256(payload.encode()).hexdigest(),
+                   "ledger": ledger, "numbers": rep.numbers, "provenance": rep.provenance,
+                   "breakdowns": rep.breakdowns, "warnings": rep.warnings}, fh, indent=2)
+        fh.write("\n")
     return out
 
 
@@ -471,7 +495,7 @@ def import_signups(con: sqlite3.Connection, csv_path: Path, channel: str = "link
 
 def add_signup(con: sqlite3.Connection, name: str, contact: str, segment_answer: str,
                current_tools: list[str] | str, ai_assistant: str, channel: str = "linkedin_paid",
-               program: str = "interview") -> int | None:
+               program: str = "interview", *, incentive_preference: str = "", best_window: str = "") -> int | None:
     """Insert one screened participant from a signup (web form or CSV row).
 
     Returns the new participant id, or None when the contact already exists —
@@ -484,12 +508,13 @@ def add_signup(con: sqlite3.Connection, name: str, contact: str, segment_answer:
     if isinstance(current_tools, str):
         current_tools = [t.strip() for t in current_tools.split(",") if t.strip()]
     screener = {"segment_answer": segment_answer or "", "current_tools": current_tools,
-                "ai_assistant": (ai_assistant or "").strip()}
+                "ai_assistant": (ai_assistant or "").strip(),
+                "incentive_preference": incentive_preference, "best_window": best_window}
     cur = con.execute(
         "INSERT INTO participants (name, contact, segment, channel, program, status, screener_json, created_at)"
-        " VALUES (?, ?, ?, ?, ?, 'screened', ?, ?)",
+        " VALUES (?, ?, ?, ?, ?, 'screened', ?, ?) ON CONFLICT(contact) DO NOTHING",
         ((name or "").strip(), contact, _segment_from_answer(segment_answer), channel, program,
          json.dumps(screener), _now()),
     )
     con.commit()
-    return int(cur.lastrowid)
+    return int(cur.lastrowid) if cur.rowcount else None

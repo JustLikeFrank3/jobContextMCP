@@ -47,7 +47,7 @@ that would let a number drift from its records must not produce a number.
 Usage:
     python scripts/discovery_report.py init
     python scripts/discovery_report.py import-signups signups.csv
-    python scripts/discovery_report.py consent 3 --version 2026-09 [--no-recording] [--no-quotes]
+    python scripts/discovery_report.py consent 3 --version 2026-09 [--recording-ok] [--quote-ok]
     python scripts/discovery_report.py session add 3 --kind interview --when 2026-09-18T18:00
     python scripts/discovery_report.py session done 7 --minutes 32 --themes "re-explaining,trust" \
         [--notes data/discovery/s-7.md] [--no-show]
@@ -81,6 +81,9 @@ from lib.discovery import (  # noqa: E402
 )
 
 
+from lib.discovery_ops import mutate
+
+
 # --- CLI ---------------------------------------------------------------------------
 
 def _run_report(con: sqlite3.Connection) -> Report:
@@ -97,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--channel", default="linkedin_paid", choices=CHANNELS)
     p.add_argument("--program", default="interview", choices=PROGRAMS)
     p = sub.add_parser("consent"); p.add_argument("participant", type=int)
-    p.add_argument("--version"); p.add_argument("--no-recording", action="store_true"); p.add_argument("--no-quotes", action="store_true")
+    p.add_argument("--version"); p.add_argument("--recording-ok", action="store_true"); p.add_argument("--quote-ok", action="store_true")
     p = sub.add_parser("session"); ps = p.add_subparsers(dest="scmd")
     a = ps.add_parser("add"); a.add_argument("participant", type=int); a.add_argument("--kind", default="interview", choices=SESSION_KINDS); a.add_argument("--when")
     d = ps.add_parser("done"); d.add_argument("session", type=int); d.add_argument("--minutes", type=int, default=0)
@@ -106,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("incentive"); p.add_argument("participant", type=int); p.add_argument("--earned-by", required=True)
     p.add_argument("--type", default="gift_card", choices=INCENTIVE_TYPES); p.add_argument("--amount", type=int, default=0)
     p.add_argument("--reference"); p.add_argument("--pending", action="store_true")
+    p = sub.add_parser("status"); p.add_argument("participant", type=int); p.add_argument("status", choices=("dropped", "declined"))
     sub.add_parser("report"); sub.add_parser("check"); sub.add_parser("snapshot")
     p = sub.add_parser("findings"); p.add_argument("path", type=Path)
     args = ap.parse_args(argv)
@@ -121,32 +125,17 @@ def main(argv: list[str] | None = None) -> int:
         elif cmd == "import-signups":
             n, k = import_signups(con, args.csv, args.channel, args.program)
             print(f"imported {n} participant(s), skipped {k}")
-        elif cmd == "consent":
-            version = args.version or con.execute("SELECT consent_version FROM program").fetchone()[0]
-            con.execute("UPDATE participants SET consent_version=?, consent_recorded_at=?, consent_recording_ok=?, consent_quote_ok=? WHERE id=?",
-                        (version, _now(), 0 if args.no_recording else 1, 0 if args.no_quotes else 1, args.participant))
-            con.commit(); print(f"consent recorded for participant {args.participant}")
-        elif cmd == "session" and args.scmd == "add":
-            cur = con.execute("INSERT INTO sessions (participant_id, kind, status, scheduled_for, created_at) VALUES (?, ?, 'scheduled', ?, ?)",
-                              (args.participant, args.kind, args.when, _now()))
-            con.execute("UPDATE participants SET status = CASE WHEN program='beta' THEN 'enrolled' ELSE 'scheduled' END WHERE id=? AND status='screened'", (args.participant,))
-            con.commit(); print(f"session {cur.lastrowid} scheduled")
-        elif cmd == "session" and args.scmd == "done":
-            status = "no_show" if args.no_show else "completed"
-            con.execute("UPDATE sessions SET status=?, duration_minutes=?, themes=?, notes_path=? WHERE id=?",
-                        (status, args.minutes, args.themes, args.notes, args.session))
-            if status == "completed":
-                con.execute("UPDATE participants SET status = CASE WHEN program='beta' THEN 'active' ELSE 'completed' END"
-                            " WHERE id = (SELECT participant_id FROM sessions WHERE id=?)", (args.session,))
-            con.commit(); print(f"session {args.session} {status}")
-        elif cmd == "quote":
-            con.execute("INSERT INTO quotes (session_id, text, public) VALUES (?, ?, ?)", (args.session, args.text, 1 if args.public else 0))
-            con.commit(); print("quote recorded")
-        elif cmd == "incentive":
-            status = "pending" if args.pending else "sent"
-            con.execute("INSERT INTO incentives (participant_id, earned_by, type, amount_usd, status, sent_at, reference, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        (args.participant, args.earned_by, args.type, args.amount, status, None if args.pending else _now(), args.reference, _now()))
-            con.commit(); print(f"incentive recorded ({status})")
+        elif cmd in ("consent", "session", "quote", "incentive", "status"):
+            values = vars(args).copy()
+            for key in ("ledger", "as_of", "cmd", "scmd"):
+                values.pop(key, None)
+            action = cmd
+            if cmd == "consent":
+                values["version"] = args.version or con.execute("SELECT consent_version FROM program").fetchone()[0]
+            elif cmd == "session":
+                action = {"add": "schedule", "done": "complete"}.get(args.scmd, "")
+            result = mutate(con, action, values)
+            print(f"{action} recorded" + (f": {result}" if result else ""))
         elif cmd in ("report", "check", "snapshot", "findings"):
             rep = _run_report(con)
             if cmd != "check":

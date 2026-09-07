@@ -9,6 +9,10 @@ Versions through 1.4.0 predate this note; their section headings vary slightly.
 ## [Unreleased]
 
 ### Added
+- Permanently QA-only customer discovery signup and founder review, with explicit consent, shared CLI actions, and reproducible private snapshots.
+
+
+### Added
 
 - **Customer-discovery ledger (`lib/discovery.py`, `data/discovery.db`, `scripts/discovery_report.py`, docs/discovery.md)** -- the provenance rule applied to the company's own traction claims: any number quoted on a pitch application (customer interviews completed, beta testers enrolled/completed, incentives paid, consent on file) is derived from a private, git-ignored SQLite ledger (own DDL, outside lib/db.py migrations and sync) by the report CLI, which refuses to print numbers while any hard error exists (completed session without consent, incentive sent for a condition not earned, sent with no reference, internal participant counted, duplicate/unknown ids). `--snapshot` writes the numbers, the session ids behind each one, and the ledger's sha256 so a form answer can be tied back to records; `--findings` rewrites a managed block in docs/discovery-findings.md with aggregates and consented, segment-attributed quotes only. `import-signups` ingests a Google Forms/Tally CSV and `add_signup()` is the hook for a web form; both dedupe on contact. Ships with the screener, consent form, interview guide, and session-notes template under templates/discovery/. Founder ops, not tenant data: nothing is added to the MCP surface.
 

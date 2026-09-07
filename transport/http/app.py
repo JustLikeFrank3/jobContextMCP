@@ -195,6 +195,19 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         from lib.user_provisioning import provision_user_data
         import lib.config as _cfg_module
 
+        # Founder ops bypass tenant provisioning. The router enforces its own
+        # QA enable switch and founder identity; signup never reads a cookie.
+        path = request.url.path
+        if path in ("/discovery", "/discovery/review") or path.startswith("/api/discovery/"):
+            if path in ("/discovery", "/api/discovery/signup"):
+                # FastAPI inspects cookie parameters even when none are declared.
+                # Remove cookies before routing so the public surface cannot read them.
+                request.scope["headers"] = [(k, v) for k, v in request.scope["headers"] if k.lower() != b"cookie"]
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Robots-Tag"] = "noindex, nofollow"
+            return response
+
         provider = get_auth_provider()
         authorization = request.headers.get("Authorization")
         session = request.cookies.get("jc_session")
@@ -447,6 +460,8 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
         )
 
     app.include_router(oauth_routes.router)   # must be before MCP catch-all
+    from transport.http.routes import discovery
+    app.include_router(discovery.router)
     app.include_router(health_routes.router)
     if settings.desktop_mode:
         from transport.http import desktop as desktop_routes
