@@ -11,7 +11,7 @@ import './styles/global.css'
 // /app/, /app/pipeline, etc. when served in production.
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {window.location.pathname === '/discovery' || window.location.pathname === '/discovery/review' ? <Discovery /> : <BrowserRouter basename="/app">
+    {['/discovery', '/discovery/beta', '/discovery/review'].includes(window.location.pathname) ? <Discovery /> : <BrowserRouter basename="/app">
       <AuthProvider>
         {/* Sits beside App, not inside a route: WebMCP tools stay registered
             across client-side navigation for the whole authed session. */}

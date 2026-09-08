@@ -24,7 +24,12 @@ function Field({ name, label, options, type = 'text', required = true, defaultVa
   </select> : <input name={name} type={type} required={required} defaultValue={defaultValue} maxLength={maxLength} min={type === 'number' ? 0 : undefined} />}</label>
 }
 
+const isBetaSignup = () => window.location.pathname === '/discovery/beta' || new URLSearchParams(window.location.search).get('program') === 'beta'
+const betaThanks = "Thanks for your interest in the jobContext beta. I'll email you within a day with next steps and details about testing."
 function Signup() {
+  const beta = isBetaSignup()
+  const channel = new URLSearchParams(window.location.search).get('c')
+  const alternate = `${beta ? '/discovery' : '/discovery/beta'}${channels.includes(channel) ? `?c=${encodeURIComponent(channel)}` : ''}`
   const [done, setDone] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -33,27 +38,28 @@ function Signup() {
     const values = Object.fromEntries(new FormData(event.currentTarget))
     const query = new URLSearchParams(window.location.search)
     values.channel = channels.includes(query.get('c')) ? query.get('c') : 'other'
-    values.program = query.get('program') === 'beta' ? 'beta' : 'interview'
+    values.program = beta ? 'beta' : 'interview'
     try { await api('signup', values); setDone(true) } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
-  if (done) return <p role="status" className="discovery-thanks">{thanks}</p>
+  if (done) return <p role="status" className="discovery-thanks">{beta ? betaThanks : thanks}</p>
   return <>
-    <p className="discovery-eyebrow">jobContext / Customer discovery</p>
-    <h1>Help shape a better job search.</h1>
-    <p className="discovery-intro">I&apos;m doing customer discovery for jobContext. This is a conversation, not a demo. $25 gift card for 30 minutes, or a year of jobContext Pro if you&apos;d rather. You can stop at any point. Nothing that identifies you gets published, ever.</p>
+    <p className="discovery-eyebrow">jobContext / {beta ? 'Beta signup' : 'Customer discovery'}</p>
+    <h1>{beta ? 'Help test jobContext.' : 'Help shape a better job search.'}</h1>
+    <p className="discovery-intro">{beta ? "Try jobContext with your own workflow and tell me what works, what gets confusing, and what breaks. Sign up below and I'll email you with access details and testing expectations. This is beta interest, not an interview booking or automatic account creation." : "I'm doing customer discovery for jobContext. This is a conversation, not a demo. $25 gift card for 30 minutes, or a year of jobContext Pro if you'd rather. You can stop at any point. Nothing that identifies you gets published, ever."}</p>
+    <p><a href={alternate}>{beta ? 'Prefer a 30-minute research conversation? Interview signup' : 'Want to try the product? Beta signup'}</a></p>
     <form onSubmit={submit}>
       <Field name="segment_answer" label="Are you actively job searching, or do you coach people who are?" options={segments} />
       <label>What do you use today to keep track of applications, résumés, and interviews?<textarea name="current_tools" maxLength={2000} required rows={3} /></label>
       <Field name="ai_assistant" label="Which AI assistant do you use most, if any?" options={assistants} />
       <div className="discovery-grid"><Field name="name" label="Name" maxLength={160} /><Field name="email" label="Email" type="email" maxLength={254} /></div>
-      <Field name="best_window" label="Best 30-minute window (include your time zone)" maxLength={500} />
-      <fieldset><legend>Which thank-you would you prefer?</legend>
+      <Field name="best_window" label={beta ? "When could you start testing? (optional)" : "Best 30-minute window (include your time zone)"} required={!beta} maxLength={500} />
+      {!beta && <fieldset><legend>Which thank-you would you prefer?</legend>
         <label className="discovery-check"><input type="radio" name="incentive_preference" value="gift_card" required /> $25 gift card</label>
         <label className="discovery-check"><input type="radio" name="incentive_preference" value="pro_access" required /> 12 months of jobContext Pro</label>
-      </fieldset>
+      </fieldset>}
       <div className="discovery-trap" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
       {error && <p role="alert" className="discovery-error">{error}</p>}
-      <button disabled={busy}>{busy ? 'Sending…' : 'Count me in'}</button>
+      <button disabled={busy}>{busy ? 'Sending…' : beta ? 'Join the beta list' : 'Count me in'}</button>
       <p className="discovery-note">Signing up expresses interest. Recording and quote permissions are collected separately.</p>
     </form>
   </>
@@ -109,7 +115,7 @@ function Review() {
   return <>
     <p className="discovery-eyebrow">jobContext / Founder review</p><h1>Customer discovery ledger</h1>
     <p>Signups are interest. Consent and completed sessions establish the counts.</p>
-    <a href="/discovery">Interview signup</a> · <a href="/discovery?program=beta">Beta signup</a>
+    <a href="/discovery">Interview signup</a> · <a href="/discovery/beta">Beta signup</a>
     {report.errors.map((text, i) => <p key={i} role="alert" className="discovery-error">{text}</p>)}
     {report.errors.length > 0 && <p className="discovery-error">Figures below are provisional. Publishing and snapshots are blocked until these errors are resolved.</p>}
     {report.warnings.map((text, i) => <p key={i} className="discovery-warning">{text}</p>)}
@@ -132,6 +138,7 @@ function Review() {
 
 export default function Discovery() {
   const review = window.location.pathname === '/discovery/review'
-  useEffect(() => { document.title = review ? 'jobContext: Discovery review' : 'jobContext: Customer discovery' }, [review])
+  const beta = !review && isBetaSignup()
+  useEffect(() => { document.title = review ? 'jobContext: Discovery review' : beta ? 'jobContext: Beta signup' : 'jobContext: Customer discovery' }, [review, beta])
   return <main className={`discovery ${review ? 'discovery-review' : ''}`}>{review ? <Review /> : <Signup />}</main>
 }

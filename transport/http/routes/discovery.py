@@ -79,13 +79,14 @@ class Signup(BaseModel):
     segment_answer: str
     current_tools: str = Field(max_length=2000)
     ai_assistant: Literal["ChatGPT", "Claude", "Copilot", "Gemini", "other", "none"]
-    best_window: str = Field(min_length=1, max_length=500)
-    incentive_preference: Literal["gift_card", "pro_access"]
+    best_window: str = Field(default="", max_length=500)
+    incentive_preference: Literal["gift_card", "pro_access", ""] = ""
     channel: str = "other"
     program: Literal["interview", "beta"] = "interview"
     website: str = ""
 
 
+@router.get("/discovery/beta")
 @router.get("/discovery")
 def signup_page():
     return page()
@@ -116,6 +117,8 @@ async def signup(request: Request):
         raise HTTPException(422, "Please check the signup fields") from exc
     if data.channel not in ledger.CHANNELS or data.segment_answer not in SEGMENT_ANSWERS:
         raise HTTPException(422, "Please choose one of the listed options")
+    if data.program == "interview" and (not data.best_window or not data.incentive_preference):
+        raise HTTPException(422, "Please choose an interview time and thank-you preference")
     # Keep blocking disk work off the request loop, without entering a tenant.
     from starlette.concurrency import run_in_threadpool
     await run_in_threadpool(save_signup, data)
