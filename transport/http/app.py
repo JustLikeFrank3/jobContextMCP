@@ -198,8 +198,8 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         # Founder ops bypass tenant provisioning. The router enforces its own
         # QA enable switch and founder identity; signup never reads a cookie.
         path = request.url.path
-        if path in ("/discovery", "/discovery/review") or path.startswith("/api/discovery/"):
-            if path in ("/discovery", "/api/discovery/signup"):
+        if path in ("/discovery", "/discovery/beta", "/discovery/review") or path.startswith("/api/discovery/"):
+            if path in ("/discovery", "/discovery/beta", "/api/discovery/signup"):
                 # FastAPI inspects cookie parameters even when none are declared.
                 # Remove cookies before routing so the public surface cannot read them.
                 request.scope["headers"] = [(k, v) for k, v in request.scope["headers"] if k.lower() != b"cookie"]

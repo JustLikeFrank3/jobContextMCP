@@ -15,12 +15,12 @@ test('signup omits credentials, includes attribution, and shows only the thank-y
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ message: 'ok' }) }); vi.stubGlobal('fetch', fetch)
   await act(async () => root.render(<Discovery />))
   for (const [key, value] of Object.entries({ name:'Pat', email:'pat@example.com', segment_answer:'coach', current_tools:'Notes', ai_assistant:'Claude', best_window:'Friday 2pm Eastern' })) host.querySelector(`[name="${key}"]`).value = value
-  host.querySelector('[value="gift_card"]').checked = true
+  expect(host.querySelector('[name="incentive_preference"]')).toBeNull()
   await act(async () => host.querySelector('form').dispatchEvent(new Event('submit', { bubbles:true, cancelable:true })))
   const [url, request] = fetch.mock.calls[0]
   expect(url).toBe('/api/discovery/signup'); expect(request.credentials).toBe('omit')
-  expect(JSON.parse(request.body)).toMatchObject({ channel:'referral', program:'beta', incentive_preference:'gift_card' })
-  expect(host.textContent).toBe("Thanks. I'll send the one-page consent form and a calendar link within a day.")
+  expect(JSON.parse(request.body)).toMatchObject({ channel:'referral', program:'beta' })
+  expect(host.textContent).toContain("Thanks for your interest in the jobContext beta.")
 })
 
 test('signup shows recoverable failure without discarding fields', async () => {
@@ -39,3 +39,22 @@ test('review exposes consent error and blocks invalid snapshot', async () => {
   expect(host.querySelector('[role="alert"]').textContent).toContain('without consent')
   expect(host.querySelector('button').disabled).toBe(true)
 })
+
+ test.each(['/discovery/beta?c=network_free', '/discovery?program=beta&c=network_free'])('beta route %s is clearly distinct and preserves attribution', async path => {
+  window.history.replaceState({}, '', path)
+  await act(async () => root.render(<Discovery />))
+  expect(host.querySelector('h1').textContent).toBe('Help test jobContext.')
+  expect(document.title).toBe('jobContext: Beta signup')
+  expect(host.querySelector('[name="best_window"]').required).toBe(false)
+  expect(host.querySelector('[name="incentive_preference"]')).toBeNull()
+  expect(host.querySelector('a').getAttribute('href')).toBe('/discovery?c=network_free')
+  expect(host.querySelector('button').textContent).toBe('Join the beta list')
+ })
+ test('interview keeps scheduling and incentive choices with beta navigation', async () => {
+  window.history.replaceState({}, '', '/discovery?c=referral')
+  await act(async () => root.render(<Discovery />))
+  expect(host.querySelector('h1').textContent).toBe('Help shape a better job search.')
+  expect(host.querySelector('[name="best_window"]').required).toBe(true)
+  expect(host.querySelector('[value="gift_card"]')).not.toBeNull()
+  expect(host.querySelector('a').getAttribute('href')).toBe('/discovery/beta?c=referral')
+ })

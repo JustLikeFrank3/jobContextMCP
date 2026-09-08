@@ -178,3 +178,13 @@ def test_ops_reject_invalid_and_no_show(tmp_path):
         assert dr.load_ledger(con)['sessions'][0]['status'] == 'no_show'
         ops.mutate(con,'incentive',dict(participant=1,earned_by='1',pending=True))
         assert dr.load_ledger(con)['incentives'][0]['status'] == 'pending'
+
+
+def test_beta_signup_without_interview_requirements(client):
+    assert client.get('/discovery/beta').status_code == 200
+    data = {k: v for k, v in DATA.items() if k not in ('best_window', 'incentive_preference')}
+    assert client.post('/api/discovery/signup', json={**data, 'program': 'beta'}).status_code == 200
+    participant = read()['participants'][0]
+    assert participant['program'] == 'beta'
+    assert not participant['screener']['incentive_preference']
+    assert client.post('/api/discovery/signup', json=data).status_code == 422
