@@ -188,3 +188,35 @@ def test_beta_signup_without_interview_requirements(client):
     assert participant['program'] == 'beta'
     assert not participant['screener']['incentive_preference']
     assert client.post('/api/discovery/signup', json=data).status_code == 422
+
+
+@pytest.mark.parametrize('first,second', [('interview', 'beta'), ('beta', 'interview')])
+def test_second_program_preserves_identity_and_history(client, first, second):
+    assert client.post('/api/discovery/signup', json={**DATA, 'program': first}).status_code == 200
+    pid = read()['participants'][0]['id']
+    with closing(dr.connect(dr.default_ledger_path())) as con:
+        ops.record_consent(con, pid, '2026-09', True, False)
+        session = ops.schedule_session(con, pid, 'interview', '2026-09-10')
+        ops.complete_session(con, session, 30)
+        con.commit()
+    before = read()
+    data = {**DATA, 'program': second, 'email': DATA['email'].upper(), 'current_tools': 'New tools', 'channel': 'network_free'}
+    for _ in range(2):
+        assert client.post('/api/discovery/signup', json=data).status_code == 200
+    after = read()
+    assert len(after['participants']) == 1
+    p = after['participants'][0]
+    assert set(p['programs']) == {'interview', 'beta'}
+    assert p['id'] == pid and p['consent'] == before['participants'][0]['consent']
+    assert p['status'] == before['participants'][0]['status']
+    assert after['sessions'] == before['sessions']
+    signups = p['screener']['program_signups']
+    assert signups[first]['channel'] == 'referral'
+    assert signups[second]['channel'] == 'network_free'
+    assert signups[second]['screener']['current_tools'] == ['New tools']
+    if first == 'interview':
+        assert dr.build_report(after).numbers['beta_testers_enrolled'] == 0
+        with closing(dr.connect(dr.default_ledger_path())) as con:
+            ops.schedule_session(con, pid, 'beta_session', '2026-09-11')
+            con.commit()
+        assert dr.build_report(read()).numbers['beta_testers_enrolled'] == 1

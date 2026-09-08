@@ -151,6 +151,7 @@ def load_ledger(con: sqlite3.Connection) -> dict:
     for r in con.execute("SELECT * FROM participants ORDER BY id"):
         d = dict(r)
         d["screener"] = json.loads(d.pop("screener_json") or "null")
+        d["programs"] = list(dict.fromkeys([d["program"], *(d["screener"] or {}).get("program_signups", {})]))
         d["consent"] = {
             "version": d.pop("consent_version"),
             "recorded_at": d.pop("consent_recorded_at"),
@@ -262,8 +263,16 @@ def build_report(ledger: dict) -> Report:
         if s.get("kind") == "beta_session" and s.get("status") == "completed":
             beta_done[s.get("participant_id")] += 1
     for pid, p in by_id.items():
-        if p.get("program") != "beta" or p.get("status") not in COUNTABLE_BETA_STATUS:
-            continue
+        if p.get("program") == "beta":
+            if p.get("status") not in COUNTABLE_BETA_STATUS:
+                continue
+        else:
+            # A second signup is interest only; founder scheduling establishes enrollment.
+            beta_interest = "beta" in (p.get("screener") or {}).get("program_signups", {})
+            beta_scheduled = any(s.get("participant_id") == pid and s.get("kind") == "beta_session"
+                                 and s.get("status") in ("scheduled", "completed") for s in sessions)
+            if not beta_interest or not beta_scheduled or p.get("status") in ("dropped", "declined"):
+                continue
         if p.get("segment") == INTERNAL_SEGMENT:
             continue
         if not _has_consent(p):
@@ -499,22 +508,33 @@ def add_signup(con: sqlite3.Connection, name: str, contact: str, segment_answer:
     """Insert one screened participant from a signup (web form or CSV row).
 
     Returns the new participant id, or None when the contact already exists —
-    the web route and the CSV importer both rely on that for idempotency."""
+    the web route and CSV importer rely on that for idempotency. A second
+    program is retained in the screener without changing identity or history."""
     contact = (contact or "").strip().lower()
     if not contact:
         raise ValueError("contact is required")
-    if con.execute("SELECT 1 FROM participants WHERE contact = ?", (contact,)).fetchone():
-        return None
     if isinstance(current_tools, str):
         current_tools = [t.strip() for t in current_tools.split(",") if t.strip()]
     screener = {"segment_answer": segment_answer or "", "current_tools": current_tools,
                 "ai_assistant": (ai_assistant or "").strip(),
                 "incentive_preference": incentive_preference, "best_window": best_window}
-    cur = con.execute(
-        "INSERT INTO participants (name, contact, segment, channel, program, status, screener_json, created_at)"
-        " VALUES (?, ?, ?, ?, ?, 'screened', ?, ?) ON CONFLICT(contact) DO NOTHING",
-        ((name or "").strip(), contact, _segment_from_answer(segment_answer), channel, program,
-         json.dumps(screener), _now()),
-    )
-    con.commit()
-    return int(cur.lastrowid) if cur.rowcount else None
+    # The insert obtains the write lock before reading an existing signup, so
+    # concurrent interview/beta submissions cannot overwrite one another.
+    with con:
+        cur = con.execute(
+            "INSERT INTO participants (name, contact, segment, channel, program, status, screener_json, created_at)"
+            " VALUES (?, ?, ?, ?, ?, 'screened', ?, ?) ON CONFLICT(contact) DO NOTHING",
+            ((name or "").strip(), contact, _segment_from_answer(segment_answer), channel, program,
+             json.dumps(screener), _now()),
+        )
+        if cur.rowcount:
+            return int(cur.lastrowid)
+        existing = con.execute("SELECT id, program, screener_json, channel, created_at FROM participants WHERE contact=?", (contact,)).fetchone()
+        original = json.loads(existing["screener_json"] or "{}")
+        signups = original.get("program_signups", {})
+        if program != existing["program"] and program not in signups:
+            signups.setdefault(existing["program"], {"screener": dict(original), "channel": existing["channel"], "created_at": existing["created_at"]})
+            signups[program] = {"screener": screener, "channel": channel, "created_at": _now()}
+            original["program_signups"] = signups
+            con.execute("UPDATE participants SET screener_json=? WHERE id=?", (json.dumps(original), existing["id"]))
+    return None

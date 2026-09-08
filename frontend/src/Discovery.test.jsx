@@ -58,3 +58,15 @@ test('review exposes consent error and blocks invalid snapshot', async () => {
   expect(host.querySelector('[value="gift_card"]')).not.toBeNull()
   expect(host.querySelector('a').getAttribute('href')).toBe('/discovery/beta?c=referral')
  })
+
+test('review displays both signup programs and their separate answers', async () => {
+  window.history.replaceState({}, '', '/discovery/review')
+  const participant = {id:1,name:'Pat',contact:'pat@example.com',program:'interview',programs:['interview','beta'],status:'screened',segment:'coach',channel:'referral',consent:{},screener:{program_signups:{interview:{channel:'referral',created_at:'2026-09-07',screener:{best_window:'Monday',incentive_preference:'gift_card'}},beta:{channel:'network_free',created_at:'2026-09-08',screener:{best_window:'Next week',current_tools:['Notes']}}}}}
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({ledger:{participants:[participant],sessions:[],incentives:[]},report:{numbers:{},errors:[],warnings:[]}})}))
+  await act(async()=>root.render(<Discovery />))
+  expect(host.textContent).toContain('interview + beta')
+  expect(host.textContent).toContain('Testing availability')
+  expect(host.textContent).toContain('Next week')
+  expect(host.textContent).toContain('Monday')
+  expect(host.textContent).not.toContain('[object Object]')
+})
