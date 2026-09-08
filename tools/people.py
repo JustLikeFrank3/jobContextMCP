@@ -39,6 +39,7 @@ def log_person(  # NOSONAR
     outreach_status: Literal["none", "drafted", "sent", "responded"] = "none",
     notes: str = "",
     sent_message: str = "",
+    sent_subject: str = "",
 ) -> str:
     """
     Add or update a person in the contacts database.
@@ -59,12 +60,15 @@ def log_person(  # NOSONAR
         notes:           Running notes about the relationship or interactions.
         sent_message:    The actual text of a message the candidate sent to this person.
                          When provided, automatically ingests it as a tone sample.
+        sent_subject:    Subject of that sent message, preserved in the sample context.
 
     Returns:
         Confirmation string with the person's name and assigned ID.
     """
     if outreach_status not in _VALID_STATUSES:
         return f"✗ Invalid outreach_status '{outreach_status}'. Must be one of: {', '.join(_VALID_STATUSES)}"
+    if sent_subject and not sent_message.strip():
+        return "A sent_subject requires sent_message so it can be attached to the correct message."
     tags = tags or []
     data = _load_json(config.PEOPLE_FILE, {"people": []})
     people = data.setdefault("people", [])
@@ -89,11 +93,12 @@ def log_person(  # NOSONAR
 
         tone_note = ""
         if sent_message.strip():
-            source = f"outreach_{name.lower().replace(' ', '_')}"
+            source = f"outreach_{existing['name'].lower().replace(' ', '_')}"
             _log_tone_sample(
-                text=sent_message.strip(),
+                text=sent_message,
                 source=source,
-                context=f"Message sent to {name} ({relationship} at {company}).",
+                context=f"Message sent to {existing['name']} ({existing['relationship']} at {existing['company']})."
+                        + (f"\nSubject: {sent_subject}" if sent_subject else ""),
             )
             tone_note = " Tone sample auto-logged."
 
@@ -116,11 +121,12 @@ def log_person(  # NOSONAR
 
     tone_note = ""
     if sent_message.strip():
-        source = f"outreach_{name.lower().replace(' ', '_')}"
+        source = f"outreach_{entry['name'].lower().replace(' ', '_')}"
         _log_tone_sample(
-            text=sent_message.strip(),
+            text=sent_message,
             source=source,
-            context=f"Message sent to {name} ({relationship} at {company}).",
+            context=f"Message sent to {name} ({relationship} at {company})."
+                    + (f"\nSubject: {sent_subject}" if sent_subject else ""),
         )
         tone_note = " Tone sample auto-logged."
 
@@ -161,7 +167,7 @@ def _format_person_slim(p: dict) -> str:
     return "\n".join(lines)
 
 
-def get_person(name: str) -> str:
+def get_person(name: str, include_context: bool = False) -> str:
     """
     Look up a single person by name (case-insensitive partial match).
 
@@ -172,6 +178,11 @@ def get_person(name: str) -> str:
 
     Args:
         name: Full or partial name to search for.
+        include_context: Include associated stories and the latest five outreach
+                         samples, with IDs and continuation instructions. Long
+                         samples are labeled previews with an exact-fetch path.
+                         Associations use exact stored names/source labels; no
+                         inferred first-name links or external mailbox verification.
 
     Returns:
         Full person record, disambiguation list, or not-found message.
@@ -188,7 +199,22 @@ def get_person(name: str) -> str:
         names = ", ".join(f"#{p['id']} {p['name']}" for p in matches)
         return f"Multiple matches for '{name}': {names}. Use a more specific name."
 
-    return _format_person_full(matches[0])
+    person = matches[0]
+    result = _format_person_full(person)
+    if include_context:
+        from lib.helpers import _format_story_list
+        from tools.tone import get_tone_profile
+
+        stories = _load_json(config.PERSONAL_CONTEXT_FILE, {"stories": []}).get("stories", [])
+        linked = [s for s in stories if person['name'].casefold() in
+                  [str(name).casefold() for name in s.get("people", [])]]
+        result += "\n\nStories with this exact stored contact name:\n"
+        result += _format_story_list(linked) if linked else "No exact-name story links found."
+        source = f"outreach_{person['name'].lower().replace(' ', '_')}"
+        result += f"\n\nLogged outreach (tone samples; source={source}):\n"
+        result += get_tone_profile(source=source)
+        result += "\nThese are workspace records, not independent confirmation from an email provider."
+    return result
 
 
 def get_people(

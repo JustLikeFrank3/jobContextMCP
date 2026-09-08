@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 
@@ -116,7 +117,19 @@ def _read_json(path: Path, default):
 
 def _write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    with path.open("w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2, ensure_ascii=False)
+
+
+def _entry_jd_path(entry_id: str) -> Path:
+    """A golden entry always names one file inside this tenant's JD folder."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", entry_id):
+        raise ValueError("entry_id must contain only letters, numbers, hyphens or underscores")
+    root = _jd_dir().resolve()
+    path = (root / f"{entry_id}-jd.txt").resolve()
+    if path.parent != root:
+        raise ValueError("entry_id must resolve inside the golden folder")
+    return path
 
 
 # ── golden set ───────────────────────────────────────────────────────────────
@@ -177,8 +190,8 @@ def upsert_golden_entry(
         raise ValueError("output_kind must be 'resume' or 'cover_letter'")
     entries = list_tenant_entries()
     entry_id = entry_id.strip() or _next_entry_id(entries)
-    jd_file = f"{entry_id}-jd.txt"
-    jd_path = _jd_dir() / jd_file
+    jd_path = _entry_jd_path(entry_id)
+    jd_file = jd_path.name
     jd_path.parent.mkdir(parents=True, exist_ok=True)
     jd_path.write_text(jd_text, encoding="utf-8")
     row = {
@@ -197,13 +210,14 @@ def upsert_golden_entry(
 
 
 def delete_golden_entry(entry_id: str) -> bool:
+    jd_path = _entry_jd_path(entry_id)
     entries = list_tenant_entries()
     kept = [e for e in entries if str(e.get("id")) != entry_id]
     if len(kept) == len(entries):
         return False
     _write_json(_manifest_path(), {"entries": kept})
     try:
-        (_jd_dir() / f"{entry_id}-jd.txt").unlink(missing_ok=True)
+        jd_path.unlink(missing_ok=True)
     except OSError:
         pass
     return True

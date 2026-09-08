@@ -120,10 +120,9 @@ async def evals_golden_upsert(body: GoldenBody) -> JSONResponse:
         # Every rejected golden-set write leaves a server-side trace — the
         # 2026-08-24 report's first finding was that a dropped write had no
         # record anywhere.
-        _LOG.warning("golden-set write rejected (company=%r, role=%r, jd_len=%d): %s",
-                     body.company[:40], body.role[:40], len(body.jd_text), e)
+        _LOG.warning("golden-set write rejected (jd_len=%d)", len(body.jd_text))
         return JSONResponse({"error": str(e)}, status_code=422)
-    _LOG.info("golden-set entry saved: %s (%s)", row["id"], row["company"])
+    _LOG.info("golden-set entry saved")
     return JSONResponse({"entry": row})
 
 
@@ -135,7 +134,11 @@ class GoldenDeleteBody(BaseModel):
 async def evals_golden_delete(body: GoldenDeleteBody) -> JSONResponse:
     from evals.tenant import delete_golden_entry  # noqa: PLC0415
 
-    return JSONResponse({"deleted": delete_golden_entry(body.entry_id)})
+    try:
+        deleted = delete_golden_entry(body.entry_id)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    return JSONResponse({"deleted": deleted})
 
 
 class TriageBody(BaseModel):
@@ -152,7 +155,7 @@ async def evals_triage(body: TriageBody) -> JSONResponse:
     try:
         record = save_ruling(body.gd_id, body.claim, body.ruling, body.note)
     except ValueError as e:
-        _LOG.warning("triage ruling rejected (gd_id=%s, ruling=%r): %s", body.gd_id, body.ruling, e)
+        _LOG.warning("triage ruling rejected")
         return JSONResponse({"error": str(e)}, status_code=422)
     return JSONResponse({"stored": record})
 
@@ -441,9 +444,9 @@ _EXTRA_CSS = """
 """
 
 
-def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]]":
-    """(cards_html, entries_html, claims) — claims feed the triage section."""
-    from evals.tenant import claim_key, judge_calibration_label  # noqa: PLC0415
+def _results_section(payload: dict) -> tuple[str, str]:
+    """Return rendered HTML only; raw claims are collected separately."""
+    from evals.tenant import judge_calibration_label  # noqa: PLC0415
 
     suite = payload.get("suite") or {}
     rows = suite.get("rows") or []
@@ -451,7 +454,7 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
     if not rows:
         empty = ('<div class="empty">No eval run stored yet. Add golden entries below, '
                  'then hit <b>Run evals</b> — results land here when the run finishes.</div>')
-        return "", empty, []
+        return "", empty
 
     total_flags = sum(int((agg or {}).get("hallucination_flags") or 0) for agg in detail.values())
     means = [float(r.get("mean") or 0) for r in rows if "mean" in r]
@@ -489,6 +492,17 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
             f"<td class='num'>{len(row.get('alerts') or [])}</td></tr>"
         )
     body.append("</table>")
+    return cards, "".join(body)
+
+
+def _result_claims(payload: dict, triage: dict) -> list[dict]:
+    """Collect unescaped claim data for the triage renderer."""
+    from evals.tenant import claim_key  # noqa: PLC0415
+
+    suite = payload.get("suite") or {}
+    if not suite.get("rows"):
+        return []
+    detail = suite.get("detail") or {}
 
     claims: list[dict] = []
     for gd_id, agg in detail.items():
@@ -506,7 +520,7 @@ def _results_section(payload: dict, triage: dict) -> "tuple[str, str, list[dict]
         rec = triage.get(c["key"]) or {}
         c["ruling"] = rec.get("ruling", "")
         c["note"] = rec.get("note", "")
-    return cards, "".join(body), claims
+    return claims
 
 
 def _triage_section(claims: list[dict], has_run: bool) -> str:
@@ -546,7 +560,7 @@ def _triage_section(claims: list[dict], has_run: bool) -> str:
         )
     claims_json = json.dumps(
         [{"key": c["key"], "gd_id": c["gd_id"], "claim": c["claim"]} for c in claims]
-    ).replace("</", "<\\/")
+    )
     return (
         f"<div class='legend-grid'>{legend}</div>"
         f"<div class='hint' style='margin-bottom:10px'>{ruled}/{len(claims)} ruled. "
@@ -554,7 +568,7 @@ def _triage_section(claims: list[dict], has_run: bool) -> str:
         "Every <b>D</b> is a to-do — document the fact in your master resume, and the flag "
         "converts to a citable strength on the next run.</div>"
         + "".join(cards)
-        + f"<script>window.__claims = {claims_json};</script>"
+        + f"<div id='claim-data' data-claims='{_e(claims_json)}' hidden></div>"
     )
 
 
@@ -610,7 +624,7 @@ def _judge_section(prefs: dict) -> str:
                       "sent back, but it sits in cleartext at rest; clear the provider to "
                       "remove it if that is not acceptable.</div>")
     cal_json = json.dumps({"map": JUDGE_CALIBRATION, "default": JUDGE_UNCALIBRATED,
-                           "install_default": default_cal}).replace("</", "<\\/")
+                           "install_default": default_cal})
     opts = "".join(
         f"<option value='{v}'{' selected' if provider == v else ''}>{label}</option>"
         for v, label in (("", "Default judge for this install"), ("openai", "OpenAI (your key)"),
@@ -630,7 +644,7 @@ def _judge_section(prefs: dict) -> str:
     {clear_warn}
     <button class="btn-primary" id="j-save">Save judge</button>
     <span class="status-line" id="j-status"></span>
-    <script>window.__cal = {cal_json};</script>"""
+    <div id="judge-data" data-calibration="{_e(cal_json)}" hidden></div>"""
 
 
 _PAGE_JS = """
@@ -642,9 +656,10 @@ async function post(url, body) {
 }
 
 // triage
+const claims = JSON.parse(document.getElementById('claim-data')?.dataset.claims || '[]');
 document.querySelectorAll('.claim-card').forEach(card => {
   const key = card.dataset.key;
-  const meta = (window.__claims || []).find(c => c.key === key);
+  const meta = claims.find(c => c.key === key);
   if (!meta) return;
   const note = card.querySelector('.rule-note');
   const send = (ruling) => post('/dashboard/evals/triage',
@@ -686,12 +701,13 @@ document.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('cli
 }));
 
 // judge
+const calibration = JSON.parse(document.getElementById('judge-data').dataset.calibration);
 const jModel = document.getElementById('j-model');
 const jProv = document.getElementById('j-provider');
 function refreshCal() {
   const el = document.getElementById('j-cal');
-  if (!jProv.value) { el.textContent = window.__cal.install_default; return; }
-  el.textContent = (window.__cal.map[jModel.value.trim()] || window.__cal.default);
+  if (!jProv.value) { el.textContent = calibration.install_default; return; }
+  el.textContent = (calibration.map[jModel.value.trim()] || calibration.default);
 }
 if (jModel) { jModel.addEventListener('input', refreshCal); jProv.addEventListener('change', refreshCal); }
 const jSave = document.getElementById('j-save');
@@ -748,13 +764,13 @@ async def evals_page() -> HTMLResponse:
 
     payload = _payload()
     triage = load_triage()
-    cards, entries_html, claims = _results_section(payload, triage)
+    cards, entries_html = _results_section(payload)
+    claims = _result_claims(payload, triage)
     tenant_entries = list_tenant_entries()
     history = results_history()
     visuals = ""
     if history:
         visuals = _svg_trend(history) + _svg_dimensions(history[-1].get("dimensions") or {})
-    stamp = json.dumps(str(payload.get("updated_at") or ""))
     # A launched run always renders a state here — in flight, failed, or its
     # stored results above. Before this, the ONLY record of an in-flight or
     # failed run was ephemeral post-click JS state: a reload forgot a running
@@ -816,7 +832,7 @@ async def evals_page() -> HTMLResponse:
       <div class="section-title">Judge</div>
       {_judge_section(load_judge_prefs())}
     </div>
-    <script>window.__stamp = {stamp}; window.__run_inflight = {json.dumps(run_inflight)};</script>
+    <script>window.__run_inflight = {json.dumps(run_inflight)};</script>
     {_PAGE_JS}
     """
     return HTMLResponse(html_page(

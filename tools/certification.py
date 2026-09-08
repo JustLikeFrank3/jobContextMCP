@@ -465,7 +465,7 @@ def select_entries(activities: list[dict], target: int) -> tuple[list[dict], lis
 
 _STALE_DAYS = 90
 _AGENCY_RE = re.compile(
-    r"^unknown\s*\((?P<agency>.+?)\s+client\)|\(via\s+(?P<via>[^)]+)\)", re.I
+    r"(?:^unknown\s*\((?P<agency>.+?)\s+client\))|(?:\(via\s+(?P<via>[^)]+)\))", re.I
 )
 # Street address: "123 Any St[reet …], City, ST 12345" — deliberately strict;
 # a wrong address on a certification is worse than a flagged gap.

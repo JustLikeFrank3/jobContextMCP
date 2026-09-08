@@ -1,0 +1,61 @@
+# Sonar gate remediation in PR #367
+
+The manually dispatched scan evaluates the project against its existing
+previous-version baseline (June 20), so it includes findings from before this
+PR. Coverage and duplication passed; security and reliability blocked the gate.
+
+Changes address the findings without changing the quality gate or adding rule
+exclusions:
+
+| Finding | Resolution |
+| --- | --- |
+| Alexa certificate request, S5144 | Normalize and validate the certificate path, reconstruct a fixed Amazon HTTPS origin, reject credentials/parameters/encoded paths, and explicitly disable redirects. Chain trust and SAN verification remain required. |
+| Alexa SHA-1 fallback, S4790 | Require `Signature-256`, following [Amazon's current verification guidance](https://developer.amazon.com/en-US/docs/alexa/custom-skills/host-a-custom-skill-as-a-web-service.html). Legacy-only requests receive 400. |
+| Materials copy, S2083 | Separate file opening from copying content; exclusively create the destination to reject overwrite races and dangling symlinks. Existing source containment and master-resume guards remain enforced. |
+| Eval JSON write, S2083 | Open the server-selected path separately from serializing user content. Also validate golden-entry IDs and resolved JD paths before create/delete, closing an actual traversal path found during review. |
+| Eval logs, S5145 | Log fixed event names and numeric lengths; do not interpolate user-supplied strings. Validation errors still return to the caller as JSON. |
+| Eval page, S5131 | Remove the unused `updated_at` value from inline JavaScript. Move claim metadata into an escaped HTML data attribute, decoded with `JSON.parse` at runtime. User data is no longer interpolated into executable scripts. |
+| Metrics, S1764 / S2583 | Use `math.isnan` instead of comparing a value with itself; preserve Prometheus `NaN` and infinity output. |
+| Hash tests, S5863 | Assert known digest values, protecting persisted identifiers against accidental algorithm changes. |
+| Certification regex, S5850 | Group each alternative explicitly, preserving the start anchor for “Unknown (agency client)” and unanchored “(via agency)” matching. |
+
+Regression tests exercise traversal IDs, escaping symlinks, stored script
+injection, log injection, certificate canonicalization and rejected URL forms,
+legacy-only signatures, and exclusive material-copy races. Existing tests
+exercise trusted signatures, tenant routing, eval persistence, and certification
+matching. The scan workflow now waits for the quality gate so an upload alone
+cannot leave the workflow green while the separate Sonar check is red.
+The scanner action is updated from unsupported v5 to v8.2.1, and material
+copying runs through AnyIO's context-preserving thread helper so synchronous
+file I/O does not block the async route.
+
+The results renderer returns HTML separately from raw claim metadata. Both
+claims and judge calibration data use escaped HTML attributes, and the only
+remaining dynamic inline-script value is a server-computed boolean.
+
+## Remaining issue review
+
+Issue `AaA0Zu4I9-6hPvk4hzNw` (S5131, the eval page's `HTMLResponse`) remains
+open after the code fixes. Its reported flow contains only the JSON file read
+and final response; it identifies no intervening unescaped value. Review of
+the current renderer found:
+
+- Result and triage text passes through `_e` (`html.escape` with quote escaping).
+- Claim and judge metadata is encoded into escaped HTML attributes and parsed
+  from the DOM, rather than interpolated into executable JavaScript.
+- Scores, counts, and chart coordinates are numeric conversions or numeric
+  formatting; conditional classes come from fixed strings.
+- Page title, CSS, and JavaScript are static; the dynamic script value is a boolean.
+
+`test_all_stored_result_text_stays_inert_in_html` injects closing script tags,
+new elements, quotes, and ampersands into the timestamp, judge name, master hash,
+entry ID, role, displayed result columns, errors, claims, critic verdicts, and
+triage notes. The parsed HTML contains no injected element or attribute.
+Separate tests verify exact round trips of hostile claim/judge metadata and
+the timestamp case. All 69 tenant-eval tests pass locally.
+
+Disposition: **False Positive for this issue only**, applied September 5 after
+Frank explicitly authorized it. Sonar confirms `RESOLVED / FALSE-POSITIVE`.
+The issue activity records the rendering audit and regression-test evidence.
+The quality gate and rule configuration remain unchanged; no source
+suppression has been added.

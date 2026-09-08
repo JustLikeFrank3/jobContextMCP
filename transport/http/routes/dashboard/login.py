@@ -46,9 +46,12 @@ _DASHBOARD_ROOT = "/dashboard"
 _LOGIN_PATH = "/dashboard/login"
 
 # Internal destinations a post-login redirect may land on. The React SPA lives
-# under /app, the legacy server-rendered dashboard under /dashboard. Anything
-# else (external URLs, protocol-relative //host) falls back to the SPA.
-_ALLOWED_NEXT_PREFIXES = (_DASHBOARD_ROOT, "/app")
+# under /app, the legacy server-rendered dashboard under /dashboard, and
+# /oauth/authorize is the ChatGPT key-bridge consent page, which sends
+# unauthenticated browsers through here and needs to get back with its
+# query string intact. Anything else (external URLs, protocol-relative
+# //host) falls back to the SPA.
+_ALLOWED_NEXT_PREFIXES = (_DASHBOARD_ROOT, "/app", "/oauth/authorize")
 
 # Default post-login destination: the React SPA. Auth flows that arrive without
 # an explicit (and safe) next target land here, not on the legacy /dashboard

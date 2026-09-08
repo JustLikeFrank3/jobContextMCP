@@ -118,6 +118,14 @@ def test_work_execution_is_instrumented(tmp_path, monkeypatch):
 
 # ── HTTP surface ───────────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("value, expected", [(float("nan"), "NaN"),
+                                           (float("inf"), "+Inf"),
+                                           (float("-inf"), "-Inf")])
+def test_nonfinite_prometheus_samples(value, expected):
+    metrics.set_gauge("nonfinite_sample", value)
+    assert f"nonfinite_sample {expected}" in metrics.render_prometheus()
+
+
 @pytest.fixture()
 def app_client(monkeypatch, tmp_path):
     import lib.config as cfg_mod
