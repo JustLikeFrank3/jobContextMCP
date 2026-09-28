@@ -5,10 +5,17 @@ is minted with scope="badge" in the dashboard, so even though it sits in
 plain text in secrets.py on a filesystem anyone can mount, it can do exactly
 three things: search, queue a generation, poll that generation.
 
+Configuration lives in the badge's root secrets.py alongside the WiFi
+credentials the firmware already reads (the deploy tooling never copies an
+app-local secrets file, by design):
+
+    JOBCONTEXT_URL = "https://jobcontext.ai"
+    JOBCONTEXT_TOKEN = "jcmcp_..."
+
 Blocking note: MicroPython's requests is synchronous, so each call freezes the
-frame loop for its duration.  The app draws a "working" frame *before*
-calling, and polls on an interval rather than every frame, so the freeze is
-visible as a deliberate pause instead of a hang.
+frame loop for its duration.  The app draws a status frame first and makes
+the call on the following frame, and polls on an interval rather than every
+frame, so the freeze reads as a deliberate pause instead of a hang.
 """
 
 import json
@@ -18,13 +25,7 @@ try:
 except ImportError:  # older MicroPython builds
     import urequests as requests
 
-import network
-import time
-
-try:
-    from . import secrets
-except ImportError:
-    import secrets
+import secrets
 
 _TIMEOUT = 15
 
@@ -33,33 +34,43 @@ class ApiError(Exception):
     """Any non-2xx or transport failure, with a message short enough to draw."""
 
 
-def connect_wifi(status=None):
-    """Bring up WiFi, returning True once connected.
+def base_url():
+    return getattr(secrets, "JOBCONTEXT_URL", "") or getattr(secrets, "BASE_URL", "")
 
-    *status* is an optional callable used to report progress on screen — the
-    badge otherwise looks frozen for the ten seconds a DHCP lease can take.
+
+def token():
+    return getattr(secrets, "JOBCONTEXT_TOKEN", "") or getattr(secrets, "BADGE_TOKEN", "")
+
+
+def configured():
+    """Name the first missing setting, or return "" when all are present."""
+    if not getattr(secrets, "WIFI_SSID", ""):
+        return "WIFI_SSID"
+    if not base_url():
+        return "JOBCONTEXT_URL"
+    if not token():
+        return "JOBCONTEXT_TOKEN"
+    return ""
+
+
+def wifi_ready():
+    """Non-blocking: True once connected. Call it every frame until then.
+
+    The firmware's wifi module reads WIFI_SSID/WIFI_PASSWORD from the root
+    secrets.py and keeps connecting in the background between calls.
     """
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    if wlan.isconnected():
-        return True
-    wlan.connect(secrets.WIFI_SSID, secrets.WIFI_PASSWORD)
-    for attempt in range(40):  # ~20s
-        if wlan.isconnected():
-            return True
-        if status:
-            status("connecting to wifi" + "." * (attempt % 4))
-        time.sleep(0.5)
-    return False
+    import wifi
+
+    return bool(wifi.connect())
 
 
 def _url(path):
-    return secrets.BASE_URL.rstrip("/") + path
+    return base_url().rstrip("/") + path
 
 
 def _headers():
     return {
-        "Authorization": "Bearer " + secrets.BADGE_TOKEN,
+        "Authorization": "Bearer " + token(),
         "Content-Type": "application/json",
     }
 
@@ -84,7 +95,7 @@ def _request(method, path, body=None):
             if response.status_code == 403:
                 raise ApiError("token is not badge-scoped")
             if response.status_code == 401:
-                raise ApiError("token rejected — regenerate it")
+                raise ApiError("token rejected - regenerate it")
             raise ApiError("server said " + str(response.status_code))
         return response.json()
     finally:

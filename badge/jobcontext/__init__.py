@@ -1,21 +1,34 @@
-"""jobcontext — GitHub Universe badge app.
+"""jobcontext — GitHub Universe 2026 badge app.
 
 Type a company, see what your pipeline says about it, and queue a tailored
 resume or cover letter without taking your phone out at a conference.
 
-    SEARCH  →  RESULTS  →  ACTIONS  →  WORKING  →  DONE
-      ▲          │           │                       │
-      └──────────┴───────────┴───────────────────────┘  (C backs out)
+    CONNECTING → SEARCH → RESULTS → ACTIONS → WORKING → DONE
+                   ▲         │          │                  │
+                   └─────────┴──────────┴──────────────────┘  (BACK backs out)
 
-The badgeware app contract: init() once, update() every frame, on_exit() on
-the way out. update() must not block for long, which is why the only slow
-things here (search, enqueue, poll) draw a frame *before* they call out and
-poll on an interval rather than every pass.
+The 2026 app contract: module code runs once, then `run(update)` calls
+update() every frame and presents what it drew when it returns. update()
+must not block for long, which shapes two things here:
+
+  * WiFi is polled — wifi.connect() is non-blocking and called every frame
+    until it reports connected, with a status screen the whole time.
+  * The slow calls (search, enqueue, poll) are *deferred*: the frame that
+    asks for one draws "searching..." and returns, so that frame is actually
+    shown, and the call runs at the start of the next frame. Drawing a status
+    and then blocking in the same update() would never display the status.
 """
 
-import time
+import sys
 
-try:  # loaded as a package (/apps/jobcontext) or flat — support both
+try:
+    _APP_DIR = __file__.rsplit("/", 1)[0]
+except (NameError, AttributeError):
+    _APP_DIR = "/system/apps/jobcontext"
+if _APP_DIR and _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
+try:  # loaded as a package or flat — support both
     from . import api, inputs, ui
 except ImportError:
     import api
@@ -23,6 +36,7 @@ except ImportError:
     import ui
 
 # States
+CONNECTING = "connecting"
 SEARCH = "search"
 RESULTS = "results"
 ACTIONS = "actions"
@@ -32,9 +46,15 @@ ERROR = "error"
 
 MATERIALS = (("resume", "Resume"), ("cover_letter", "Cover letter"), ("both", "Both"))
 _POLL_MS = 2000
+_WIFI_TIMEOUT_MS = 30000
+_FLASH_MS = 1500
 _MAX_QUERY = 40
+# Results rows: a size-2 company line (26px) over a size-1 role line (13px).
+_ROW_H = 42
+_LIST_TOP = 48
+_VISIBLE_ROWS = 4
 
-state = SEARCH
+state = CONNECTING
 query = ""
 results = []
 selected = 0
@@ -42,25 +62,25 @@ action_index = 0
 work_id = 0
 message = ""
 source = None
-_online = False
+_connect_started = 0
 _last_poll = 0
-_prev_buttons = {}
+_flash_text = ""
+_flash_until = 0
+_task = None
+_task_label = ""
+_task_shown = False
 
 
 def init():
-    global source, _online
+    global source, _connect_started
     ui.init()
     source = inputs.best_available()
-    _draw_splash("connecting…")
-    try:
-        _online = api.connect_wifi(status=lambda text: _draw_splash(text))
-        if _online:
-            api.ping()
-    except api.ApiError as exc:
-        _go(ERROR, str(exc))
+    missing = api.configured()
+    if missing:
+        _go(ERROR, "add " + missing + " to secrets.py")
         return
-    if not _online:
-        _go(ERROR, "wifi failed — check secrets.py")
+    _connect_started = ui.ticks()
+    _go(CONNECTING)
 
 
 def on_exit():
@@ -70,50 +90,87 @@ def on_exit():
 # ── frame ──────────────────────────────────────────────────────────────────────
 
 def update():
-    if state == SEARCH:
-        _update_search()
-    elif state == RESULTS:
-        _update_results()
-    elif state == ACTIONS:
-        _update_actions()
-    elif state == WORKING:
-        _update_working()
-    else:
-        _update_terminal()
-    ui.flip()
+    """One frame: handle input for the current screen, then draw whatever
+    screen that left us on — each exactly once.
 
+    Separating the two is what keeps a press from leaking across screens:
+    the SELECT that moves RESULTS to ACTIONS is consumed by RESULTS' input
+    handler, and ACTIONS only *draws* this frame, so it cannot also read that
+    SELECT as "generate".
+    """
+    global _task
 
-def _edge(name):
-    """One-shot button read for the screens that don't use the input source."""
-    down = ui.pressed(name)
-    fired = down and not _prev_buttons.get(name, False)
-    _prev_buttons[name] = down
-    return fired
+    if _task is not None and _task_shown:
+        # The status for this call was presented last frame and stays on
+        # screen while it blocks. Input is skipped: anything pressed during
+        # the wait belongs to no screen.
+        fn, _task = _task, None
+        fn()
+    elif _task is None:
+        _INPUT[state]()
+
+    if _task is not None:
+        _show_task()
+        return
+
+    _DRAW[state]()
+    if _flash_text and ui.ticks() < _flash_until:
+        ui.box(16, 96, ui.WIDTH - 32, 40, ui.PANEL, 6)
+        ui.centred(_flash_text, 109, ui.WARN, 1, x=16, span=ui.WIDTH - 32)
 
 
 def _go(new_state, note=""):
-    """Change screen, re-arming every button first.
-
-    The search screen reads buttons through the input source and the other
-    screens read them through _edge(); those are two independent edge
-    detectors. Without re-arming, the C press that submits a search is still
-    physically down when RESULTS first reads it, so RESULTS sees a fresh press
-    and bounces straight back to SEARCH. Same for A moving into ACTIONS and
-    immediately confirming a generation nobody chose.
-    """
     global state, message
     state = new_state
     if note:
         message = note
-    for name in ("UP", "DOWN", "A", "B", "C"):
-        _prev_buttons[name] = ui.pressed(name)
-    if source is not None:
-        source.rearm()
+
+
+def _defer(label, fn):
+    """Show *label* this frame; run *fn* at the start of the next one."""
+    global _task, _task_label, _task_shown
+    _task, _task_label, _task_shown = fn, label, False
+
+
+def _show_task():
+    global _task_shown
+    _task_shown = True
+    _draw_status(_task_label)
+
+
+def _flash(text):
+    """A non-blocking toast over whatever the current screen draws."""
+    global _flash_text, _flash_until
+    _flash_text = text
+    _flash_until = ui.ticks() + _FLASH_MS
+
+
+# ── connecting ─────────────────────────────────────────────────────────────────
+
+def _input_connecting():
+    if api.wifi_ready():
+        _defer("checking jobcontext...", _check_server)
+    elif ui.ticks() - _connect_started > _WIFI_TIMEOUT_MS:
+        _go(ERROR, "wifi failed - check secrets.py")
+
+
+def _draw_connecting():
+    dots = "." * (1 + (ui.ticks() // 400) % 3)
+    _draw_status("connecting to wifi" + dots)
+
+
+def _check_server():
+    try:
+        api.ping()
+    except api.ApiError as exc:
+        _go(ERROR, str(exc))
+        return
+    _go(SEARCH)
 
 
 # ── search ─────────────────────────────────────────────────────────────────────
 
-def _update_search():
+def _input_search():
     global query
 
     for event in source.poll():
@@ -123,19 +180,20 @@ def _update_search():
         elif kind == "back":
             query = query[:-1]
         elif kind == "submit" and query.strip():
-            _run_search()
+            _defer("searching " + query.strip() + "...", _run_search)
             return
 
+
+def _draw_search():
     ui.clear()
-    ui.header("jobcontext", "who are you talking to?")
+    ui.header("jobcontext", "")
     source.draw(query)
-    ui.footer("UP/DOWN pick  A type  B delete  C search")
+    ui.footer("dpad move  SELECT type  BACK del  MENU go")
 
 
 def _run_search():
     global results, selected
 
-    _draw_status("searching " + ui.fit(query.strip(), 20) + "…")
     try:
         body = api.search(query.strip())
     except api.ApiError as exc:
@@ -144,163 +202,203 @@ def _run_search():
     results = body.get("results", [])
     selected = 0
     if not results:
-        _go(ERROR, "nothing found for " + ui.fit(query.strip(), 18))
+        _go(ERROR, "nothing found for " + query.strip())
         return
     _go(RESULTS)
 
 
 # ── results ────────────────────────────────────────────────────────────────────
 
-def _update_results():
-    global selected, query
+def _input_results():
+    global selected, query, action_index
 
-    if _edge("UP"):
+    if ui.pressed("UP"):
         selected = (selected - 1) % len(results)
-    if _edge("DOWN"):
+    if ui.pressed("DOWN"):
         selected = (selected + 1) % len(results)
-    if _edge("A"):
+    if ui.pressed("SELECT"):
         # Directory-only hits carry job_id 0: known company, nothing queued to
         # generate against yet.
         if results[selected].get("job_id"):
+            action_index = 0
             _go(ACTIONS)
-        else:
-            _flash("not queued yet — capture it first")
-    if _edge("C"):
+            return
+        _flash("not queued yet - capture it first")
+    if ui.pressed("BACK"):
         query = ""
         _go(SEARCH)
-        return
 
+
+def _draw_results():
     ui.clear()
-    ui.header("results", str(len(results)) + " for " + ui.fit(query.strip(), 18))
-    y = 52
-    for i, hit in enumerate(results):
+    ui.header("results", str(len(results)) + " for " + query.strip())
+    # Scroll so the selection is always on screen.
+    first = max(0, min(selected - _VISIBLE_ROWS + 1, len(results) - _VISIBLE_ROWS))
+    y = _LIST_TOP
+    for i in range(first, min(len(results), first + _VISIBLE_ROWS)):
+        hit = results[i]
         chosen = i == selected
         if chosen:
-            ui.rect(0, y - 3, ui.WIDTH, 34, (26, 40, 60))
-        ui.text(ui.fit(hit.get("company", ""), 28), 8, y, ui.ACCENT if chosen else ui.WHITE, 2)
-        line = ui.fit(hit.get("role", ""), 30)
+            ui.box(4, y - 1, ui.WIDTH - 8, _ROW_H - 2, ui.HIGHLIGHT, 4)
+        ui.text(hit.get("company", ""), 12, y, ui.ACCENT if chosen else ui.WHITE, 2, width=ui.WIDTH - 24)
         score = hit.get("score") or ""
-        ui.text(line, 8, y + 16, ui.DIM, 1)
+        role_y = y + ui.line_height(2)
+        ui.text(hit.get("role", ""), 12, role_y, ui.DIM, 1, width=ui.WIDTH - 72)
         if score:
-            ui.text(score, ui.WIDTH - 40, y + 16, ui.OK, 1)
-        y += 34
-        if y > ui.HEIGHT - 40:
-            break
-    ui.footer("UP/DOWN select  A make something  C new search")
+            ui.text(score, ui.WIDTH - 52, role_y, ui.OK, 1, width=44)
+        y += _ROW_H
+    if len(results) > _VISIBLE_ROWS:
+        ui.text(str(selected + 1) + "/" + str(len(results)), ui.WIDTH - 48, ui.HEADER_H + 2, ui.DIM, 1)
+    ui.footer("UP/DOWN pick  SELECT make  BACK new search")
 
 
 # ── actions ────────────────────────────────────────────────────────────────────
 
-def _update_actions():
-    global action_index, work_id
+def _input_actions():
+    global action_index
 
-    if _edge("UP"):
+    if ui.pressed("UP"):
         action_index = (action_index - 1) % len(MATERIALS)
-    if _edge("DOWN"):
+    if ui.pressed("DOWN"):
         action_index = (action_index + 1) % len(MATERIALS)
-    if _edge("C"):
+    if ui.pressed("BACK"):
         _go(RESULTS)
         return
-    if _edge("A"):
-        hit = results[selected]
-        _draw_status("queueing " + MATERIALS[action_index][1].lower() + "…")
-        try:
-            body = api.request_materials(hit["job_id"], MATERIALS[action_index][0])
-        except api.ApiError as exc:
-            _go(ERROR, str(exc))
-            return
-        work_id = body.get("work_id", 0)
-        _go(WORKING)
-        return
+    if ui.pressed("SELECT"):
+        _defer("queueing " + MATERIALS[action_index][1].lower() + "...", _request_materials)
+
+
+def _request_materials():
+    global work_id, _last_poll
 
     hit = results[selected]
+    try:
+        body = api.request_materials(hit["job_id"], MATERIALS[action_index][0])
+    except api.ApiError as exc:
+        _go(ERROR, str(exc))
+        return
+    work_id = body.get("work_id", 0)
+    _last_poll = ui.ticks()
+    _go(WORKING)
+
+
+def _draw_actions():
+    hit = results[selected]
     ui.clear()
-    ui.header(ui.fit(hit.get("company", ""), 24), ui.fit(hit.get("role", ""), 40))
-    y = 60
+    ui.header(hit.get("company", ""), hit.get("role", ""))
+    y = 56
     for i, (_key, label) in enumerate(MATERIALS):
         chosen = i == action_index
         if chosen:
-            ui.rect(0, y - 4, ui.WIDTH, 30, (26, 40, 60))
+            ui.box(4, y - 3, ui.WIDTH - 8, ui.line_height(2) + 6, ui.HIGHLIGHT, 4)
         ui.text(("> " if chosen else "  ") + label, 12, y, ui.ACCENT if chosen else ui.WHITE, 2)
-        y += 32
-    ui.footer("UP/DOWN choose  A generate  C back")
+        y += 38
+    ui.footer("UP/DOWN choose  SELECT generate  BACK back")
 
 
-# ── working / terminal ─────────────────────────────────────────────────────────
+# ── working ────────────────────────────────────────────────────────────────────
 
-def _update_working():
+def _input_working():
+    if ui.pressed("BACK"):
+        _go(RESULTS)
+        return
+    if ui.ticks() - _last_poll >= _POLL_MS:
+        # Polled inline rather than deferred: last frame's spinner stays on
+        # screen during the call, which is the status we want anyway.
+        _poll_work()
+
+
+def _poll_work():
     global _last_poll
 
-    now = time.ticks_ms()
-    if time.ticks_diff(now, _last_poll) >= _POLL_MS:
-        _last_poll = now
-        try:
-            body = api.poll(work_id)
-        except api.ApiError as exc:
-            _go(ERROR, str(exc))
-            return
-        status = body.get("status", "")
-        if status == "succeeded":
-            made = body.get("made") or []
-            _go(DONE, ", ".join(made) + " ready on your desktop" if made else "done")
-            return
-        if status == "failed":
-            _go(ERROR, body.get("detail") or "generation failed")
-            return
+    _last_poll = ui.ticks()
+    try:
+        body = api.poll(work_id)
+    except api.ApiError as exc:
+        _go(ERROR, str(exc))
+        return
+    status = body.get("status", "")
+    if status == "succeeded":
+        labels = dict(MATERIALS)
+        made = [labels.get(key, key).lower() for key in body.get("made") or []]
+        _go(DONE, " and ".join(made) + " ready on your desktop" if made else "done")
+    elif status == "failed":
+        _go(ERROR, body.get("detail") or "generation failed")
 
+
+def _draw_working():
     ui.clear()
     ui.header("working", "job #" + str(work_id))
     # A spinner, because a static screen during a 30s LLM call reads as a crash.
-    dots = "." * (1 + (time.ticks_ms() // 400) % 3)
-    ui.text("generating" + dots, 12, 100, ui.WHITE, 3)
-    ui.text("this runs on the server —", 12, 150, ui.DIM, 1)
-    ui.text("the badge can walk away", 12, 164, ui.DIM, 1)
-    ui.footer("C cancel waiting")
-
-    if _edge("C"):
-        _go(RESULTS)
+    dots = "." * (1 + (ui.ticks() // 400) % 3)
+    ui.text("generating" + dots, 12, 84, ui.WHITE, 2)
+    ui.text("this runs on the server -", 12, 136, ui.DIM, 1)
+    ui.text("the badge can walk away", 12, 152, ui.DIM, 1)
+    ui.footer("BACK stop waiting")
 
 
-def _update_terminal():
-    global query
+# ── done / error ───────────────────────────────────────────────────────────────
 
+def _input_terminal():
+    global query, _connect_started
+
+    if api.configured():
+        return  # nothing to retry until secrets.py is fixed
+    if ui.pressed("BACK"):
+        query = ""
+        _go(SEARCH)
+    elif ui.pressed("SELECT"):
+        if not api.wifi_ready():
+            _connect_started = ui.ticks()
+            _go(CONNECTING)
+        else:
+            _go(RESULTS if results else SEARCH)
+
+
+def _draw_terminal():
     ui.clear()
     if state == DONE:
         ui.header("done", "")
-        ui.text("✓", 12, 80, ui.OK, 4)
-        ui.text(ui.fit(message, 34), 12, 130, ui.WHITE, 1)
+        ui.box(12, 56, 48, 48, ui.OK, 24)
+        ui.centred("OK", 67, ui.BLACK, 2, x=12, span=48)
+        ui.text(message, 12, 120, ui.WHITE, 1, width=ui.WIDTH - 24, lines=4)
+        ui.footer("SELECT back to results  BACK new search")
     else:
         ui.header("problem", "")
-        ui.text(ui.fit(message, 36), 12, 90, ui.WARN, 1)
-        ui.text("A retry   C start over", 12, 140, ui.DIM, 1)
-
-    ui.footer("A retry  C new search")
-    if _edge("C"):
-        query = ""
-        _go(SEARCH)
-    elif _edge("A"):
-        _go(RESULTS if results else SEARCH)
+        # Server errors arrive pre-clipped to one line; local ones (a missing
+        # setting, a network failure) can wrap.
+        ui.text(message, 12, 60, ui.WARN, 1, width=ui.WIDTH - 24, lines=6)
+        ui.footer("SELECT retry  BACK new search")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-def _draw_splash(text):
-    ui.clear()
-    ui.header("jobcontext", "")
-    ui.text(ui.fit(text, 34), 12, 100, ui.DIM, 2)
-    ui.flip()
-
-
 def _draw_status(text):
-    """Draw before a blocking call so the pause looks intentional."""
     ui.clear()
     ui.header("jobcontext", "")
-    ui.text(ui.fit(text, 30), 12, 100, ui.WHITE, 2)
-    ui.flip()
+    ui.centred(text, (ui.HEIGHT - ui.line_height(2)) // 2, ui.WHITE, 2)
 
 
-def _flash(text):
-    global message
-    message = text
-    _draw_status(text)
-    time.sleep(1)
+_INPUT = {
+    CONNECTING: _input_connecting,
+    SEARCH: _input_search,
+    RESULTS: _input_results,
+    ACTIONS: _input_actions,
+    WORKING: _input_working,
+    DONE: _input_terminal,
+    ERROR: _input_terminal,
+}
+
+_DRAW = {
+    CONNECTING: _draw_connecting,
+    SEARCH: _draw_search,
+    RESULTS: _draw_results,
+    ACTIONS: _draw_actions,
+    WORKING: _draw_working,
+    DONE: _draw_terminal,
+    ERROR: _draw_terminal,
+}
+
+
+init()
+run(update)

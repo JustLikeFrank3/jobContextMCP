@@ -110,3 +110,5 @@ desktop/src-tauri/icons/
 
 # Badge credentials — WiFi password + API token in plain text on the device
 badge/jobcontext/secrets.py
+# Simulator renders — regenerate with badge/simulator/render.mjs
+badge/simulator/out/

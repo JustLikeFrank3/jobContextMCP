@@ -37,8 +37,8 @@ tracked.
 
 Two reasons, both about the device rather than tidiness.
 
-**Size.** The badge draws ~34 characters per line into 520KB of SRAM and
-parses responses with `json.loads`. `/api/work/{id}` returns inputs, timings,
+**Size.** The badge draws ~38 characters per line of small text and parses
+responses with `json.loads` on a microcontroller. `/api/work/{id}` returns inputs, timings,
 attempt counts and full tracebacks; `/api/badge/work/{id}` returns a status,
 a list of what got made, and at most one clipped line of error. The server
 truncates to display width so the firmware carries no layout logic.
@@ -97,8 +97,10 @@ an empty job description.
 
 ## Input, and the Bluetooth keyboard
 
-Text entry is a character carousel driven by UP/DOWN/A/B/C. The badge has no
-left/right buttons, so a grid keyboard has no way to move horizontally.
+Text entry is a grid keyboard on the Universe 2026 badge's capacitive d-pad:
+SELECT presses a key, BACK deletes, MENU searches. (The first version targeted
+the 2025 badge, which had only UP/DOWN/A/B/C, and used a one-dimensional
+character carousel for want of left/right.)
 
 The original ask was a paired Bluetooth keyboard. It is scaffolded but not
 implemented, because it requires the badge to be an HID-over-GATT *host* and
@@ -112,9 +114,13 @@ interface so this can land without touching the state machine.
 - `tests/test_badge_api.py` — scope containment (proved by contrast: each
   blocked path is shown to serve a full key first), search shape, enqueue and
   poll, and that the poll never returns a traceback.
-- `tests/test_badge_firmware.py` — the real state machine against fake
-  hardware. Covers text entry, the carousel, and the button re-arm on screen
-  changes (without it, the C press that submits a search is still held when
-  the results screen first reads it, and bounces straight back).
+- `tests/test_badge_firmware.py` — the real app modules (state machine, ui,
+  api, keyboard, inputs) against a fake Universe 2026 runtime: text entry and
+  hold-to-repeat, deferred network calls (the status frame is presented
+  before the call blocks), polling cadence, HTTP error mapping, and the
+  press-leak regression (the SELECT that opens the actions menu must not also
+  press "generate").
+- `badge/simulator/` — not a test suite but a renderer: every screen through
+  Pimoroni's Badgeware simulator, which is where the text layout was measured.
 - `tests/test_api_keys.py::TestKeyScopes` — scope storage and resolution,
   including pre-scope rows reading as `full`.

@@ -13,7 +13,7 @@ Events are tuples:
 
 Two sources live here:
 
-  ButtonInput  — the five hardware buttons driving an on-screen keyboard.
+  ButtonInput  — the capacitive pads driving an on-screen grid keyboard.
                  Always available, works on a plane, needs no pairing.
 
   BleKeyboardInput — a real Bluetooth keyboard.  NOT implemented, and the
@@ -31,56 +31,19 @@ Two sources live here:
                  compiled with it at all.
 """
 
-import time
-
 try:
     from . import ui
-    from .keyboard import OnScreenKeyboard
+    from .keyboard import DELETE, SEARCH, SPACE, OnScreenKeyboard
 except ImportError:
     import ui
-    from keyboard import OnScreenKeyboard
+    from keyboard import DELETE, SEARCH, SPACE, OnScreenKeyboard
 
-# Repeat behaviour for held UP/DOWN: first repeat after _REPEAT_DELAY, then
-# every _REPEAT_RATE, so scrolling to 'W' does not take twenty presses.
+# Held d-pad repeat: first repeat after _REPEAT_DELAY ms, then every
+# _REPEAT_RATE ms, so crossing the grid does not take ten separate taps.
 _REPEAT_DELAY = 400
-_REPEAT_RATE = 90
+_REPEAT_RATE = 110
 
-
-class _Edges:
-    """Debounced press/repeat detection over ui.pressed()."""
-
-    def __init__(self, names, repeat=()):
-        self._down = {n: False for n in names}
-        self._since = {n: 0 for n in names}
-        self._next = {n: 0 for n in names}
-        self._repeat = set(repeat)
-
-    def rearm(self):
-        """Treat every currently-held button as already seen.
-
-        Called on a screen change: without it, the press that *left* the last
-        screen is still down when this one starts reading, reads as a fresh
-        press, and actuates whatever the new screen has bound to it.
-        """
-        for name in self._down:
-            self._down[name] = ui.pressed(name)
-
-    def poll(self):
-        """Return the list of button names that 'fired' this frame."""
-        fired = []
-        now = time.ticks_ms()
-        for name in self._down:
-            is_down = ui.pressed(name)
-            if is_down and not self._down[name]:
-                fired.append(name)
-                self._since[name] = now
-                self._next[name] = time.ticks_add(now, _REPEAT_DELAY)
-            elif is_down and name in self._repeat:
-                if time.ticks_diff(now, self._next[name]) >= 0:
-                    fired.append(name)
-                    self._next[name] = time.ticks_add(now, _REPEAT_RATE)
-            self._down[name] = is_down
-        return fired
+_MOVES = {"UP": (-1, 0), "DOWN": (1, 0), "LEFT": (0, -1), "RIGHT": (0, 1)}
 
 
 class TextInput:
@@ -98,50 +61,63 @@ class TextInput:
     def draw(self, text_so_far):
         """Optionally render the source's own UI (the OSK needs this)."""
 
-    def rearm(self):
-        """Discard any in-flight press state after a screen change."""
-
 
 class ButtonInput(TextInput):
-    """Five buttons, one on-screen keyboard.
+    """The capacitive pads driving an on-screen grid keyboard.
 
-    Mapping (no left/right button exists, which is why entry is a carousel
-    rather than a grid):
-        UP / DOWN — move through the character strip, accelerating when held
-        A         — type the highlighted character
-        B         — backspace
-        C         — search now
+    Mapping:
+        d-pad   — move the cursor, repeating while held
+        SELECT  — press the highlighted key
+        BACK    — delete one character
+        MENU    — search now, from anywhere on the grid
+
+    Edge detection is the firmware's: ui.pressed() is true only on the frame
+    a pad goes down, so a press that ends one screen cannot also actuate the
+    next one.
     """
 
     name = "buttons"
 
     def __init__(self):
         self.kb = OnScreenKeyboard()
-        self._edges = _Edges(("UP", "DOWN", "A", "B", "C"), repeat=("UP", "DOWN"))
+        self._next_repeat = {}
 
     def available(self):
         return True
 
     def poll(self):
         events = []
-        for button in self._edges.poll():
-            if button == "UP":
-                self.kb.move(-1)
-            elif button == "DOWN":
-                self.kb.move(1)
-            elif button == "A":
-                events.append(("char", self.kb.current()))
-            elif button == "B":
+        now = ui.ticks()
+        for name, (d_row, d_col) in _MOVES.items():
+            if ui.pressed(name):
+                self.kb.move(d_row, d_col)
+                self._next_repeat[name] = now + _REPEAT_DELAY
+            elif ui.held(name):
+                due = self._next_repeat.get(name)
+                if due is not None and now >= due:
+                    self.kb.move(d_row, d_col)
+                    self._next_repeat[name] = now + _REPEAT_RATE
+            else:
+                self._next_repeat.pop(name, None)
+
+        if ui.pressed("SELECT"):
+            key = self.kb.current()
+            if key == SPACE:
+                events.append(("char", " "))
+            elif key == DELETE:
                 events.append(("back",))
-            elif button == "C":
+            elif key == SEARCH:
                 events.append(("submit",))
+            else:
+                events.append(("char", key))
+        if ui.pressed("BACK"):
+            events.append(("back",))
+        if ui.pressed("MENU"):
+            events.append(("submit",))
         return events
 
     def draw(self, text_so_far):
         self.kb.draw(text_so_far)
-
-    def rearm(self):
-        self._edges.rearm()
 
 
 class BleKeyboardInput(TextInput):

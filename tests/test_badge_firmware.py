@@ -1,295 +1,632 @@
-"""The badge app's state machine, driven on the host against fake hardware.
+"""The badge app, driven on the host against a fake Universe 2026 runtime.
 
 badge/jobcontext/ is MicroPython and never runs in CI, so the interesting
-logic — text entry, screen transitions, the button re-arm — would otherwise
-only ever be tested by flashing a badge and pressing things. Here `ui` and
-`api` are replaced with fakes, the *real* keyboard/inputs/state machine are
-imported, and button presses are scripted.
+logic — text entry, screen transitions, deferred network calls — would
+otherwise only ever be tested by flashing a badge and pressing things.
+
+Only the firmware boundary is faked: the runtime builtins (`badge`, `screen`,
+`color`, `BUTTON_*`, `run`, ...) and the `wifi`, `requests` and `secrets`
+modules. The app's own modules — ui, api, keyboard, inputs and the state
+machine — are the real files.
+
+The fake input model matches the firmware's: `badge.pressed(b)` is true only
+on the frame a pad goes down, `badge.held(b)` for every frame it stays down.
 """
 from __future__ import annotations
 
+import builtins
 import importlib.util
+import json
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 _APP = Path(__file__).resolve().parents[1] / "badge" / "jobcontext"
+_APP_MODULES = ("ui", "api", "keyboard", "inputs")
+_BUTTONS = ("UP", "DOWN", "LEFT", "RIGHT", "SELECT", "BACK", "MENU", "HOME")
 
 
-class FakeUI:
-    """Records draw calls; button state is set by the test."""
+# ── fake runtime ───────────────────────────────────────────────────────────────
 
-    WIDTH, HEIGHT = 320, 240
-    BLACK = WHITE = DIM = ACCENT = WARN = BAD = OK = (0, 0, 0)
+class FakeBadge:
+    def __init__(self):
+        self.ticks = 1000
+        self.pressed_now = set()
+        self.held_now = set()
+        self.modes = []
+
+    def mode(self, flags):
+        self.modes.append(flags)
+
+    def pressed(self, button):
+        return button in self.pressed_now
+
+    def held(self, button):
+        return button in self.held_now
+
+
+class FakeScreen:
+    """Records the strings drawn since the last clear()."""
 
     def __init__(self):
-        self.down = set()
+        self.pen = None
+        self.font = None
         self.drawn = []
-        # Simulated millisecond clock. The app throttles its work-item polling
-        # to one call every _POLL_MS, so a test that wants a second poll has
-        # to move time forward rather than just calling update() again.
-        self.offset_ms = 0
+        self.bounded = []
+        self.sizes = {}
 
-    def advance_ms(self, millis):
-        self.offset_ms += millis
-
-    def init(self):
-        return True
-
-    def pressed(self, name):
-        return name in self.down
-
-    def clear(self, colour=None):
+    def clear(self):
         self.drawn = []
 
-    def text(self, value, x, y, colour=None, scale=2):
-        self.drawn.append(str(value))
+    def text(self, value, *args, **kwargs):
+        self.drawn.append(value)
+        # Point form is (x, y, size); rect form is (bounds, size).
+        self.sizes[value] = args[2] if len(args) >= 3 else args[1] if len(args) == 2 else 1
+        if kwargs.get("overflow") is not None:
+            self.bounded.append(value)
 
-    def rect(self, x, y, w, h, colour):
+    def measure_text(self, value, size=1):
+        # The `nope` ROM font as measured in the Badgeware simulator: a 13px
+        # line box and ~8px per character at size 1.
+        return len(value) * 8 * size, 13 * size
+
+    def shape(self, _shape):
         pass
 
-    def hline(self, y, colour=None):
-        pass
-
-    def flip(self):
-        pass
-
-    def fit(self, value, chars):
-        value = str(value)
-        return value if len(value) <= chars else value[: chars - 1] + "."
-
-    def header(self, title, subtitle=""):
-        self.drawn.append(str(title))
-
-    def footer(self, hint):
-        pass
-
-    # test helpers
-    def press(self, *names):
-        self.down = set(names)
-
-    def release(self):
-        self.down = set()
+    def all_text(self):
+        return " | ".join(self.drawn)
 
 
-class FakeApi:
-    class ApiError(Exception):
-        pass
+class _Namespace:
+    def __init__(self, **attrs):
+        self.__dict__.update(attrs)
+
+
+class FakeServer:
+    """Stands in for the firmware's `requests`, routing to canned handlers."""
 
     def __init__(self):
-        self.searched = []
-        self.requested = []
+        self.calls = []
         self.results = []
         self.poll_status = "succeeded"
         self.poll_made = ["resume"]
+        self.status_code = 200
+        self.fail_with = None
 
-    def connect_wifi(self, status=None):
-        return True
+    def request(self, method, url, data=None, headers=None, timeout=None):
+        self.calls.append((method, url, json.loads(data) if data else None, headers))
+        if self.fail_with is not None:
+            raise self.fail_with
+        path = url.split("://", 1)[-1].split("/", 1)[-1]
+        if path.startswith("api/badge/search"):
+            body = {"results": self.results}
+        elif path.startswith("api/badge/materials"):
+            body = {"work_id": 7}
+        elif path.startswith("api/badge/work/"):
+            body = {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
+        else:
+            body = {"ok": True}
+        return _Response(self.status_code, body)
 
-    def ping(self):
-        return {"ok": True}
-
-    def search(self, query, limit=6):
-        self.searched.append(query)
-        return {"results": self.results}
-
-    def request_materials(self, job_id, material="resume"):
-        self.requested.append((job_id, material))
-        return {"work_id": 7}
-
-    def poll(self, work_id):
-        return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
+    def paths(self, prefix):
+        return [c for c in self.calls if prefix in c[1]]
 
 
-@pytest.fixture()
-def badge_app(monkeypatch):
-    """Load the real badge app with fake ui/api/secrets underneath it."""
-    fake_ui, fake_api = FakeUI(), FakeApi()
+class _Response:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self._body = body
+        self.closed = False
 
-    # MicroPython's ticks_* live on `time`; CPython has no such thing.
-    monkeypatch.setattr(
-        time, "ticks_ms", lambda: int(time.monotonic() * 1000) + fake_ui.offset_ms, raising=False
-    )
-    monkeypatch.setattr(time, "ticks_add", lambda t, d: t + d, raising=False)
-    monkeypatch.setattr(time, "ticks_diff", lambda a, b: a - b, raising=False)
-    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    def json(self):
+        return self._body
 
-    monkeypatch.setitem(sys.modules, "ui", fake_ui)
-    monkeypatch.setitem(sys.modules, "api", fake_api)
-    for name in ("keyboard", "inputs", "badgeapp"):
-        sys.modules.pop(name, None)
-    monkeypatch.syspath_prepend(str(_APP))
+    def close(self):
+        self.closed = True
+
+
+class Runtime:
+    """Everything a test needs to drive the app, plus the loaded app."""
+
+    def __init__(self):
+        self.badge = FakeBadge()
+        self.screen = FakeScreen()
+        self.server = FakeServer()
+        self.wifi_up = True
+        self.secrets = _Namespace(
+            WIFI_SSID="guest",
+            WIFI_PASSWORD="pw",
+            JOBCONTEXT_URL="https://jobcontext.example",
+            JOBCONTEXT_TOKEN="jcmcp_badge",
+        )
+        self.update = None
+        self.app = None
+
+    def mod(self, name):
+        """The app's own copy of one of its modules."""
+        return getattr(self.app, name)
+
+    # driving helpers
+    def frame(self, *pressed, held=None, ms=16):
+        """Advance one frame with *pressed* going down this frame."""
+        self.badge.ticks += ms
+        self.badge.pressed_now = {"BUTTON_" + p for p in pressed}
+        still = held if held is not None else pressed
+        self.badge.held_now = {"BUTTON_" + h for h in still}
+        self.app.update()
+
+    def tap(self, name):
+        self.frame(name)
+        self.frame()
+
+    def settle(self, frames=3):
+        for _ in range(frames):
+            self.frame()
+
+    def type(self, text):
+        """Type *text* by walking the grid, the way a person would."""
+        ROWS, SPACE = self.mod("keyboard").ROWS, self.mod("keyboard").SPACE
+
+        for char in text:
+            char = SPACE if char == " " else char
+            target = next((r, row.index(char)) for r, row in enumerate(ROWS) if char in row)
+            kb = self.app.source.kb
+            while kb.row != target[0]:
+                self.tap("DOWN")
+            while kb.col != target[1]:
+                self.tap("RIGHT")
+            self.tap("SELECT")
+
+
+def _unload():
+    """Forget every copy of the app's modules. Loaded from its __init__.py,
+    the app is a package, so its modules live as badgeapp.<name>; the flat
+    names are cleared too in case the fallback import path was taken."""
+    for name in list(sys.modules):
+        if name == "badgeapp" or name.startswith("badgeapp.") or name in _APP_MODULES:
+            del sys.modules[name]
+    sys.path[:] = [p for p in sys.path if p != str(_APP)]
+
+
+def _load(rt, monkeypatch):
+    globals_ = {
+        "badge": rt.badge,
+        "screen": rt.screen,
+        "color": _Namespace(rgb=lambda *c: c),
+        "shape": _Namespace(rectangle=lambda *a: a, rounded_rectangle=lambda *a: a),
+        "rect": lambda *a: a,
+        "image": _Namespace(ELLIPSES="ellipses"),
+        "font": _Namespace(nope="nope"),
+        "HIRES": 1,
+        "VSYNC": 2,
+        "run": lambda fn: setattr(rt, "update", fn),
+    }
+    for name in _BUTTONS:
+        globals_["BUTTON_" + name] = "BUTTON_" + name
+    for name, value in globals_.items():
+        monkeypatch.setattr(builtins, name, value, raising=False)
+
+    monkeypatch.setitem(sys.modules, "secrets", rt.secrets)
+    monkeypatch.setitem(sys.modules, "requests", rt.server)
+    monkeypatch.setitem(sys.modules, "wifi", _Namespace(connect=lambda: rt.wifi_up))
+    _unload()
 
     spec = importlib.util.spec_from_file_location("badgeapp", _APP / "__init__.py")
     app = importlib.util.module_from_spec(spec)
     sys.modules["badgeapp"] = app
-    spec.loader.exec_module(app)
-
-    app.init()
-    yield app, fake_ui, fake_api
-    for name in ("keyboard", "inputs", "badgeapp"):
-        sys.modules.pop(name, None)
+    spec.loader.exec_module(app)  # runs init() and run(update)
+    rt.app = app
+    return rt
 
 
-def _tap(app, ui_, button):
-    """One clean press: a released frame, then a pressed frame.
-
-    The leading released frame matters — edge detection only fires on a
-    low→high transition, so without a frame in which the button is observed
-    up, two consecutive taps of the same button read as one continuous hold.
-    On real hardware the frame loop is always running, so that gap exists for
-    free; here it has to be simulated.
-    """
-    ui_.release()
-    app.update()
-    ui_.press(button)
-    app.update()
-    ui_.release()
+@pytest.fixture()
+def rt(monkeypatch):
+    """A fresh runtime with the app loaded and sitting on the search screen."""
+    runtime = _load(Runtime(), monkeypatch)
+    runtime.settle()
+    assert runtime.app.state == runtime.app.SEARCH
+    yield runtime
+    _unload()
 
 
-def test_typing_builds_a_query(badge_app):
-    app, ui_, _api = badge_app
-    assert app.state == app.SEARCH
-
-    _tap(app, ui_, "A")  # types the highlighted char, which starts at 'A'
-    assert app.query == "A"
-
-    _tap(app, ui_, "DOWN")  # advance the carousel
-    _tap(app, ui_, "A")
-    assert app.query == "AB"
-
-    _tap(app, ui_, "B")  # backspace
-    assert app.query == "A"
+@pytest.fixture()
+def cold(monkeypatch):
+    """A runtime whose app has been loaded but not advanced a single frame."""
+    runtime = Runtime()
+    yield runtime, monkeypatch
+    _unload()
 
 
-def test_carousel_wraps_backwards(badge_app):
-    """UP from 'A' should land on the last character, not stall at index 0."""
-    app, ui_, _api = badge_app
-    _tap(app, ui_, "UP")
-    _tap(app, ui_, "A")
-    from keyboard import CHARSET
+# ── startup ────────────────────────────────────────────────────────────────────
 
-    assert app.query == CHARSET[-1]
+def test_boot_requests_hires_and_hands_update_to_run(rt):
+    assert rt.badge.modes == [1 | 2]
+    assert rt.update is rt.app.update
 
 
-def test_submit_runs_search_and_shows_results(badge_app):
-    app, ui_, api_ = badge_app
-    api_.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": "8/10"}]
-    app.query = "ACME"
+def test_boot_waits_for_wifi_then_pings(cold):
+    rt, monkeypatch = cold
+    rt.wifi_up = False
+    _load(rt, monkeypatch)
 
-    _tap(app, ui_, "C")
-    assert api_.searched == ["ACME"]
-    assert app.state == app.RESULTS
+    rt.settle(5)
+    assert rt.app.state == rt.app.CONNECTING
+    assert "connecting to wifi" in rt.screen.all_text()
+    assert rt.server.calls == []
 
-
-def test_held_submit_does_not_bounce_off_the_results_screen(badge_app):
-    """Regression: the OSK and _edge() track edges separately, so a C press
-    held across the transition used to read as a *fresh* C on RESULTS and
-    kick straight back to SEARCH before anything could be read."""
-    app, ui_, api_ = badge_app
-    api_.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": ""}]
-    app.query = "ACME"
-
-    ui_.press("C")
-    app.update()          # submits the search
-    assert app.state == app.RESULTS
-    app.update()          # C is STILL held
-    app.update()
-    assert app.state == app.RESULTS, "held button leaked into the next screen"
-
-    ui_.release()
-    _tap(app, ui_, "C")   # a deliberate second press does go back
-    assert app.state == app.SEARCH
+    rt.wifi_up = True
+    rt.frame()  # sees wifi, defers the ping and shows its status
+    assert "checking jobcontext" in rt.screen.all_text()
+    assert rt.server.calls == [], "the status frame must be presented before the call blocks"
+    rt.frame()  # runs the ping
+    assert rt.server.paths("/api/badge/ping")
+    assert rt.app.state == rt.app.SEARCH
 
 
-def test_empty_results_are_an_explicit_message(badge_app):
-    app, ui_, api_ = badge_app
-    api_.results = []
-    app.query = "NOBODY"
-    _tap(app, ui_, "C")
-    assert app.state == app.ERROR
-    assert "nothing found" in app.message
+def test_wifi_timeout_is_an_error_with_a_retry(cold):
+    rt, monkeypatch = cold
+    rt.wifi_up = False
+    _load(rt, monkeypatch)
+
+    rt.frame(ms=31000)
+    assert rt.app.state == rt.app.ERROR
+    assert "wifi failed" in rt.app.message
+
+    rt.tap("SELECT")
+    assert rt.app.state == rt.app.CONNECTING, "retry must reconnect, not search offline"
 
 
-def test_directory_hit_cannot_start_a_generation(badge_app):
+def test_missing_token_names_the_setting_and_does_not_retry(cold):
+    rt, monkeypatch = cold
+    rt.secrets.JOBCONTEXT_TOKEN = ""
+    _load(rt, monkeypatch)
+
+    rt.settle()
+    assert rt.app.state == rt.app.ERROR
+    assert rt.app.message == "add JOBCONTEXT_TOKEN to secrets.py"
+    rt.tap("SELECT")
+    rt.tap("BACK")
+    assert rt.app.state == rt.app.ERROR
+    assert rt.server.calls == []
+
+
+def test_legacy_secret_names_still_work(cold):
+    """Badges set up for the 2025 build used BASE_URL / BADGE_TOKEN."""
+    rt, monkeypatch = cold
+    del rt.secrets.JOBCONTEXT_URL, rt.secrets.JOBCONTEXT_TOKEN
+    rt.secrets.BASE_URL = "https://legacy.example/"
+    rt.secrets.BADGE_TOKEN = "jcmcp_old"
+    _load(rt, monkeypatch)
+    rt.settle()
+
+    _method, url, _body, headers = rt.server.calls[0]
+    assert url == "https://legacy.example/api/badge/ping"
+    assert headers["Authorization"] == "Bearer jcmcp_old"
+
+
+# ── text entry ─────────────────────────────────────────────────────────────────
+
+def test_grid_typing_builds_a_query(rt):
+    rt.tap("SELECT")  # cursor starts on 'A'
+    rt.tap("RIGHT")
+    rt.tap("SELECT")
+    assert rt.app.query == "AB"
+
+    rt.tap("BACK")
+    assert rt.app.query == "A"
+
+
+def test_every_character_is_reachable(rt):
+    rt.type("AT&T 3M-O'K.")
+    assert rt.app.query == "AT&T 3M-O'K."
+
+
+def test_movement_wraps_on_both_axes(rt):
+    kb_mod = rt.mod("keyboard")
+    DELETE, ROWS, SPACE = kb_mod.DELETE, kb_mod.ROWS, kb_mod.SPACE
+
+    rt.tap("LEFT")  # A → J, same row
+    assert rt.app.source.kb.current() == "J"
+
+    rt.tap("RIGHT")  # J → A
+    rt.tap("UP")  # top row wraps to the action row
+    assert rt.app.source.kb.current() == SPACE
+    rt.tap("SELECT")
+    assert rt.app.query == " "
+
+    rt.tap("RIGHT")
+    assert rt.app.source.kb.current() == DELETE
+    rt.tap("SELECT")
+    assert rt.app.query == ""
+    assert len(ROWS[-1]) == 3
+
+
+def test_column_position_is_kept_across_rows_of_different_length(rt):
+    """From the far right of a letter row, DOWN into the three-key action row
+    should land on its right-hand key, not clamp to index 2 by accident or
+    wrap to the left."""
+    SEARCH = rt.mod("keyboard").SEARCH
+
+    for _ in range(9):
+        rt.tap("RIGHT")  # 'J'
+    for _ in range(4):
+        rt.tap("DOWN")
+    assert rt.app.source.kb.current() == SEARCH
+
+
+def test_held_direction_repeats_after_a_delay(rt):
+    kb = rt.app.source.kb
+    rt.frame("RIGHT", ms=16)  # the press itself: one step
+    assert kb.col == 1
+    for _ in range(20):  # 320ms held — still inside the repeat delay
+        rt.frame(held=["RIGHT"], ms=16)
+    assert kb.col == 1
+    for _ in range(40):  # ~640ms more: a few repeats at ~110ms each
+        rt.frame(held=["RIGHT"], ms=16)
+    assert kb.col >= 5
+    rt.frame()
+    col = kb.col
+    rt.frame(held=["RIGHT"], ms=500)
+    assert kb.col == col, "a release must reset the repeat timer"
+
+
+def test_go_key_with_an_empty_query_does_nothing(rt):
+    SEARCH = rt.mod("keyboard").SEARCH
+
+    rt.tap("UP")
+    rt.tap("RIGHT")
+    rt.tap("RIGHT")
+    assert rt.app.source.kb.current() == SEARCH
+    rt.tap("SELECT")
+    rt.settle()
+    assert rt.app.state == rt.app.SEARCH
+    assert rt.server.paths("/search") == []
+
+
+# ── search ─────────────────────────────────────────────────────────────────────
+
+def test_menu_submits_and_the_status_frame_precedes_the_call(rt):
+    rt.server.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": "8/10"}]
+    rt.app.query = "ACME"
+
+    rt.frame("MENU")
+    assert "searching ACME..." in rt.screen.all_text()
+    assert rt.server.paths("/search") == [], "must draw the status before blocking"
+
+    rt.frame()
+    (call,) = rt.server.paths("/search")
+    assert call[1].endswith("/api/badge/search?q=ACME&limit=6")
+    assert rt.app.state == rt.app.RESULTS
+    assert "Acme" in rt.screen.drawn, "results draw on the same frame the call returns"
+
+
+def test_query_is_percent_encoded(rt):
+    rt.app.query = "AT&T CO."
+    rt.frame("MENU")
+    rt.frame()
+    url = rt.server.paths("/search")[0][1]
+    assert "q=AT%26T+CO.&" in url
+
+
+def test_held_select_does_not_leak_into_the_next_screen(rt):
+    """The press that leaves a screen must not also actuate the next one.
+    SELECT on a result opens ACTIONS; if ACTIONS read that same press it
+    would queue a resume nobody chose."""
+    rt.server.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": ""}]
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    assert rt.app.state == rt.app.RESULTS
+
+    rt.frame("SELECT")
+    assert rt.app.state == rt.app.ACTIONS
+    for _ in range(10):
+        rt.frame(held=["SELECT"])
+    rt.settle()
+    assert rt.app.state == rt.app.ACTIONS
+    assert rt.server.paths("/materials") == []
+
+
+def test_empty_results_are_an_explicit_message(rt):
+    rt.app.query = "NOBODY"
+    rt.frame("MENU")
+    rt.frame()
+    assert rt.app.state == rt.app.ERROR
+    assert rt.app.message == "nothing found for NOBODY"
+
+
+def test_directory_hit_cannot_start_a_generation(rt):
     """job_id 0 means 'known company, nothing queued' — offering to generate
     from it would produce a resume against an empty job description."""
-    app, ui_, api_ = badge_app
-    api_.results = [{"job_id": 0, "company": "Initech", "role": "Austin, TX", "score": ""}]
-    app.query = "INITECH"
-    _tap(app, ui_, "C")
-    ui_.release()
+    rt.server.results = [{"job_id": 0, "company": "Initech", "role": "Austin, TX", "score": ""}]
+    rt.app.query = "INITECH"
+    rt.frame("MENU")
+    rt.frame()
 
-    _tap(app, ui_, "A")
-    assert app.state == app.RESULTS
-    assert api_.requested == []
-
-
-def test_full_generation_flow(badge_app):
-    app, ui_, api_ = badge_app
-    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": "8/10"}]
-    app.query = "ACME"
-    _tap(app, ui_, "C")
-    ui_.release()
-
-    _tap(app, ui_, "A")               # open the actions menu
-    assert app.state == app.ACTIONS
-
-    api_.poll_status = "running"      # still generating when we first look
-    _tap(app, ui_, "DOWN")            # resume → cover letter
-    _tap(app, ui_, "A")               # confirm
-    assert api_.requested == [(42, "cover_letter")]
-    assert app.state == app.WORKING
-
-    ui_.advance_ms(2500)
-    app.update()
-    assert app.state == app.WORKING, "a still-running job must keep waiting"
-
-    api_.poll_status = "succeeded"
-    api_.poll_made = ["cover_letter"]
-    ui_.advance_ms(2500)
-    app.update()
-    assert app.state == app.DONE
-    assert "cover_letter" in app.message
+    rt.tap("SELECT")
+    assert rt.app.state == rt.app.RESULTS
+    assert "not queued yet - capture it first" in rt.screen.drawn
+    rt.frame(ms=2000)
+    assert "not queued yet - capture it first" not in rt.screen.drawn, "the toast expires"
 
 
-def test_failed_generation_surfaces_detail(badge_app):
-    app, ui_, api_ = badge_app
-    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
-    app.query = "ACME"
-    _tap(app, ui_, "C")
-    api_.poll_status = "running"
-    _tap(app, ui_, "A")
-    _tap(app, ui_, "A")
-    assert app.state == app.WORKING
+def test_long_result_lists_scroll_to_keep_the_selection_visible(rt):
+    rt.server.results = [
+        {"job_id": i + 1, "company": "Company %d" % i, "role": "Role", "score": ""} for i in range(6)
+    ]
+    rt.app.query = "CO"
+    rt.frame("MENU")
+    rt.frame()
+    assert "Company 0" in rt.screen.drawn
 
-    api_.poll_status = "failed"
-    ui_.advance_ms(2500)
-    app.update()
-    assert app.state == app.ERROR
-    assert app.message == "nope"
+    for _ in range(5):
+        rt.tap("DOWN")
+    assert "Company 5" in rt.screen.drawn
+    assert "Company 0" not in rt.screen.drawn
+    assert "6/6" in rt.screen.drawn
+
+    rt.tap("DOWN")  # wraps to the top
+    assert "Company 0" in rt.screen.drawn
 
 
-def test_api_error_during_search_is_caught(badge_app):
+def test_back_from_results_starts_a_new_search(rt):
+    rt.server.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": ""}]
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    rt.tap("BACK")
+    assert rt.app.state == rt.app.SEARCH
+    assert rt.app.query == ""
+
+
+def test_text_boxes_are_at_least_one_measured_line_tall(rt):
+    """Regression: a text rect shorter than the font's real line box means no
+    line 'fits' — the firmware then neither wraps nor adds an ellipsis, it
+    just cuts the glyphs off at the bottom. Heights come from measure_text."""
+    ui = rt.mod("ui")
+    assert ui.line_height(1) == 13
+    assert ui.line_height(2) == 26
+
+
+def test_status_lines_shrink_rather_than_overflow(rt):
+    """A status line carries user-typed text, so it steps down a size when
+    it would not fit at the default one."""
+    rt.app.query = "CONSOLIDATED AEROSPACE"
+    rt.frame("MENU")
+    status = "searching CONSOLIDATED AEROSPACE..."
+    assert len(status) * 8 * 2 > 320 >= len(status) * 8, "fixture should need the smaller size"
+    assert status in rt.screen.drawn
+    assert rt.screen.sizes[status] == 1
+
+    rt.frame()  # runs the search: no results, so the error screen
+    rt.tap("BACK")  # back to a fresh search
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    assert rt.screen.sizes["searching ACME..."] == 2, "short statuses keep the large size"
+
+
+def test_long_names_are_clipped_by_the_firmware_not_guessed(rt):
+    """Result text is drawn into a rect with overflow=ELLIPSES, so the
+    firmware measures and truncates — no hard-coded character width."""
+    long_name = "An Extremely Long Company Name That Cannot Possibly Fit, Incorporated"
+    rt.server.results = [{"job_id": 3, "company": long_name, "role": "SWE", "score": ""}]
+    rt.app.query = "AN"
+    rt.frame("MENU")
+    rt.frame()
+    assert long_name in rt.screen.bounded
+
+
+# ── generation ─────────────────────────────────────────────────────────────────
+
+def _to_actions(rt, job_id=42):
+    rt.server.results = [{"job_id": job_id, "company": "Acme", "role": "SWE", "score": "8/10"}]
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    rt.tap("SELECT")
+    assert rt.app.state == rt.app.ACTIONS
+
+
+def test_full_generation_flow(rt):
+    _to_actions(rt)
+    rt.server.poll_status = "running"
+    rt.tap("DOWN")  # resume → cover letter
+    rt.frame("SELECT")
+    assert "queueing cover letter..." in rt.screen.all_text()
+    rt.frame()
+    (call,) = rt.server.paths("/materials")
+    assert call[0] == "POST"
+    assert call[2] == {"job_id": 42, "material": "cover_letter"}
+    assert rt.app.state == rt.app.WORKING
+
+    rt.settle(10)  # 160ms: too soon to poll
+    assert rt.server.paths("/work/") == []
+
+    rt.frame(ms=2000)
+    assert len(rt.server.paths("/work/7")) == 1
+    assert rt.app.state == rt.app.WORKING, "a still-running job keeps waiting"
+    rt.frame()
+    assert len(rt.server.paths("/work/7")) == 1, "polling is throttled, not per-frame"
+
+    rt.server.poll_status = "succeeded"
+    rt.server.poll_made = ["cover_letter"]
+    rt.frame(ms=2000)
+    assert rt.app.state == rt.app.DONE
+    assert rt.app.message == "cover letter ready on your desktop"
+
+    rt.tap("SELECT")
+    assert rt.app.state == rt.app.RESULTS
+
+
+def test_both_materials_read_as_a_sentence(rt):
+    _to_actions(rt)
+    rt.server.poll_made = ["resume", "cover_letter"]
+    rt.frame("SELECT")
+    rt.frame()
+    rt.frame(ms=2000)
+    assert rt.app.message == "resume and cover letter ready on your desktop"
+
+
+def test_failed_generation_surfaces_detail(rt):
+    _to_actions(rt)
+    rt.server.poll_status = "failed"
+    rt.frame("SELECT")
+    rt.frame()
+    rt.frame(ms=2000)
+    assert rt.app.state == rt.app.ERROR
+    assert rt.app.message == "nope"
+
+
+def test_back_stops_waiting_without_cancelling_the_job(rt):
+    _to_actions(rt)
+    rt.server.poll_status = "running"
+    rt.frame("SELECT")
+    rt.frame()
+    rt.tap("BACK")
+    assert rt.app.state == rt.app.RESULTS
+
+
+# ── transport ──────────────────────────────────────────────────────────────────
+
+def test_network_failure_during_search_is_caught(rt):
     """A dropped conference network must not traceback into the frame loop."""
-    app, ui_, api_ = badge_app
-
-    def boom(query, limit=6):
-        raise api_.ApiError("network: timeout")
-
-    api_.search = boom
-    app.query = "ACME"
-    _tap(app, ui_, "C")
-    assert app.state == app.ERROR
-    assert "network" in app.message
+    rt.server.fail_with = OSError("ETIMEDOUT")
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    assert rt.app.state == rt.app.ERROR
+    assert rt.app.message.startswith("network:")
 
 
-def test_ble_source_is_declared_unavailable(badge_app):
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (403, "token is not badge-scoped"),
+        (401, "token rejected - regenerate it"),
+        (500, "server said 500"),
+    ],
+)
+def test_http_errors_become_readable_messages(rt, status, message):
+    rt.server.status_code = status
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    assert rt.app.message == message
+
+
+def test_every_request_carries_the_badge_token(rt):
+    rt.app.query = "ACME"
+    rt.frame("MENU")
+    rt.frame()
+    for _method, _url, _body, headers in rt.server.calls:
+        assert headers["Authorization"] == "Bearer jcmcp_badge"
+
+
+def test_ble_source_is_declared_unavailable(rt):
     """The BLE keyboard is wired in but not implemented; best_available must
-    therefore hand back the buttons rather than a source that emits nothing."""
-    import inputs
+    therefore hand back the pads rather than a source that emits nothing."""
+    inputs = rt.mod("inputs")
 
     assert inputs.BleKeyboardInput().available() is False
     assert isinstance(inputs.best_available(), inputs.ButtonInput)
