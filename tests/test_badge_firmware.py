@@ -25,6 +25,8 @@ import pytest
 _APP = Path(__file__).resolve().parents[1] / "badge" / "jobcontext"
 _APP_MODULES = ("ui", "api", "keyboard", "inputs")
 _BUTTONS = ("UP", "DOWN", "LEFT", "RIGHT", "SELECT", "BACK", "MENU", "HOME")
+# A stock Tufty 2350 / the Universe 2025 badge: physical buttons only.
+_TUFTY_BUTTONS = ("A", "B", "C", "UP", "DOWN", "HOME")
 
 
 # ── fake runtime ───────────────────────────────────────────────────────────────
@@ -189,7 +191,7 @@ def _unload():
     sys.path[:] = [p for p in sys.path if p != str(_APP)]
 
 
-def _load(rt, monkeypatch):
+def _load(rt, monkeypatch, buttons=_BUTTONS):
     globals_ = {
         "badge": rt.badge,
         "screen": rt.screen,
@@ -202,7 +204,9 @@ def _load(rt, monkeypatch):
         "VSYNC": 2,
         "run": lambda fn: setattr(rt, "update", fn),
     }
-    for name in _BUTTONS:
+    for name in set(_BUTTONS) | set(_TUFTY_BUTTONS):
+        monkeypatch.delattr(builtins, "BUTTON_" + name, raising=False)
+    for name in buttons:
         globals_["BUTTON_" + name] = "BUTTON_" + name
     for name, value in globals_.items():
         monkeypatch.setattr(builtins, name, value, raising=False)
@@ -630,3 +634,105 @@ def test_ble_source_is_declared_unavailable(rt):
 
     assert inputs.BleKeyboardInput().available() is False
     assert isinstance(inputs.best_available(), inputs.ButtonInput)
+
+
+# ── physical buttons (stock Tufty 2350 / Universe 2025 badge) ─────────────────
+
+@pytest.fixture()
+def tufty(monkeypatch):
+    """The app on a badge with A/B/C/UP/DOWN buttons instead of 2026 pads."""
+    runtime = _load(Runtime(), monkeypatch, buttons=_TUFTY_BUTTONS)
+    runtime.settle()
+    assert runtime.app.state == runtime.app.SEARCH
+    yield runtime
+    _unload()
+
+
+def _tap_b(rt):
+    """A short B press: down, a couple of frames, up."""
+    rt.frame("B")
+    rt.frame(held=["B"])
+    rt.frame()
+
+
+def _hold_b(rt, ms=700):
+    rt.frame("B")
+    rt.frame(held=["B"], ms=ms)
+    rt.frame()
+
+
+def test_buttons_mode_is_chosen_when_pads_are_absent(tufty):
+    assert tufty.mod("ui").controls == "buttons"
+
+
+def test_pads_mode_on_the_2026_badge(rt):
+    assert rt.mod("ui").controls == "pads"
+
+
+def test_a_and_c_move_left_and_right(tufty):
+    kb = tufty.app.source.kb
+    tufty.tap("C")
+    assert kb.col == 1
+    tufty.tap("A")
+    tufty.tap("A")
+    assert kb.current() == "J", "A from the first column wraps like LEFT"
+
+
+def test_tapping_b_types_on_release(tufty):
+    tufty.frame("B")
+    assert tufty.app.query == "", "SELECT waits for release — it might become BACK"
+    tufty.frame()
+    assert tufty.app.query == "A"
+
+
+def test_holding_b_is_back_and_does_not_also_type(tufty):
+    _tap_b(tufty)
+    _tap_b(tufty)
+    assert tufty.app.query == "AA"
+
+    tufty.frame("B")
+    tufty.frame(held=["B"], ms=300)
+    assert tufty.app.query == "AA", "not long enough to be BACK yet"
+    tufty.frame(held=["B"], ms=400)
+    assert tufty.app.query == "A", "BACK fires while still held, at the threshold"
+    for _ in range(10):
+        tufty.frame(held=["B"], ms=100)
+    assert tufty.app.query == "A", "one long press is one BACK"
+    tufty.frame()
+    assert tufty.app.query == "A", "releasing a long press must not type"
+
+
+def test_full_flow_on_buttons(tufty):
+    """Search via the on-screen search key (there is no MENU button), pick a
+    result, generate, and back out — every screen reachable."""
+    tufty.server.results = [
+        {"job_id": 42, "company": "Acme", "role": "SWE", "score": ""},
+        {"job_id": 43, "company": "Acme Labs", "role": "SRE", "score": ""},
+    ]
+    tufty.app.query = "ACME"
+    kb = tufty.app.source.kb
+    while kb.row != 4:
+        tufty.tap("UP")
+    while kb.current() != tufty.mod("keyboard").SEARCH:
+        tufty.tap("C")
+    _tap_b(tufty)
+    tufty.settle()
+    assert tufty.app.state == tufty.app.RESULTS
+
+    tufty.tap("DOWN")
+    _tap_b(tufty)
+    assert tufty.app.state == tufty.app.ACTIONS
+    _hold_b(tufty)
+    assert tufty.app.state == tufty.app.RESULTS, "hold B backs out of the menu"
+
+    _tap_b(tufty)
+    _tap_b(tufty)
+    tufty.settle()
+    assert tufty.server.paths("/materials")[0][2] == {"job_id": 43, "material": "resume"}
+    assert tufty.app.state == tufty.app.WORKING
+
+
+def test_legend_names_the_buttons_in_hand(tufty):
+    assert "B type" in tufty.screen.drawn[-1]
+    assert "hold B del" in tufty.screen.drawn[-1]
+    assert "MENU" not in tufty.screen.drawn[-1], "no MENU button to name"

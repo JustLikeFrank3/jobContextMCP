@@ -13,7 +13,8 @@ Events are tuples:
 
 Two sources live here:
 
-  ButtonInput  — the capacitive pads driving an on-screen grid keyboard.
+  ButtonInput  — the pads (2026) or buttons (Tufty/2025) driving an
+                 on-screen grid keyboard.
                  Always available, works on a plane, needs no pairing.
 
   BleKeyboardInput — a real Bluetooth keyboard.  NOT implemented, and the
@@ -63,7 +64,10 @@ class TextInput:
 
 
 class ButtonInput(TextInput):
-    """The capacitive pads driving an on-screen grid keyboard.
+    """The pads or buttons driving an on-screen grid keyboard.
+
+    Written against logical actions; ui.py maps them onto 2026 pads or onto
+    a Tufty's A/B/C/UP/DOWN (where SELECT is a tap of B and BACK a hold).
 
     Mapping:
         d-pad   — move the cursor, repeating while held

@@ -15,10 +15,12 @@ the Playwright package if it is installed globally). Nothing is fetched at
 run time: the script serves the simulator clone itself, so it works offline
 once cloned.
 
-`scenes.py` is the program the simulator runs. It maps the 2026 pad
-constants onto the stock Tufty buttons, fakes `wifi`, `requests` and
-`secrets`, imports the real app, and forces each screen in turn; add a scene
-there to render a new state.
+`scenes.py` is the program the simulator runs. It fakes `wifi`, `requests`
+and `secrets`, imports the real app, and forces each screen in turn; add a
+scene there to render a new state. By default it defines the 2026 pad
+constants so the renders show the pads' legends; `CONTROLS=buttons` leaves
+them out, and the app runs its physical-buttons mode — which is what the
+simulator's stock-Tufty hardware really is.
 
 ## What it proves, and what it doesn't
 

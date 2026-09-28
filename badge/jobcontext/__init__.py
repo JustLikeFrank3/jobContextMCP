@@ -100,6 +100,7 @@ def update():
     """
     global _task
 
+    ui.poll()
     if _task is not None and _task_shown:
         # The status for this call was presented last frame and stays on
         # screen while it blocks. Input is skipped: anything pressed during
@@ -188,7 +189,7 @@ def _draw_search():
     ui.clear()
     ui.header("jobcontext", "")
     source.draw(query)
-    ui.footer("dpad move  SELECT type  BACK del  MENU go")
+    ui.footer(("dpad", "move"), ("SELECT", "type"), ("BACK", "del"), ("MENU", "go"))
 
 
 def _run_search():
@@ -249,7 +250,7 @@ def _draw_results():
         y += _ROW_H
     if len(results) > _VISIBLE_ROWS:
         ui.text(str(selected + 1) + "/" + str(len(results)), ui.WIDTH - 48, ui.HEADER_H + 2, ui.DIM, 1)
-    ui.footer("UP/DOWN pick  SELECT make  BACK new search")
+    ui.footer(("UPDOWN", "pick"), ("SELECT", "make"), ("BACK", "new search"))
 
 
 # ── actions ────────────────────────────────────────────────────────────────────
@@ -293,7 +294,7 @@ def _draw_actions():
             ui.box(4, y - 3, ui.WIDTH - 8, ui.line_height(2) + 6, ui.HIGHLIGHT, 4)
         ui.text(("> " if chosen else "  ") + label, 12, y, ui.ACCENT if chosen else ui.WHITE, 2)
         y += 38
-    ui.footer("UP/DOWN choose  SELECT generate  BACK back")
+    ui.footer(("UPDOWN", "choose"), ("SELECT", "generate"), ("BACK", "back"))
 
 
 # ── working ────────────────────────────────────────────────────────────────────
@@ -334,7 +335,7 @@ def _draw_working():
     ui.text("generating" + dots, 12, 84, ui.WHITE, 2)
     ui.text("this runs on the server -", 12, 136, ui.DIM, 1)
     ui.text("the badge can walk away", 12, 152, ui.DIM, 1)
-    ui.footer("BACK stop waiting")
+    ui.footer(("BACK", "stop waiting"))
 
 
 # ── done / error ───────────────────────────────────────────────────────────────
@@ -362,13 +363,13 @@ def _draw_terminal():
         ui.box(12, 56, 48, 48, ui.OK, 24)
         ui.centred("OK", 67, ui.BLACK, 2, x=12, span=48)
         ui.text(message, 12, 120, ui.WHITE, 1, width=ui.WIDTH - 24, lines=4)
-        ui.footer("SELECT back to results  BACK new search")
+        ui.footer(("SELECT", "back to results"), ("BACK", "new search"))
     else:
         ui.header("problem", "")
         # Server errors arrive pre-clipped to one line; local ones (a missing
         # setting, a network failure) can wrap.
         ui.text(message, 12, 60, ui.WARN, 1, width=ui.WIDTH - 24, lines=6)
-        ui.footer("SELECT retry  BACK new search")
+        ui.footer(("SELECT", "retry"), ("BACK", "new search"))
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────

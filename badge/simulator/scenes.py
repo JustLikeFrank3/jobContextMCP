@@ -1,15 +1,21 @@
 # Renders every screen of the jobcontext badge app inside the Badgeware web
 # simulator (run by render.mjs). The simulator models the stock Tufty 2350
-# (A/B/C/UP/DOWN/HOME), so the 2026 pad constants are mapped or stubbed, and
-# the network is faked. Screens are forced by setting app state directly;
+# (A/B/C/UP/DOWN/HOME), so the app runs in its physical-buttons mode, and the
+# network is faked. Screens are forced by setting app state directly;
 # each scene prints "SCENE <name>" and render.mjs captures a few frames later.
 import builtins, sys
 
-builtins.BUTTON_LEFT = BUTTON_A
-builtins.BUTTON_RIGHT = BUTTON_C
-builtins.BUTTON_SELECT = BUTTON_B
-builtins.BUTTON_BACK = object()
-builtins.BUTTON_MENU = object()
+# render.mjs prepends PADS = True/False (CONTROLS=buttons to get False). With
+# PADS, the 2026 pad constants are defined, so the app picks its pads mode
+# and legends; without, it runs its physical-buttons (Tufty) mode, which is
+# what this simulator's hardware actually is.
+if PADS:
+    builtins.BUTTON_LEFT = BUTTON_A
+    builtins.BUTTON_RIGHT = BUTTON_C
+    builtins.BUTTON_SELECT = BUTTON_B
+    builtins.BUTTON_BACK = object()
+    builtins.BUTTON_MENU = object()
+
 
 class _Resp:
     def __init__(self, body):

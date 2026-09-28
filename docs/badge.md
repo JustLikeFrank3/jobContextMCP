@@ -102,6 +102,11 @@ SELECT presses a key, BACK deletes, MENU searches. (The first version targeted
 the 2025 badge, which had only UP/DOWN/A/B/C, and used a one-dimensional
 character carousel for want of left/right.)
 
+On a badge with physical buttons instead — a stock Tufty 2350 or the 2025
+badge on current firmware — `ui.py` maps the same logical actions: A/C are
+LEFT/RIGHT, a tap of B is SELECT and a long press of B is BACK. That keeps a
+single app testable on hardware you can buy before the conference.
+
 The original ask was a paired Bluetooth keyboard. It is scaffolded but not
 implemented, because it requires the badge to be an HID-over-GATT *host* and
 MicroPython's entire BLE HID ecosystem is peripheral-side — libraries for

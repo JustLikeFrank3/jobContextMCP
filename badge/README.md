@@ -27,6 +27,25 @@ The pads are logical, not physical: the firmware uses the IMU to keep them
 the lanyard, so the app only ever asks for `BUTTON_SELECT`, never "the pad
 on the left".
 
+### Before the conference: the 2025 badge or a stock Tufty
+
+The same app runs on a **stock Pimoroni Tufty 2350** or the **Universe 2025
+badge** (sold as "Badger 2350 (Hackable Conference Badge)" in the GitHub
+shop — despite the name, it is the colour-LCD Tufty board, not the e-ink
+Badger). Both have physical buttons instead of pads, and the app detects
+that at startup and switches to its buttons mode (see *Using it*).
+
+The 2025 badge ships its 2025 firmware ("MONA-OS"), whose API predates the
+one this app targets. Flash Pimoroni's current Tufty 2350 firmware first
+([`pimoroni/tufty2350`](https://github.com/pimoroni/tufty2350) releases): the
+`.uf2` copies over in the RP2350's USB bootloader mode. A stock Tufty from
+Pimoroni ships on current firmware already.
+
+What a Tufty can and cannot stand in for: it runs the same MCU, screen,
+radio and Badgeware runtime, so WiFi to your server, request timeouts,
+speed and memory are all real. It has no capacitive pads and no IMU
+remapping — those only exist on the 2026 badge.
+
 ## Install
 
 1. **Mint a badge-scoped token.** Dashboard → API Keys → scope
@@ -68,6 +87,23 @@ secrets.py`) rather than failing to connect.
 | Done / problem | — | back to results / retry | new search | — |
 
 HOME always returns to the launcher; the firmware reserves it.
+
+**On physical buttons** (stock Tufty, 2025 badge):
+
+| Button | Acts as |
+|---|---|
+| UP / DOWN | UP / DOWN |
+| A / C | LEFT / RIGHT |
+| B, tapped | SELECT (fires on release) |
+| B, held ~0.6s | BACK (fires while held; releasing it does not also select) |
+
+There is no MENU button — use the keyboard's on-screen **search** key. The
+footer legend names whichever controls the badge in hand actually has
+("B type  hold B del" versus "SELECT type  BACK del").
+
+BACK is a long press on B rather than a chord like A+C because a chord's
+first button has already acted by the time the second arrives: the cursor
+would jump before "back" registered.
 
 The keyboard is a grid: letters, the punctuation that shows up in company
 names (`. - & '`), digits, and a row of **space / del / search** keys. Movement
@@ -147,7 +183,12 @@ badge/
   where text layout was measured — the `nope` font's line box is 13px at size
   1, not the 8px its name suggests, and an undersized text rect silently cuts
   glyphs off rather than adding an ellipsis.
-- **Not yet on hardware.** The simulator models the stock Tufty 2350, not
-  GitHub's capacitive pads, IMU remapping or radio. Still to check on a real
-  badge: the pad mapping and hold-to-repeat feel on capacitive pads, WiFi on a
-  conference network, and the firmware `requests` module's `timeout=`.
+- **Buttons mode on the real runtime.** The simulator *is* a stock Tufty, so
+  it runs the physical-buttons path for real: tap B types on release, a 1.2s
+  hold of B is exactly one BACK with nothing typed, A/C move and wrap.
+  `CONTROLS=buttons` renders its legends.
+- **Not yet on hardware.** The simulator does not model GitHub's capacitive
+  pads, IMU remapping or radio. Still to check on a real badge: the pad
+  mapping and hold-to-repeat feel on capacitive pads, WiFi on a conference
+  network, and the firmware `requests` module's `timeout=`. A Tufty or 2025
+  badge covers the last two.

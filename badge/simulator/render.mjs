@@ -3,6 +3,7 @@
 //
 //   git clone --depth 1 https://github.com/pimoroni/badgeware-web-simulator /tmp/websim
 //   SIM_DIR=/tmp/websim node badge/simulator/render.mjs [out-dir]
+//   CONTROLS=buttons ...   # render the physical-button (Tufty) legends
 //
 // Needs Playwright (global or local) and a Chromium it can launch.
 import fs from 'fs'
@@ -65,7 +66,10 @@ const port = server.address().port
 
 const files = fs.readdirSync(appDir).filter((f) => f.endsWith('.py') && f !== 'secrets.py')
   .map((f) => ({name: '/apps/jobcontext/' + f, content: fs.readFileSync(path.join(appDir, f), 'utf8')}))
-const program = fs.readFileSync(path.join(here, 'scenes.py'), 'utf8')
+// CONTROLS=buttons renders the stock-Tufty legends ("B type"); the default is
+// the 2026 pads ("SELECT type").
+const pads = process.env.CONTROLS !== 'buttons'
+const program = `PADS = ${pads ? 'True' : 'False'}\n` + fs.readFileSync(path.join(here, 'scenes.py'), 'utf8')
 const expected = (program.match(/^\s+\("\d\d-[^"]+"/gm) || []).length
 
 const browser = await chromium.launch()
