@@ -459,8 +459,12 @@ def _save_job_queue(con, data: dict) -> None:
         # All jobs removed — clear the table entirely.
         con.execute("DELETE FROM job_queue")
 
-    # After committing the DB changes, export the canonical job_queue to JSON
-    # as an atomic replica for human inspection and safe backups. This keeps
+    _export_job_queue(con)
+
+
+def _export_job_queue(con):
+    # Export the canonical job_queue to an atomic JSON replica while holding
+    # the write lock, for human inspection and safe backups. This keeps
     # the DB as the single source of truth while preserving the dual-write
     # audit trail the project currently expects.
     # Build the jobs list from the DB to ensure consistent shape.

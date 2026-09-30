@@ -39,7 +39,7 @@ def get_session_context() -> str:
         "",
         _load_master_context(),
         "",
-        "── 2. TONE PROFILE (all samples) ─────────────────────────",
+        "── 2. TONE PROFILE (recent samples; more available by ID/search) ──",
         "",
         get_tone_profile(),
         "",

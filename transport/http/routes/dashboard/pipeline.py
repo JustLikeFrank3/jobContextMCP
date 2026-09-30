@@ -138,7 +138,7 @@ async def pipeline_provenance_latest(company: str = "", role: str = "") -> JSONR
 
 
 @router.post("/pipeline/evaluate", responses={404: {"description": "Job id not found"}})
-async def pipeline_evaluate(req: _JobActionRequest) -> JSONResponse:
+def pipeline_evaluate(req: _JobActionRequest) -> JSONResponse:
     job = _find_job(req.job_id)
     result = JobAnalysisService.evaluate(
         company=job.get("company", ""),
@@ -163,7 +163,10 @@ async def pipeline_evaluate(req: _JobActionRequest) -> JSONResponse:
 
 
 @router.post("/pipeline/generate-resume", responses={404: {"description": "Job id not found"}})
-async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
+def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
+    # FastAPI dispatches synchronous handlers through its context-preserving
+    # worker pool. Model calls and rate-limit sleeps must not block the event
+    # loop: doing so starves /health and gets the pod restarted mid-generation.
     job = _find_job(req.job_id)
     selected = (job.get("selected_resume") or "").strip()
     if not selected:
@@ -190,7 +193,7 @@ async def pipeline_generate_resume(req: _JobActionRequest) -> JSONResponse:
 
 
 @router.post("/pipeline/generate-cover-letter", responses={403: {"description": "Owner-only feature"}, 404: {"description": "Job id not found"}})
-async def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse:
+def pipeline_generate_cover_letter(req: _JobActionRequest) -> JSONResponse:
     # LaTeX pipeline is owner-only — tectonic is not installed for beta users
     # and the template assets live in the owner's workspace.
     if req.export_pipeline == "latex":

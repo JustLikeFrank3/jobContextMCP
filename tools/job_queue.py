@@ -57,6 +57,9 @@ def _find_job(jobs: list[dict], company: str, role: str) -> dict | None:
 
 def queue_job(company: str, role: str, jd: str, source: str = "") -> str:
     """Add a job description to the evaluation queue for later fitment review. Status starts as 'pending'. Run evaluate_queued_job next."""
+    from lib import io
+    if io._USE_SQLITE:
+        return _queue_sqlite(company, role, jd, source)
     data = _load_json(config.JOB_QUEUE_FILE, {"jobs": []})
     jobs: list = data.setdefault("jobs", [])
 
@@ -81,6 +84,22 @@ def queue_job(company: str, role: str, jd: str, source: str = "") -> str:
         "decided_date": None,
     })
     _save_json(config.JOB_QUEUE_FILE, data)
+    return f"Queued: {company} — {role}. Run evaluate_queued_job to assess fitment before deciding."
+
+
+def _queue_sqlite(company, role, jd, source):
+    """Serialize duplicate checks and insert one row without rewriting peers."""
+    from lib.io_sqlite import _export_job_queue
+    with get_connection() as con:
+        con.commit()
+        con.execute("BEGIN IMMEDIATE")
+        existing = next((r for r in con.execute("SELECT company, role, status FROM job_queue")
+                         if r["company"].casefold() == company.casefold() and r["role"].casefold() == role.casefold()), None)
+        if existing:
+            return f"Already queued: {company} — {role} (status: {existing['status']}). Use evaluate_queued_job to assess it."
+        con.execute("INSERT INTO job_queue (company, role, jd, source, added_date, status) VALUES (?,?,?,?,?,'pending')",
+                    (company, role, jd, source, _now()))
+        _export_job_queue(con)
     return f"Queued: {company} — {role}. Run evaluate_queued_job to assess fitment before deciding."
 
 

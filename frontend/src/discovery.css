@@ -1,0 +1,31 @@
+.discovery { max-width: 720px; margin: 0 auto; padding: 48px 24px 72px; color: var(--text, #e5e7eb); }
+.discovery-review { max-width: 1120px; }
+.discovery h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.12; margin: 12px 0 24px; }
+.discovery-intro { font-size: 1.1rem; line-height: 1.75; margin-bottom: 32px; }
+.discovery-eyebrow { color: #77c9cf; text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; }
+.discovery label { display: flex; flex-direction: column; gap: 9px; margin: 18px 0; line-height: 1.5; }
+.discovery input, .discovery select, .discovery textarea { width: 100%; padding: 12px; border: 1px solid #657080; border-radius: 8px; background: #15202d; color: #f1f5f9; font: inherit; box-sizing: border-box; }
+.discovery input:focus, .discovery select:focus, .discovery textarea:focus { outline: 2px solid #77c9cf; outline-offset: 2px; }
+.discovery .discovery-check { flex-direction: row; align-items: center; }
+.discovery-check input { width: auto; }
+.discovery fieldset { border: 1px solid #657080; border-radius: 8px; margin: 24px 0; padding: 12px 18px; }
+.discovery button { background: #7dd3cf; color: #102029; padding: 13px 22px; border: none; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; }
+.discovery button:disabled { opacity: .55; cursor: default; }
+.discovery-note { color: #aebccc; font-size: .88rem; line-height: 1.5; }
+.discovery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+.discovery-trap { position: absolute; left: -10000px; }
+.discovery-error, .discovery-warning { padding: 14px; border-radius: 8px; overflow-wrap: anywhere; }
+.discovery-error { color: #ffced0; background: #4a2028; }
+.discovery-warning { color: #ffe0a4; background: #44351c; }
+.discovery-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 24px 0; }
+.discovery-stats div { background: #182432; border: 1px solid #354555; padding: 18px; border-radius: 10px; }
+.discovery-stats strong { display: block; font-size: 2rem; }
+.discovery-stats span { text-transform: capitalize; font-size: .85rem; }
+.discovery-person { border: 1px solid #506070; border-radius: 10px; margin: 14px 0; padding: 18px; overflow-wrap: anywhere; }
+.discovery-person summary { cursor: pointer; line-height: 1.7; }
+.discovery-person summary span { display: block; font-size: .9rem; color: #b6c5d5; }
+.discovery-person dt { color: #9bb3c8; text-transform: capitalize; margin-top: 10px; }
+.discovery-person dd { margin: 4px 0; }
+.discovery pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.discovery a { color: #7dd3cf; }
+.discovery-thanks { font-size: 1.5rem; line-height: 1.6; }

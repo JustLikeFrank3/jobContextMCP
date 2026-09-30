@@ -23,6 +23,7 @@ route *templates* (/api/work/{item_id}), not raw paths, to bound cardinality.
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 
@@ -131,7 +132,7 @@ def _fmt_value(value: float) -> str:
     to ~1.4h wrong in either direction — reading NEGATIVE right after a run
     whose stamp had rounded up into the future.
     """
-    if value != value:  # NaN — the only value not equal to itself
+    if math.isnan(value):
         return "NaN"
     if value in (float("inf"), float("-inf")):
         return "+Inf" if value > 0 else "-Inf"

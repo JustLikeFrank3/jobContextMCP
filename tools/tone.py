@@ -25,27 +25,49 @@ def log_tone_sample(
     return f"✓ Tone sample logged (#{entry['id']}, {entry['word_count']} words from '{source}')"
 
 
-def get_tone_profile() -> str:
-    """Return all logged tone samples so the AI can calibrate the candidate's writing voice before drafting cover letters, outreach messages, or other materials."""
+def get_tone_profile(
+    sample_id: int | None = None,
+    source: str = "",
+    query: str = "",
+    limit: int = 5,
+    offset: int = 0,
+) -> str:
+    """Retrieve writing samples with provenance. By default return five newest samples.
+
+    Use sample_id for one complete verbatim sample, source for an exact source
+    label, or query for case-insensitive text/context/source search. Results are
+    newest first; page with offset. Long samples return labeled previews; fetch
+    sample_id for the complete verbatim text.
+    """
     data = _load_json(config.TONE_FILE, {"samples": []})
     samples = data.get("samples", [])
 
     if not samples:
         return _NO_TONE_SAMPLES_MESSAGE
 
-    total_words = sum(s.get("word_count", 0) for s in samples)
-    lines = [
-        f"═══ TONE PROFILE ({len(samples)} samples, {total_words} total words) ═══",
-        "Use these samples to calibrate the candidate's voice before writing anything.",
-        "",
-    ]
-    for s in samples:
-        lines.append(f"── Sample #{s['id']} | {s['source']} ──")
-        if s.get("context"):
-            lines.append(f"Context: {s['context']}")
-        lines.append(s["text"])
-        lines.append("")
-    return "\n".join(lines)
+    if limit < 1 or limit > 20 or offset < 0:
+        return "Use limit between 1 and 20 and offset zero or greater."
+    if sample_id is not None:
+        samples = [s for s in samples if s.get("id") == sample_id]
+    if source:
+        samples = [s for s in samples if s.get("source", "").casefold() == source.casefold()]
+    if query.strip():
+        terms = query.casefold().split()
+        samples = [s for s in samples if all(term in " ".join(
+            str(s.get(field) or "") for field in ("source", "context", "text")
+        ).casefold() for term in terms)]
+    if not samples:
+        return "No tone samples match those filters."
+    samples.sort(key=lambda s: s.get("id", 0), reverse=True)
+    page = samples[offset:offset + limit]
+    if sample_id is None:
+        page = [dict(s, text=s["text"][:2000] +
+                     f"\n[Preview only. Fetch sample_id={s['id']} for the complete verbatim text.]")
+                if len(s.get("text", "")) > 2000 else s for s in page]
+    result = _format_tone_samples(page, len(samples))
+    if offset + len(page) < len(samples):
+        result += f"\nMore samples available: use offset={offset + len(page)} with the same filters."
+    return result
 
 
 def _format_tone_samples(samples: list, total_count: int) -> str:
@@ -59,6 +81,8 @@ def _format_tone_samples(samples: list, total_count: int) -> str:
     ]
     for s in samples:
         lines.append(f"── Sample #{s['id']} | {s['source']} ──")
+        if s.get("timestamp"):
+            lines.append(f"Logged: {s['timestamp']}")
         if s.get("context"):
             lines.append(f"Context: {s['context']}")
         lines.append(s["text"])

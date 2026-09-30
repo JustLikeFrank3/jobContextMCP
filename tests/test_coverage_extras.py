@@ -111,7 +111,7 @@ def test_get_tone_profile_renders_context_and_samples(monkeypatch):
 
     result = tone.get_tone_profile()
 
-    assert "═══ TONE PROFILE (2 samples, 4 total words) ═══" in result
+    assert "═══ TONE PROFILE (2 of 2 samples, 4 words) ═══" in result
     assert "Context: target register" in result
     assert "First sample" in result
     assert "Second sample" in result

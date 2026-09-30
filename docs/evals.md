@@ -170,6 +170,33 @@ The suite also runs inside the server via the control plane (work kind `run_eval
 - `EVALS_NIGHTLY_HOUR_UTC=<0–23>` schedules runs in the owner's partition from the always-on pod — a fixed-model drift baseline, with workstation runs as a comparison overlay. `EVALS_NIGHTLY_DAYS_UTC` (`mon,wed,fri` or `0,2,4`) restricts which UTC weekdays fire; unset = daily. Cadence is a deployment choice, not a quality one: regression signal exists only when something deployed, drift is slow enough for weekly detection, and the variance stats (CoV, verdict flips) are computed *within* a run at N=5, so they are identical at any frequency. The wallboard staleness panel tolerates 7 days before going amber. Nightly earns its cost while generation or the judge is being actively changed; MWF or weekly + a run after each deploy is the steady state.
 - Results history lands under `<partition>/eval_runs/`.
 
+## qa as the eval lab (prod-freeze workflow)
+
+During a prod freeze (first: 2026-09-01 → 09-21), eval iteration moves to qa
+without breaking the train: feature branches merge to qa and deploy there as
+always — **promotions to main are simply parked** until the freeze lifts,
+then one qa → main PR carries the accumulated work. The qa deployment runs
+its own nightly (09:00 UTC MWF — one hour after prod, so two N=5 suites
+never hit the shared judge key at the same minute; delete
+`EVALS_NIGHTLY_DAYS_UTC` on qa to go daily while actively iterating), which
+measures the lab code while prod's unchanged nightly keeps running as the
+control.
+
+Two things the manifest cannot do:
+
+- **Seed the ground truth.** The qa owner partition (whatever OID
+  `ENTRA_OWNER_OID` holds in `jcmcp-qa-app-secrets`) needs the master
+  bundle, stories, and the golden set's JD files in its workspace. Copy the
+  workspace from the prod partition (kubectl exec + tar between namespaces,
+  or dashboard workspace export/import). Do NOT copy `eval_runs/` — the qa
+  trend should start at the freeze boundary and measure lab iteration;
+  prod's history is the control, and `master_sha` on every run says whether
+  the two environments are measuring the same master.
+- **Keep the masters in step.** A master edit during the freeze must land on
+  both sides (or deliberately on one, with the hash divergence understood) —
+  cross-environment comparisons are only valid where the `master_sha`
+  matches, which the trend panels and baseline attestation enforce visually.
+
 ## Versioned ground truth (`master_sha`)
 
 Every suite score is a measurement *against* the master bundle — and the

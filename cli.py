@@ -29,6 +29,12 @@ import sys
 import json
 import inspect
 
+# Windows consoles default to a legacy codepage (e.g. cp1252) that can't encode
+# the tool output; force UTF-8 so results don't depend on console encoding.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 
 # ── Tool discovery ─────────────────────────────────────────────────────────────
 
