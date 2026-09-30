@@ -100,7 +100,14 @@ def page():
     return FileResponse(index, headers={"Cache-Control": "no-store"})
 
 
-@router.post("/api/discovery/signup")
+@router.post(
+    "/api/discovery/signup",
+    responses={
+        413: {"description": "Signup body over 8 KB"},
+        422: {"description": "Invalid or incomplete signup fields"},
+        429: {"description": "Too many signups from this client; see Retry-After"},
+    },
+)
 async def signup(request: Request):
     check_rate(request)
     body = bytearray()

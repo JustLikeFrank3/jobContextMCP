@@ -207,7 +207,8 @@ def test_second_program_preserves_identity_and_history(client, first, second):
     assert len(after['participants']) == 1
     p = after['participants'][0]
     assert set(p['programs']) == {'interview', 'beta'}
-    assert p['id'] == pid and p['consent'] == before['participants'][0]['consent']
+    assert p['id'] == pid
+    assert p['consent'] == before['participants'][0]['consent']
     assert p['status'] == before['participants'][0]['status']
     assert after['sessions'] == before['sessions']
     signups = p['screener']['program_signups']
