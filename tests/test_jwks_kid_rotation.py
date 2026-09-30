@@ -166,11 +166,18 @@ class TestPyJWTFetchSemantics:
 
     def _served(self):
         """Patch the transport, not `fetch_data` — the cache write lives
-        inside `fetch_data`, so stubbing it out would test nothing."""
-        def _urlopen(*_args, **_kwargs):
+        inside `fetch_data`, so stubbing it out would test nothing.
+
+        The seam is `OpenerDirector.open`, not `urllib.request.urlopen`:
+        PyJWT 2.15 builds its own opener (`build_opener(...).open`) and no
+        longer calls `urlopen`, so a `urlopen` stub was silently bypassed and
+        these tests went to the network for `example.invalid`. Every urllib
+        fetch — `urlopen` on older PyJWT, a built opener on newer — ends in
+        `OpenerDirector.open`."""
+        def _open(*_args, **_kwargs):
             return io.BytesIO(json.dumps(_jwks_dict(_LIVE_KID)).encode())
 
-        return patch("urllib.request.urlopen", side_effect=_urlopen)
+        return patch("urllib.request.OpenerDirector.open", side_effect=_open)
 
     def test_cached_reads_do_not_refetch(self):
         client = self._client()
