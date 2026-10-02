@@ -33,6 +33,8 @@ ERROR = "error"
 MATERIALS = (("resume", "Resume"), ("cover_letter", "Cover letter"), ("both", "Both"))
 _POLL_MS = 2000
 _MAX_QUERY = 40
+_ROWS = 3
+_ROW_H = 24
 
 state = SEARCH
 query = ""
@@ -51,7 +53,7 @@ def init():
     global source, _online
     ui.init()
     source = inputs.best_available()
-    _draw_splash("connecting…")
+    _draw_splash("connecting...")
     try:
         _online = api.connect_wifi(status=lambda text: _draw_splash(text))
         if _online:
@@ -60,7 +62,7 @@ def init():
         _go(ERROR, str(exc))
         return
     if not _online:
-        _go(ERROR, "wifi failed — check secrets.py")
+        _go(ERROR, "wifi failed - check secrets.py")
 
 
 def on_exit():
@@ -129,13 +131,13 @@ def _update_search():
     ui.clear()
     ui.header("jobcontext", "who are you talking to?")
     source.draw(query)
-    ui.footer("UP/DOWN pick  A type  B delete  C search")
+    ui.footer("U/D pick  A type  B del  C search")
 
 
 def _run_search():
     global results, selected
 
-    _draw_status("searching " + ui.fit(query.strip(), 20) + "…")
+    _draw_status("searching " + query.strip() + "...")
     try:
         body = api.search(query.strip())
     except api.ApiError as exc:
@@ -144,7 +146,7 @@ def _run_search():
     results = body.get("results", [])
     selected = 0
     if not results:
-        _go(ERROR, "nothing found for " + ui.fit(query.strip(), 18))
+        _go(ERROR, "nothing found for " + query.strip())
         return
     _go(RESULTS)
 
@@ -164,29 +166,33 @@ def _update_results():
         if results[selected].get("job_id"):
             _go(ACTIONS)
         else:
-            _flash("not queued yet — capture it first")
+            _flash("not queued yet - capture it first")
     if _edge("C"):
         query = ""
         _go(SEARCH)
         return
 
     ui.clear()
-    ui.header("results", str(len(results)) + " for " + ui.fit(query.strip(), 18))
-    y = 52
-    for i, hit in enumerate(results):
+    ui.header("results", str(len(results)) + " for " + query.strip())
+    # Three rows fit between header and footer; scroll so the selection is
+    # always on screen with one row of context above it where possible.
+    first = max(0, min(selected - 1, len(results) - _ROWS))
+    y = 30
+    for i in range(first, min(first + _ROWS, len(results))):
+        hit = results[i]
         chosen = i == selected
         if chosen:
-            ui.rect(0, y - 3, ui.WIDTH, 34, (26, 40, 60))
-        ui.text(ui.fit(hit.get("company", ""), 28), 8, y, ui.ACCENT if chosen else ui.WHITE, 2)
-        line = ui.fit(hit.get("role", ""), 30)
+            ui.rect(0, y - 2, ui.WIDTH, _ROW_H, ui.SELECT)
+        ui.text(ui.fit(hit.get("company", ""), ui.WIDTH - 8, 2), 4, y, ui.ACCENT if chosen else ui.WHITE, 2)
         score = hit.get("score") or ""
-        ui.text(line, 8, y + 16, ui.DIM, 1)
+        room = ui.WIDTH - 8
         if score:
-            ui.text(score, ui.WIDTH - 40, y + 16, ui.OK, 1)
-        y += 34
-        if y > ui.HEIGHT - 40:
-            break
-    ui.footer("UP/DOWN select  A make something  C new search")
+            score_w = ui.text_width(score, 1)
+            ui.text(score, ui.WIDTH - 4 - score_w, y + 10, ui.OK, 1)
+            room -= score_w + 4
+        ui.text(ui.fit(hit.get("role", ""), room, 1), 4, y + 10, ui.DIM, 1)
+        y += _ROW_H
+    ui.footer("U/D select  A make  C new search")
 
 
 # ── actions ────────────────────────────────────────────────────────────────────
@@ -203,7 +209,7 @@ def _update_actions():
         return
     if _edge("A"):
         hit = results[selected]
-        _draw_status("queueing " + MATERIALS[action_index][1].lower() + "…")
+        _draw_status("queueing " + MATERIALS[action_index][1].lower() + "...")
         try:
             body = api.request_materials(hit["job_id"], MATERIALS[action_index][0])
         except api.ApiError as exc:
@@ -215,15 +221,15 @@ def _update_actions():
 
     hit = results[selected]
     ui.clear()
-    ui.header(ui.fit(hit.get("company", ""), 24), ui.fit(hit.get("role", ""), 40))
-    y = 60
+    ui.header(hit.get("company", ""), hit.get("role", ""))
+    y = 32
     for i, (_key, label) in enumerate(MATERIALS):
         chosen = i == action_index
         if chosen:
-            ui.rect(0, y - 4, ui.WIDTH, 30, (26, 40, 60))
-        ui.text(("> " if chosen else "  ") + label, 12, y, ui.ACCENT if chosen else ui.WHITE, 2)
-        y += 32
-    ui.footer("UP/DOWN choose  A generate  C back")
+            ui.rect(0, y - 2, ui.WIDTH, 16, ui.SELECT)
+        ui.text(("> " if chosen else "  ") + label, 6, y, ui.ACCENT if chosen else ui.WHITE, 2)
+        y += 18
+    ui.footer("U/D choose  A generate  C back")
 
 
 # ── working / terminal ─────────────────────────────────────────────────────────
@@ -252,10 +258,10 @@ def _update_working():
     ui.header("working", "job #" + str(work_id))
     # A spinner, because a static screen during a 30s LLM call reads as a crash.
     dots = "." * (1 + (time.ticks_ms() // 400) % 3)
-    ui.text("generating" + dots, 12, 100, ui.WHITE, 3)
-    ui.text("this runs on the server —", 12, 150, ui.DIM, 1)
-    ui.text("the badge can walk away", 12, 164, ui.DIM, 1)
-    ui.footer("C cancel waiting")
+    ui.text("generating" + dots, 6, 38, ui.WHITE, 3)
+    ui.text("this runs on the server -", 6, 66, ui.DIM, 1)
+    ui.text("the badge can walk away", 6, 78, ui.DIM, 1)
+    ui.footer("C stop waiting")
 
     if _edge("C"):
         _go(RESULTS)
@@ -267,12 +273,11 @@ def _update_terminal():
     ui.clear()
     if state == DONE:
         ui.header("done", "")
-        ui.text("✓", 12, 80, ui.OK, 4)
-        ui.text(ui.fit(message, 34), 12, 130, ui.WHITE, 1)
+        ui.text("ready", 6, 22, ui.OK, 3)
+        _draw_lines(message, 46, ui.WHITE)
     else:
         ui.header("problem", "")
-        ui.text(ui.fit(message, 36), 12, 90, ui.WARN, 1)
-        ui.text("A retry   C start over", 12, 140, ui.DIM, 1)
+        _draw_lines(message, 24, ui.WARN)
 
     ui.footer("A retry  C new search")
     if _edge("C"):
@@ -287,16 +292,16 @@ def _update_terminal():
 def _draw_splash(text):
     ui.clear()
     ui.header("jobcontext", "")
-    ui.text(ui.fit(text, 34), 12, 100, ui.DIM, 2)
-    ui.flip()
+    _draw_lines(text, 50, ui.DIM, 2)
+    ui.present()
 
 
 def _draw_status(text):
     """Draw before a blocking call so the pause looks intentional."""
     ui.clear()
     ui.header("jobcontext", "")
-    ui.text(ui.fit(text, 30), 12, 100, ui.WHITE, 2)
-    ui.flip()
+    _draw_lines(text, 50, ui.WHITE, 2)
+    ui.present()
 
 
 def _flash(text):
@@ -304,3 +309,11 @@ def _flash(text):
     message = text
     _draw_status(text)
     time.sleep(1)
+
+
+def _draw_lines(text, y, colour, scale=1):
+    """Word-wrapped block at the left margin, starting at *y*."""
+    step = ui.line_height(scale) + 1
+    for line in ui.wrap(text, ui.WIDTH - 12, scale):
+        ui.text(line, 6, y, colour, scale)
+        y += step

@@ -16,9 +16,12 @@ except ImportError:
 
 CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-&'"
 
-# How many characters flank the highlight. Nine fits 320px comfortably at
-# scale 2 with room for the cursor box.
-_WINDOW = 9
+# Strip geometry on the 160x120 screen: 16px cells, four characters either
+# side of the highlight (9 x 16 = 144px).
+_CELL = 16
+_WINDOW = 4
+_ENTRY_Y = 31
+_STRIP_Y = 62
 
 
 class OnScreenKeyboard:
@@ -35,18 +38,19 @@ class OnScreenKeyboard:
 
     def draw(self, text_so_far):
         """Render the entry line and the character strip."""
-        # What has been typed so far, with a block cursor.
-        ui.rect(0, 60, ui.WIDTH, 34, (12, 18, 30))
-        shown = text_so_far[-24:] if len(text_so_far) > 24 else text_so_far
-        ui.text(shown or "type a company", 10, 68, ui.WHITE if shown else ui.DIM, 2)
+        # What has been typed so far; the tail stays visible as it grows.
+        ui.rect(0, _ENTRY_Y, ui.WIDTH, 18, (12, 18, 30))
+        if text_so_far:
+            ui.text(ui.fit_tail(text_so_far + "_", ui.WIDTH - 8, 2), 4, _ENTRY_Y + 3, ui.WHITE, 2)
+        else:
+            ui.text("type a company", 4, _ENTRY_Y + 3, ui.DIM, 2)
 
         # The strip, highlight in the middle.
         centre_x = ui.WIDTH // 2
-        ui.rect(centre_x - 14, 118, 28, 34, (30, 46, 70))
-        for offset in range(-_WINDOW // 2, _WINDOW // 2 + 1):
+        ui.rect(centre_x - _CELL // 2, _STRIP_Y - 3, _CELL, 18, (30, 46, 70))
+        for offset in range(-_WINDOW, _WINDOW + 1):
             char = CHARSET[(self.index + offset) % len(CHARSET)]
-            x = centre_x + offset * 28 - 5
-            if x < 0 or x > ui.WIDTH - 10:
-                continue
+            glyph = "_" if char == " " else char
+            x = centre_x + offset * _CELL - ui.text_width(glyph, 2) // 2
             colour = ui.ACCENT if offset == 0 else ui.DIM
-            ui.text("_" if char == " " else char, x, 126, colour, 2)
+            ui.text(glyph, x, _STRIP_Y, colour, 2)

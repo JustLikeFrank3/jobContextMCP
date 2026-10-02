@@ -24,7 +24,10 @@ import time
 try:
     from . import secrets
 except ImportError:
-    import secrets
+    try:
+        import secrets
+    except ImportError:  # installed without one — say so on screen, don't crash
+        secrets = None
 
 _TIMEOUT = 15
 
@@ -39,6 +42,8 @@ def connect_wifi(status=None):
     *status* is an optional callable used to report progress on screen — the
     badge otherwise looks frozen for the ten seconds a DHCP lease can take.
     """
+    if secrets is None:
+        raise ApiError("no secrets.py - copy secrets.example.py and fill it in")
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     if wlan.isconnected():
@@ -84,7 +89,7 @@ def _request(method, path, body=None):
             if response.status_code == 403:
                 raise ApiError("token is not badge-scoped")
             if response.status_code == 401:
-                raise ApiError("token rejected — regenerate it")
+                raise ApiError("token rejected - regenerate it")
             raise ApiError("server said " + str(response.status_code))
         return response.json()
     finally:
@@ -115,11 +120,12 @@ _SAFE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
 def _quote(text):
     """Percent-encode a query string. MicroPython has no urllib.parse."""
     out = []
-    for char in text:
+    for byte in text.encode("utf-8"):
+        char = chr(byte)
         if char in _SAFE:
             out.append(char)
         elif char == " ":
             out.append("+")
         else:
-            out.append("%%%02X" % ord(char))
+            out.append("%%%02X" % byte)
     return "".join(out)

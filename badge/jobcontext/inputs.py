@@ -147,6 +147,9 @@ class ButtonInput(TextInput):
 class BleKeyboardInput(TextInput):
     """A paired Bluetooth keyboard. Not implemented — see the module docstring.
 
+    Probed on hardware 2026-10-02: the stock firmware has no gap_pair, so
+    bonding is not compiled in and this cannot work without a custom build.
+
     Kept as a real class rather than a TODO comment so the wiring is already
     in place: implement available()/poll() here and the app picks it up with
     no other change. Until then it reports unavailable and the app silently
