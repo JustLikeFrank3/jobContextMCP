@@ -41,6 +41,9 @@ router = APIRouter(prefix="/api/badge", tags=["badge"])
 # keeps the firmware free of layout math and the payload small.
 _COMPANY_CHARS = 28
 _ROLE_CHARS = 34
+# The badge word-wraps failure text over a few lines, so this can be longer
+# than a list row.
+_DETAIL_CHARS = 80
 _MAX_RESULTS = 12
 
 
@@ -167,17 +170,47 @@ def _generate_materials(inputs: dict) -> dict:
         raise ValueError(f"job_queue row {job_id} not found")
 
     company, role, jd = row["company"], row["role"] or "Unknown role", row["jd"] or ""
-    artifacts: dict[str, str] = {"company": company, "role": role}
+    artifacts: dict = {"company": company, "role": role}
+    errors: dict[str, str] = {}
 
-    if material in ("resume", "both"):
-        from tools.generate import generate_resume
+    from tools import generate
 
-        artifacts["resume"] = str(generate_resume(company, role, jd))
-    if material in ("cover_letter", "both"):
-        from tools.generate import generate_cover_letter
+    wanted = [m for m in ("resume", "cover_letter") if material in (m, "both")]
+    for name in wanted:
+        fn = generate.generate_resume if name == "resume" else generate.generate_cover_letter
+        result = str(fn(company, role, jd))
+        failure = _generation_failure(result)
+        if failure:
+            errors[name] = failure
+        else:
+            artifacts[name] = result
 
-        artifacts["cover_letter"] = str(generate_cover_letter(company, role, jd))
+    if len(errors) == len(wanted):
+        # Nothing was written. Fail the row so the badge's poll says so instead
+        # of listing a document that does not exist.
+        raise RuntimeError("; ".join(errors.values()))
+    if errors:
+        artifacts["errors"] = errors
     return artifacts
+
+
+def _generation_failure(result: str) -> str:
+    """Return a short reason if *result* is not a generated document, else "".
+
+    The generators never raise on failure — they *report* it in their return
+    text, because their usual caller is an MCP client that reads that text.
+    With no LLM configured they return a "CONTEXT PACKAGE" for the client to
+    write from; on an API error a "✗ …" line followed by that same package.
+    Either is a successful call that produced no file, and storing it as the
+    artifact made every one of them look like a finished document.
+    """
+    head = result.lstrip()
+    if head.startswith("✓"):
+        return ""
+    if "CONTEXT PACKAGE" in head[:200]:
+        return "no LLM configured on the server"
+    first = head.splitlines()[0] if head else "empty result"
+    return first.lstrip("✗ ").strip() or "generation failed"
 
 
 work.register_kind(_KIND, _generate_materials)
@@ -235,5 +268,13 @@ async def badge_work(
         "status": item.get("status", ""),
         "made": done,
         # One short line, never a traceback.
-        "detail": _clip(item.get("error") or "", _ROLE_CHARS) if item.get("status") == "failed" else "",
+        "detail": _failure_line(item.get("error")) if item.get("status") == "failed" else "",
     }
+
+
+def _failure_line(error: "str | None") -> str:
+    """The exception message only. The row's error is "<message>\n<traceback>",
+    and _clip() collapses whitespace, so clipping the whole thing would run a
+    short message straight into "Traceback (most recent…"."""
+    first = (error or "").strip().splitlines()
+    return _clip(first[0] if first else "", _DETAIL_CHARS)

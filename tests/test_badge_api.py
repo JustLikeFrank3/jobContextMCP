@@ -258,7 +258,7 @@ def test_poll_never_returns_a_traceback(badge_env, monkeypatch):
             break
         time.sleep(0.05)
     assert body["status"] == "failed"
-    assert len(body["detail"]) <= 34
+    assert len(body["detail"]) <= 80
     assert "Traceback" not in body["detail"]
 
 
@@ -282,17 +282,18 @@ def test_executor_generates_requested_materials(badge_env, monkeypatch):
     calls = []
     monkeypatch.setattr(
         "tools.generate.generate_resume",
-        lambda c, r, jd, *a, **k: calls.append(("resume", c, r, jd)) or "/out/resume.pdf",
+        lambda c, r, jd, *a, **k: calls.append(("resume", c, r, jd)) or "✓ Resume generated for SWE @ Acme",
     )
     monkeypatch.setattr(
         "tools.generate.generate_cover_letter",
-        lambda c, r, jd, *a, **k: calls.append(("cl", c, r, jd)) or "/out/cl.pdf",
+        lambda c, r, jd, *a, **k: calls.append(("cl", c, r, jd)) or "✓ Cover letter generated for SWE @ Acme",
     )
 
     import transport.http.routes.badge as badge_mod
 
     out = badge_mod._generate_materials({"job_id": job_id, "material": "both"})
-    assert out["resume"] == "/out/resume.pdf" and out["cover_letter"] == "/out/cl.pdf"
+    assert out["resume"].startswith("✓ Resume") and out["cover_letter"].startswith("✓ Cover letter")
+    assert "errors" not in out
     assert [c[0] for c in calls] == ["resume", "cl"]
     # The job's own text reaches the generator, not a placeholder.
     assert calls[0][1:] == ("Acme", "SWE", "the jd")
@@ -308,3 +309,93 @@ def test_executor_fails_loudly_on_missing_job(badge_env):
     set_data_folder(root / "users" / _OID)
     with pytest.raises(ValueError, match="not found"):
         badge_mod._generate_materials({"job_id": 424242, "material": "resume"})
+
+
+def _queue_job(root):
+    with _partition_conn(root) as con:
+        cur = con.execute(
+            "INSERT INTO job_queue (company, role, jd) VALUES ('Acme', 'SWE', 'the jd')"
+        )
+        return cur.lastrowid
+
+
+@pytest.mark.live_llm
+def test_executor_fails_when_no_llm_is_configured(badge_env, monkeypatch):
+    """The real generator, with no LLM client, returns a context package for an
+    MCP client to write from — text, not a document. That must fail the row,
+    not report made=["resume"] for a file that was never written."""
+    # live_llm keeps the real generator; no client sends it down the
+    # context-package path, which is what a keyless tenant hits.
+    monkeypatch.setattr("tools.generate._openai_client", lambda: None)
+    client, root = badge_env
+    client.get("/api/badge/ping", headers=_auth(_key("badge")))
+    job_id = _queue_job(root)
+    import transport.http.routes.badge as badge_mod
+    from lib.user_context import set_data_folder
+
+    set_data_folder(root / "users" / _OID)
+    with pytest.raises(RuntimeError, match="no LLM"):
+        badge_mod._generate_materials({"job_id": job_id, "material": "resume"})
+
+
+def test_executor_fails_on_reported_generator_error(badge_env, monkeypatch):
+    client, root = badge_env
+    client.get("/api/badge/ping", headers=_auth(_key("badge")))
+    job_id = _queue_job(root)
+    monkeypatch.setattr(
+        "tools.generate.generate_resume",
+        lambda *a, **k: "✗ OpenAI API error: 429 rate limited\n\nFalling back to context package:\n…",
+    )
+    import transport.http.routes.badge as badge_mod
+    from lib.user_context import set_data_folder
+
+    set_data_folder(root / "users" / _OID)
+    with pytest.raises(RuntimeError, match="429"):
+        badge_mod._generate_materials({"job_id": job_id, "material": "resume"})
+
+
+def test_executor_keeps_the_half_that_worked(badge_env, monkeypatch):
+    client, root = badge_env
+    client.get("/api/badge/ping", headers=_auth(_key("badge")))
+    job_id = _queue_job(root)
+    monkeypatch.setattr(
+        "tools.generate.generate_resume",
+        lambda *a, **k: "✓ Resume generated for SWE @ Acme\n  ✓ Saved: Acme_SWE_Resume.txt",
+    )
+    monkeypatch.setattr(
+        "tools.generate.generate_cover_letter", lambda *a, **k: "✗ OpenAI API error: boom"
+    )
+    import transport.http.routes.badge as badge_mod
+    from lib.user_context import set_data_folder
+
+    set_data_folder(root / "users" / _OID)
+    out = badge_mod._generate_materials({"job_id": job_id, "material": "both"})
+    assert out["resume"].startswith("✓ Resume generated")
+    assert "cover_letter" not in out
+    assert "boom" in out["errors"]["cover_letter"]
+
+
+def test_poll_detail_is_the_message_not_the_traceback(badge_env, monkeypatch):
+    """A short message must not run on into the stored traceback."""
+    client, root = badge_env
+    token = _key("badge")
+    client.get("/api/badge/ping", headers=_auth(token))
+    job_id = _queue_job(root)
+
+    def no_llm(*a, **k):
+        raise RuntimeError("no LLM configured on the server")
+
+    from lib import work
+
+    monkeypatch.setitem(work._KINDS, "badge_materials", no_llm)
+    work_id = client.post(
+        "/api/badge/materials", json={"job_id": job_id, "material": "resume"}, headers=_auth(token)
+    ).json()["work_id"]
+    deadline = time.time() + 5
+    body = {}
+    while time.time() < deadline:
+        body = client.get(f"/api/badge/work/{work_id}", headers=_auth(token)).json()
+        if body.get("status") in ("succeeded", "failed"):
+            break
+        time.sleep(0.05)
+    assert body["detail"] == "no LLM configured on the server"
