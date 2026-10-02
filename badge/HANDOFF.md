@@ -6,7 +6,7 @@ that built this; it could never reach the hardware, which is why this exists.
 
 **Branch:** `claude/jobcontext-github-badge-fw1b2q`
 **Base:** current `main` as of `c2e9e3c` (PR #360)
-**State:** complete, 2612 tests passing, never PR'd
+**State:** hardware-verified firmware; PR'd to qa 2026-10-02
 
 ---
 
@@ -73,112 +73,76 @@ probe.py             ../probe.py — hardware diagnostic, see below
 
 ---
 
-## 2. Your actual job: run the probe, then fix `ui.py` from fact
+## 2. Hardware facts (probed 2026-10-02 — no longer guesses)
 
-`ui.py` contains three guesses that could not be checked without the badge.
-`badge/probe.py` answers all of them. It writes nothing, connects to nothing,
-and needs no `secrets.py`.
+`badge/probe.py` was run on a real badge. `ui.py` was rewritten from its
+output; these are the facts it encodes:
 
-### Getting output
+- **Machine:** "GitHub Badger with RP2350", Pimoroni badgeware firmware,
+  MicroPython 1.26. No PicoGraphics, no `tufty*` modules.
+- **Display:** `badgeware.display` is a bare ST7789 (`update`/`backlight`/
+  `command`). Drawing is `screen.brush = brushes.color(...)`, then
+  `screen.draw(shapes.rectangle(...))` / `screen.text()`. **`screen` is
+  160x120**, doubled onto the 320x240 panel — every coordinate is in 160x120.
+- **Fonts:** proportional `.ppf` PixelFonts in `/system/assets/fonts/`,
+  **ASCII-only** (any non-ASCII char draws as one fallback box). `ui.fit()`
+  measures pixels; `ui._ascii()` folds "…", "—", accents before drawing. A
+  fixed `CHAR_W` cannot be right, so the server's `_COMPANY_CHARS` /
+  `_ROLE_CHARS` are now payload caps only — the badge does the real fitting.
+- **Buttons:** `io.BUTTON_* in io.held`, refreshed by `run()` each frame.
+  Active-low pins, confirmed live by holding UP during the probe.
+- **Frame loop:** `run(update)` pushes `screen` after every update, so
+  `ui.flip()` is a no-op; `ui.present()` (`display.update()`) is for frames
+  drawn outside the loop (splash/status before a blocking call).
+- **TLS:** `ssl.CERT_REQUIRED` exists, but MicroPython `requests` wraps the
+  socket without a verifying context — treat badge HTTPS as **unverified**.
+  The token is badge-scoped for exactly this reason; revoke it after events.
 
-Cable must be **USB-C with data lines** — charge-only cables make the badge
-look fine while never mounting.
+### REPL gotcha
 
-```bash
-ls /dev/cu.usbmodem*            # find the port
-pip install mpremote            # if needed
-mpremote run badge/probe.py     # runs WITHOUT copying; streams output
-```
-
-Have the user **hold UP** while it runs, so the button section proves the
-mapping is live rather than merely present. Thonny also works if mpremote
-fights you. Double-tap reset mounts the filesystem at `/Volumes/BADGER`.
-
-### Decision tree from the output
-
-**`display object` section**
-
-- `badgeware.display` exists with `set_pen` / `create_pen` / `clear` / `text` /
-  `rectangle` / `update` → the primary path in `ui.py` is correct. Verify each
-  method name against the printed list; adapt `_pen()` if `create_pen` is
-  absent (it already falls back to `set_pen(colour)`).
-- Only `picographics` → **the fallback constant in `ui.py` is wrong.** It says
-  `DISPLAY_TUFTY_2040`; this badge is a Tufty **2350**. The probe prints every
-  `DISPLAY_*` constant — pick the right one.
-- Neither → ask what the badge's own preloaded apps import, and rewrite
-  `_import_firmware()` around that. Nothing outside `ui.py` should change.
-
-**`font metrics` section — the important numbers**
-
-`ui.CHAR_W = 8` is an estimate, and `measure_text` gives the truth. When you
-correct it, remember **the widths exist in two places**:
-
-- `badge/jobcontext/ui.py` — `CHAR_W`, `LINE_H`, and the `fit()` call sites
-- `transport/http/routes/badge.py` — `_COMPANY_CHARS = 28`, `_ROLE_CHARS = 34`
-
-The server pre-truncates so the firmware carries no layout maths, so a wrong
-`CHAR_W` means the *server* is cutting strings at the wrong width. Fix both,
-then re-run `tests/test_badge_api.py` — one test asserts `len(role) <= 34`
-and will need its constant updated with you.
-
-**`buttons` section**
-
-Pin numbers in the PicoGraphics fallback (`UP=22 DOWN=6 A=7 B=8 C=9`) are
-Tufty **2040** values. Confirm against what the probe reports before trusting
-them on a 2350.
-
-**`network / TLS` section**
-
-If `ssl` has no `CERT_REQUIRED`, the badge's HTTPS is **unverified** — a
-conference-WiFi MITM could lift the badge token. Not fatal (the token is
-badge-scoped: search, enqueue, poll, nothing else) but worth telling Frank,
-and an argument for revoking the token after the event.
+Ctrl-C at the launcher menu (which `mpremote` sends on connect) makes
+badgeware's `run()` return `None`; `main.py` then does
+`sys.path.insert(0, None)` and **every subsequent `import` fails** with
+`TypeError: can't convert 'NoneType' object to str`. Fix in-session with
+`sys.path[:] = [p for p in sys.path if p is not None]`, or just reset.
+Use `mpremote ... resume` to avoid the soft reset re-entering the menu.
 
 ---
 
-## 3. The Bluetooth keyboard question
+## 3. The Bluetooth keyboard question — closed
 
-Originally requested; scaffolded but **not implemented**. `inputs.py` defines
-a source interface, `best_available()` picks the richest working one, and
-`BleKeyboardInput` reports unavailable so the app falls back to buttons.
-Implementing its `available()` / `poll()` is the only change needed.
-
-**The gate is in the probe.** If `bluetooth.BLE()` has no `gap_pair`, pairing
-and bonding were not compiled into this firmware; keyboards refuse to send
-reports over an unencrypted link, so it is a dead end — say so and stop.
-
-If `gap_pair` IS present, there is a working reference to port:
-`p4_ble_keyboard.py` in the **moybyte** project does the full sequence
-(scan → connect/bond → discover HID service `0x1812` → subscribe to report
-characteristics, with persistent bonding and autorepeat). Caveat: it targets
-**ESP32-P4 on NimBLE** and needs two ESP-IDF flags. This badge is RP2350 +
-CYW43439 on **BTstack**, so the protocol logic ports but the stack layer does
-not.
-
-**Before buying a keyboard:** it must be genuinely BLE, not Bluetooth Classic.
-MicroPython has no Classic/BR-EDR support, and Classic-only devices never even
-appear in a BLE scan. Cheapest check — scan with nRF Connect or LightBlue on a
-phone; if the keyboard appears, it's BLE.
+The probe found **no `gap_pair`** on `bluetooth.BLE()`: pairing/bonding is
+not compiled into this firmware, and keyboards refuse to send HID reports
+over an unencrypted link. Dead end on stock firmware; buttons only.
+`BleKeyboardInput` stays as the seam if a custom firmware build ever adds it.
 
 ---
 
-## 4. End-to-end run
+## 4. Installing
 
-Needs a badge-scoped token: Dashboard → API Keys → scope **"Badge only"**.
-Copy `badge/jobcontext/secrets.example.py` to `secrets.py`, fill in
-`WIFI_SSID`, `WIFI_PASSWORD`, `BASE_URL`, `BADGE_TOKEN`. Guest WiFi is wise —
-both land in plain text on a filesystem anyone can mount.
+`/system` (where apps live) is **read-only to MicroPython**, so mpremote
+cannot install. Put the badge in USB-drive mode (double-tap reset → mounts
+`/system` as `/Volumes/BADGER`), then:
 
 ```bash
-cp -r badge/jobcontext /Volumes/BADGER/apps/
+cp badge/jobcontext/secrets.example.py badge/jobcontext/secrets.py   # fill in
+python3 badge/install.py            # --dry-run to preview, --restore to undo
 ```
 
-Then reset and pick *jobcontext* from the app menu.
+The launcher only shows apps in a hard-coded list in `apps/menu/__init__.py`
+on a 3x2 grid the six stock apps fill, so the installer swaps **gallery's**
+slot for jobcontext (override with `--remove`), backs up the menu and the
+removed app to `~/badge-backups/<stamp>/`, copies the app + `icon.png`, and
+ejects. Re-runs only refresh app files and make no backup.
+
+The token must be **"Badge only"** scope — which only exists once this
+branch is deployed. A full-scope key on a mountable drive is your whole job
+search.
 
 | Screen | UP/DOWN | A | B | C |
 |---|---|---|---|---|
 | Search | move character strip | type highlighted char | backspace | search |
-| Results | select | open actions | — | new search |
+| Results | select (scrolls, 3 visible) | open actions | — | new search |
 | Actions | resume / cover letter / both | generate | — | back |
 | Working | — | — | — | stop waiting |
 
@@ -219,10 +183,6 @@ to fix that; don't bypass it with a bare `state = ...` assignment.
 
 ## 6. Known gaps
 
-- `ui.py` firmware probe, `CHAR_W`, and fallback button pins — unverified
-  (that's §2).
-- BLE keyboard unimplemented (§3).
-- A desktop simulator was offered and never built: a pygame/tkinter harness
-  running the real modules in a 320×240 window. Largely moot now the hardware
-  is in hand.
-- No PR opened. Frank's call.
+- Not yet run end-to-end against a deployed server (the badge routes were
+  never deployed; first attempt 404'd at `/api/badge/ping`).
+- Badge HTTPS is unverified (see §2).
