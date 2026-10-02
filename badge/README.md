@@ -104,3 +104,29 @@ API differs from what it probes for, that is the one file to correct.
 
 The state machine is tested on the host, against fake hardware, in
 `tests/test_badge_firmware.py` — no badge required to run them.
+
+## Before you install: run the probe
+
+`ui.py` makes three guesses that cannot be checked from a laptop — which
+drawing API the firmware exposes, how wide a character is, and how buttons
+are surfaced. `badge/probe.py` asks the badge directly.
+
+1. Double-tap reset to mount the badge as a USB drive.
+2. Copy `probe.py` to the root of that drive.
+3. In a REPL (Thonny, `mpremote`, `screen`): `import probe`
+4. Hold **UP** while it runs, so the button section proves the mapping is
+   live rather than merely present.
+
+It writes nothing, connects to nothing, and needs no `secrets.py`. Paste the
+output and `ui.py` can be corrected from fact.
+
+The sections that matter most:
+
+- **display object** — whether `badgeware.display` exists, and whether it has
+  `set_pen` / `create_pen` / `text` / `rectangle` / `update`.
+- **font metrics** — `measure_text` output is where `CHAR_W = 8` gets
+  replaced with the real number; every truncation width derives from it.
+- **BLE host capability** — if `gap_pair` is missing from `bluetooth.BLE()`,
+  pairing was not compiled in, no keyboard will send reports over an
+  unencrypted link, and the Bluetooth-keyboard path is a dead end. That one
+  attribute settles it.
