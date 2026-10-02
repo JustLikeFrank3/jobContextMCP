@@ -16,7 +16,7 @@ MicroPython firmware.
 |---|---|
 | MCU | RP2350B, dual Cortex-M33 @ 250MHz, 520KB SRAM |
 | Memory | 16MB QSPI flash (XiP) + 8MB PSRAM |
-| Display | 2.8" colour IPS LCD, 320×240 |
+| Display | 2.8" colour IPS LCD, 320×240 (apps draw at 160×120, doubled) |
 | Wireless | Raspberry Pi RM2 (CYW43439) — WiFi b/g/n + Bluetooth 5.2 |
 | Buttons | UP, DOWN, A, B, C |
 | Other | IR receiver, phototransistor, qwiic port, 1000mAh LiPo |
@@ -30,12 +30,18 @@ MicroPython firmware.
    `jobcontext/secrets.py` and fill in WiFi + the token. `secrets.py` is
    gitignored.
 
-3. **Copy to the badge.** Double-tap reset to mount it as a USB drive
-   (it appears as `BADGER`), then drop the app in:
+3. **Install.** Double-tap reset to mount the badge as a USB drive (it
+   appears as `BADGER`), then:
 
    ```sh
-   cp -r badge/jobcontext /Volumes/BADGER/apps/
+   python3 badge/install.py          # --dry-run to preview first
    ```
+
+   A plain `cp -r` is not enough: the launcher only shows apps named in a
+   hard-coded list in `apps/menu/__init__.py`, on a 3x2 grid the six stock
+   apps already fill. The installer gives jobcontext **gallery's** slot
+   (`--remove <app>` to choose another), backs up what it changes to
+   `~/badge-backups/`, and ejects. `--restore <backup>` undoes it.
 
 4. **Reset** and pick *jobcontext* from the app menu.
 
@@ -105,28 +111,19 @@ API differs from what it probes for, that is the one file to correct.
 The state machine is tested on the host, against fake hardware, in
 `tests/test_badge_firmware.py` — no badge required to run them.
 
-## Before you install: run the probe
+## The probe
 
-`ui.py` makes three guesses that cannot be checked from a laptop — which
-drawing API the firmware exposes, how wide a character is, and how buttons
-are surfaced. `badge/probe.py` asks the badge directly.
+`badge/probe.py` asks the badge what its firmware actually exposes. It was run
+on real hardware on 2026-10-02 and `ui.py` was rewritten from its output —
+`badge/HANDOFF.md` §2 has the findings. Re-run it if a firmware update
+changes things:
 
-1. Double-tap reset to mount the badge as a USB drive.
-2. Copy `probe.py` to the root of that drive.
-3. In a REPL (Thonny, `mpremote`, `screen`): `import probe`
-4. Hold **UP** while it runs, so the button section proves the mapping is
-   live rather than merely present.
+```sh
+mpremote resume run badge/probe.py   # hold UP while it runs
+```
 
-It writes nothing, connects to nothing, and needs no `secrets.py`. Paste the
-output and `ui.py` can be corrected from fact.
-
-The sections that matter most:
-
-- **display object** — whether `badgeware.display` exists, and whether it has
-  `set_pen` / `create_pen` / `text` / `rectangle` / `update`.
-- **font metrics** — `measure_text` output is where `CHAR_W = 8` gets
-  replaced with the real number; every truncation width derives from it.
-- **BLE host capability** — if `gap_pair` is missing from `bluetooth.BLE()`,
-  pairing was not compiled in, no keyboard will send reports over an
-  unencrypted link, and the Bluetooth-keyboard path is a dead end. That one
-  attribute settles it.
+It writes nothing, connects to nothing, and needs no `secrets.py`. The
+headline results: drawing is badgeware's 160x120 `screen` (no PicoGraphics),
+fonts are proportional and ASCII-only (so `ui.fit()` measures pixels), and
+`bluetooth.BLE()` has **no `gap_pair`** — the Bluetooth-keyboard path is a
+dead end on stock firmware.

@@ -103,9 +103,11 @@ left/right buttons, so a grid keyboard has no way to move horizontally.
 The original ask was a paired Bluetooth keyboard. It is scaffolded but not
 implemented, because it requires the badge to be an HID-over-GATT *host* and
 MicroPython's entire BLE HID ecosystem is peripheral-side — libraries for
-pretending to *be* a keyboard, not to read one. `badge/README.md` has the full
-reasoning and two cheaper alternatives. `inputs.py` defines the source
-interface so this can land without touching the state machine.
+pretending to *be* a keyboard, not to read one. The hardware probe then
+settled it: the stock firmware has no `gap_pair`, so bonding is not compiled
+in and keyboards will not send reports at all. `badge/README.md` has the
+reasoning and two cheaper alternatives; `inputs.py` keeps the source
+interface in case a custom firmware build ever changes that.
 
 ## Tests
 
@@ -115,6 +117,10 @@ interface so this can land without touching the state machine.
 - `tests/test_badge_firmware.py` — the real state machine against fake
   hardware. Covers text entry, the carousel, and the button re-arm on screen
   changes (without it, the C press that submits a search is still held when
-  the results screen first reads it, and bounces straight back).
+  the results screen first reads it, and bounces straight back), plus the
+  real `ui` text helpers (pixel fitting, wrap, ASCII folding).
+- `tests/test_badge_install.py` — the installer against a fake badge drive
+  built from the stock menu: slot swap, idempotence, backup/restore round
+  trip, dry run.
 - `tests/test_api_keys.py::TestKeyScopes` — scope storage and resolution,
   including pre-scope rows reading as `full`.
