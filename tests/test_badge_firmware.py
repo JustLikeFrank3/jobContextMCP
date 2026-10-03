@@ -56,11 +56,15 @@ class FakeUI:
     def flip(self):
         pass
 
-    def qr_image(self, text, max_w, max_h):
-        self.qr_text = text
-        return ("qr-image", 90)
+    QR_QUIET = 2
+    qr_modules = 49  # a typical card: fits beside Tetris at 2px per module
 
-    def blit(self, image, x, y):
+    def qr_code(self, text):
+        self.qr_text = text
+        return (self.qr_modules, bytearray())
+
+    def draw_qr(self, qr, x, y, scale):
+        self.qr_scale = scale
         self.drawn.append("<qr>")
 
     def present(self):
@@ -551,14 +555,28 @@ def test_idle_shows_the_contact_card(saver_app):
     assert any(line.startswith("in/ada") for line in ui_.drawn)
 
 
-def test_card_alternates_with_the_vcard_qr(saver_app):
+def test_card_alternates_with_the_qr(saver_app):
     app, ui_, _api = saver_app
     _idle(app, ui_, 31)
     assert "<qr>" not in ui_.drawn          # text card first
     _idle(app, ui_, 8)
-    assert "<qr>" in ui_.drawn              # then the QR page
-    assert ui_.qr_text.startswith("BEGIN:VCARD")
-    assert "FN:Ada Lovelace" in ui_.qr_text
+    assert "<qr>" in ui_.drawn              # then the QR page, beside Tetris
+    assert "scan me" in ui_.drawn
+    assert ui_.qr_scale == 2
+    assert ui_.qr_text.startswith("MECARD:N:Ada Lovelace;")
+
+
+def test_dense_qr_takes_the_whole_screen_rather_than_shrinking(saver_app):
+    """1px modules were unscannable on the real badge: never go below 2px
+    to keep Tetris in view — give the QR the screen instead."""
+    app, ui_, _api = saver_app
+    ui_.qr_modules = 55                     # 59 with quiet zone: 1px in the 114px panel
+    _idle(app, ui_, 31)
+    _idle(app, ui_, 8)
+    assert "<qr>" in ui_.drawn
+    assert app.screensaver._qr_full
+    assert ui_.qr_scale == 2                # full screen keeps it scannable
+    assert "scan me" not in ui_.drawn       # no Tetris on the full-screen page
 
 
 def test_waking_press_is_swallowed(saver_app):
@@ -574,6 +592,18 @@ def test_waking_press_is_swallowed(saver_app):
     app.update()
     assert app.query == ""
     assert app.state == app.SEARCH
+
+
+def test_static_page_is_drawn_once_then_only_tetris(saver_app):
+    """The QR is hundreds of rectangles: paint it on the page flip, not 30x/s."""
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    _idle(app, ui_, 8)                      # flip to the QR page
+    assert ui_.drawn.count("<qr>") == 1
+    for _ in range(5):
+        _idle(app, ui_, 0.2)
+    assert ui_.drawn.count("<qr>") == 1     # not repainted
+    assert "scan me" in ui_.drawn           # but the well label still updates
 
 
 def test_tetris_plays_while_saving(saver_app):
@@ -621,10 +651,23 @@ def test_no_contact_file_means_no_screen_saver(badge_app):
     assert not app.saving
 
 
-def test_vcard_includes_only_filled_fields(badge_app):
+def test_qr_payload_is_a_compact_mecard(badge_app):
     app, _ui, _api = badge_app
-    card = app.screensaver.vcard(_Contact)
-    assert "N:Lovelace;Ada" in card and "TITLE:Staff Engineer" in card
-    assert "URL:https://linkedin.com/in/ada" in card
-    assert "URL:https://github.com/ada-l" in card
-    assert "TEL:" not in card               # PHONE is empty
+    card = app.screensaver.qr_payload(_Contact)
+    assert card == (
+        "MECARD:N:Ada Lovelace;EMAIL:ada@example.com;"
+        "URL:linkedin.com/in/ada;URL:github.com/ada-l;;"
+    )
+    assert "Staff Engineer" not in card     # title: on the card, not the QR
+    assert "https://" not in card and "TEL:" not in card
+
+
+def test_qr_payload_escapes_mecard_separators(badge_app):
+    app, _ui, _api = badge_app
+
+    class Tricky(_Contact):
+        NAME = "Smith; Jo"
+        EMAIL = "a:b@x.io"
+
+    card = app.screensaver.qr_payload(Tricky)
+    assert "N:Smith\\; Jo;" in card and "EMAIL:a\\:b@x.io;" in card

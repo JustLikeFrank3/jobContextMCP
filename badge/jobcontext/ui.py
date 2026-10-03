@@ -217,16 +217,14 @@ def present():
     _fw.display.update()
 
 
-def qr_image(text, max_w, max_h):
-    """Render *text* as a QR code into an offscreen Image, once.
+def qr_code(text):
+    """Encode *text* as a QR code: (modules_per_side, runs) or None.
 
-    Returns (image, side_px) or None when the firmware has no qrcode module.
-    Modules are as large as fit in max_w x max_h (at least 1px) with a
-    2-module white quiet zone, drawn as horizontal runs so a dense code is a
-    few hundred rectangles at render time and a single blit per frame after.
+    *runs* is a bytearray of (x, y, length) triples, one per horizontal run
+    of dark modules — about 2 KB for a typical contact card. Deliberately not
+    an offscreen Image: at 2px per module that is ~45 KB in one block, which
+    the badge's fragmented heap could not allocate (on-hardware MemoryError).
     """
-    if _fw is None:
-        return None
     try:
         import qrcode  # type: ignore
     except ImportError:
@@ -234,13 +232,7 @@ def qr_image(text, max_w, max_h):
     code = qrcode.QRCode()
     code.set_text(text)
     n = code.get_size()[0]
-    quiet = 2
-    scale = max(1, min(max_w, max_h) // (n + 2 * quiet))
-    side = (n + 2 * quiet) * scale
-    image = _fw.Image(0, 0, side, side)
-    image.brush = _fw.brushes.color(255, 255, 255)
-    image.draw(_fw.shapes.rectangle(0, 0, side, side))
-    image.brush = _fw.brushes.color(0, 0, 0)
+    runs = bytearray()
     for y in range(n):
         x = 0
         while x < n:
@@ -250,15 +242,26 @@ def qr_image(text, max_w, max_h):
             start = x
             while x < n and code.get_module(x, y):
                 x += 1
-            image.draw(_fw.shapes.rectangle(
-                (start + quiet) * scale, (y + quiet) * scale, (x - start) * scale, scale))
-    return image, side
+            runs.extend((start, y, x - start))
+    return n, runs
 
 
-def blit(image, x, y):
+QR_QUIET = 2  # light modules around the code
+
+
+def draw_qr(qr, x, y, scale):
+    """Draw *qr* (from qr_code) with its quiet zone, top-left at (x, y)."""
     if _fw is None:
         return
-    _fw.screen.blit(image, int(x), int(y))
+    n, runs = qr
+    side = (n + 2 * QR_QUIET) * scale
+    rect(x, y, side, side, WHITE)
+    _brush(BLACK)
+    ox = x + QR_QUIET * scale
+    oy = y + QR_QUIET * scale
+    for i in range(0, len(runs), 3):
+        _fw.screen.draw(_fw.shapes.rectangle(
+            ox + runs[i] * scale, oy + runs[i + 1] * scale, runs[i + 2] * scale, scale))
 
 
 def header(title, subtitle=""):

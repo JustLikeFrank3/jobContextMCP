@@ -5,7 +5,7 @@ so a badge left on the jobcontext app works as a name tag. Any button wakes
 it; the app swallows that press so it never also acts on the screen below.
 
 The left panel alternates between the text card and a QR code of the same
-details as a vCard, so scanning it adds you to someone's contacts. The right
+details (a MECARD — see qr_payload), so scanning it adds you to contacts. The right
 panel is tetris.Game playing itself.
 
     +----------------------+---------+
@@ -49,7 +49,11 @@ contact = None
 _game = None
 _last_step = 0
 _started = 0
-_qr = None          # (image, side) once rendered; False if unavailable
+_qr = None          # (modules, runs) once encoded; False if unavailable
+_qr_scale = 2
+_qr_full = False    # QR too dense for the side panel: it takes the screen
+_MIN_MODULE_PX = 2  # 1px modules (2 physical px) proved unscannable
+_shown_page = None  # page currently on screen; static pages draw once
 
 
 def load():
@@ -83,59 +87,88 @@ def _field(module, name):
     return " ".join(str(value).split())
 
 
-def vcard(c):
-    """A minimal vCard 3.0 for *c* — only the fields that are filled in.
+def _mecard_escape(value):
+    out = ""
+    for ch in value:
+        out += ("\\" + ch) if ch in ";:,\\" else ch
+    return out
 
-    Minimal on purpose: every byte grows the QR, and a dense code is hard to
-    scan off a small screen.
+
+def qr_payload(c):
+    """Contact details for the QR, as a MECARD — not a vCard.
+
+    The first on-badge test used a full vCard 3.0: 261 bytes, a 65x65 code
+    drawn at 1px per module, and phones could not scan it off the screen.
+    MECARD carries the same contact without the vCard boilerplate, links drop
+    their https://, and the title is left out (MECARD has no title field and
+    it is on the text card anyway). A typical card is then ~150 bytes, a
+    49x49 code at 2px per module: twice the size, and it scans. Both the iOS
+    and Android cameras read MECARD.
     """
-    name = _field(c, "NAME")
-    parts = name.rsplit(" ", 1)
-    family, given = (parts[1], parts[0]) if len(parts) == 2 else (name, "")
-    lines = ["BEGIN:VCARD", "VERSION:3.0", "N:" + family + ";" + given, "FN:" + name]
-    if _field(c, "TITLE"):
-        lines.append("TITLE:" + _field(c, "TITLE"))
+    parts = ["N:" + _mecard_escape(_field(c, "NAME"))]
     if _field(c, "EMAIL"):
-        lines.append("EMAIL:" + _field(c, "EMAIL"))
+        parts.append("EMAIL:" + _mecard_escape(_field(c, "EMAIL")))
     if _field(c, "PHONE"):
-        lines.append("TEL:" + _field(c, "PHONE"))
-    if _field(c, "LINKEDIN"):
-        lines.append("URL:https://linkedin.com/in/" + _field(c, "LINKEDIN"))
-    if _field(c, "GITHUB"):
-        lines.append("URL:https://github.com/" + _field(c, "GITHUB"))
-    if _field(c, "WEBSITE"):
-        lines.append("URL:https://" + _field(c, "WEBSITE"))
-    lines.append("END:VCARD")
-    return "\n".join(lines)
+        parts.append("TEL:" + _mecard_escape(_field(c, "PHONE")))
+    for prefix, key in (("linkedin.com/in/", "LINKEDIN"), ("github.com/", "GITHUB"), ("", "WEBSITE")):
+        if _field(c, key):
+            parts.append("URL:" + _mecard_escape(prefix + _field(c, key)))
+    return "MECARD:" + ";".join(parts) + ";;"
 
 
 def start(now):
     """Begin (or resume) showing the saver at tick *now*."""
-    global _game, _last_step, _started, _qr
+    global _game, _last_step, _started, _qr, _shown_page
     if _game is None:
         _game = tetris.Game()
     if _qr is None:
-        # Render once: re-drawing a ~45x45 code module by module every frame
-        # is far too slow on the badge, a cached image is one blit.
-        _qr = ui.qr_image(vcard(contact), _PANEL_W, ui.HEIGHT - 14) or False
+        _qr = _render_qr()
     _last_step = now
     _started = now
+    _shown_page = None  # whatever the app drew is underneath: redraw fully
+
+
+def _render_qr():
+    """Encode the QR once and pick where it goes.
+
+    Beside Tetris if it fits at 2px per module; otherwise the QR page takes
+    the whole screen, because a smaller code is a code nobody can scan.
+    """
+    global _qr_full, _qr_scale
+    qr = ui.qr_code(qr_payload(contact))
+    if not qr:
+        return False
+    side = qr[0] + 2 * ui.QR_QUIET
+    _qr_scale = min(_PANEL_W, ui.HEIGHT) // side
+    _qr_full = _qr_scale < _MIN_MODULE_PX
+    if _qr_full:
+        _qr_scale = max(1, min(ui.WIDTH, ui.HEIGHT) // side)
+    return qr
 
 
 def draw(now):
-    """Advance Tetris as time allows and draw one full frame."""
-    global _last_step
+    """Advance Tetris as time allows and draw the frame.
+
+    The card and the QR are static, so they are drawn only when the page
+    changes; every other frame repaints just the Tetris well. A dense QR is
+    hundreds of rectangles — fine once, wasteful at 30 fps.
+    """
+    global _last_step, _shown_page
     while time.ticks_diff(now, _last_step) >= _STEP_MS:
         _game.step()
         _last_step += _STEP_MS
 
-    ui.clear(ui.BLACK)
-    show_qr = _qr and (time.ticks_diff(now, _started) // _PAGE_MS) % 2 == 1
-    if show_qr:
-        _draw_qr()
-    else:
-        _draw_card()
-    _draw_well()
+    page = "qr" if _qr and (time.ticks_diff(now, _started) // _PAGE_MS) % 2 == 1 else "card"
+    if page != _shown_page:
+        _shown_page = page
+        ui.clear(ui.BLACK)
+        if page == "qr":
+            _draw_qr()
+        else:
+            _draw_card()
+    if page == "qr" and _qr_full:
+        return
+    _draw_well("scan me" if page == "qr" else "lines " + str(_game.lines))
 
 
 def _draw_card():
@@ -160,16 +193,19 @@ def _draw_card():
 
 
 def _draw_qr():
-    image, side = _qr
-    x = max(0, (_PANEL_W - side) // 2)
-    ui.blit(image, x, 2)
-    ui.text(ui.fit("scan to save my contact", _PANEL_W, 1), 4, ui.HEIGHT - 12, ui.DIM, 1)
+    # White behind the whole panel, not just the code's own quiet zone: the
+    # wider the light margin, the easier the scan.
+    width = ui.WIDTH if _qr_full else _PANEL_W
+    side = (_qr[0] + 2 * ui.QR_QUIET) * _qr_scale
+    ui.rect(0, 0, width, ui.HEIGHT, ui.WHITE)
+    ui.draw_qr(_qr, (width - side) // 2, (ui.HEIGHT - side) // 2, _qr_scale)
 
 
-def _draw_well():
+def _draw_well(label):
     w = tetris.W * _CELL
     h = tetris.H * _CELL
-    ui.text("lines " + str(_game.lines), _WELL_X, 6, ui.DIM, 1)
+    ui.rect(_WELL_X - 1, 0, ui.WIDTH - _WELL_X + 1, _WELL_Y - 1, ui.BLACK)  # label area
+    ui.text(label, _WELL_X, 6, ui.DIM, 1)
     ui.rect(_WELL_X - 1, _WELL_Y - 1, w + 2, h + 2, ui.DIM)
     ui.rect(_WELL_X, _WELL_Y, w, h, ui.PANEL)
     for x, y, colour in _game.cells():

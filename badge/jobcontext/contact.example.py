@@ -5,8 +5,8 @@ field is optional except NAME; leave one empty ("") to hide it. Everything
 here is shown to anyone who looks at your badge and is encoded in the QR code
 anyone can scan — put only what you'd hand out on a business card.
 
-Keep it short: the QR is a full vCard, and every character makes the code
-denser and harder to scan off a 2.8" screen.
+Keep it short: every character makes the QR denser and harder to scan off a
+2.8" screen. TITLE shows on the card but is left out of the QR to save room.
 """
 
 NAME = "Your Name"
