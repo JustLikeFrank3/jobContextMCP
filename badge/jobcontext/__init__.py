@@ -1,11 +1,14 @@
 """jobcontext — GitHub Universe badge app.
 
-Type a company, see what your pipeline says about it, and queue a tailored
-resume or cover letter without taking your phone out at a conference.
+Type a company, see what your pipeline says about it — or find its open roles
+on the web — and queue a tailored resume or cover letter without taking your
+phone out at a conference.
 
     SEARCH  →  RESULTS  →  ACTIONS  →  WORKING  →  DONE
-      ▲          │           │                       │
-      └──────────┴───────────┴───────────────────────┘  (C backs out)
+      │           │ B         ▲
+      │ (none)    ▼           │ A adds the role to the pipeline
+      └──────→  JOBS  ────────┘
+                                          C backs out to SEARCH from anywhere
 
 The badgeware app contract: init() once, update() every frame, on_exit() on
 the way out. update() must not block for long, which is why the only slow
@@ -28,6 +31,7 @@ RESULTS = "results"
 ACTIONS = "actions"
 WORKING = "working"
 DONE = "done"
+JOBS = "jobs"
 ERROR = "error"
 
 MATERIALS = (("resume", "Resume"), ("cover_letter", "Cover letter"), ("both", "Both"))
@@ -40,6 +44,9 @@ state = SEARCH
 query = ""
 results = []
 selected = 0
+jobs = []
+job_search_id = ""
+job_selected = 0
 action_index = 0
 work_id = 0
 message = ""
@@ -76,6 +83,8 @@ def update():
         _update_search()
     elif state == RESULTS:
         _update_results()
+    elif state == JOBS:
+        _update_jobs()
     elif state == ACTIONS:
         _update_actions()
     elif state == WORKING:
@@ -146,9 +155,29 @@ def _run_search():
     results = body.get("results", [])
     selected = 0
     if not results:
-        _go(ERROR, "nothing found for " + query.strip())
+        # Nothing in the pipeline yet — the usual case for a company you just
+        # met — so go find its open roles instead of dead-ending.
+        _run_job_search()
         return
     _go(RESULTS)
+
+
+def _run_job_search():
+    global jobs, job_search_id, job_selected
+
+    _draw_status("finding open roles for " + query.strip() + "...")
+    try:
+        body = api.jobs(query.strip())
+    except api.ApiError as exc:
+        _go(ERROR, str(exc))
+        return
+    jobs = body.get("results", [])
+    job_search_id = body.get("search_id", "")
+    job_selected = 0
+    if not jobs:
+        _go(ERROR, "no open roles found for " + query.strip())
+        return
+    _go(JOBS)
 
 
 # ── results ────────────────────────────────────────────────────────────────────
@@ -167,6 +196,9 @@ def _update_results():
             _go(ACTIONS)
         else:
             _flash("not queued yet - capture it first")
+    if _edge("B"):
+        _run_job_search()
+        return
     if _edge("C"):
         query = ""
         _go(SEARCH)
@@ -192,7 +224,58 @@ def _update_results():
             room -= score_w + 4
         ui.text(ui.fit(hit.get("role", ""), room, 1), 4, y + 10, ui.DIM, 1)
         y += _ROW_H
-    ui.footer("U/D select  A make  C new search")
+    ui.footer("U/D select  A make  B web jobs  C new")
+
+
+# ── jobs (open roles from the web) ─────────────────────────────────────────────
+
+def _update_jobs():
+    global job_selected, results, selected, query
+
+    if _edge("UP"):
+        job_selected = (job_selected - 1) % len(jobs)
+    if _edge("DOWN"):
+        job_selected = (job_selected + 1) % len(jobs)
+    if _edge("A"):
+        hit = jobs[job_selected]
+        _draw_status("adding " + hit.get("company", "") + " to your pipeline...")
+        try:
+            body = api.queue_job(job_search_id, hit.get("number", job_selected + 1))
+        except api.ApiError as exc:
+            _go(ERROR, str(exc))
+            return
+        # The role is a pipeline job now; hand ACTIONS a one-row result list
+        # so the existing resume / cover letter flow runs against it as-is.
+        results = [{
+            "job_id": body.get("job_id", 0),
+            "company": body.get("company", hit.get("company", "")),
+            "role": body.get("role", hit.get("role", "")),
+            "score": "",
+        }]
+        selected = 0
+        _go(ACTIONS)
+        return
+    if _edge("C"):
+        query = ""
+        _go(SEARCH)
+        return
+
+    ui.clear()
+    ui.header("open roles", str(len(jobs)) + " for " + query.strip())
+    first = max(0, min(job_selected - 1, len(jobs) - _ROWS))
+    y = 30
+    for i in range(first, min(first + _ROWS, len(jobs))):
+        hit = jobs[i]
+        chosen = i == job_selected
+        if chosen:
+            ui.rect(0, y - 2, ui.WIDTH, _ROW_H, ui.SELECT)
+        ui.text(ui.fit(hit.get("company", ""), ui.WIDTH - 8, 2), 4, y, ui.ACCENT if chosen else ui.WHITE, 2)
+        detail = hit.get("role", "")
+        if hit.get("location"):
+            detail += " - " + hit["location"]
+        ui.text(ui.fit(detail, ui.WIDTH - 8, 1), 4, y + 10, ui.DIM, 1)
+        y += _ROW_H
+    ui.footer("U/D select  A add + make  C new")
 
 
 # ── actions ────────────────────────────────────────────────────────────────────
