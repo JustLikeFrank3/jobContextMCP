@@ -533,3 +533,79 @@ def test_job_search_is_badge_reachable_but_still_contained(badge_env, web_search
     token = _key("badge")
     assert client.get("/api/badge/jobs?q=x", headers=_auth(token)).status_code == 200
     assert client.get("/api/dashboard/api-keys", headers=_auth(token)).status_code == 403
+
+
+# ── layout / colour choice ─────────────────────────────────────────────────────
+
+def _capture_generators(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(
+        "tools.generate.generate_resume",
+        lambda c, r, jd, **k: calls.setdefault("resume", k) and "✓ Resume generated",
+    )
+    monkeypatch.setattr(
+        "tools.generate.generate_cover_letter",
+        lambda c, r, jd, **k: calls.setdefault("cover_letter", k) and "✓ Cover letter generated",
+    )
+    return calls
+
+
+def test_executor_passes_layout_and_colour_to_both_generators(badge_env, monkeypatch):
+    client, root = badge_env
+    client.get("/api/badge/ping", headers=_auth(_key("badge")))
+    job_id = _queue_job(root)
+    calls = _capture_generators(monkeypatch)
+    import transport.http.routes.badge as badge_mod
+
+    badge_mod._generate_materials(
+        {"job_id": job_id, "material": "both", "template": "executive", "style": "forest"}
+    )
+    assert calls["resume"] == {"template": "executive", "style": "forest"}
+    assert calls["cover_letter"] == {"cl_template": "executive", "cl_style": "forest"}
+
+
+def test_executor_defaults_match_old_firmware(badge_env, monkeypatch):
+    """A work row from firmware that predates the picker has neither key."""
+    client, root = badge_env
+    client.get("/api/badge/ping", headers=_auth(_key("badge")))
+    job_id = _queue_job(root)
+    calls = _capture_generators(monkeypatch)
+    import transport.http.routes.badge as badge_mod
+
+    badge_mod._generate_materials({"job_id": job_id, "material": "resume"})
+    assert calls["resume"] == {"template": "", "style": "navy"}
+
+
+def test_materials_rejects_unknown_layout_or_colour(badge_env):
+    client, root = badge_env
+    token = _key("badge")
+    client.get("/api/badge/ping", headers=_auth(token))
+    job_id = _queue_job(root)
+    for extra in ({"template": "comic-sans"}, {"template": "modern", "style": "neon"}):
+        resp = client.post(
+            "/api/badge/materials",
+            json={"job_id": job_id, "material": "both", **extra},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 422, extra
+
+
+def test_materials_records_the_choice_on_the_work_row(badge_env, monkeypatch):
+    client, root = badge_env
+    token = _key("badge")
+    client.get("/api/badge/ping", headers=_auth(token))
+    job_id = _queue_job(root)
+    from lib import work
+
+    seen = []
+    monkeypatch.setitem(work._KINDS, "badge_materials", lambda inputs: seen.append(inputs) or {})
+    resp = client.post(
+        "/api/badge/materials",
+        json={"job_id": job_id, "material": "resume", "template": "sidebar", "style": "warm"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200
+    deadline = time.time() + 5
+    while not seen and time.time() < deadline:
+        time.sleep(0.05)
+    assert seen and seen[0]["template"] == "sidebar" and seen[0]["style"] == "warm"
