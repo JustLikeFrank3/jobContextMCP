@@ -34,6 +34,11 @@ def installer(tmp_path, monkeypatch):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     monkeypatch.setattr(mod, "BACKUP_ROOT", tmp_path / "backups")
+    # CI has no mpy-cross; stand in a compiler that records what it built.
+    monkeypatch.setattr(mod, "find_mpy_cross", lambda: "fake-mpy-cross")
+    monkeypatch.setattr(
+        mod, "compile_module", lambda exe, src, dst: dst.write_bytes(b"MPY:" + src.name.encode())
+    )
     return mod
 
 
@@ -74,8 +79,10 @@ def test_install_then_restore_round_trips(installer, volume):
 
     assert not (volume / "apps/gallery").exists()
     app = volume / "apps/jobcontext"
-    for name in installer.APP_FILES:
-        assert (app / name).is_file(), name
+    for src, dst in installer.MODULES.items():
+        assert (app / dst).read_bytes() == b"MPY:" + src.encode(), dst
+    assert (app / "__init__.py").read_text() == installer.LOADER
+    assert (app / "icon.png").is_file()
     assert not (app / "secrets.example.py").exists()
     assert "jobcontext" in installer.listed_apps((volume / "apps/menu/__init__.py").read_text())
 
@@ -104,9 +111,61 @@ def test_refuses_a_volume_that_is_not_a_badge(installer, tmp_path):
 def test_reinstall_refreshes_files_without_a_useless_backup(installer, volume):
     installer.install(volume, "gallery", dry_run=False)
     (first,) = installer.BACKUP_ROOT.iterdir()
-    (volume / "apps/jobcontext/ui.py").write_text("stale")
+    (volume / "apps/jobcontext/ui.mpy").write_bytes(b"stale")
 
     installer.install(volume, "gallery", dry_run=False)
 
     assert list(installer.BACKUP_ROOT.iterdir()) == [first]
-    assert (volume / "apps/jobcontext/ui.py").read_text() != "stale"
+    assert (volume / "apps/jobcontext/ui.mpy").read_bytes() != b"stale"
+
+
+def test_install_removes_stale_py_that_would_shadow_the_mpy(installer, volume):
+    """MicroPython imports name.py before name.mpy: an old ui.py left on the
+    badge would silently win over the freshly compiled ui.mpy."""
+    app = volume / "apps/jobcontext"
+    app.mkdir(parents=True)
+    for name in ("ui.py", "api.py", "tetris.py", "secrets.py"):
+        (app / name).write_text("# old")
+    installer.install(volume, "gallery", dry_run=False)
+    for name in ("ui.py", "api.py", "tetris.py"):
+        assert not (app / name).exists(), name
+    assert (app / "ui.mpy").is_file()
+    assert (app / "secrets.py").exists()   # personal files are not "stale"
+
+
+def test_install_refuses_without_a_compiler_before_touching_the_badge(installer, volume, monkeypatch):
+    def missing():
+        raise installer.InstallError("mpy-cross not found")
+
+    monkeypatch.setattr(installer, "find_mpy_cross", missing)
+    with pytest.raises(installer.InstallError, match="mpy-cross"):
+        installer.install(volume, "gallery", dry_run=False)
+    assert (volume / "apps/menu/__init__.py").read_text() == STOCK_MENU
+    assert (volume / "apps/gallery").is_dir()
+    assert not (volume / "apps/jobcontext").exists()
+
+
+def test_wrong_mpy_cross_version_is_refused(installer, tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("badge_install_real", _SCRIPT)
+    real = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real)
+    fake = tmp_path / "mpy-cross"
+    fake.write_text("#!/bin/sh\necho 'MicroPython v1.22.0; mpy-cross emitting mpy v6.2'\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr(real.shutil, "which", lambda _name: str(fake))
+    with pytest.raises(real.InstallError, match="wrong bytecode"):
+        real.find_mpy_cross()
+
+
+def test_real_compile_produces_loadable_bytecode(tmp_path):
+    """With mpy-cross installed, every app module compiles for the badge."""
+    spec = importlib.util.spec_from_file_location("badge_install_real2", _SCRIPT)
+    real = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real)
+    try:
+        exe = real.find_mpy_cross()
+    except real.InstallError:
+        pytest.skip("mpy-cross not installed")
+    for src, dst in real.MODULES.items():
+        real.compile_module(exe, real.APP_SRC / src, tmp_path / dst)
+        assert (tmp_path / dst).read_bytes()[:2] == b"M\x06", dst   # mpy v6 header

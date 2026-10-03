@@ -30,8 +30,15 @@ MicroPython firmware.
    `jobcontext/secrets.py` and fill in WiFi + the token. `secrets.py` is
    gitignored.
 
-3. **Install.** Double-tap reset to mount the badge as a USB drive (it
-   appears as `BADGER`), then:
+3. **Install.** One-time prerequisite — the installer precompiles the app
+   (the badge runs out of memory compiling it from source itself):
+
+   ```sh
+   uv tool install "mpy-cross==1.26.*"   # or: pip install "mpy-cross==1.26.*"
+   ```
+
+   Then double-tap reset to mount the badge as a USB drive (it appears as
+   `BADGER`), and:
 
    ```sh
    python3 badge/install.py          # --dry-run to preview first

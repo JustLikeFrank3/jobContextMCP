@@ -959,3 +959,26 @@ def test_tls_reserve_is_released_for_each_request(monkeypatch):
     assert api.ping() == {"ok": True}
     assert seen["reserve_during"] is None   # released for the handshake
     assert isinstance(api._reserve, bytearray)  # and taken back after
+
+
+def test_saver_resources_are_built_at_startup(saver_app):
+    """Built while the heap is clean, not on first idle (crashed on hardware)."""
+    app, ui_, _api = saver_app
+    app.init()
+    assert app.screensaver._game is not None and app.screensaver._qr
+
+
+def test_a_failing_saver_never_takes_the_app_down(saver_app, monkeypatch):
+    app, ui_, _api = saver_app
+
+    def boom(_now):
+        raise MemoryError("memory allocation failed")
+
+    monkeypatch.setattr(app.screensaver, "start", boom)
+    _idle(app, ui_, 31)                     # would have crashed jobcontext
+    assert not app.saving and not app.saver_ok
+    assert app.state == app.SEARCH
+    _idle(app, ui_, 120)
+    assert not app.saving                   # stays off for the session
+    _tap(app, ui_, "A")
+    assert app.query == "A"                 # and the app still works

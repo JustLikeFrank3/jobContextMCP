@@ -70,6 +70,7 @@ _prev_buttons = {}
 _BUTTONS = ("UP", "DOWN", "A", "B", "C")
 _last_input = 0
 saving = False  # the contact-card screen saver is up
+saver_ok = True  # cleared if the saver ever fails; the app carries on
 
 # Generations you walked away from ("C stop waiting") are still tracked:
 # polled in the background from any screen, saver included, and announced
@@ -89,7 +90,8 @@ def init():
     global source, _last_input
     ui.init()
     _load_prefs()
-    screensaver.load()
+    if screensaver.load():
+        _saver_guard(screensaver.prepare)
     _last_input = time.ticks_ms()
     source = inputs.best_available()
     _connect()
@@ -202,15 +204,38 @@ def _screensaver_frame():
             return True
         return False
     if saving:
-        screensaver.draw(now)
+        if not _saver_guard(screensaver.draw, now):
+            saving = False
+            _go(state)  # repaint the real screen under the dead saver
+            return False
         return True
-    if (state != WORKING and screensaver.enabled()
+    if (state != WORKING and saver_ok and screensaver.enabled()
             and time.ticks_diff(now, _last_input) >= screensaver.idle_ms()):
-        saving = True
-        screensaver.start(now)
-        screensaver.draw(now)
-        return True
+        if _saver_guard(screensaver.start, now) and _saver_guard(screensaver.draw, now):
+            saving = True
+            return True
     return False
+
+
+def _saver_guard(fn, *args):
+    """Run a screen saver step; on any failure, turn the saver off.
+
+    The saver is decoration — it must never take the app down with it (on
+    hardware a MemoryError while starting it crashed jobcontext to the
+    firmware's error screen). The traceback goes to the USB console.
+    """
+    global saver_ok
+    try:
+        fn(*args)
+        return True
+    except Exception as exc:  # noqa: BLE001 — anything here just disables it
+        saver_ok = False
+        try:
+            import sys
+            sys.print_exception(exc)
+        except AttributeError:  # CPython (host tests) has no print_exception
+            print("screensaver disabled:", repr(exc))
+        return False
 
 
 # ── background jobs + notices ──────────────────────────────────────────────────

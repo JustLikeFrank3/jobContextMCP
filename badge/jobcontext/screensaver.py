@@ -116,13 +116,26 @@ def qr_payload(c):
     return "MECARD:" + ";".join(parts) + ";;"
 
 
-def start(now):
-    """Begin (or resume) showing the saver at tick *now*."""
-    global _game, _last_step, _started, _qr, _shown_page
+def prepare():
+    """Build the long-lived pieces now, while the heap is still clean.
+
+    Done at app start, not on first idle: by the time the badge idles the
+    app has searched, parsed JSON and made TLS connections, the heap is
+    fragmented, and building the QR and the board then raised on hardware
+    (a crash on the 'screensaver_frame' line). Afterwards start() allocates
+    nothing large.
+    """
+    global _game, _qr
     if _game is None:
         _game = tetris.Game()
     if _qr is None:
         _qr = _render_qr()
+
+
+def start(now):
+    """Begin (or resume) showing the saver at tick *now*."""
+    global _last_step, _started, _shown_page
+    prepare()  # no-op when the app already did it at init
     _last_step = now
     _started = now
     _shown_page = None  # whatever the app drew is underneath: redraw fully
