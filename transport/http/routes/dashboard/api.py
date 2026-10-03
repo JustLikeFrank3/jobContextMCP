@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from lib import config, dismissals
-from lib.api_keys import create_key, list_keys, revoke_key
+from lib.api_keys import SCOPE_FULL, VALID_SCOPES, create_key, list_keys, revoke_key
 from lib.io import _load_json
 from transport.http.auth import require_authenticated_user
 from transport.http.security import User
@@ -385,6 +385,10 @@ async def dismiss_priority(
 
 class _CreateKeyBody(BaseModel):
     label: str = ""
+    # "full" (default) or "badge" — see lib/api_keys.py. The SPA's picker is
+    # the only caller, so an unknown value is a bug to surface (422), not a
+    # request to guess at.
+    scope: str = SCOPE_FULL
 
 
 def _key_dict(k) -> dict:
@@ -393,6 +397,7 @@ def _key_dict(k) -> dict:
         "label": k.label or "",
         "created_at": k.created_at or "",
         "last_used_at": k.last_used_at or "",
+        "scope": getattr(k, "scope", None) or SCOPE_FULL,
     }
 
 
@@ -409,10 +414,15 @@ async def api_keys_create(
     user: Annotated[User, Depends(require_authenticated_user)],
     body: _CreateKeyBody,
 ) -> JSONResponse:
-    key_id, plaintext = create_key(user.id, body.label.strip())
+    if body.scope not in VALID_SCOPES:
+        return JSONResponse(
+            {"error": f"scope must be one of {', '.join(VALID_SCOPES)}"},
+            status_code=422,
+        )
+    key_id, plaintext = create_key(user.id, body.label.strip(), scope=body.scope)
     # plaintext is returned exactly once — the client must surface it now.
     return JSONResponse(
-        {"id": key_id, "label": body.label.strip(), "token": plaintext},
+        {"id": key_id, "label": body.label.strip(), "scope": body.scope, "token": plaintext},
         status_code=201,
     )
 

@@ -770,6 +770,7 @@ class TestDashboardApiKeysJsonCoverage:
             "label": "Phone Shortcut",
             "created_at": "2026-06-28T20:00:00",
             "last_used_at": "2026-06-29T08:30:00",
+            "scope": "full",
         }
         # Unlabeled / never-used rows collapse None to empty strings.
         assert keys[1]["label"] == ""
@@ -780,7 +781,7 @@ class TestDashboardApiKeysJsonCoverage:
         monkeypatch.setattr(
             dashboard_api_routes,
             "create_key",
-            lambda oid, label: calls.update({"args": (oid, label)})
+            lambda oid, label, scope="full": calls.update({"args": (oid, label, scope)})
             or (9, "jcmcp_brand_new_token"),
         )
 
@@ -793,21 +794,74 @@ class TestDashboardApiKeysJsonCoverage:
         assert body == {
             "id": 9,
             "label": "CLI on Home Mac",
+            "scope": "full",
             "token": "jcmcp_brand_new_token",
         }
         # Label is trimmed and the key is scoped to the resolved admin OID.
-        assert calls["args"] == ("admin", "CLI on Home Mac")
+        assert calls["args"] == ("admin", "CLI on Home Mac", "full")
 
     def test_create_key_defaults_blank_label(self, http_client_noauth, monkeypatch):
         monkeypatch.setattr(
             dashboard_api_routes,
             "create_key",
-            lambda _oid, _label: (1, "jcmcp_token"),
+            lambda _oid, _label, scope="full": (1, "jcmcp_token"),
         )
 
         response = http_client_noauth.post("/api/dashboard/api-keys", json={})
         assert response.status_code == 201
         assert response.json()["label"] == ""
+
+    def test_create_badge_scoped_key(self, http_client_noauth, monkeypatch):
+        """The SPA's "Badge only" choice must reach create_key — it was
+        silently dropped, so the React screen could only mint full keys."""
+        calls = {}
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "create_key",
+            lambda oid, label, scope="full": calls.update({"scope": scope}) or (5, "jcmcp_b"),
+        )
+
+        response = http_client_noauth.post(
+            "/api/dashboard/api-keys", json={"label": "Universe badge", "scope": "badge"}
+        )
+        assert response.status_code == 201
+        assert response.json()["scope"] == "badge"
+        assert calls["scope"] == "badge"
+
+    def test_badge_key_from_the_spa_resolves_as_badge_scoped(self, http_client_noauth):
+        """No mocks: the token the SPA hands back must authenticate as a
+        badge-scoped key, or the badge's 403 gate never applies to it."""
+        from lib.api_keys import resolve_key
+
+        token = http_client_noauth.post(
+            "/api/dashboard/api-keys", json={"label": "badge", "scope": "badge"}
+        ).json()["token"]
+        assert resolve_key(token).scope == "badge"
+
+    def test_create_key_rejects_unknown_scope(self, http_client_noauth, monkeypatch):
+        called = []
+        monkeypatch.setattr(
+            dashboard_api_routes, "create_key", lambda *a, **k: called.append(1) or (1, "x")
+        )
+
+        response = http_client_noauth.post(
+            "/api/dashboard/api-keys", json={"label": "x", "scope": "root"}
+        )
+        assert response.status_code == 422
+        assert called == []  # nothing minted
+
+    def test_list_reports_each_keys_scope(self, http_client_noauth, monkeypatch):
+        monkeypatch.setattr(
+            dashboard_api_routes,
+            "list_keys",
+            lambda _oid: [
+                SimpleNamespace(id=1, label="b", created_at="", last_used_at=None, scope="badge"),
+                SimpleNamespace(id=2, label="f", created_at="", last_used_at=None, scope=None),
+            ],
+        )
+
+        keys = http_client_noauth.get("/api/dashboard/api-keys").json()["keys"]
+        assert [k["scope"] for k in keys] == ["badge", "full"]
 
     def test_revoke_key_reports_success(self, http_client_noauth, monkeypatch):
         calls = {}
