@@ -153,6 +153,7 @@ class FakeApi:
         return {"work_id": 7}
 
     def poll(self, work_id):
+        self.polls = getattr(self, "polls", []) + [work_id]
         return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
 
 
@@ -809,3 +810,98 @@ def test_retry_after_an_ordinary_failure_goes_back_without_reconnecting(badge_ap
     before = api_.connects
     _tap(app, ui_, "A")
     assert app.state == app.SEARCH and api_.connects == before
+
+
+# ── walked-away generations: background polling + banner ──────────────────────
+
+def _start_and_walk_away(app, ui_, api_):
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")                     # generate
+    assert app.state == app.WORKING
+    _tap(app, ui_, "C")                     # stop waiting
+    assert app.state == app.RESULTS
+    assert [j["work_id"] for j in app.pending] == [7]
+
+
+def _wait(app, ui_, seconds):
+    ui_.release()
+    ui_.advance_ms(int(seconds * 1000))
+    app.update()
+
+
+def test_walked_away_job_is_announced_when_done(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    _wait(app, ui_, 16)
+    assert app.notices == [] and app.pending   # still running
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 16)
+    assert app.pending == []
+    assert app.notices == [(True, "resume ready - Acme")]
+    assert "resume ready - Acme" in ui_.drawn
+
+
+def test_background_poll_is_throttled(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    before = len(api_.polls)
+    for _ in range(10):
+        _wait(app, ui_, 1)                  # 10s: under the 15s interval
+    assert len(api_.polls) <= before + 1
+
+
+def test_banner_shows_over_the_screen_saver(saver_app):
+    app, ui_, api_ = saver_app
+    _start_and_walk_away(app, ui_, api_)
+    _wait(app, ui_, 31)
+    assert app.saving
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 16)
+    assert app.saving and app.notices
+    assert "resume ready - Acme" in ui_.drawn
+
+
+def test_dismissing_the_banner_swallows_the_press(saver_app):
+    app, ui_, api_ = saver_app
+    _start_and_walk_away(app, ui_, api_)
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 31)                     # done, and idled into the saver
+    assert app.notices and app.saving
+    state = app.state
+    ui_.press("A")
+    app.update()
+    assert app.notices == [] and not app.saving
+    app.update()                            # A still held
+    ui_.release()
+    app.update()
+    assert app.state == state               # A didn't also open actions
+
+
+def test_failed_walked_away_job_says_why(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    api_.poll_status = "failed"
+    _wait(app, ui_, 16)
+    assert app.notices == [(False, "resume failed - Acme: nope")]
+
+
+def test_waiting_it_out_gives_the_done_screen_not_a_banner(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 3)
+    assert app.state == app.DONE
+    assert app.pending == [] and app.notices == []
+    _wait(app, ui_, 20)
+    assert app.notices == []

@@ -12,6 +12,7 @@ calling, and polls on an interval rather than every frame, so the freeze is
 visible as a deliberate pause instead of a hang.
 """
 
+import gc
 import json
 
 try:
@@ -111,6 +112,9 @@ def _headers():
 
 
 def _request(method, path, body=None):
+    # A TLS handshake needs one large free block; collect first so leftover
+    # garbage from drawing doesn't fragment the heap into ENOMEM.
+    gc.collect()
     try:
         response = requests.request(
             method,

@@ -71,6 +71,17 @@ _BUTTONS = ("UP", "DOWN", "A", "B", "C")
 _last_input = 0
 saving = False  # the contact-card screen saver is up
 
+# Generations you walked away from ("C stop waiting") are still tracked:
+# polled in the background from any screen, saver included, and announced
+# with a banner when they finish.
+_BG_POLL_MS = 15000
+_NOTICE_FLASH_MS = 4000
+pending = []    # [{"work_id", "what", "company"}]
+notices = []    # [(ok, text)] — first one is on screen until a press
+_bg_last_poll = 0
+_notice_since = 0
+_any_prev = False
+
 
 def init():
     global source, _last_input
@@ -111,7 +122,11 @@ def on_exit():
 # ── frame ──────────────────────────────────────────────────────────────────────
 
 def update():
+    if _notice_input():
+        return
+    _background_poll()
     if _screensaver_frame():
+        _draw_notice()
         return
     if state == SEARCH:
         _update_search()
@@ -127,6 +142,7 @@ def update():
         _update_working()
     else:
         _update_terminal()
+    _draw_notice()
     ui.flip()
 
 
@@ -193,6 +209,94 @@ def _screensaver_frame():
         screensaver.draw(now)
         return True
     return False
+
+
+# ── background jobs + notices ──────────────────────────────────────────────────
+
+def _forget(wid):
+    for i, job in enumerate(pending):
+        if job["work_id"] == wid:
+            pending.pop(i)
+            return
+
+
+def _notify(ok, text):
+    global _notice_since
+    if not notices:
+        _notice_since = time.ticks_ms()
+    notices.append((ok, text))
+
+
+def _background_poll():
+    """Check one walked-away job every _BG_POLL_MS, from any screen.
+
+    One job per tick and a slow interval: each poll is a blocking HTTPS call
+    that freezes the frame (a Tetris hitch), so it should be rare. WORKING
+    polls its own job every 2s already and is skipped. A network error just
+    waits for the next tick — the job is still running server-side.
+    """
+    global _bg_last_poll
+    if not pending or state == WORKING:
+        return
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _bg_last_poll) < _BG_POLL_MS:
+        return
+    _bg_last_poll = now
+    job = pending.pop(0)
+    pending.append(job)  # round-robin when several are in flight
+    try:
+        body = api.poll(job["work_id"])
+    except api.ApiError:
+        return
+    status = body.get("status", "")
+    if status == "succeeded":
+        _forget(job["work_id"])
+        made = ", ".join(body.get("made") or []) or job["what"].lower()
+        _notify(True, made + " ready - " + job["company"])
+    elif status == "failed":
+        _forget(job["work_id"])
+        _notify(False, job["what"].lower() + " failed - " + job["company"] + ": "
+                + (body.get("detail") or "see the dashboard"))
+
+
+def _notice_input():
+    """A fresh press while a banner is up dismisses it — and only that.
+
+    The press is swallowed (screens re-armed, saver closed) so dismissing a
+    banner never also types, searches, or generates. True when swallowed.
+    """
+    global _any_prev, saving, _last_input, _notice_since
+    down = any(ui.pressed(name) for name in _BUTTONS)
+    fresh = down and not _any_prev
+    _any_prev = down
+    if not (fresh and notices):
+        return False
+    notices.pop(0)
+    _notice_since = _last_input = time.ticks_ms()
+    saving = False
+    _rearm()
+    return True
+
+
+def _draw_notice():
+    if not notices:
+        return
+    ok, text = notices[0]
+    lines = ui.wrap(text, ui.WIDTH - 10, 1, 2)
+    if len(notices) > 1:
+        lines.append("+" + str(len(notices) - 1) + " more - any button")
+    h = len(lines) * ui.line_height(1) + 6
+    y = ui.HEIGHT - h
+    elapsed = time.ticks_diff(time.ticks_ms(), _notice_since)
+    flash = elapsed < _NOTICE_FLASH_MS and (elapsed // 250) % 2 == 1
+    bg = (20, 90, 50) if ok else (110, 30, 30)
+    if flash:
+        bg = ui.OK if ok else ui.BAD
+    ui.rect(0, y, ui.WIDTH, h, bg)
+    for line in lines:
+        y += 3
+        ui.text(line, 5, y, ui.WHITE, 1)
+        y += ui.line_height(1) - 3
 
 
 # ── search ─────────────────────────────────────────────────────────────────────
@@ -419,6 +523,11 @@ def _update_style():
             _go(ERROR, str(exc))
             return
         work_id = body.get("work_id", 0)
+        pending.append({
+            "work_id": work_id,
+            "what": MATERIALS[action_index][1],
+            "company": hit.get("company", ""),
+        })
         _go(WORKING)
         return
     if _edge("C"):
@@ -480,6 +589,8 @@ def _update_working():
             _go(ERROR, str(exc))
             return
         status = body.get("status", "")
+        if status in ("succeeded", "failed"):
+            _forget(work_id)  # this screen is the notification; no banner too
         if status == "succeeded":
             made = body.get("made") or []
             _go(DONE, ", ".join(made) + " ready on your desktop" if made else "done")
