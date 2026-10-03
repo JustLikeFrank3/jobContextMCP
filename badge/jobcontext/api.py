@@ -111,10 +111,39 @@ def _headers():
     }
 
 
+# A TLS handshake needs one large contiguous block. While the screen saver
+# runs, Tetris keeps re-allocating small long-lived objects all over the heap,
+# so after ~30s there is >100 KB free but no single hole big enough: on
+# hardware the 8th background poll failed with ENOMEM (without the saver, 12
+# in a row succeeded). So a block is reserved at import, while the heap is
+# still clean, released just before each request and taken back right after.
+_RESERVE_BYTES = 40 * 1024
+_reserve = None
+
+
+def _hold_reserve():
+    global _reserve
+    if _reserve is None:
+        try:
+            _reserve = bytearray(_RESERVE_BYTES)
+        except MemoryError:
+            _reserve = None  # try again after the next request
+
+
+_hold_reserve()
+
+
 def _request(method, path, body=None):
-    # A TLS handshake needs one large free block; collect first so leftover
-    # garbage from drawing doesn't fragment the heap into ENOMEM.
+    global _reserve
+    _reserve = None
     gc.collect()
+    try:
+        return _send(method, path, body)
+    finally:
+        _hold_reserve()
+
+
+def _send(method, path, body):
     try:
         response = requests.request(
             method,

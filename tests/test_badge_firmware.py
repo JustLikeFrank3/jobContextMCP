@@ -905,3 +905,57 @@ def test_waiting_it_out_gives_the_done_screen_not_a_banner(badge_app):
     assert app.pending == [] and app.notices == []
     _wait(app, ui_, 20)
     assert app.notices == []
+
+
+def test_repeated_background_poll_failures_are_reported_once(badge_app):
+    """Failed checks used to be silent forever: no banner, ever."""
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+
+    def broken(_wid):
+        raise api_.ApiError("network: [Errno 12] ENOMEM")
+
+    api_.poll = broken
+    for _ in range(3):
+        _wait(app, ui_, 16)
+    assert app.notices == []                # a blip or two: stay quiet
+    _wait(app, ui_, 16)
+    assert app.notices == [(False, "can't check on your jobs: network: [Errno 12] ENOMEM")]
+    for _ in range(4):
+        _wait(app, ui_, 16)
+    assert len(app.notices) == 1            # said once, not every 15s
+    assert app.pending                      # and the job is still tracked
+
+
+def test_tls_reserve_is_released_for_each_request(monkeypatch):
+    """The heap reserve exists so a TLS handshake always finds a big block."""
+    import types
+
+    seen = {}
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+        def close(self):
+            pass
+
+    req = types.ModuleType("requests")
+
+    def request(*a, **k):
+        seen["reserve_during"] = api._reserve
+        return Resp()
+
+    req.request = request
+    monkeypatch.setitem(sys.modules, "requests", req)
+    monkeypatch.setitem(sys.modules, "network", types.ModuleType("network"))
+    monkeypatch.setitem(
+        sys.modules, "secrets", types.SimpleNamespace(BASE_URL="https://x", BADGE_TOKEN="t")
+    )
+    api = _load("api")
+    assert isinstance(api._reserve, bytearray) and len(api._reserve) == api._RESERVE_BYTES
+    assert api.ping() == {"ok": True}
+    assert seen["reserve_during"] is None   # released for the handshake
+    assert isinstance(api._reserve, bytearray)  # and taken back after

@@ -81,6 +81,8 @@ notices = []    # [(ok, text)] — first one is on screen until a press
 _bg_last_poll = 0
 _notice_since = 0
 _any_prev = False
+_bg_failures = 0
+_BG_FAILURES_TO_SAY = 4   # ~1 minute of failed checks before saying so
 
 
 def init():
@@ -235,7 +237,7 @@ def _background_poll():
     polls its own job every 2s already and is skipped. A network error just
     waits for the next tick — the job is still running server-side.
     """
-    global _bg_last_poll
+    global _bg_last_poll, _bg_failures
     if not pending or state == WORKING:
         return
     now = time.ticks_ms()
@@ -246,8 +248,14 @@ def _background_poll():
     pending.append(job)  # round-robin when several are in flight
     try:
         body = api.poll(job["work_id"])
-    except api.ApiError:
+    except api.ApiError as exc:
+        # Keep trying — but say so once, rather than leaving the badge
+        # silently never announcing a job that finished long ago.
+        _bg_failures += 1
+        if _bg_failures == _BG_FAILURES_TO_SAY:
+            _notify(False, "can't check on your jobs: " + str(exc))
         return
+    _bg_failures = 0
     status = body.get("status", "")
     if status == "succeeded":
         _forget(job["work_id"])
