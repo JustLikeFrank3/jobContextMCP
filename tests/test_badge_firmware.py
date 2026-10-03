@@ -119,10 +119,19 @@ class FakeApi:
         self.job_results = []
         self.queued = []
 
+    wifi_ok = True
+    ping_error = None
+
     def connect_wifi(self, status=None):
-        return True
+        self.connects = getattr(self, "connects", 0) + 1
+        return self.wifi_ok
+
+    def _ping_check(self):
+        if self.ping_error:
+            raise self.ApiError(self.ping_error)
 
     def ping(self):
+        self._ping_check()
         return {"ok": True}
 
     def search(self, query, limit=6):
@@ -757,3 +766,46 @@ def test_wifi_tries_unseen_networks_when_a_hidden_one_is_in_range(monkeypatch):
     api = _api_with(monkeypatch, secrets_obj, wlan)
     assert api.connect_wifi() is True
     assert wlan.tried == ["Home", "Frank's Device"]
+
+
+# ── retry after a connection failure ───────────────────────────────────────────
+
+def test_retry_after_failed_wifi_actually_reconnects(badge_app):
+    """Retry used to jump to SEARCH and look connected when it wasn't."""
+    app, ui_, api_ = badge_app
+    api_.wifi_ok = False
+    app.init()
+    assert app.state == app.ERROR and "wifi" in app.message
+    before = api_.connects
+
+    _tap(app, ui_, "A")                     # still no wifi
+    assert api_.connects == before + 1
+    assert app.state == app.ERROR           # stays on the error, not SEARCH
+
+    api_.wifi_ok = True
+    _tap(app, ui_, "A")                     # hotspot back
+    assert app.state == app.SEARCH and app._online
+
+
+def test_retry_after_a_rejected_token_rechecks_it(badge_app):
+    app, ui_, api_ = badge_app
+    api_.ping_error = "token rejected - regenerate it"
+    app.init()
+    assert app.state == app.ERROR and not app._online
+    _tap(app, ui_, "A")
+    assert app.state == app.ERROR and "token" in app.message
+    api_.ping_error = None
+    _tap(app, ui_, "A")
+    assert app.state == app.SEARCH
+
+
+def test_retry_after_an_ordinary_failure_goes_back_without_reconnecting(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = []
+    api_.job_results = []
+    app.query = "NOBODY"
+    _tap(app, ui_, "C")
+    assert app.state == app.ERROR and app._online
+    before = api_.connects
+    _tap(app, ui_, "A")
+    assert app.state == app.SEARCH and api_.connects == before

@@ -73,22 +73,35 @@ saving = False  # the contact-card screen saver is up
 
 
 def init():
-    global source, _online, _last_input
+    global source, _last_input
     ui.init()
     _load_prefs()
     screensaver.load()
     _last_input = time.ticks_ms()
     source = inputs.best_available()
+    _connect()
+
+
+def _connect():
+    """Join WiFi and prove the token works. True when ready to search.
+
+    On failure the app lands on ERROR with the reason, and _online stays
+    False so that screen's A retries *this*, not the search screen — Retry
+    used to skip straight to SEARCH and look connected when it wasn't.
+    """
+    global _online
+    _online = False
     _draw_splash("connecting...")
     try:
-        _online = api.connect_wifi(status=lambda text: _draw_splash(text))
-        if _online:
-            api.ping()
+        if not api.connect_wifi(status=lambda text: _draw_splash(text)):
+            _go(ERROR, "couldn't join wifi - check WIFI_NETWORKS in secrets.py")
+            return False
+        api.ping()
     except api.ApiError as exc:
         _go(ERROR, str(exc))
-        return
-    if not _online:
-        _go(ERROR, "wifi failed - check secrets.py")
+        return False
+    _online = True
+    return True
 
 
 def on_exit():
@@ -500,11 +513,21 @@ def _update_terminal():
         ui.header("problem", "")
         _draw_lines(message, 24, ui.WARN)
 
-    ui.footer("A retry  C new search")
+    # Not connected (startup failed, or a request lost the network): A has to
+    # actually reconnect. Anything else is a failed action: A goes back to it.
+    reconnect = state == ERROR and (not _online or message.startswith("network"))
+    if state == DONE:
+        ui.footer("A back  C new search")
+    else:
+        ui.footer(("A reconnect" if reconnect else "A retry") + "  C new search")
     if _edge("C"):
         query = ""
         _go(SEARCH)
     elif _edge("A"):
+        if reconnect:
+            if _connect():
+                _go(RESULTS if results else SEARCH)
+            return
         _go(RESULTS if results else SEARCH)
 
 
