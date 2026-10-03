@@ -4,7 +4,7 @@ Type a company, see what your pipeline says about it — or find its open roles
 on the web — and queue a tailored resume or cover letter without taking your
 phone out at a conference.
 
-    SEARCH  →  RESULTS  →  ACTIONS  →  WORKING  →  DONE
+    SEARCH  →  RESULTS  →  ACTIONS  →  STYLE  →  WORKING  →  DONE
       │           │ B         ▲
       │ (none)    ▼           │ A adds the role to the pipeline
       └──────→  JOBS  ────────┘
@@ -16,6 +16,7 @@ things here (search, enqueue, poll) draw a frame *before* they call out and
 poll on an interval rather than every pass.
 """
 
+import json
 import time
 
 try:  # loaded as a package (/apps/jobcontext) or flat — support both
@@ -32,6 +33,14 @@ ACTIONS = "actions"
 WORKING = "working"
 DONE = "done"
 JOBS = "jobs"
+STYLE = "style"
+
+# PDF layout + colour, matching lib/template_loader.py. "" is the original
+# layout, which ignores colour — so colour is only offered for the others.
+LAYOUTS = (("", "original"), ("modern", "modern"), ("executive", "executive"),
+           ("sidebar", "sidebar"), ("portfolio", "portfolio"))
+COLOURS = ("navy", "slate", "forest", "warm", "classic")
+_PREFS = "/jobcontext_prefs.json"  # badge root is writable; /system is not
 ERROR = "error"
 
 MATERIALS = (("resume", "Resume"), ("cover_letter", "Cover letter"), ("both", "Both"))
@@ -47,6 +56,9 @@ selected = 0
 jobs = []
 job_search_id = ""
 job_selected = 0
+layout_index = 0
+colour_index = 0
+style_row = 0  # set to the Generate row whenever STYLE is entered
 action_index = 0
 work_id = 0
 message = ""
@@ -59,6 +71,7 @@ _prev_buttons = {}
 def init():
     global source, _online
     ui.init()
+    _load_prefs()
     source = inputs.best_available()
     _draw_splash("connecting...")
     try:
@@ -87,6 +100,8 @@ def update():
         _update_jobs()
     elif state == ACTIONS:
         _update_actions()
+    elif state == STYLE:
+        _update_style()
     elif state == WORKING:
         _update_working()
     else:
@@ -281,7 +296,7 @@ def _update_jobs():
 # ── actions ────────────────────────────────────────────────────────────────────
 
 def _update_actions():
-    global action_index, work_id
+    global action_index, style_row
 
     if _edge("UP"):
         action_index = (action_index - 1) % len(MATERIALS)
@@ -291,15 +306,8 @@ def _update_actions():
         _go(RESULTS)
         return
     if _edge("A"):
-        hit = results[selected]
-        _draw_status("queueing " + MATERIALS[action_index][1].lower() + "...")
-        try:
-            body = api.request_materials(hit["job_id"], MATERIALS[action_index][0])
-        except api.ApiError as exc:
-            _go(ERROR, str(exc))
-            return
-        work_id = body.get("work_id", 0)
-        _go(WORKING)
+        style_row = len(_style_rows()) - 1  # land on Generate: A, A = go
+        _go(STYLE)
         return
 
     hit = results[selected]
@@ -312,7 +320,92 @@ def _update_actions():
             ui.rect(0, y - 2, ui.WIDTH, 16, ui.SELECT)
         ui.text(("> " if chosen else "  ") + label, 6, y, ui.ACCENT if chosen else ui.WHITE, 2)
         y += 18
-    ui.footer("U/D choose  A generate  C back")
+    ui.footer("U/D choose  A next  C back")
+
+
+# ── style (layout + colour) ────────────────────────────────────────────────────
+
+def _style_rows():
+    """Rows on the style screen; colour is hidden for the original layout."""
+    rows = ["layout"]
+    if LAYOUTS[layout_index][0]:
+        rows.append("colour")
+    rows.append("generate")
+    return rows
+
+
+def _update_style():
+    global layout_index, colour_index, style_row, work_id
+
+    rows = _style_rows()
+    style_row = min(style_row, len(rows) - 1)
+    if _edge("UP"):
+        style_row = (style_row - 1) % len(rows)
+    if _edge("DOWN"):
+        style_row = (style_row + 1) % len(rows)
+    step = 1 if _edge("A") else (-1 if _edge("B") else 0)
+    row = rows[style_row]
+    if step and row == "layout":
+        layout_index = (layout_index + step) % len(LAYOUTS)
+    elif step and row == "colour":
+        colour_index = (colour_index + step) % len(COLOURS)
+    elif step == 1 and row == "generate":
+        hit = results[selected]
+        template = LAYOUTS[layout_index][0]
+        colour = COLOURS[colour_index]
+        _save_prefs()
+        _draw_status("queueing " + MATERIALS[action_index][1].lower() + "...")
+        try:
+            body = api.request_materials(hit["job_id"], MATERIALS[action_index][0], template, colour)
+        except api.ApiError as exc:
+            _go(ERROR, str(exc))
+            return
+        work_id = body.get("work_id", 0)
+        _go(WORKING)
+        return
+    if _edge("C"):
+        _go(ACTIONS)
+        return
+
+    rows = _style_rows()
+    ui.clear()
+    ui.header(MATERIALS[action_index][1], results[selected].get("company", ""))
+    labels = {
+        "layout": "Layout: " + LAYOUTS[layout_index][1],
+        "colour": "Colour: " + COLOURS[colour_index],
+        "generate": "Generate",
+    }
+    y = 32
+    for i, name in enumerate(rows):
+        chosen = i == style_row
+        if chosen:
+            ui.rect(0, y - 2, ui.WIDTH, 16, ui.SELECT)
+        ui.text(("> " if chosen else "  ") + labels[name], 6, y, ui.ACCENT if chosen else ui.WHITE, 2)
+        y += 18
+    hint = "A/B change" if rows[style_row] != "generate" else "A generate"
+    ui.footer("U/D row  " + hint + "  C back")
+
+
+def _load_prefs():
+    global layout_index, colour_index
+    try:
+        with open(_PREFS) as fh:
+            prefs = json.loads(fh.read())
+    except (OSError, ValueError):
+        return
+    keys = [key for key, _label in LAYOUTS]
+    if prefs.get("template") in keys:
+        layout_index = keys.index(prefs["template"])
+    if prefs.get("style") in COLOURS:
+        colour_index = COLOURS.index(prefs["style"])
+
+
+def _save_prefs():
+    try:
+        with open(_PREFS, "w") as fh:
+            fh.write(json.dumps({"template": LAYOUTS[layout_index][0], "style": COLOURS[colour_index]}))
+    except OSError:
+        pass  # a read-only or full filesystem just means the choice isn't remembered
 
 
 # ── working / terminal ─────────────────────────────────────────────────────────
