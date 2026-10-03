@@ -671,3 +671,78 @@ def test_qr_payload_escapes_mecard_separators(badge_app):
 
     card = app.screensaver.qr_payload(Tricky)
     assert "N:Smith\\; Jo;" in card and "EMAIL:a\\:b@x.io;" in card
+
+
+# ── WiFi: several networks, joined by what's in range ──────────────────────────
+
+class _FakeWlan:
+    def __init__(self, visible, joinable):
+        self.visible, self.joinable = visible, joinable
+        self.tried, self.up = [], False
+
+    def active(self, _on):
+        pass
+
+    def isconnected(self):
+        return self.up
+
+    def scan(self):
+        return [(name.encode(), b"", 1, -60, 3, 0) for name in self.visible]
+
+    def connect(self, ssid, _password):
+        self.tried.append(ssid)
+        self.up = ssid in self.joinable
+
+    def disconnect(self):
+        self.up = False
+
+
+def _api_with(monkeypatch, secrets_obj, wlan):
+    import types
+
+    net = types.SimpleNamespace(STA_IF=0, WLAN=lambda _i: wlan)
+    monkeypatch.setitem(sys.modules, "network", net)
+    monkeypatch.setitem(sys.modules, "requests", types.ModuleType("requests"))
+    monkeypatch.setitem(sys.modules, "secrets", secrets_obj)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    return _load("api")
+
+
+def test_wifi_joins_the_listed_network_that_is_in_range(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Frank’s iPhone", "b")])
+    wlan = _FakeWlan(visible=["Starbucks WiFi", "Frank’s iPhone"], joinable={"Frank’s iPhone"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Frank’s iPhone"]          # Home isn't in range: never tried
+
+
+def test_wifi_falls_through_the_list_in_order(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "wrong"), ("Hotspot", "b")])
+    wlan = _FakeWlan(visible=["Home", "Hotspot"], joinable={"Hotspot"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home", "Hotspot"]
+
+
+def test_wifi_still_reads_the_old_single_network_secrets(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_SSID="Home", WIFI_PASSWORD="a")
+    wlan = _FakeWlan(visible=["Home"], joinable={"Home"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True and wlan.tried == ["Home"]
+
+
+def test_wifi_says_so_when_nothing_known_is_in_range(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a")])
+    wlan = _FakeWlan(visible=["Starbucks WiFi"], joinable=set())
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    with pytest.raises(api.ApiError, match="in range"):
+        api.connect_wifi()
+    assert wlan.tried == []
