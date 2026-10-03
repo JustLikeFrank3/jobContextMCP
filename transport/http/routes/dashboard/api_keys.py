@@ -12,7 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from lib.api_keys import create_key, list_keys, revoke_key
+from lib.api_keys import SCOPE_BADGE, SCOPE_FULL, VALID_SCOPES, create_key, list_keys, revoke_key
 from transport.http.auth import require_authenticated_user
 from transport.http.security import User
 from .shared import BASE_CSS, html_page, nav_tabs, page_header
@@ -109,6 +109,19 @@ _EXTRA_CSS = """
     color: var(--muted); text-align: center; padding: 24px;
     border: 1px dashed var(--line); border-radius: 10px;
   }
+  .scope-select {
+    background: #0e1628; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 12px; font-size: 0.88rem;
+  }
+  .scope-select:focus { outline: none; border-color: var(--accent); }
+  .scope-pill {
+    display: inline-block; border-radius: 999px; padding: 2px 9px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .scope-full { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .scope-badge { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 """
 
 _INSTRUCTIONS_HTML = """
@@ -145,12 +158,23 @@ _INSTRUCTIONS_HTML = """
 """
 
 
-def _key_row_html(key_id: int, label: str, created_at: str, last_used_at: str | None) -> str:
+_SCOPE_LABELS = {SCOPE_FULL: "Full access", SCOPE_BADGE: "Badge only"}
+
+
+def _scope_pill(scope: str) -> str:
+    css = "scope-badge" if scope == SCOPE_BADGE else "scope-full"
+    return f'<span class="scope-pill {css}">{html.escape(_SCOPE_LABELS.get(scope, scope))}</span>'
+
+
+def _key_row_html(
+    key_id: int, label: str, created_at: str, last_used_at: str | None, scope: str = SCOPE_FULL
+) -> str:
     safe_label = html.escape(label) if label else ""
     used = f'<span class="key-meta">{last_used_at[:10]}</span>' if last_used_at else '<span class="never-used">Never</span>'
     label_display = safe_label or "<em style='color:var(--muted)'>unlabeled</em>"
     return f"""<tr>
       <td><span class="key-label">{label_display}</span></td>
+      <td>{_scope_pill(scope)}</td>
       <td><span class="key-meta">{created_at[:10]}</span></td>
       <td>{used}</td>
       <td>
@@ -199,13 +223,15 @@ function copyKey() {{
 </script>"""
 
     if keys:
-        rows = "\n".join(_key_row_html(k.id, k.label, k.created_at, k.last_used_at) for k in keys)
+        rows = "\n".join(
+            _key_row_html(k.id, k.label, k.created_at, k.last_used_at, k.scope) for k in keys
+        )
         table_html = f"""
 <div class="section-title">Your API keys</div>
 <div class="card" style="padding:0;overflow:hidden">
   <table class="key-table">
     <thead><tr>
-      <th>Label</th><th>Created</th><th>Last used</th><th></th>
+      <th>Label</th><th>Scope</th><th>Created</th><th>Last used</th><th></th>
     </tr></thead>
     <tbody>{rows}</tbody>
   </table>
@@ -213,14 +239,23 @@ function copyKey() {{
     else:
         table_html = '<div class="empty-keys">No API keys yet. Generate one below to get started.</div>'
 
-    generate_form = """
+    generate_form = f"""
 <div class="generate-form">
   <h3>Generate a new API key</h3>
   <form method="post" action="/dashboard/api-keys">
     <div class="form-row">
       <input class="label-input" type="text" name="label"
              placeholder='Label (e.g. "iPhone Shortcut")' maxlength="80" />
+      <select class="scope-select" name="scope">
+        <option value="{SCOPE_FULL}">Full access</option>
+        <option value="{SCOPE_BADGE}">Badge only — conference badge</option>
+      </select>
       <button class="gen-btn" type="submit">Generate key</button>
+    </div>
+    <div class="key-meta" style="margin-top:10px">
+      <strong>Badge only</strong> keys can search your pipeline, queue a resume or
+      cover letter, and check on it — nothing else. Use one for any device you
+      hand to other people or leave on a lanyard.
     </div>
   </form>
 </div>"""
@@ -238,8 +273,13 @@ async def api_keys_page(user: Annotated[User, Depends(require_authenticated_user
 async def generate_api_key(
     user: Annotated[User, Depends(require_authenticated_user)],
     label: Annotated[str, Form()] = "",
+    scope: Annotated[str, Form()] = SCOPE_FULL,
 ) -> HTMLResponse:
-    _key_id, plaintext = create_key(oid=user.id, label=label.strip())
+    # A hand-crafted POST with an unknown scope must not fall back to full
+    # access — the safe default when the request is unintelligible is the
+    # narrower key, not the wider one.
+    chosen = scope if scope in VALID_SCOPES else SCOPE_BADGE
+    _key_id, plaintext = create_key(oid=user.id, label=label.strip(), scope=chosen)
     return HTMLResponse(_build_page(user, new_key=plaintext))  # NOSONAR
 
 
