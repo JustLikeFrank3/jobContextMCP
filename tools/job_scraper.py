@@ -479,27 +479,20 @@ def scrape_job_url(url: str, auto_queue: bool = True, page_text: str = "") -> st
     return f"Scraped {url}\n→ {result}"
 
 
-def search_jobs(  # NOSONAR
-    query: str,
-    location: str = "",
-    num_results: int = 10,
-    auto_queue: bool = False,
-) -> str:
-    """Search for job listings via SerpAPI Google Jobs and return matching results.
+class JobSearchError(Exception):
+    """A web job search that could not run; the message is user-facing."""
 
-    Requires serpapi_key set in config.json.  Results can optionally be queued
-    into the evaluation pipeline via auto_queue=True.
 
-    Args:
-        query:       Search query, e.g. 'Senior Software Engineer AI Python'.
-        location:    Location filter, e.g. 'Seattle, WA' or 'Remote'. Optional.
-        num_results: Max results to return (1-20). Default 10.
-        auto_queue:  If True, queues every result immediately.  Use with care
-                     for large result sets — each becomes a pending queue item.
+def _serpapi_jobs(query: str, location: str = "") -> list[dict]:
+    """Run one SerpAPI Google Jobs query and return its raw ``jobs_results``.
+
+    Raises JobSearchError with a readable message when the key is missing or
+    SerpAPI refuses the request. Shared by search_jobs (MCP text output) and
+    the badge's structured search, so both send exactly the same request.
     """
     api_key = getattr(config, "SERPAPI_KEY", "")
     if not api_key:
-        return (
+        raise JobSearchError(
             "serpapi_key not set in config.json.\n"
             'Add:  "serpapi_key": "your-key"  to config.json to enable job search.\n'
             "Get a free key at https://serpapi.com"
@@ -508,8 +501,7 @@ def search_jobs(  # NOSONAR
     # No "num" parameter: google_jobs doesn't support it (it belongs to the
     # google web engine) and SerpAPI rejects the whole request with HTTP 400.
     # Every search this tool made failed that way until 2026-08-30. The engine
-    # returns one page (~10 results); num_results trims the display below.
-    num_results = min(max(int(num_results), 1), 20)
+    # returns one page (~10 results); callers trim the display.
     params: dict = {
         "engine":  "google_jobs",
         "q":       query,
@@ -540,11 +532,36 @@ def search_jobs(  # NOSONAR
             detail = ""
         hint = " Check your API key." if status in (401, 403) else ""
         detail_part = f": {detail}" if detail else ""
-        return f"SerpAPI returned HTTP {status}{detail_part}.{hint}"
+        raise JobSearchError(f"SerpAPI returned HTTP {status}{detail_part}.{hint}") from exc
     except httpx.HTTPError as exc:
-        return f"SerpAPI request failed: {exc}"
+        raise JobSearchError(f"SerpAPI request failed: {exc}") from exc
+    return data.get("jobs_results", []) or []
 
-    jobs_results: list[dict] = data.get("jobs_results", [])
+
+def search_jobs(  # NOSONAR
+    query: str,
+    location: str = "",
+    num_results: int = 10,
+    auto_queue: bool = False,
+) -> str:
+    """Search for job listings via SerpAPI Google Jobs and return matching results.
+
+    Requires serpapi_key set in config.json.  Results can optionally be queued
+    into the evaluation pipeline via auto_queue=True.
+
+    Args:
+        query:       Search query, e.g. 'Senior Software Engineer AI Python'.
+        location:    Location filter, e.g. 'Seattle, WA' or 'Remote'. Optional.
+        num_results: Max results to return (1-20). Default 10.
+        auto_queue:  If True, queues every result immediately.  Use with care
+                     for large result sets — each becomes a pending queue item.
+    """
+    num_results = min(max(int(num_results), 1), 20)
+    try:
+        jobs_results = _serpapi_jobs(query, location)
+    except JobSearchError as exc:
+        return str(exc)
+
     if not jobs_results:
         suffix = f" in {location}" if location else ""
         return f"No results found for '{query}'{suffix}."

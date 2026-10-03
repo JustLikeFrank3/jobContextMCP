@@ -103,6 +103,9 @@ class FakeApi:
         self.results = []
         self.poll_status = "succeeded"
         self.poll_made = ["resume"]
+        self.job_searches = []
+        self.job_results = []
+        self.queued = []
 
     def connect_wifi(self, status=None):
         return True
@@ -113,6 +116,15 @@ class FakeApi:
     def search(self, query, limit=6):
         self.searched.append(query)
         return {"results": self.results}
+
+    def jobs(self, query, limit=6):
+        self.job_searches.append(query)
+        return {"search_id": "badge-web-x", "results": self.job_results}
+
+    def queue_job(self, search_id, number):
+        self.queued.append((search_id, number))
+        hit = self.job_results[number - 1]
+        return {"job_id": 900 + number, "company": hit["company"], "role": hit["role"], "status": "queued"}
 
     def request_materials(self, job_id, material="resume"):
         self.requested.append((job_id, material))
@@ -223,13 +235,59 @@ def test_held_submit_does_not_bounce_off_the_results_screen(badge_app):
     assert app.state == app.SEARCH
 
 
-def test_empty_results_are_an_explicit_message(badge_app):
+def test_nothing_anywhere_is_an_explicit_message(badge_app):
     app, ui_, api_ = badge_app
     api_.results = []
+    api_.job_results = []
     app.query = "NOBODY"
     _tap(app, ui_, "C")
+    assert api_.job_searches == ["NOBODY"]  # the web was tried, not skipped
     assert app.state == app.ERROR
-    assert "nothing found" in app.message
+    assert "no open roles" in app.message
+
+
+_GITHUB_ROLES = [
+    {"number": 1, "company": "GitHub", "role": "Senior SWE, Copilot", "location": "Remote"},
+    {"number": 2, "company": "GitHub", "role": "Staff Engineer", "location": "SF"},
+]
+
+
+def test_empty_pipeline_falls_through_to_open_roles(badge_app):
+    """Typing a company you just met should find its jobs, not dead-end."""
+    app, ui_, api_ = badge_app
+    api_.results = []
+    api_.job_results = _GITHUB_ROLES
+    app.query = "GITHUB"
+    _tap(app, ui_, "C")
+    assert app.state == app.JOBS
+    assert api_.job_searches == ["GITHUB"]
+
+
+def test_b_on_pipeline_results_searches_the_web(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = [{"job_id": 3, "company": "GitHub", "role": "Old application"}]
+    api_.job_results = _GITHUB_ROLES
+    app.query = "GITHUB"
+    _tap(app, ui_, "C")
+    assert app.state == app.RESULTS and api_.job_searches == []
+    _tap(app, ui_, "B")
+    assert app.state == app.JOBS
+
+
+def test_picking_an_open_role_queues_it_and_generates_against_it(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = []
+    api_.job_results = _GITHUB_ROLES
+    app.query = "GITHUB"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "DOWN")
+    _tap(app, ui_, "A")  # add Staff Engineer to the pipeline
+    assert api_.queued == [("badge-web-x", 2)]
+    assert app.state == app.ACTIONS
+    assert app.results[app.selected]["job_id"] == 902
+    _tap(app, ui_, "A")  # generate a resume for it
+    assert api_.requested == [(902, "resume")]
+    assert app.state == app.WORKING
 
 
 def test_directory_hit_cannot_start_a_generation(badge_app):

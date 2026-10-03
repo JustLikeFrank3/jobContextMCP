@@ -2,8 +2,9 @@
 
 Talks to the badge-scoped surface only (/api/badge/*).  The token it carries
 is minted with scope="badge" in the dashboard, so even though it sits in
-plain text in secrets.py on a filesystem anyone can mount, it can do exactly
-three things: search, queue a generation, poll that generation.
+plain text in secrets.py on a filesystem anyone can mount, it can only search
+(your pipeline, or open roles on the web), add a found role to the pipeline,
+queue a resume/cover letter, and poll that generation.
 
 Blocking note: MicroPython's requests is synchronous, so each call freezes the
 frame loop for its duration.  The app draws a "working" frame *before*
@@ -90,12 +91,21 @@ def _request(method, path, body=None):
                 raise ApiError("token is not badge-scoped")
             if response.status_code == 401:
                 raise ApiError("token rejected - regenerate it")
-            raise ApiError("server said " + str(response.status_code))
+            raise ApiError(_detail(response) or "server said " + str(response.status_code))
         return response.json()
     finally:
         # MicroPython does not close these for you, and leaked sockets are how
         # a long-running badge app dies twenty minutes into a conference.
         response.close()
+
+
+def _detail(response):
+    """The server's own one-line reason (FastAPI's "detail"), if it sent one."""
+    try:
+        detail = response.json().get("detail")
+    except Exception:  # noqa: BLE001 — non-JSON error body
+        return ""
+    return detail if isinstance(detail, str) else ""
 
 
 def ping():
@@ -104,6 +114,16 @@ def ping():
 
 def search(query, limit=6):
     return _request("GET", "/api/badge/search?q=" + _quote(query) + "&limit=" + str(limit))
+
+
+def jobs(query, limit=6):
+    """Open roles on the web (not the pipeline). Returns search_id + results."""
+    return _request("GET", "/api/badge/jobs?q=" + _quote(query) + "&limit=" + str(limit))
+
+
+def queue_job(search_id, number):
+    """Add web result *number* to the pipeline; returns its job_id."""
+    return _request("POST", "/api/badge/jobs/queue", {"search_id": search_id, "number": number})
 
 
 def request_materials(job_id, material="resume"):

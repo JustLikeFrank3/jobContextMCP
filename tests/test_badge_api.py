@@ -399,3 +399,137 @@ def test_poll_detail_is_the_message_not_the_traceback(badge_env, monkeypatch):
             break
         time.sleep(0.05)
     assert body["detail"] == "no LLM configured on the server"
+
+
+# ── job search: new openings via SerpAPI ───────────────────────────────────────
+
+_WEB_JOBS = [
+    {
+        "title": "Senior Software Engineer, Copilot",
+        "company_name": "GitHub",
+        "location": "Remote, US",
+        "description": "Build Copilot. " * 20,
+        "apply_options": [{"title": "GitHub", "link": "https://github.careers/1"}],
+    },
+    {"title": "", "company_name": "Nameless", "description": "dropped: no title"},
+    {"title": "Staff Engineer", "company_name": "GitHub", "location": "SF", "via": "LinkedIn"},
+]
+
+
+@pytest.fixture()
+def web_search(monkeypatch):
+    """Stub the paid SerpAPI call and count how often it is made."""
+
+    import lib.io
+
+    monkeypatch.setattr(lib.io, "_USE_SQLITE", True)
+    calls = []
+
+    def fake(query, location=""):
+        calls.append(query)
+        return _WEB_JOBS
+
+    monkeypatch.setattr("tools.job_scraper._serpapi_jobs", fake)
+    return calls
+
+
+def test_job_search_returns_numbered_openings(badge_env, web_search):
+    client, _root = badge_env
+    body = client.get("/api/badge/jobs?q=GITHUB", headers=_auth(_key("badge"))).json()
+    assert body["count"] == 2  # the untitled result is dropped
+    assert [r["number"] for r in body["results"]] == [1, 2]
+    assert body["results"][0]["company"] == "GitHub"
+    assert body["results"][0]["location"] == "Remote, US"
+    assert body["search_id"].startswith("badge-web-")
+
+
+def test_repeat_job_search_is_served_from_cache(badge_env, web_search):
+    client, _root = badge_env
+    token = _key("badge")
+    first = client.get("/api/badge/jobs?q=GitHub", headers=_auth(token)).json()
+    again = client.get("/api/badge/jobs?q=github", headers=_auth(token)).json()
+    assert web_search == ["GitHub"]  # one paid call; case-insensitive cache hit
+    assert again == first
+
+
+def test_job_search_daily_cap(badge_env, web_search, monkeypatch):
+    import transport.http.routes.badge as badge_mod
+
+    monkeypatch.setattr(badge_mod, "_JOB_SEARCHES_PER_DAY", 2)
+    client, _root = badge_env
+    token = _key("badge")
+    assert client.get("/api/badge/jobs?q=one", headers=_auth(token)).status_code == 200
+    assert client.get("/api/badge/jobs?q=two", headers=_auth(token)).status_code == 200
+    capped = client.get("/api/badge/jobs?q=three", headers=_auth(token))
+    assert capped.status_code == 429 and "limit" in capped.json()["detail"]
+    assert web_search == ["one", "two"]
+    # A cached query still answers after the cap — it costs nothing.
+    assert client.get("/api/badge/jobs?q=one", headers=_auth(token)).status_code == 200
+
+
+def test_job_search_without_a_key_says_so(badge_env, monkeypatch):
+    import lib.config as cfg
+
+    monkeypatch.setattr(cfg, "SERPAPI_KEY", "")
+    client, _root = badge_env
+    response = client.get("/api/badge/jobs?q=GitHub", headers=_auth(_key("badge")))
+    assert response.status_code == 503
+    assert "isn't set up" in response.json()["detail"]
+
+
+def test_job_search_rejects_an_empty_query(badge_env, web_search):
+    client, _root = badge_env
+    assert client.get("/api/badge/jobs?q=%20", headers=_auth(_key("badge"))).status_code == 422
+    assert web_search == []
+
+
+def test_queue_adds_the_opening_with_its_description(badge_env, web_search):
+    client, root = badge_env
+    token = _key("badge")
+    search_id = client.get("/api/badge/jobs?q=GitHub", headers=_auth(token)).json()["search_id"]
+
+    body = client.post(
+        "/api/badge/jobs/queue", json={"search_id": search_id, "number": 1}, headers=_auth(token)
+    ).json()
+    assert body["status"] == "queued" and body["company"] == "GitHub"
+
+    with _partition_conn(root) as con:
+        row = con.execute(
+            "SELECT company, role, jd, source FROM job_queue WHERE id = ?", (body["job_id"],)
+        ).fetchone()
+    assert row["role"] == "Senior Software Engineer, Copilot"
+    assert row["jd"].startswith("Build Copilot.")
+    assert row["source"] == "https://github.careers/1"
+
+    # The queued opening is now a pipeline hit the materials flow can use.
+    hits = client.get("/api/badge/search?q=copilot", headers=_auth(token)).json()["results"]
+    assert hits[0]["job_id"] == body["job_id"]
+
+
+def test_queue_twice_returns_the_same_job(badge_env, web_search):
+    client, _root = badge_env
+    token = _key("badge")
+    search_id = client.get("/api/badge/jobs?q=GitHub", headers=_auth(token)).json()["search_id"]
+    payload = {"search_id": search_id, "number": 2}
+    first = client.post("/api/badge/jobs/queue", json=payload, headers=_auth(token)).json()
+    second = client.post("/api/badge/jobs/queue", json=payload, headers=_auth(token)).json()
+    assert second["job_id"] == first["job_id"] and second["status"] == "already queued"
+
+
+def test_queue_from_an_unknown_search_is_gone(badge_env, web_search):
+    client, _root = badge_env
+    response = client.post(
+        "/api/badge/jobs/queue",
+        json={"search_id": "badge-web-nope", "number": 1},
+        headers=_auth(_key("badge")),
+    )
+    assert response.status_code == 410
+
+
+def test_job_search_is_badge_reachable_but_still_contained(badge_env, web_search):
+    """The new paths sit under /api/badge, so a badge key reaches them — and
+    nothing about adding them widened what else that key can touch."""
+    client, _root = badge_env
+    token = _key("badge")
+    assert client.get("/api/badge/jobs?q=x", headers=_auth(token)).status_code == 200
+    assert client.get("/api/dashboard/api-keys", headers=_auth(token)).status_code == 403

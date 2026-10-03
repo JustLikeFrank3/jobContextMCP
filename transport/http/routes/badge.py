@@ -23,7 +23,12 @@ lib/api_keys.py for why a badge token is treated as semi-public.
 """
 from __future__ import annotations
 
+import asyncio
+import datetime as _dt
+import hashlib
+import json
 import logging
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -130,6 +135,170 @@ async def badge_search(
                 )
 
     return {"query": _clip(query, _ROLE_CHARS), "count": len(results), "results": results}
+
+
+# ── job search (new openings, not the pipeline) ────────────────────────────────
+#
+# /search above only looks inside the caller's job_queue. These find openings
+# that aren't there yet — Google Jobs through the server's SerpAPI key — and
+# queue one so the materials flow can run against it.
+#
+# Every uncached search is a paid call on a key shared by all tenants, so a
+# repeat query within the hour reuses the stored results and each tenant gets
+# a daily cap. Results live in job_discovery's job_search_results table (same
+# expiry, same lookup), which is what lets queue_result add one by number with
+# its full description — never a title-only stub.
+
+_JOB_SEARCHES_PER_DAY = 25
+_MAX_QUERY_CHARS = 120
+
+
+class JobQueueRequest(BaseModel):
+    search_id: str
+    number: int
+
+
+def _web_job(job: dict) -> "dict | None":
+    """Normalise one Google Jobs result to job_discovery's stored shape."""
+    company = " ".join(str(job.get("company_name") or "").split())
+    role = " ".join(str(job.get("title") or "").split())
+    if not company or not role:
+        return None
+    source = next((o["link"] for o in job.get("apply_options") or [] if o.get("link")), "")
+    return {
+        "company": company[:120],
+        "role": role[:240],
+        "location": " ".join(str(job.get("location") or "").split())[:240],
+        "source": source or str(job.get("via") or ""),
+        "jd": str(job.get("description") or ""),
+        "provider": "web",
+    }
+
+
+def _search_id(query: str) -> str:
+    return "badge-web-" + hashlib.sha256(query.casefold().encode()).hexdigest()[:20]
+
+
+def _use_search_quota(con) -> bool:
+    """Count one paid search against today's cap; False once it is spent."""
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS badge_usage (day TEXT PRIMARY KEY, web_searches INTEGER NOT NULL)"
+    )
+    day = _dt.date.today().isoformat()
+    row = con.execute("SELECT web_searches FROM badge_usage WHERE day = ?", (day,)).fetchone()
+    used = row["web_searches"] if row else 0
+    if used >= _JOB_SEARCHES_PER_DAY:
+        return False
+    con.execute(
+        "INSERT INTO badge_usage (day, web_searches) VALUES (?, 1) "
+        "ON CONFLICT(day) DO UPDATE SET web_searches = web_searches + 1",
+        (day,),
+    )
+    return True
+
+
+def _job_rows(search_id: str, jobs: list[dict], limit: int) -> dict:
+    return {
+        "search_id": search_id,
+        "count": min(len(jobs), limit),
+        "results": [
+            {
+                "number": n,
+                "company": _clip(j["company"], _COMPANY_CHARS),
+                "role": _clip(j["role"], _ROLE_CHARS),
+                "location": _clip(j["location"], _ROLE_CHARS),
+            }
+            for n, j in enumerate(jobs[:limit], 1)
+        ],
+    }
+
+
+@router.get("/jobs")
+async def badge_jobs(
+    user: Annotated[User, Depends(require_badge_client)],  # noqa: ARG001
+    q: str = "",
+    limit: int = 6,
+) -> dict:
+    """Find open roles on the web for *q* (a company, a role, or both)."""
+    from tools.job_discovery import TTL, _db
+    from tools.job_scraper import JobSearchError, _serpapi_jobs
+
+    query = " ".join(q.split())
+    if not query or len(query) > _MAX_QUERY_CHARS:
+        raise HTTPException(status_code=422, detail="Type a company or role to search for.")
+    limit = max(1, min(limit, _MAX_RESULTS))
+    search_id = _search_id(query)
+
+    with _db() as con:
+        row = con.execute(
+            "SELECT results FROM job_search_results WHERE id = ? AND expires >= ?",
+            (search_id, time.time()),
+        ).fetchone()
+        if row is not None:
+            return _job_rows(search_id, json.loads(row["results"]), limit)
+        if not _use_search_quota(con):
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily job search limit ({_JOB_SEARCHES_PER_DAY}) reached - try tomorrow.",
+            )
+
+    # The HTTP call needs no partition, so a worker thread is safe here; the
+    # result is stored back on this request's own context below.
+    try:
+        raw = await asyncio.to_thread(_serpapi_jobs, query)
+    except JobSearchError as exc:
+        _log.warning("badge job search failed: %s", exc)
+        if "serpapi_key not set" in str(exc):
+            raise HTTPException(status_code=503, detail="Job search isn't set up on this server.") from exc
+        raise HTTPException(status_code=502, detail="Job search failed - try again.") from exc
+
+    jobs = [j for j in (_web_job(r) for r in raw) if j is not None]
+    with _db() as con:
+        con.execute("DELETE FROM job_search_results WHERE expires < ?", (time.time(),))
+        con.execute(
+            "INSERT OR REPLACE INTO job_search_results VALUES (?, ?, ?)",
+            (search_id, time.time() + TTL, json.dumps(jobs)),
+        )
+    return _job_rows(search_id, jobs, limit)
+
+
+@router.post("/jobs/queue")
+async def badge_queue_job(
+    request: JobQueueRequest,
+    user: Annotated[User, Depends(require_badge_client)],  # noqa: ARG001
+) -> dict:
+    """Add one search result to the pipeline and return its job id.
+
+    Idempotent: picking a posting that is already queued returns the existing
+    row, so a double press can't create two jobs.
+    """
+    from lib.db import get_connection
+    from tools.job_discovery import lookup_result, queue_result
+
+    try:
+        job = lookup_result(request.search_id, request.number)
+        message = queue_result(request.search_id, request.number)
+    except ValueError as exc:
+        raise HTTPException(status_code=410, detail="Those results expired - search again.") from exc
+
+    with get_connection() as con:
+        row = next(
+            (
+                r
+                for r in con.execute("SELECT id, company, role FROM job_queue ORDER BY id DESC")
+                if (r["company"] or "").casefold() == job["company"].casefold()
+                and (r["role"] or "").casefold() == job["role"].casefold()
+            ),
+            None,
+        )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Queued, but the job could not be found.")
+    return {
+        "job_id": row["id"],
+        "company": _clip(job["company"], _COMPANY_CHARS),
+        "role": _clip(job["role"], _ROLE_CHARS),
+        "status": "already queued" if message.startswith("Already") else "queued",
+    }
 
 
 # ── material generation ────────────────────────────────────────────────────────
