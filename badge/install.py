@@ -37,6 +37,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -199,13 +200,22 @@ def install(volume: Path, remove: str, dry_run: bool) -> None:
 
     target = volume / "apps" / APP
     target.mkdir(exist_ok=True)
-    for src, dst in MODULES.items():
-        compile_module(exe, APP_SRC / src, target / dst)
+    # Compile on the Mac, then copy each finished file in one write. mpy-cross
+    # writing straight onto the badge's FAT drive took ~1 minute per file —
+    # it emits many tiny writes, and the USB mass-storage mount is slow at them.
+    with tempfile.TemporaryDirectory() as tmp:
+        for src, dst in MODULES.items():
+            compile_module(exe, APP_SRC / src, Path(tmp) / dst)
+            shutil.copyfile(Path(tmp) / dst, target / dst)
     for name in STALE:
         (target / name).unlink(missing_ok=True)
     (target / "__init__.py").write_text(LOADER)
     for name in ASSETS + optional:
         shutil.copyfile(APP_SRC / name, target / name)
+    # macOS leaves AppleDouble ._* metadata files on FAT volumes; on the badge
+    # they are just clutter in a small filesystem.
+    for junk in target.glob("._*"):
+        junk.unlink(missing_ok=True)
     menu_path.write_text(patched)
     if (volume / "apps" / remove).is_dir():
         shutil.rmtree(volume / "apps" / remove)

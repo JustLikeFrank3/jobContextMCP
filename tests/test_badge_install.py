@@ -169,3 +169,25 @@ def test_real_compile_produces_loadable_bytecode(tmp_path):
     for src, dst in real.MODULES.items():
         real.compile_module(exe, real.APP_SRC / src, tmp_path / dst)
         assert (tmp_path / dst).read_bytes()[:2] == b"M\x06", dst   # mpy v6 header
+
+
+def test_compiles_off_the_badge_then_copies(installer, volume, monkeypatch):
+    """mpy-cross writing straight to the badge's FAT drive took ~1 min/file."""
+    targets = []
+
+    def record(exe, src, dst):
+        targets.append(dst)
+        dst.write_bytes(b"MPY")
+
+    monkeypatch.setattr(installer, "compile_module", record)
+    installer.install(volume, "gallery", dry_run=False)
+    assert targets and all(volume not in dst.parents for dst in targets)
+    assert (volume / "apps/jobcontext/app.mpy").read_bytes() == b"MPY"
+
+
+def test_appledouble_clutter_is_removed(installer, volume):
+    app = volume / "apps/jobcontext"
+    app.mkdir(parents=True)
+    (app / "._ui.py").write_bytes(b"mac metadata")
+    installer.install(volume, "gallery", dry_run=False)
+    assert not list(app.glob("._*"))
