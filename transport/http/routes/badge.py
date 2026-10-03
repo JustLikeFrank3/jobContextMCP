@@ -310,6 +310,11 @@ _VALID_MATERIALS = ("resume", "cover_letter", "both")
 class MaterialsRequest(BaseModel):
     job_id: int
     material: str = "resume"
+    # Visual layout + colour theme for the PDF. Empty template is the legacy
+    # layout, which ignores style. Firmware that predates the picker sends
+    # neither and gets exactly what it always got.
+    template: str = ""
+    style: str = "navy"
 
 
 def _generate_materials(inputs: dict) -> dict:
@@ -330,6 +335,8 @@ def _generate_materials(inputs: dict) -> dict:
 
     job_id = int(inputs["job_id"])
     material = inputs.get("material", "resume")
+    template = inputs.get("template", "")
+    style = inputs.get("style") or "navy"
 
     with get_connection() as con:
         row = con.execute(
@@ -346,8 +353,12 @@ def _generate_materials(inputs: dict) -> dict:
 
     wanted = [m for m in ("resume", "cover_letter") if material in (m, "both")]
     for name in wanted:
-        fn = generate.generate_resume if name == "resume" else generate.generate_cover_letter
-        result = str(fn(company, role, jd))
+        if name == "resume":
+            result = str(generate.generate_resume(company, role, jd, template=template, style=style))
+        else:
+            result = str(
+                generate.generate_cover_letter(company, role, jd, cl_template=template, cl_style=style)
+            )
         failure = _generation_failure(result)
         if failure:
             errors[name] = failure
@@ -404,9 +415,23 @@ async def badge_materials(
             status_code=422,
             detail="That result isn't a queued job yet — capture it first.",
         )
+    from lib.template_loader import template_style_error
+
+    # Same gate the generators and export use, for both document kinds (a
+    # "both" request applies one choice to each), checked here so a bad value
+    # is a 422 now rather than a failed work row a minute later.
+    for is_cl in (False, True):
+        err = template_style_error(request.template, request.style, cover_letter=is_cl)
+        if err:
+            raise HTTPException(status_code=422, detail=err)
     work_id = work.enqueue(
         _KIND,
-        {"job_id": request.job_id, "material": request.material},
+        {
+            "job_id": request.job_id,
+            "material": request.material,
+            "template": request.template,
+            "style": request.style,
+        },
         origin="badge",
     )
     return {"status": "queued", "work_id": work_id}

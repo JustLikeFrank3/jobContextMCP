@@ -104,6 +104,7 @@ class FakeApi:
         self.poll_status = "succeeded"
         self.poll_made = ["resume"]
         self.job_searches = []
+        self.styles = []
         self.job_results = []
         self.queued = []
 
@@ -126,8 +127,9 @@ class FakeApi:
         hit = self.job_results[number - 1]
         return {"job_id": 900 + number, "company": hit["company"], "role": hit["role"], "status": "queued"}
 
-    def request_materials(self, job_id, material="resume"):
+    def request_materials(self, job_id, material="resume", template="", style="navy"):
         self.requested.append((job_id, material))
+        self.styles.append((template, style))
         return {"work_id": 7}
 
     def poll(self, work_id):
@@ -135,7 +137,7 @@ class FakeApi:
 
 
 @pytest.fixture()
-def badge_app(monkeypatch):
+def badge_app(monkeypatch, tmp_path):
     """Load the real badge app with fake ui/api/secrets underneath it."""
     fake_ui, fake_api = FakeUI(), FakeApi()
 
@@ -157,6 +159,9 @@ def badge_app(monkeypatch):
     app = importlib.util.module_from_spec(spec)
     sys.modules["badgeapp"] = app
     spec.loader.exec_module(app)
+    # Remembered layout/colour live at the badge's filesystem root; never let
+    # a test read or write the host's.
+    monkeypatch.setattr(app, "_PREFS", str(tmp_path / "prefs.json"))
 
     app.init()
     yield app, fake_ui, fake_api
@@ -285,7 +290,8 @@ def test_picking_an_open_role_queues_it_and_generates_against_it(badge_app):
     assert api_.queued == [("badge-web-x", 2)]
     assert app.state == app.ACTIONS
     assert app.results[app.selected]["job_id"] == 902
-    _tap(app, ui_, "A")  # generate a resume for it
+    _tap(app, ui_, "A")  # resume -> style screen
+    _tap(app, ui_, "A")  # cursor starts on Generate
     assert api_.requested == [(902, "resume")]
     assert app.state == app.WORKING
 
@@ -316,7 +322,9 @@ def test_full_generation_flow(badge_app):
 
     api_.poll_status = "running"      # still generating when we first look
     _tap(app, ui_, "DOWN")            # resume → cover letter
-    _tap(app, ui_, "A")               # confirm
+    _tap(app, ui_, "A")               # confirm -> style screen
+    assert app.state == app.STYLE
+    _tap(app, ui_, "A")               # Generate (the cursor starts there)
     assert api_.requested == [(42, "cover_letter")]
     assert app.state == app.WORKING
 
@@ -338,6 +346,7 @@ def test_failed_generation_surfaces_detail(badge_app):
     app.query = "ACME"
     _tap(app, ui_, "C")
     api_.poll_status = "running"
+    _tap(app, ui_, "A")
     _tap(app, ui_, "A")
     _tap(app, ui_, "A")
     assert app.state == app.WORKING
@@ -431,3 +440,61 @@ def test_api_quote_percent_encodes_utf8_bytes(monkeypatch):
     api = _load("api")
     assert api._quote("AT&T Inc") == "AT%26T+Inc"
     assert api._quote("é") == "%C3%A9"
+
+
+# ── layout / colour picker ─────────────────────────────────────────────────────
+
+def _to_style_screen(app, ui_, api_):
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")  # actions
+    _tap(app, ui_, "A")  # resume -> style
+    assert app.state == app.STYLE
+
+
+def test_default_style_is_the_original_layout(badge_app):
+    """A, A from the actions menu generates exactly what it did before."""
+    app, ui_, api_ = badge_app
+    _to_style_screen(app, ui_, api_)
+    _tap(app, ui_, "A")
+    assert api_.styles == [("", "navy")]
+
+
+def test_picking_a_layout_and_colour(badge_app):
+    app, ui_, api_ = badge_app
+    _to_style_screen(app, ui_, api_)
+    assert app._style_rows() == ["layout", "generate"]  # no colour for original
+    _tap(app, ui_, "UP")          # -> layout
+    _tap(app, ui_, "A")           # original -> modern
+    _tap(app, ui_, "A")           # modern -> executive
+    assert app._style_rows() == ["layout", "colour", "generate"]
+    _tap(app, ui_, "DOWN")        # -> colour
+    _tap(app, ui_, "B")           # navy -> classic (B steps backwards)
+    _tap(app, ui_, "DOWN")        # -> generate
+    _tap(app, ui_, "A")
+    assert api_.styles == [("executive", "classic")]
+    assert app.state == app.WORKING
+
+
+def test_style_choice_survives_a_restart(badge_app):
+    app, ui_, api_ = badge_app
+    _to_style_screen(app, ui_, api_)
+    _tap(app, ui_, "UP")
+    _tap(app, ui_, "A")           # modern
+    _tap(app, ui_, "DOWN")
+    _tap(app, ui_, "A")           # navy -> slate
+    _tap(app, ui_, "DOWN")
+    _tap(app, ui_, "A")           # generate (saves the choice)
+
+    app.layout_index = app.colour_index = 0
+    app._load_prefs()             # what init() does after a reset
+    assert app.LAYOUTS[app.layout_index][0] == "modern"
+    assert app.COLOURS[app.colour_index] == "slate"
+
+
+def test_c_on_style_goes_back_without_generating(badge_app):
+    app, ui_, api_ = badge_app
+    _to_style_screen(app, ui_, api_)
+    _tap(app, ui_, "C")
+    assert app.state == app.ACTIONS and api_.requested == []

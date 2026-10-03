@@ -126,8 +126,12 @@ def queue_job(search_id, number):
     return _request("POST", "/api/badge/jobs/queue", {"search_id": search_id, "number": number})
 
 
-def request_materials(job_id, material="resume"):
-    return _request("POST", "/api/badge/materials", {"job_id": job_id, "material": material})
+def request_materials(job_id, material="resume", template="", style="navy"):
+    return _request(
+        "POST",
+        "/api/badge/materials",
+        {"job_id": job_id, "material": material, "template": template, "style": style},
+    )
 
 
 def poll(work_id):
