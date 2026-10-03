@@ -58,6 +58,21 @@ Text entry is a horizontal character carousel rather than a grid keyboard
 because the badge has no left/right buttons — only UP, DOWN, A, B and C.
 Holding UP or DOWN accelerates after 400ms.
 
+## Screen saver: your contact card
+
+Leave the badge on the jobcontext app and after `IDLE_SECONDS` (default 30)
+with no button presses it turns into a name tag: your name, title and links on
+the left, alternating every few seconds with a **QR code of the same details as
+a vCard** (scan it to add you to contacts), and a self-playing game of Tetris
+on the right. Any button wakes it; that press is swallowed, so waking with A
+never also types a letter. It never covers the "generating" screen, and every
+screen change restarts the idle clock so "ready" stays visible.
+
+Copy `jobcontext/contact.example.py` to `jobcontext/contact.py` (gitignored),
+fill it in, and re-run `install.py`. No `contact.py` means no screen saver.
+Keep the fields short: every character makes the QR denser and harder to scan
+off a 2.8" screen.
+
 ## Why the token is scoped
 
 Anyone can mount this badge's filesystem by double-tapping reset and plugging

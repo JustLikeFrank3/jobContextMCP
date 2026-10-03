@@ -34,9 +34,12 @@ from pathlib import Path
 
 APP = "jobcontext"
 APP_SRC = Path(__file__).resolve().parent / APP
-# Copied onto the badge. secrets.py is added when present; the example and
-# anything else stays behind.
-APP_FILES = ("__init__.py", "api.py", "inputs.py", "keyboard.py", "ui.py", "icon.png")
+# Copied onto the badge; the *.example.py files and anything else stay behind.
+APP_FILES = ("__init__.py", "api.py", "inputs.py", "keyboard.py", "ui.py",
+             "screensaver.py", "tetris.py", "icon.png")
+# Personal, gitignored, copied when present: WiFi + token, and the screen
+# saver's contact card (no contact.py = no screen saver).
+OPTIONAL_FILES = ("secrets.py", "contact.py")
 DEFAULT_VOLUME = Path("/Volumes/BADGER")
 BACKUP_ROOT = Path.home() / "badge-backups"
 _MENU = Path("apps/menu/__init__.py")
@@ -111,15 +114,18 @@ def install(volume: Path, remove: str, dry_run: bool) -> None:
 
     original = menu_path.read_text()
     patched = patch_menu(original, remove)
-    has_secrets = (APP_SRC / "secrets.py").is_file()
+    optional = tuple(f for f in OPTIONAL_FILES if (APP_SRC / f).is_file())
+    has_secrets = "secrets.py" in optional
 
     print(f"menu now:  {', '.join(listed_apps(original))}")
     print(f"menu after: {', '.join(listed_apps(patched))}")
     print(f"delete:    apps/{remove}/" if (volume / "apps" / remove).is_dir() else f"delete:    (apps/{remove} already gone)")
-    print(f"copy:      {', '.join(APP_FILES)}" + (", secrets.py" if has_secrets else ""))
+    print(f"copy:      {', '.join(APP_FILES + optional)}")
     if not has_secrets:
         print(f"  ! no {APP_SRC / 'secrets.py'} — the app will install but show a")
         print("    'no secrets.py' error until you add one (see secrets.example.py).")
+    if "contact.py" not in optional:
+        print("  (no contact.py — no screen saver; see contact.example.py)")
     if dry_run:
         print("dry run — nothing written.")
         return
@@ -135,7 +141,7 @@ def install(volume: Path, remove: str, dry_run: bool) -> None:
 
     target = volume / "apps" / APP
     target.mkdir(exist_ok=True)
-    for name in APP_FILES + (("secrets.py",) if has_secrets else ()):
+    for name in APP_FILES + optional:
         shutil.copyfile(APP_SRC / name, target / name)
     menu_path.write_text(patched)
     if (volume / "apps" / remove).is_dir():

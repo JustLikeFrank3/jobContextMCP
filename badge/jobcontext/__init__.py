@@ -20,10 +20,11 @@ import json
 import time
 
 try:  # loaded as a package (/apps/jobcontext) or flat — support both
-    from . import api, inputs, ui
+    from . import api, inputs, screensaver, ui
 except ImportError:
     import api
     import inputs
+    import screensaver
     import ui
 
 # States
@@ -66,12 +67,17 @@ source = None
 _online = False
 _last_poll = 0
 _prev_buttons = {}
+_BUTTONS = ("UP", "DOWN", "A", "B", "C")
+_last_input = 0
+saving = False  # the contact-card screen saver is up
 
 
 def init():
-    global source, _online
+    global source, _online, _last_input
     ui.init()
     _load_prefs()
+    screensaver.load()
+    _last_input = time.ticks_ms()
     source = inputs.best_available()
     _draw_splash("connecting...")
     try:
@@ -92,6 +98,8 @@ def on_exit():
 # ── frame ──────────────────────────────────────────────────────────────────────
 
 def update():
+    if _screensaver_frame():
+        return
     if state == SEARCH:
         _update_search()
     elif state == RESULTS:
@@ -127,14 +135,51 @@ def _go(new_state, note=""):
     and bounces straight back to SEARCH. Same for A moving into ACTIONS and
     immediately confirming a generation nobody chose.
     """
-    global state, message
+    global state, message, _last_input
     state = new_state
     if note:
         message = note
-    for name in ("UP", "DOWN", "A", "B", "C"):
+    # A fresh screen gets a full idle period: a generation that took longer
+    # than IDLE_SECONDS must not drop straight into the saver over "ready".
+    _last_input = time.ticks_ms()
+    _rearm()
+
+
+def _rearm():
+    """Treat every button that is down right now as already seen."""
+    for name in _BUTTONS:
         _prev_buttons[name] = ui.pressed(name)
     if source is not None:
         source.rearm()
+
+
+def _screensaver_frame():
+    """Run the idle screen saver. True when it owns this frame.
+
+    Any button wakes it, and that press is swallowed: the screens below are
+    re-armed so the held button reads as already seen, otherwise waking the
+    badge with A would also type a letter or start a generation. WORKING never
+    idles into the saver — that screen is polling a job and should say so.
+    """
+    global _last_input, saving
+    now = time.ticks_ms()
+    if any(ui.pressed(name) for name in _BUTTONS):
+        _last_input = now
+        if saving:
+            saving = False
+            _rearm()
+            return True
+        return False
+    if saving:
+        screensaver.draw(now)
+        return True
+    if (state != WORKING and screensaver.enabled()
+            and time.ticks_diff(now, _last_input) >= screensaver.idle_ms()):
+        saving = True
+        screensaver.start(now)
+        screensaver.draw(now)
+        return True
+    return False
 
 
 # ── search ─────────────────────────────────────────────────────────────────────

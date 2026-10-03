@@ -56,6 +56,13 @@ class FakeUI:
     def flip(self):
         pass
 
+    def qr_image(self, text, max_w, max_h):
+        self.qr_text = text
+        return ("qr-image", 90)
+
+    def blit(self, image, x, y):
+        self.drawn.append("<qr>")
+
     def present(self):
         pass
 
@@ -136,6 +143,9 @@ class FakeApi:
         return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
 
 
+_APP_MODULES = ("keyboard", "inputs", "screensaver", "tetris", "badgeapp")
+
+
 @pytest.fixture()
 def badge_app(monkeypatch, tmp_path):
     """Load the real badge app with fake ui/api/secrets underneath it."""
@@ -151,7 +161,10 @@ def badge_app(monkeypatch, tmp_path):
 
     monkeypatch.setitem(sys.modules, "ui", fake_ui)
     monkeypatch.setitem(sys.modules, "api", fake_api)
-    for name in ("keyboard", "inputs", "badgeapp"):
+    # No contact card unless a test supplies one — and never the developer's
+    # real badge/jobcontext/contact.py, which sits right on sys.path.
+    monkeypatch.setitem(sys.modules, "contact", None)
+    for name in _APP_MODULES:
         sys.modules.pop(name, None)
     monkeypatch.syspath_prepend(str(_APP))
 
@@ -165,7 +178,7 @@ def badge_app(monkeypatch, tmp_path):
 
     app.init()
     yield app, fake_ui, fake_api
-    for name in ("keyboard", "inputs", "badgeapp"):
+    for name in _APP_MODULES:
         sys.modules.pop(name, None)
 
 
@@ -498,3 +511,120 @@ def test_c_on_style_goes_back_without_generating(badge_app):
     _to_style_screen(app, ui_, api_)
     _tap(app, ui_, "C")
     assert app.state == app.ACTIONS and api_.requested == []
+
+
+# ── contact-card screen saver ──────────────────────────────────────────────────
+
+class _Contact:
+    NAME = "Ada Lovelace"
+    TITLE = "Staff Engineer"
+    EMAIL = "ada@example.com"
+    PHONE = ""
+    LINKEDIN = "ada"
+    GITHUB = "ada-l"
+    WEBSITE = ""
+    IDLE_SECONDS = 30
+
+
+@pytest.fixture()
+def saver_app(badge_app, monkeypatch):
+    app, ui_, api_ = badge_app
+    monkeypatch.setitem(sys.modules, "contact", _Contact)
+    assert app.screensaver.load()
+    app._last_input = time.ticks_ms()
+    return app, ui_, api_
+
+
+def _idle(app, ui_, seconds):
+    ui_.release()
+    ui_.advance_ms(seconds * 1000)
+    app.update()
+
+
+def test_idle_shows_the_contact_card(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 10)
+    assert not app.saving
+    _idle(app, ui_, 25)
+    assert app.saving
+    assert "Ada Lovelace" in ui_.drawn
+    assert any(line.startswith("in/ada") for line in ui_.drawn)
+
+
+def test_card_alternates_with_the_vcard_qr(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    assert "<qr>" not in ui_.drawn          # text card first
+    _idle(app, ui_, 8)
+    assert "<qr>" in ui_.drawn              # then the QR page
+    assert ui_.qr_text.startswith("BEGIN:VCARD")
+    assert "FN:Ada Lovelace" in ui_.qr_text
+
+
+def test_waking_press_is_swallowed(saver_app):
+    """Waking with A must not also type an 'A' into the search box."""
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    assert app.saving
+    ui_.press("A")
+    app.update()
+    assert not app.saving
+    app.update()                            # A still held
+    ui_.release()
+    app.update()
+    assert app.query == ""
+    assert app.state == app.SEARCH
+
+
+def test_tetris_plays_while_saving(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    first = app.screensaver._game.cells()
+    _idle(app, ui_, 3)
+    assert app.screensaver._game.cells() != first
+
+
+def test_working_never_idles_into_the_saver(saver_app):
+    app, ui_, api_ = saver_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    assert app.state == app.WORKING
+    _idle(app, ui_, 120)
+    assert not app.saving and app.state == app.WORKING
+
+
+def test_ready_screen_is_not_covered_after_a_long_generation(saver_app):
+    app, ui_, api_ = saver_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _idle(app, ui_, 90)                     # a slow generation
+    api_.poll_status = "succeeded"
+    _idle(app, ui_, 3)
+    assert app.state == app.DONE and not app.saving
+    _idle(app, ui_, 31)
+    assert app.saving                       # only after a full idle period
+
+
+def test_no_contact_file_means_no_screen_saver(badge_app):
+    app, ui_, _api = badge_app
+    _idle(app, ui_, 600)
+    assert not app.saving
+
+
+def test_vcard_includes_only_filled_fields(badge_app):
+    app, _ui, _api = badge_app
+    card = app.screensaver.vcard(_Contact)
+    assert "N:Lovelace;Ada" in card and "TITLE:Staff Engineer" in card
+    assert "URL:https://linkedin.com/in/ada" in card
+    assert "URL:https://github.com/ada-l" in card
+    assert "TEL:" not in card               # PHONE is empty

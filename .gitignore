@@ -113,3 +113,5 @@ desktop/src-tauri/icons/
 
 # Badge credentials — WiFi password + API token in plain text on the device
 badge/jobcontext/secrets.py
+# Screen saver contact card — personal details shown on and QR-encoded by the badge
+badge/jobcontext/contact.py
