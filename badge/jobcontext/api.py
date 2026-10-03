@@ -76,7 +76,15 @@ def connect_wifi(status=None):
             visible.add(name.decode() if isinstance(name, (bytes, bytearray)) else name)
     except Exception:  # noqa: BLE001 — a failed scan just means "try them all"
         visible = None
-    candidates = [n for n in nets if visible is None or n[0] in visible]
+    if visible is None:
+        candidates = nets
+    else:
+        candidates = [n for n in nets if n[0] in visible]
+        # A hidden network (a phone hotspot set to "hide") scans with an empty
+        # name, so it can never match by name. If one is in range, the
+        # networks we couldn't see may be it: try them after the visible ones.
+        if "" in visible:
+            candidates += [n for n in nets if n not in candidates]
     if not candidates:
         raise ApiError("none of your wifi networks are in range")
     for ssid, password in candidates:

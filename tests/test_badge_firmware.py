@@ -746,3 +746,14 @@ def test_wifi_says_so_when_nothing_known_is_in_range(monkeypatch):
     with pytest.raises(api.ApiError, match="in range"):
         api.connect_wifi()
     assert wlan.tried == []
+
+
+def test_wifi_tries_unseen_networks_when_a_hidden_one_is_in_range(monkeypatch):
+    """A hidden hotspot scans as an empty name; it must still be joinable."""
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Frank's Device", "b")])
+    wlan = _FakeWlan(visible=["", "Starbucks"], joinable={"Frank's Device"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home", "Frank's Device"]
