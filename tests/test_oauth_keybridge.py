@@ -349,6 +349,51 @@ class TestAlexaClient:
         assert "MCP connector" in [k.label for k in list_keys("oid-alice")]
 
 
+# Copilot Studio (M365 Copilot) connectors call back on Power Platform's
+# shared consent host, bare or with a per-connector id suffix.
+_COPILOT_REDIRECT = "https://global.consent.azure-apim.net/redirect/jobcontextmcp"
+
+
+class TestCopilotStudioClient:
+    def test_consent_host_callbacks_match(self):
+        from transport.http.routes.oauth import _is_bridge_redirect_uri
+
+        assert _is_bridge_redirect_uri(_COPILOT_REDIRECT)
+        assert _is_bridge_redirect_uri("https://global.consent.azure-apim.net/redirect")
+        # The /redirect root is pinned exactly, not as a bare string prefix.
+        assert not _is_bridge_redirect_uri("https://global.consent.azure-apim.net/redirectX")
+        assert not _is_bridge_redirect_uri("https://global.consent.azure-apim.net/other")
+        assert not _is_bridge_redirect_uri(
+            "https://global.consent.azure-apim.net.evil.example/redirect/x"
+        )
+        assert not _is_bridge_redirect_uri("http://global.consent.azure-apim.net/redirect")
+
+    def test_consent_page_names_copilot_studio(self, bridge_client, alice_cookie):
+        r = bridge_client.get(
+            "/oauth/authorize",
+            params=_authorize_query(redirect_uri=_COPILOT_REDIRECT),
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "Connect Copilot Studio" in r.text
+
+    @pytest.mark.parametrize(
+        "uri", [_COPILOT_REDIRECT, "https://global.consent.azure-apim.net/redirect"]
+    )
+    def test_full_flow_labels_key(self, bridge_client, alice_cookie, uri):
+        from lib.api_keys import list_keys, lookup_key
+
+        r = _approve(bridge_client, redirect_uri=uri)
+        assert r.status_code == 303
+        assert r.headers["location"].startswith(uri + "?")
+        code = parse_qs(urlparse(r.headers["location"]).query)["code"][0]
+
+        rx = _exchange(bridge_client, code, redirect_uri=uri)
+        assert rx.status_code == 200
+        assert lookup_key(rx.json()["access_token"]) == "oid-alice"
+        assert "Copilot Studio connector" in [k.label for k in list_keys("oid-alice")]
+
+
 class TestUnauthChallenge:
     def test_401_carries_resource_metadata_pointer(self, bridge_client):
         """RFC 9728 §5.1 — Alexa+ discovery starts from a bare 401 and follows
