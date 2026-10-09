@@ -77,14 +77,6 @@ _BRIDGE_FALLBACK_LABEL = "MCP connector"
 # the documented shape for add-on account linking.  If Alexa+ onboarding
 # surfaces a different callback (the MCP Toolkit is new), extend via the
 # KEYBRIDGE_REDIRECT_URIS env override without a deploy.
-# Copilot Studio (M365 Copilot agents) runs MCP tools as Power Platform
-# connectors; every connector's OAuth callback lands on the shared consent
-# host — https://global.consent.azure-apim.net/redirect exactly, or that plus
-# /<connector id> — so it gets an exact rule plus a /redirect/ prefix rule
-# (a bare "/redirect" prefix would also admit "/redirectX").
-# Its "Dynamic discovery" mode registers via /oauth/register (public client,
-# PKCE) and would otherwise hit Entra with an unregistered callback.
-# Sovereign-cloud consent hosts are not listed; add them via the override.
 _BRIDGE_CLIENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "ChatGPT",
@@ -103,19 +95,9 @@ _BRIDGE_CLIENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             "https://alexa.amazon.co.jp/api/skill/link/",
         ),
     ),
-    (
-        "Copilot Studio",
-        "Copilot Studio connector",
-        ("https://global.consent.azure-apim.net/redirect/",),
-    ),
 )
 _BRIDGE_DEFAULT_REDIRECT_PREFIXES = tuple(
     prefix for _, _, prefixes in _BRIDGE_CLIENTS for prefix in prefixes
-)
-# Exact callbacks: a client's prefix minus its trailing slash, where the bare
-# root is itself a real callback (Copilot Studio's un-suffixed form).
-_BRIDGE_DEFAULT_REDIRECT_EXACTS = frozenset(
-    {"https://global.consent.azure-apim.net/redirect"}
 )
 
 # Pending one-time codes: code → {oid, redirect_uri, code_challenge, expires}.
@@ -145,7 +127,7 @@ def _bridge_redirect_rules() -> tuple[frozenset[str], tuple[str, ...]]:
         exacts = frozenset(u for u in entries if not u.endswith("*"))
         prefixes = tuple(u[:-1] for u in entries if u.endswith("*"))
         return exacts, prefixes
-    return _BRIDGE_DEFAULT_REDIRECT_EXACTS, _BRIDGE_DEFAULT_REDIRECT_PREFIXES
+    return frozenset(), _BRIDGE_DEFAULT_REDIRECT_PREFIXES
 
 
 def _bridge_client_for(uri: str) -> tuple[str, str]:
@@ -156,7 +138,7 @@ def _bridge_client_for(uri: str) -> tuple[str, str]:
     dashboard label is just less specific.
     """
     for display, label, prefixes in _BRIDGE_CLIENTS:
-        if any(uri.startswith(p) or uri == p.rstrip("/") for p in prefixes):
+        if any(uri.startswith(p) for p in prefixes):
             return display, label
     return _BRIDGE_FALLBACK_LABEL, _BRIDGE_FALLBACK_LABEL
 
@@ -509,9 +491,8 @@ async def oauth_authorize_proxy(request: Request) -> Response:
     preserved — this is completely transparent to both the browser and
     mcp-remote's local callback server.
     """
-    # Bridge callbacks (ChatGPT, Alexa+, Copilot Studio) divert to the key
-    # bridge; everything else (Claude.ai, Cursor, VS Code, mcp-remote)
-    # proceeds to Entra unchanged.
+    # ChatGPT's callback URIs divert to the key bridge; everything else
+    # (Claude.ai, Cursor, VS Code, mcp-remote) proceeds to Entra unchanged.
     if _bridge_enabled() and _is_bridge_redirect_uri(request.query_params.get("redirect_uri", "")):
         return _bridge_consent_response(request)
 
