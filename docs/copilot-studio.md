@@ -65,3 +65,40 @@ owns the OAuth flow.
   Publishing to M365 Copilot may also need admin approval.
 - The issued key never expires. Revoke it from the API Keys tab when you're
   done with the agent.
+
+## Troubleshooting: "can't connect" with nothing in the server log
+
+Seen 2026-10-09 from an employer (Accenture) tenant. OAuth (Dynamic
+discovery), OAuth (Dynamic) and API key auth all failed with the same
+generic "can't connect" message, which gave no detail. Meanwhile the same
+`jcmcp_` key worked from curl:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://app.jobcontext.ai/mcp \
+  -H "Authorization: $KEY" -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+# → 200
+```
+
+Run `kubectl logs deploy/jcmcp -n jcmcp --since=3m | grep /mcp` right after
+clicking **Add**. In this case it showed **no requests** from Copilot Studio,
+while the curl above appeared immediately. That means the connection is
+refused inside Power Platform before any traffic leaves the tenant. The
+usual cause is the tenant's data (DLP) policy blocking custom or MCP
+connectors, or allowing only approved endpoints. Nothing on the jobContext
+side (server, key, bridge) can fix it.
+
+What to do:
+- Check whether the agent lives in a managed or default environment. If the
+  tenant allows it, retry from a Power Platform **developer environment**
+  to confirm a policy block.
+- Otherwise, only a tenant Power Platform admin can allow the connector.
+  For a personal job-search workspace, it's usually better to use that
+  workspace from Claude.ai or ChatGPT on a personal account instead.
+- Revoke any API key minted for the failed connection.
+
+Copilot Studio's "MCP client" channel (preview) runs the other direction. It
+exposes a Copilot Studio agent *as* an MCP server for outside clients, and it
+needs an app registration in the employer's tenant, so it doesn't get around
+the block.
