@@ -255,7 +255,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         _PUBLIC_PREFIXES = (
             "/.well-known/",
             "/health",
-            "/metrics",       # aggregate counters only — no user data (scraped by ama-metrics)
+            "/metrics",       # aggregate counters only — no user data (scraped by in-cluster Prometheus)
             "/oauth/",
             "/logout",
             "/setup",

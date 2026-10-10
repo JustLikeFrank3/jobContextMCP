@@ -107,3 +107,39 @@ The guest must accept the invitation before their first login. Their data partit
 ## QA environment
 
 A parallel `qa.jobcontext.ai` environment runs on the same cluster (namespace `jcmcp-qa`, its own storage account + PVC, shared workload identity via a QA federated credential). Pushes to the `qa` branch build a `qa-<sha>` image and roll out independently of production. See `k8s/qa/` and `scripts/setup-qa-env.sh`.
+
+## Cost controls
+
+Changes from the 2026-10 cost review. Spend was about $330/month for an
+environment with light beta traffic.
+
+- **Blob backup writes.** The `workspace-sync` sidecar used to re-upload
+  every tenant file every 15 minutes. Those writes were nearly the whole
+  storage-account bill in both environments. It now uploads only files whose
+  ctime changed since the last good tick. It still runs a full `upload-batch`
+  on the first tick after a pod start, once a day, and whenever more than
+  200 files changed. Each tick logs `upload: full batch` or
+  `upload: N changed files`.
+- **Monitoring is in-cluster only.** Azure Managed Grafana and Azure Monitor
+  managed Prometheus (the `ama-metrics` addon and its Azure Monitor
+  workspace) were removed. The dashboards live in `k8s/monitoring/`, backed
+  by the in-cluster Prometheus. Don't re-enable the AKS monitoring addon
+  without a reason; it re-creates both costs.
+- **ACR purge.** Every deploy pushes a `<sha>` (prod) or `qa-<sha>` (QA)
+  image, and Basic SKU has no retention policy. Two scheduled ACR tasks,
+  one per tag family so `--keep` counts each family separately, keep the 5
+  newest of each and leave `latest` and `qa-latest` alone. The currently
+  deployed image is always the newest of its family, so it's never purged:
+
+  ```bash
+  az acr task create --registry jcmcpacr --name purge-prod-images \
+    --cmd "acr purge --filter 'jcmcp:^[0-9a-f]{40}$' --ago 1d --keep 5 --untagged" \
+    --schedule "0 4 * * *" --context /dev/null
+  az acr task create --registry jcmcpacr --name purge-qa-images \
+    --cmd "acr purge --filter 'jcmcp:^qa-[0-9a-f]{40}$' --ago 1d --keep 5" \
+    --schedule "30 4 * * *" --context /dev/null
+  ```
+- **One node.** The node pool runs a single D2s v3; everything requests
+  about 0.2 vCPU and 1.5 GiB. Prod and QA are already single-replica
+  (`Recreate`), so a second node added no redundancy for the app itself.
+  Scale back up with `az aks nodepool scale` if load grows.
