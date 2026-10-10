@@ -116,10 +116,11 @@ environment with light beta traffic.
 - **Blob backup writes.** The `workspace-sync` sidecar used to re-upload
   every tenant file every 15 minutes. Those writes were nearly the whole
   storage-account bill in both environments. It now uploads only files whose
-  ctime changed since the last good tick. It still runs a full `upload-batch`
+  ctime changed since the last good tick. The sidecar image's `find` is
+  BusyBox (no `-cnewer`), so the ctimes come from `stat -c %Z`. It still runs a full `upload-batch`
   on the first tick after a pod start, once a day, and whenever more than
-  200 files changed. Each tick logs `upload: full batch` or
-  `upload: N changed files`.
+  200 files changed. Each tick logs `upload: N changed files` or
+  `upload: full batch (<reason>)`.
 - **Monitoring is in-cluster only.** Azure Managed Grafana and Azure Monitor
   managed Prometheus (the `ama-metrics` addon and its Azure Monitor
   workspace) were removed. The dashboards live in `k8s/monitoring/`, backed
