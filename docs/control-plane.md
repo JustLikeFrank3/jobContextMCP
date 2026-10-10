@@ -55,9 +55,9 @@ Two complementary layers, still zero new infrastructure (`lib/metrics.py`):
   and every LLM call through the `create_chat_completion` funnel
   (`llm_calls_total` by label/model/outcome, `llm_call_seconds`,
   `llm_tokens_total` by direction). Aggregates only — no user data. The AKS
-  pods carry `prometheus.io/*` annotations for Azure Monitor's managed
-  Prometheus (enable pod-annotation scraping in
-  ama-metrics-settings-configmap to activate collection).
+  pods carry `prometheus.io/*` annotations, scraped by the in-cluster
+  Prometheus in `k8s/monitoring/` (Azure Monitor managed Prometheus and
+  Managed Grafana were removed in the 2026-10 cost review).
 - **`GET /api/work/stats`** — per-tenant JSON aggregates straight off the
   work_items table (counts + avg duration by kind/status, recent failures
   with error heads, and — since P2 — `tokens_by_kind`): the control plane

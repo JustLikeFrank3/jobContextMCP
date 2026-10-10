@@ -2,8 +2,8 @@
 
 Counters and duration summaries, thread-safe, zero dependencies — the same
 constraint as the control plane (this module ships inside the frozen desktop
-sidecar too). The cloud's AKS cluster already runs Azure Monitor's managed
-Prometheus agents (ama-metrics); GET /metrics exposes the standard text
+sidecar too). The cloud's AKS cluster scrapes it with an in-cluster
+Prometheus (k8s/monitoring/); GET /metrics exposes the standard text
 format so scraping is a pod-annotation away. Locally it's a debugging page.
 
 What gets instrumented where:

@@ -237,9 +237,55 @@ spec:
             - -c
             - |
               set -e
-              echo "QA Tenant sync sidecar ready. Backing up + pruning every 15 min."
+              echo "QA Tenant sync sidecar ready. Incremental backup + prune every 15 min."
+              # Upload only what changed. Re-uploading every file each tick (the old
+              # bare upload-batch --overwrite) wrote ~96 full copies of every tenant
+              # file a day: 100% of the storage-account bill in both envs, with
+              # almost nothing stored (2026-10 cost review). Change detection uses
+              # CTIME, not mtime: sync transfers preserve the source mtime (os.utime
+              # in /files/put), so a file pulled from a desktop peer can carry an
+              # mtime older than the last tick. The full upload-batch still runs on
+              # the first tick after start, every 96th tick (daily reconciliation),
+              # when find lacks -cnewer, or when >200 files changed (per-file CLI
+              # calls would be slower than one batch).
+              stamp=/tmp/last-sync-ok
+              tick=0
+              full_upload() {
+                az storage blob upload-batch \
+                  --account-name "${STORAGE_ACCOUNT}" \
+                  --source /app/data/users \
+                  --destination workspace \
+                  --destination-path users \
+                  --overwrite true \
+                  --auth-mode login \
+                  --output none 2>/dev/null
+              }
+              sync_changed() {
+                touch /tmp/sync-start
+                if [ ! -f "$stamp" ] || [ $((tick % 96)) -eq 0 ] \
+                    || ! (cd /app/data && find users -type f -cnewer "$stamp") > /tmp/changed.txt 2>/dev/null \
+                    || [ "$(wc -l < /tmp/changed.txt)" -gt 200 ]; then
+                  full_upload || return 1
+                  echo "[$(date -u +%H:%M:%SZ)] upload: full batch"
+                else
+                  while IFS= read -r f; do
+                    [ -n "$f" ] || continue
+                    az storage blob upload \
+                      --account-name "${STORAGE_ACCOUNT}" \
+                      --container-name workspace \
+                      --name "$f" \
+                      --file "/app/data/$f" \
+                      --overwrite true \
+                      --auth-mode login \
+                      --output none 2>/dev/null || return 1
+                  done < /tmp/changed.txt
+                  echo "[$(date -u +%H:%M:%SZ)] upload: $(wc -l < /tmp/changed.txt) changed files"
+                fi
+                mv /tmp/sync-start "$stamp"
+              }
               while true; do
                 sleep 900
+                tick=$((tick + 1))
                 az login \
                   --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
                   --service-principal \
@@ -247,14 +293,7 @@ spec:
                   --tenant "$AZURE_TENANT_ID" \
                   --output none 2>/dev/null
                 if [ -d /app/data/users ] && [ -n "$(ls -A /app/data/users 2>/dev/null)" ]; then
-                  if az storage blob upload-batch \
-                      --account-name "${STORAGE_ACCOUNT}" \
-                      --source /app/data/users \
-                      --destination workspace \
-                      --destination-path users \
-                      --overwrite true \
-                      --auth-mode login \
-                      --output none 2>/dev/null; then
+                  if sync_changed; then
                     # Delete propagation WITHOUT azcopy: `az storage blob sync` downloads
                     # azcopy at runtime and this cluster's egress blocks that (2026-08-23:
                     # every tick failed with "Name does not resolve" fetching azcopy
