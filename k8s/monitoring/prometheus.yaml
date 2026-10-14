@@ -3,8 +3,9 @@
 # lib/metrics.py and docs/control-plane.md → Telemetry).
 #
 # Deliberately tiny: one replica, 7d retention, 2Gi PVC. This is a viewing
-# cache, not the system of record (work_items is). Upgrade path: Azure
-# Monitor managed Prometheus + Azure Managed Grafana.
+# cache, not the system of record (work_items is). Azure Monitor managed
+# Prometheus + Azure Managed Grafana ran alongside this until 2026-10 and
+# were removed in a cost review (~$62/mo for a duplicate of this stack).
 apiVersion: v1
 kind: Namespace
 metadata:
