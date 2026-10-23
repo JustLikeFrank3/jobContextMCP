@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY lib/ lib/
 COPY tools/ tools/
 COPY services/ services/
+COPY workflows/ workflows/
 COPY transport/ transport/
 COPY evals/ evals/
 COPY templates/ templates/
