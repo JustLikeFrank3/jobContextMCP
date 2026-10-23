@@ -392,7 +392,7 @@ def claim_key(gd_id: str, claim: str) -> str:
     """Stable key for one flagged claim. Hash of entry + exact claim text:
     the same claim re-flagged on a later run keeps its ruling; a reworded
     claim is honestly a new one to rule on."""
-    return hashlib.sha1(f"{gd_id}|{claim}".encode()).hexdigest()[:16]
+    return hashlib.sha1(f"{gd_id}|{claim}".encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def load_triage() -> dict:

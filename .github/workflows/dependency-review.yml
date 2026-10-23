@@ -1,0 +1,25 @@
+name: Dependency Review
+
+# This is a PR-delta SCA gate, not an audit of every installed dependency.
+# Includes forks safely: no secret, build, install, or contributor code runs.
+on:
+  pull_request:
+    branches: [qa, main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          # Block newly introduced high/critical advisories in all scopes.
+          fail-on-severity: high
+          fail-on-scopes: runtime, development, unknown
+          license-check: false
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false

@@ -113,3 +113,7 @@ desktop/src-tauri/icons/
 
 # Badge credentials — WiFi password + API token in plain text on the device
 badge/jobcontext/secrets.py
+
+# Disposable local DAST output
+security/dast/reports/
+security/sast/reports/
