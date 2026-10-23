@@ -213,7 +213,7 @@ _CLOSED_STATUSES = ("closed", "rejected", "withdrawn", "passed")
 
 def _event_id(*parts: str) -> str:
     """Stable short id for a source record (events carry no ids of their own)."""
-    return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _method_from(notes: str, default: str) -> str:
