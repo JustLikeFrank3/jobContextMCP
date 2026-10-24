@@ -272,6 +272,10 @@ _LOGIN_TMPL: str = r'''<!doctype html>
     .split { grid-template-columns: 1fr; }
     .panel { display: none; }
   }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  a.submit.microsoft-signin { display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body); }
+  .hint.invitation-hint { margin-top:20px; }
 </style>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -315,10 +319,10 @@ _LOGIN_TMPL: str = r'''<!doctype html>
     <div class="card">
       <h1 class="lead">Sign in</h1>
       <p class="leadsub">jobContext uses Microsoft sign-in. If you have received an invitation, click below to continue.</p>
-      <a class="submit" href="/dashboard/login?next=__NEXT_HREF__" style="display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body);">
+      <a class="submit microsoft-signin" href="/dashboard/login?next=__NEXT_HREF__">
         Sign in with Microsoft
       </a>
-      <div class="hint" style="margin-top:20px;">
+      <div class="hint invitation-hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
         You must have a valid invitation to sign in.
       </div>

@@ -29,6 +29,26 @@ env:
   ENTRA_OWNER_OID: ${{ secrets.ENTRA_OWNER_OID }}
 
 jobs:
+  # Local reusable workflows execute the caller's exact commit. No workflow_run
+  # handoff, arbitrary ref input, inherited secrets, or live DAST target.
+  sast:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sast.yml
+
+  dast:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dast.yml
+
+  sonar:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sonar.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -142,7 +162,7 @@ jobs:
           exit 1
 
   build-and-deploy:
-    needs: test
+    needs: [test, sast, dast, sonar]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
@@ -150,7 +170,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Log in to ACR
         uses: docker/login-action@v4
@@ -180,7 +200,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Set AKS context
-        uses: azure/aks-set-context@v3
+        uses: azure/aks-set-context@c7eb093e5a5d47caa333f64974d5fd1cd4bf069d # v4.0.3
         with:
           resource-group: ${{ env.AKS_RG }}
           cluster-name: ${{ env.AKS_CLUSTER }}
@@ -206,7 +226,7 @@ jobs:
             -n ${{ env.K8S_NAMESPACE }} --timeout=300s
 
   build-and-deploy-qa:
-    needs: test
+    needs: [test, sast, dast]
     if: github.ref == 'refs/heads/qa'
     runs-on: ubuntu-latest
     env:
@@ -223,7 +243,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Log in to ACR
         uses: docker/login-action@v4
@@ -247,7 +267,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Set AKS context
-        uses: azure/aks-set-context@v3
+        uses: azure/aks-set-context@c7eb093e5a5d47caa333f64974d5fd1cd4bf069d # v4.0.3
         with:
           resource-group: ${{ env.AKS_RG }}
           cluster-name: ${{ env.AKS_CLUSTER }}

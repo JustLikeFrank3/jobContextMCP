@@ -1,0 +1,36 @@
+name: DAST
+
+on:
+  pull_request:
+    branches: [qa, main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap:
+    name: ZAP disposable app
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Test DAST severity policy
+        run: python3 -m unittest discover -s security/dast -p 'test_*.py' -v
+      - name: Active scan (isolated network, synthetic data, no credentials)
+        run: security/dast/run.sh
+      - name: Retain reports and app startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dast-${{ github.run_id }}-${{ github.run_attempt }}
+          path: security/dast/reports/
+          retention-days: 14
+          if-no-files-found: warn

@@ -172,6 +172,10 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 .foot-links a { color: var(--muted); font-size: .875rem; }
 .foot-links a:hover { color: var(--text); text-decoration: none; }
 .muted { color: var(--muted); font-size: .875rem; }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  p.workspace-next-step { margin-top:.75rem; }
+  p.client-guide-note { color:var(--muted); font-size:.95rem; }
 </style>
 </head>
 <body>
@@ -260,7 +264,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
           <h3>Bootstrap your workspace</h3>
           <p>In your AI chat, say:</p>
           <div class="note">"Run workspace setup and walk me through it."</div>
-          <p style="margin-top:.75rem">The <code>workspace</code> tool creates your whole data tree with zero manual setup. Then drop in your resume and start talking: log contacts, assess postings, generate documents. It remembers all of it next session.</p>
+          <p class="workspace-next-step">The <code>workspace</code> tool creates your whole data tree with zero manual setup. Then drop in your resume and start talking: log contacts, assess postings, generate documents. It remembers all of it next session.</p>
         </div>
       </div>
 
@@ -342,7 +346,7 @@ cd jobContextMCP
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python server.py          # stdio MCP server
 # or the HTTP server: dashboard + REST + MCP Streamable HTTP at /mcp</code></pre>
-    <p style="color:var(--muted); font-size:.95rem">Per-client walkthroughs (VS Code, Claude Desktop, ChatGPT desktop, Cursor, Windsurf), Docker mode, and deployment guides live in the repo: <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/client-setup.md" target="_blank">docs/client-setup.md</a> and <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/local-development.md" target="_blank">docs/local-development.md</a>.</p>
+    <p class="client-guide-note">Per-client walkthroughs (VS Code, Claude Desktop, ChatGPT desktop, Cursor, Windsurf), Docker mode, and deployment guides live in the repo: <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/client-setup.md" target="_blank">docs/client-setup.md</a> and <a href="https://github.com/JustLikeFrank3/jobContextMCP/blob/main/docs/local-development.md" target="_blank">docs/local-development.md</a>.</p>
   </div>
 
   <!-- See also -->

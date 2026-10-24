@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { renderMarkdownDoc, MARKDOWN_DOC_CSS } from './markdownPreview.js'
+import { readFileSync } from 'node:fs'
+import { renderMarkdownDoc } from './markdownPreview.js'
 
 describe('renderMarkdownDoc', () => {
   it('renders headings, lists, and emphasis as HTML', () => {
@@ -41,10 +42,11 @@ describe('renderMarkdownDoc', () => {
   })
 })
 
-describe('MARKDOWN_DOC_CSS', () => {
+describe('same-origin markdown preview stylesheet', () => {
   it('pairs screen colors and flips to ink-on-paper for print', () => {
-    expect(MARKDOWN_DOC_CSS).toContain('.doc')
-    expect(MARKDOWN_DOC_CSS).toContain('@media print')
-    expect(MARKDOWN_DOC_CSS).toMatch(/print[^}]*background: #fff/s)
+    const css = readFileSync('public/materials-preview.css', 'utf8')
+    expect(css).toContain('.doc')
+    expect(css).toContain('@media print')
+    expect(css).toMatch(/print[^}]*background: #fff/s)
   })
 })

@@ -409,6 +409,10 @@ WHY_HTML: str = r'''<!doctype html>
     .ba, .bp, .who { grid-template-columns: 1fr; }
     .pagehead h1 { font-size: 2.4rem; }
   }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  section.blk.section-continuation { padding-top:0; }
+  .wrap p.webmcp-note { text-align:center; color:var(--faint); font-size:var(--fs-sm); margin:26px auto 0; max-width:44em; }
 </style>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </head>
@@ -489,7 +493,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- WHAT IT DOES: MEMORY -->
-<section class="blk" style="padding-top:0;">
+<section class="blk section-continuation">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">Memory &amp; continuity</div>
@@ -500,7 +504,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- WHAT IT DOES: ACTION -->
-<section class="blk" style="padding-top:0;">
+<section class="blk section-continuation">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">Direction &amp; action</div>
@@ -511,7 +515,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- HOW IT WORKS -->
-<section class="blk" id="how" style="padding-top:0;">
+<section class="blk section-continuation" id="how">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">How it works</div>
@@ -523,12 +527,12 @@ WHY_HTML: str = r'''<!doctype html>
       <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
       <div class="step"><h3>Just start talking</h3><p>Ask it to log a contact, assess a job, draft a cover letter, or plan your day. It does the rest, and remembers all of it next time.</p></div>
     </div>
-    <p style="text-align:center; color:var(--faint); font-size:var(--fs-sm); margin:26px auto 0; max-width:44em;">New: in ChatGPT desktop's built-in browser you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own, over WebMCP; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out.</p>
+    <p class="webmcp-note">New: in ChatGPT desktop's built-in browser you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own, over WebMCP; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out.</p>
   </div>
 </section>
 
 <!-- BEST PRACTICES -->
-<section class="blk" id="best" style="padding-top:0;">
+<section class="blk section-continuation" id="best">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">Best practices</div>
@@ -540,7 +544,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- WHO IT'S FOR -->
-<section class="blk" style="padding-top:0;">
+<section class="blk section-continuation">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">Honest fit</div>
@@ -571,7 +575,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- WHY IT'S SAFE -->
-<section class="blk" id="safe" style="padding-top:0;">
+<section class="blk section-continuation" id="safe">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">Why it's safe</div>
@@ -583,7 +587,7 @@ WHY_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- FINAL CTA -->
-<section class="blk" style="padding-top:0;">
+<section class="blk section-continuation">
   <div class="wrap">
     <div class="cta-band">
       <h2>Give your AI a memory of your career.</h2>
