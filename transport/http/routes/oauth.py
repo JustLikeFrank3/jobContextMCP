@@ -644,6 +644,9 @@ _LOGGED_OUT_HTML = """<!DOCTYPE html>
       border-radius: 8px; padding: 10px 20px; font-size: .9rem;
     }
     .home-btn:hover { background: #333; }
+
+    /* Fixed presentation classes keep public pages free of inline style attributes. */
+    .step p.reauth-note { margin-top:6px; }
   </style>
 </head>
 <body>
@@ -657,7 +660,7 @@ _LOGGED_OUT_HTML = """<!DOCTYPE html>
   </div>
   <div class="step">
     <strong>2. Quit and reopen Claude Desktop.</strong><br>
-    <p style="margin-top:6px">Claude Desktop will re-authenticate on next start
+    <p class="reauth-note">Claude Desktop will re-authenticate on next start
     and open a new browser login prompt.</p>
   </div>
   <a class="home-btn" href="/dashboard/login">Sign in again</a>

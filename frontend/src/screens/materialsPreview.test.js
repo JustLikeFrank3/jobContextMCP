@@ -6,6 +6,7 @@ import { buildPreviewDoc, extOf, openPreview } from './materialsPreview.js'
 
 const file = { name: 'Assessment.md', href: '/dashboard/materials/file/job_assessments/Assessment.md', ext: 'md' }
 const parse = (html) => new DOMParser().parseFromString(html, 'text/html')
+const absolute = (href) => new URL(href, window.location.href).href
 
 function popup() {
   const win = { closed: false, opener: window, document: { open: vi.fn(), write: vi.fn(), close: vi.fn() } }
@@ -21,12 +22,25 @@ afterEach(() => {
 describe('CSP-compatible preview document', () => {
   it('loads script and styles from same-origin configured-base assets, with no inline handlers', () => {
     const doc = parse(buildPreviewDoc({ name: 'Assessment', href: '/file', body: '<main class="doc">Hello</main>' }))
-    expect(doc.querySelector('link[rel="stylesheet"]').getAttribute('href')).toBe(`${import.meta.env.BASE_URL}materials-preview.css`)
-    expect(doc.querySelector('script').getAttribute('src')).toBe(`${import.meta.env.BASE_URL}materials-preview.js`)
+    expect(doc.querySelector('link[rel="stylesheet"]').getAttribute('href')).toBe(absolute(`${import.meta.env.BASE_URL}materials-preview.css`))
+    expect(doc.querySelector('script').getAttribute('src')).toBe(absolute(`${import.meta.env.BASE_URL}materials-preview.js`))
     expect(doc.querySelector('script').defer).toBe(true)
     expect(doc.querySelector('script').textContent).toBe('')
     expect(doc.querySelector('style, [style], [onclick]')).toBeNull()
     expect(doc.querySelector('#print-preview').textContent).toBe('Print')
+  })
+
+  it('uses URLs that remain valid with an about:blank base and no opener', () => {
+    const win = popup()
+    openPreview({ ...file, ext: 'txt' })
+    const doc = parse(win.document.write.mock.calls[0][0])
+    expect(win.opener).toBeNull()
+    for (const [selector, attr] of [
+      ['link[rel="stylesheet"]', 'href'], ['script', 'src'], ['iframe', 'src'], ['a.btn', 'href'],
+    ]) {
+      const value = doc.querySelector(selector).getAttribute(attr)
+      expect(new URL(value, 'about:blank').origin).toBe(window.location.origin)
+    }
   })
 
   it('preserves raw-file preview and severs the opener before writing', () => {
@@ -35,7 +49,7 @@ describe('CSP-compatible preview document', () => {
     expect(extOf({ ext: '.PDF' })).toBe('pdf')
     expect(win.opener).toBeNull()
     const doc = parse(win.document.write.mock.calls[0][0])
-    expect(doc.querySelector('iframe').getAttribute('src')).toBe(file.href)
+    expect(doc.querySelector('iframe').getAttribute('src')).toBe(absolute(file.href))
     expect(doc.querySelector('iframe').title).toBe('Resume.pdf')
     expect(win.document.close).toHaveBeenCalledOnce()
   })
@@ -61,7 +75,7 @@ describe('CSP-compatible preview document', () => {
       : vi.fn().mockResolvedValue({ ok: false, status: 503 }))
     openPreview(file)
     await vi.waitFor(() => expect(win.document.write).toHaveBeenCalledTimes(2))
-    expect(parse(win.document.write.mock.calls[1][0]).querySelector('iframe').getAttribute('src')).toBe(file.href)
+    expect(parse(win.document.write.mock.calls[1][0]).querySelector('iframe').getAttribute('src')).toBe(absolute(file.href))
   })
 
   it('does not rewrite a popup closed while markdown fetch is pending', async () => {
@@ -80,7 +94,7 @@ describe('CSP-compatible preview document', () => {
     openPreview({ ...file, ext: 'docx' })
     const doc = parse(win.document.write.mock.calls[0][0])
     expect(doc.querySelector('iframe')).toBeNull()
-    expect(doc.querySelector('a[download]').getAttribute('href')).toBe(file.href)
+    expect(doc.querySelector('a[download]').getAttribute('href')).toBe(absolute(file.href))
   })
 
   it('reports popup blocking without starting a fetch', () => {
@@ -99,7 +113,7 @@ describe('CSP-compatible preview document', () => {
     const doc = parse(win.document.write.mock.calls[0][0])
     expect(doc.querySelector('img, [onload], [onerror]')).toBeNull()
     expect(doc.querySelector('.name').textContent).toBe('<img src=x onerror=bad()>')
-    expect(doc.querySelector('iframe').getAttribute('src')).toBe('/file?name=" onload="bad()')
+    expect(doc.querySelector('iframe').getAttribute('src')).toBe(absolute('/file?name=" onload="bad()'))
   })
 })
 

@@ -36,13 +36,9 @@ class _TemplateStyles(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.blocks: set[str] = set()
-        self.attributes: set[str] = set()
         self._style: list[str] | None = None
 
     def handle_starttag(self, tag, attrs):
-        for name, value in attrs:
-            if name == "style" and value is not None:
-                self.attributes.add(_hash_source(value))
         if tag == "style":
             self._style = []
 
@@ -59,11 +55,9 @@ class _TemplateStyles(HTMLParser):
 def _strict_policy(trusted_template: str = "", *, local_fonts: bool = False) -> str:
     styles = _TemplateStyles()
     styles.feed(trusted_template)
-    # 'unsafe-hashes' is limited to the exact authored CSS attributes; it is
-    # NOT unsafe-inline, and is never enabled for scripts/event handlers.
+    # Public templates use classes, never style attributes. Hash only authored
+    # style blocks; do not relax the policy with unsafe-inline/unsafe-hashes.
     sources = ["'self'", *([] if local_fonts else ["https://fonts.googleapis.com"]), *sorted(styles.blocks)]
-    if styles.attributes:
-        sources += ["'unsafe-hashes'", *sorted(styles.attributes)]
     resources = _SOURCES.replace(" https://fonts.gstatic.com", "") if local_fonts else _SOURCES
     return f"{_BASE_POLICY}; {resources}; style-src {' '.join(sources)}"
 

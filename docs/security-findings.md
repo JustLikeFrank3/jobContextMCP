@@ -27,11 +27,19 @@ The four medium alert classes were real missing controls on that HTTP surface:
 | ZAP rule | Evidence | Fix |
 | --- | --- | --- |
 | 10202, absent anti-CSRF token | `/dashboard/login?next=%2Fapp`, API-key login POST form | Hidden random challenge + HttpOnly pre-login cookie, constant-time match and same-origin browser provenance required **before** credential authentication. HTTPS uses a Secure `__Host-` cookie; local HTTP is supported. Challenge pages are `no-store`; successful login clears the challenge. Entra PKCE/callback and auth-disabled flows remain separate. |
-| 10038, missing CSP | Public marketing/login pages | Strict public-page policies with `default-src 'none'`, self-only scripts, explicit resource origins, and hashes of **source-controlled template** CSS, never hashes of rendered/request content. Exact authored CSS attributes use `unsafe-hashes`, not `unsafe-inline`; scripts never allow inline handlers or eval. The SPA uses same-origin fonts/scripts/styles; preview popup assets were externalized to preserve printing and rendering. |
+| 10038, missing CSP | Public marketing/login pages | Strict public-page policies with `default-src 'none'`, self-only scripts, explicit resource origins, and hashes of **source-controlled template** CSS blocks, never hashes of rendered/request content. Authored style attributes were migrated to CSS classes; neither `unsafe-hashes` nor `unsafe-inline` is permitted. Scripts never allow inline handlers or eval. The SPA uses same-origin fonts/scripts/styles; preview popup assets were externalized to preserve printing and rendering. |
 | 10020, missing anti-clickjacking header | Public HTML | App-boundary `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN`, including auth errors and static content. Same-origin document/template preview iframes continue to work. `nosniff` and a referrer policy were also added. |
 | 90003, missing SRI | `/architecture`, external Mermaid 11.4.1 script | Removed the runtime executable dependency entirely: two maintained inert, same-origin SVG diagrams preserve the content. The SPA's variable third-party font stylesheet was also replaced with licensed, hash-documented local assets instead of trying to integrity-pin user-agent-dependent CSS. |
 
 ### Scope and compatibility limits
+
+The follow-up disposable scan `40127807506` visited 23 URLs and cleared all four
+original classes. It identified medium rule 10055 (`style-src unsafe-hashes`),
+which was addressed by moving the fixed public-template style attributes into
+class rules and removing that CSP allowance, not suppressing the alert. The
+first real-browser run also exposed root-relative popup assets resolving against
+`about:blank` after detaching the opener; popup asset/file URLs now resolve
+against the parent application's origin, independently of the detached opener.
 
 - Strict source CSP covers the reviewed public templates, API-key login/callback
   pages, logged-out page and React SPA. Other routes, including OAuth consent,
@@ -54,8 +62,8 @@ The four medium alert classes were real missing controls on that HTTP surface:
   these are not executable scripts. The React SPA's fonts are fully local.
 - DAST remains unauthenticated, disposable and network-isolated. It is not an
   authenticated tenant, native-client, ingress or whole-application certification.
-  No live QA/production scan, branch-protection change, merge or deployment was
-  performed. ZAP medium/high alerts still fail without exceptions.
+  The scanner never targets live QA/production, changes branch protection or
+  deploys. ZAP medium/high alerts still fail without exceptions.
 
 ## Validation
 

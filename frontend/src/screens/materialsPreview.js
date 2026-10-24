@@ -19,10 +19,15 @@ function escapeHtml(s) {
    rendered with marked, sanitized with DOMPurify — see markdownPreview.js);
    if the fetch fails it degrades to the raw iframe. */
 export function buildPreviewDoc({ name, href, body }) {
+  // This code runs in the trusted parent. The about:blank popup has no
+  // reliable base URL once its opener is severed, so root-relative assets
+  // can silently fail to load. Resolve them BEFORE writing to the child.
+  const stylesheet = escapeHtml(new URL(`${import.meta.env.BASE_URL}materials-preview.css`, window.location.href).href)
+  const script = escapeHtml(new URL(`${import.meta.env.BASE_URL}materials-preview.js`, window.location.href).href)
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <title>${name}</title>
-<link rel="stylesheet" href="${import.meta.env.BASE_URL}materials-preview.css">
-<script src="${import.meta.env.BASE_URL}materials-preview.js" defer></script></head><body>
+<link rel="stylesheet" href="${stylesheet}">
+<script src="${script}" defer></script></head><body>
   <div class="bar">
     <span class="name">${name}</span>
     <a class="btn" href="${href}" target="_blank" rel="noreferrer">Open original</a>
@@ -53,7 +58,9 @@ export function openPreview(file) {
   // opener so the child can't reach back via window.opener / window.top.opener.
   win.opener = null
   const name = escapeHtml(file.name)
-  const href = escapeHtml(file.href) // backend URL-encoded; also escape HTML attribute delimiters
+  // File URLs have the same about:blank base problem as the CSS/JS above.
+  // Keep the backend's URL encoding, then escape the resulting HTML attribute.
+  const href = escapeHtml(new URL(file.href, window.location.href).href)
   const ext = extOf(file)
   const rawIframe = `<iframe id="pv" src="${href}" title="${name}"></iframe>`
 

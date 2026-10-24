@@ -146,6 +146,9 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 .foot-links a { color: var(--muted); font-size: .875rem; }
 .foot-links a:hover { color: var(--text); text-decoration: none; }
 .muted { color: var(--muted); font-size: .875rem; }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  .doc-section .architecture-motto { color:var(--faint); }
 </style>
 </head>
 <body>
@@ -205,7 +208,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
         <p>Share-sheet capture with on-device page extraction: the phone reads postings that block datacenter IPs. Talks to the cloud with a keychain-stored API key.</p>
       </div>
     </div>
-    <p><i style="color:var(--faint)">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
+    <p><i class="architecture-motto">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
   </div>
 
   <!-- Transports -->

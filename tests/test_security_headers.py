@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 import pytest
 
 from transport.http.security_headers import (
-    SecurityHeadersMiddleware, _hash_source, content_security_policy,
+    SecurityHeadersMiddleware, _hash_source, _strict_policy, content_security_policy,
 )
 
 
@@ -48,9 +48,11 @@ def test_public_pages_allow_authored_styles_only(http_client_authed, path):
     assert "script-src 'self'" in policy
     assert "'unsafe-inline'" not in policy
     assert "'unsafe-eval'" not in policy
+    assert "'unsafe-hashes'" not in policy
     resources = _Resources()
     resources.feed(response.text)
-    for style in resources.style_blocks + resources.style_attrs:
+    assert not resources.style_attrs
+    for style in resources.style_blocks:
         assert _hash_source(style) in policy
     assert not resources.scripts  # architecture uses inert first-party diagrams
     assert _hash_source("body { display:none }") not in policy
@@ -61,6 +63,12 @@ def test_reflected_next_never_changes_policy(http_client_authed):
     malicious = http_client_authed.get("/login", params={"next": '</a><script>alert(1)</script>'})
     assert normal.headers["content-security-policy"] == malicious.headers["content-security-policy"]
     assert "<script>" not in malicious.text
+
+
+def test_style_attributes_never_add_hash_allowances():
+    policy = _strict_policy('<p style="display:none">Hidden</p>')
+    assert "'unsafe-hashes'" not in policy
+    assert _hash_source("display:none") not in policy
 
 
 @pytest.mark.parametrize("path,status", [
@@ -82,6 +90,7 @@ def test_spa_policy_and_legacy_preview_compatibility():
     assert "script-src 'self'" in content_security_policy("/app/pipeline")
     assert "frame-src 'self'" in content_security_policy("/app")
     assert "https://login.microsoftonline.com" in content_security_policy("/app")
+    assert "'unsafe-hashes'" not in content_security_policy("/app")
     legacy = content_security_policy("/dashboard/pipeline")
     assert "frame-ancestors 'self'" in legacy
     # Generated document/legacy flows are not falsely claimed to have strict
