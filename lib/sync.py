@@ -147,6 +147,12 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
     TableSpec("file_tombstones", "upsert", ("rel",)),
 )
 
+# SQL identifier trust boundary: peer table names are resolved through this
+# fixed registry; peer row keys are filtered through the local schema in
+# _apply_one. Never construct a TableSpec or change the schema from peer data.
+# Values (including natural keys) remain SQLite parameters. Adversarial coverage:
+# tests/test_sql_security.py. B608 exceptions below apply only to these
+# registry/schema-derived identifiers, not to arbitrary dynamic SQL.
 _SPECS_BY_NAME = {s.name: s for s in TABLE_SPECS}
 
 
@@ -194,7 +200,7 @@ def ensure_sync_schema(con) -> None:
                     BEGIN
                         INSERT INTO sync_log (tbl, op, nk, ts, origin)
                         VALUES ('{spec.name}', '{op}', {nk_expr}, {ts}, 'local');
-                    END"""
+                    END"""  # nosec B608 # all fragments from TABLE_SPECS / local literals
             )
     _backfill_journal(con)
 
@@ -267,7 +273,7 @@ def _backfill_journal(con) -> None:
                 FROM {spec.name} t
                 WHERE NOT EXISTS (
                     SELECT 1 FROM sync_log sl WHERE sl.tbl = '{spec.name}' AND sl.nk = {nk_expr}
-                )""",
+                )""",  # nosec B608 # fixed TABLE_SPECS identifiers; timestamp is bound
             (ts,),
         )
         con.execute(
@@ -285,7 +291,7 @@ def _columns(con, table: str) -> list[str]:
 def _row_payload(con, spec: TableSpec, nk_values: list) -> "dict | None":
     where = " AND ".join(f"{c} IS ?" for c in spec.identity)
     row = con.execute(
-        f"SELECT * FROM {spec.name} WHERE {where} ORDER BY id DESC LIMIT 1", nk_values
+        f"SELECT * FROM {spec.name} WHERE {where} ORDER BY id DESC LIMIT 1", nk_values  # nosec B608 # registry identifiers, bound key
     ).fetchone()
     if row is None:
         return None
@@ -296,7 +302,7 @@ def _row_payload(con, spec: TableSpec, nk_values: list) -> "dict | None":
         parent_nk = None
         if fk is not None:
             prow = con.execute(
-                f"SELECT * FROM {parent_spec.name} WHERE id = ?", (fk,)
+                f"SELECT * FROM {parent_spec.name} WHERE id = ?", (fk,)  # nosec B608 # registry table, bound FK
             ).fetchone()
             if prow is not None:
                 parent_nk = [prow[c] for c in parent_spec.identity]
@@ -407,7 +413,7 @@ def _apply_one(con, change: dict, stats: ApplyStats) -> None:
 
     if spec.kind == "append":
         exists = con.execute(
-            f"SELECT 1 FROM {spec.name} WHERE {where} LIMIT 1", nk_values
+            f"SELECT 1 FROM {spec.name} WHERE {where} LIMIT 1", nk_values  # nosec B608 # registry identifiers, bound key
         ).fetchone()
         if exists:
             stats.skipped_dupe += 1
@@ -429,14 +435,14 @@ def _apply_one(con, change: dict, stats: ApplyStats) -> None:
         and not (change.get("row") or {}).get("manual_override")
     ):
         local = con.execute(
-            f"SELECT manual_override FROM {spec.name} WHERE {where} LIMIT 1", nk_values
+            f"SELECT manual_override FROM {spec.name} WHERE {where} LIMIT 1", nk_values  # nosec B608 # registry identifiers, bound key
         ).fetchone()
         if local and local[0]:
             stats.skipped_guard += 1
             return
 
     if op == "delete":
-        con.execute(f"DELETE FROM {spec.name} WHERE {where}", nk_values)
+        con.execute(f"DELETE FROM {spec.name} WHERE {where}", nk_values)  # nosec B608 # registry identifiers, bound key
     else:
         row = dict(change.get("row") or {})
         parent_nk = row.pop("__parent_nk__", None)
@@ -446,7 +452,7 @@ def _apply_one(con, change: dict, stats: ApplyStats) -> None:
                 parent_spec = _SPECS_BY_NAME[spec.parent["table"]]
                 pwhere = " AND ".join(f"{c} IS ?" for c in parent_spec.identity)
                 prow = con.execute(
-                    f"SELECT id FROM {parent_spec.name} WHERE {pwhere} ORDER BY id DESC LIMIT 1",
+                    f"SELECT id FROM {parent_spec.name} WHERE {pwhere} ORDER BY id DESC LIMIT 1",  # nosec B608 # registry identifiers, bound key
                     parent_nk,
                 ).fetchone()
                 if prow is None:
@@ -459,10 +465,12 @@ def _apply_one(con, change: dict, stats: ApplyStats) -> None:
         valid = set(_columns(con, spec.name))
         row = {k: v for k, v in row.items() if k in valid}
         if spec.kind == "upsert":
-            con.execute(f"DELETE FROM {spec.name} WHERE {where}", nk_values)
+            con.execute(f"DELETE FROM {spec.name} WHERE {where}", nk_values)  # nosec B608 # registry identifiers, bound key
         cols = ", ".join(row.keys())
         marks = ", ".join("?" for _ in row)
-        con.execute(f"INSERT INTO {spec.name} ({cols}) VALUES ({marks})", list(row.values()))
+        # cols survived the local-schema allowlist above; marks contains only
+        # placeholders. Peer values never become SQL syntax.
+        con.execute(f"INSERT INTO {spec.name} ({cols}) VALUES ({marks})", list(row.values()))  # nosec B608 # registry table, schema columns, bound values
 
     con.execute(
         "INSERT INTO sync_log (tbl, op, nk, ts, origin) VALUES (?, ?, ?, ?, 'remote')",

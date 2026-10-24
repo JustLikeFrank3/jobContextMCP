@@ -696,20 +696,24 @@ def _save_linkedin_posts(con, data: dict) -> None:
 def _prune_stale(con, table: str, id_col: str, keep: set) -> None:
     """Delete rows of *table* whose id is absent from the incoming payload.
 
-    Ids are bound as parameters rather than interpolated into an IN clause
-    (Sonar S3649 / B608); *table* and *id_col* are call-site literals. Mirrors
+    Ids are bound as parameters rather than interpolated into an IN clause.
+    Only the two literal statement pairs below are accepted. Mirrors
     _save_people. Without this, delete_personal_story() removed the entry from
     the payload but left the row in SQLite — so the story came back on the next
     read, and once these tables sync, the ghost row would be re-pushed to every
     peer forever.
     """
-    stale = [
-        (row[0],)
-        for row in con.execute(f"SELECT {id_col} FROM {table}")
-        if row[0] not in keep
-    ]
+    statements = {
+        ("stories", "id"): ("SELECT id FROM stories", "DELETE FROM stories WHERE id = ?"),
+        ("star_stories", "id"): ("SELECT id FROM star_stories", "DELETE FROM star_stories WHERE id = ?"),
+    }
+    try:
+        select_sql, delete_sql = statements[(table, id_col)]
+    except KeyError:
+        raise ValueError("Unsupported prune table/column") from None
+    stale = [(row[0],) for row in con.execute(select_sql) if row[0] not in keep]
     if stale:
-        con.executemany(f"DELETE FROM {table} WHERE {id_col} = ?", stale)
+        con.executemany(delete_sql, stale)
 
 
 def _save_personal_context(con, data: dict) -> None:

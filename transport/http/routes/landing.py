@@ -410,6 +410,18 @@ LANDING_HTML: str = r'''<!doctype html>
   @media (max-width: 640px) {
     .nav-links .lnk { display: none; }
   }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  .term-bar i.window-close { background:#ff5f57; }
+  .term-bar i.window-minimize { background:#febc2e; }
+  .term-bar i.window-maximize { background:#28c840; }
+  section.blk.section-compact { padding-top:24px; }
+  .ora-card .readiness-high { color:#22C55E; }
+  .ora-fill.sleep-score { width:88%;background:#22C55E; }
+  .ora-fill.hrv-score { width:80%;background:#22C55E; }
+  .ora-fill.recovery-score { width:91%;background:#22C55E; }
+  code.webmcp-api { font-family:var(--font-mono);font-size:0.9em;color:var(--cyan-300); }
+  .foot-inner .wm.footer-wordmark { font-size:1.1rem; }
 </style>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -470,7 +482,7 @@ LANDING_HTML: str = r'''<!doctype html>
 
     <div class="term">
       <div class="term-bar">
-        <i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+        <i class="window-close"></i><i class="window-minimize"></i><i class="window-maximize"></i>
         <span class="term-title">claude · jobContext MCP</span>
       </div>
       <div class="term-body">
@@ -576,7 +588,7 @@ LANDING_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- ============ PLATFORMS ============ -->
-<section class="blk" id="platforms" style="padding-top:24px;">
+<section class="blk section-compact" id="platforms">
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">One capability layer, three surfaces</div>
@@ -608,7 +620,7 @@ LANDING_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- ============ READINESS ============ -->
-<section class="blk" id="readiness" style="padding-top:24px;">
+<section class="blk section-compact" id="readiness">
   <div class="wrap">
     <div class="readiness-grid">
       <div>
@@ -631,20 +643,20 @@ LANDING_HTML: str = r'''<!doctype html>
             <text x="90" y="83" font-family="'Space Grotesk',system-ui,sans-serif" font-size="40" font-weight="700" fill="#f1f5f9" text-anchor="middle">86</text>
             <text x="90" y="106" font-family="'Space Grotesk',system-ui,sans-serif" font-size="10" font-weight="600" fill="#9aa8bf" text-anchor="middle" letter-spacing="2">SCORE</text>
           </svg>
-          <div class="ora-label" style="color:#22C55E">High readiness</div>
+          <div class="ora-label readiness-high">High readiness</div>
         </div>
         <div class="ora-metrics">
           <div class="ora-mrow">
-            <div class="ora-mtop"><span class="ora-mname">Sleep score</span><span class="ora-mval" style="color:#22C55E">88</span></div>
-            <div class="ora-track"><div class="ora-fill" style="width:88%;background:#22C55E"></div></div>
+            <div class="ora-mtop"><span class="ora-mname">Sleep score</span><span class="ora-mval readiness-high">88</span></div>
+            <div class="ora-track"><div class="ora-fill sleep-score"></div></div>
           </div>
           <div class="ora-mrow">
-            <div class="ora-mtop"><span class="ora-mname">HRV</span><span class="ora-mval" style="color:#22C55E">80<span class="ora-munit">ms</span></span></div>
-            <div class="ora-track"><div class="ora-fill" style="width:80%;background:#22C55E"></div></div>
+            <div class="ora-mtop"><span class="ora-mname">HRV</span><span class="ora-mval readiness-high">80<span class="ora-munit">ms</span></span></div>
+            <div class="ora-track"><div class="ora-fill hrv-score"></div></div>
           </div>
           <div class="ora-mrow">
-            <div class="ora-mtop"><span class="ora-mname">Recovery index</span><span class="ora-mval" style="color:#22C55E">91</span></div>
-            <div class="ora-track"><div class="ora-fill" style="width:91%;background:#22C55E"></div></div>
+            <div class="ora-mtop"><span class="ora-mname">Recovery index</span><span class="ora-mval readiness-high">91</span></div>
+            <div class="ora-track"><div class="ora-fill recovery-score"></div></div>
           </div>
         </div>
         <div class="ora-move">High readiness day. Good window for outreach and interviews.</div>
@@ -654,20 +666,20 @@ LANDING_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- ============ WEBMCP ============ -->
-<section class="blk" id="webmcp" style="padding-top:24px;">
+<section class="blk section-compact" id="webmcp">
   <div class="wrap">
     <div class="readiness-grid">
       <div>
         <div class="sec-eyebrow">New · WebMCP</div>
         <h2 class="readiness-h">The dashboard is itself an <span class="c">agent surface.</span></h2>
-        <p class="readiness-p">Sign in to the cloud dashboard in a WebMCP-capable browser and every jobContext tool is registered in-page via <code style="font-family:var(--font-mono);font-size:0.9em;color:var(--cyan-300)">document.modelContext</code>, an emerging web standard (a W3C community proposal) for giving in-browser agents tools. ChatGPT desktop's built-in browser drives your whole workspace today, with no connector setup, no OAuth dance, and no second tool surface; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out. The bridge republishes the server's own tool list verbatim, so what a browser agent sees can never drift from what Claude or Cursor sees.</p>
+        <p class="readiness-p">Sign in to the cloud dashboard in a WebMCP-capable browser and every jobContext tool is registered in-page via <code class="webmcp-api">document.modelContext</code>, an emerging web standard (a W3C community proposal) for giving in-browser agents tools. ChatGPT desktop's built-in browser drives your whole workspace today, with no connector setup, no OAuth dance, and no second tool surface; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out. The bridge republishes the server's own tool list verbatim, so what a browser agent sees can never drift from what Claude or Cursor sees.</p>
         <span class="compat-chip"><span class="ring" aria-hidden="true"></span>Works in <strong>ChatGPT desktop</strong> today · Chrome &amp; Edge next</span>
         <p class="tm-note">Calls ride your signed-in session and are same-origin only: a CSRF guard ignores the session cookie on cross-site requests, so a hostile page can't ride your login.</p>
       </div>
 
       <div class="term">
         <div class="term-bar">
-          <i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+          <i class="window-close"></i><i class="window-minimize"></i><i class="window-maximize"></i>
           <span class="term-title">chatgpt &middot; browsing app.jobcontext.ai</span>
         </div>
         <div class="term-body">
@@ -744,7 +756,7 @@ LANDING_HTML: str = r'''<!doctype html>
 </section>
 
 <!-- ============ FINAL CTA ============ -->
-<section class="blk" style="padding-top:24px;">
+<section class="blk section-compact">
   <div class="wrap">
     <div class="cta-band">
       <h2>Give your AI a memory.</h2>
@@ -770,7 +782,7 @@ LANDING_HTML: str = r'''<!doctype html>
           <path d="M100 142 L100 205 Q100 230 74 230" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
         </g>
       </svg>
-      <span class="wm" style="font-size:1.1rem">job<span class="c">Context</span></span>
+      <span class="wm footer-wordmark">job<span class="c">Context</span></span>
     </a>
     <div class="foot-links">
       <a href="#features">Features</a>

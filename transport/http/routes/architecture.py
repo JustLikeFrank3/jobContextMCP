@@ -87,10 +87,8 @@ pre {
   font-family: var(--font-mono); font-size: .82rem;
   color: var(--text-soft); line-height: 1.55; white-space: pre;
 }
-/* Mermaid: before render the source shows as a plain code block (graceful
-   fallback if the CDN script is blocked); once processed, center the SVG. */
-pre.mermaid[data-processed="true"] { display: flex; justify-content: center; }
-pre.mermaid svg { max-width: 100%; height: auto; }
+/* Inert first-party SVGs: no CDN script or runtime-injected styles. */
+.diagram-image { display: block; width: 100%; height: auto; margin: 0 auto; }
 code {
   font-family: var(--font-mono); font-size: .875rem;
   background: var(--ink-500); border: 1px solid var(--line);
@@ -148,6 +146,9 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 .foot-links a { color: var(--muted); font-size: .875rem; }
 .foot-links a:hover { color: var(--text); text-decoration: none; }
 .muted { color: var(--muted); font-size: .875rem; }
+
+  /* Fixed presentation classes keep public pages free of inline style attributes. */
+  .doc-section .architecture-motto { color:var(--faint); }
 </style>
 </head>
 <body>
@@ -183,34 +184,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
   <!-- Big picture -->
   <div class="doc-section">
     <h2>The big picture</h2>
-    <div class="diagram-wrap"><pre class="mermaid">
-flowchart TB
-  subgraph AGENTS["AI agents"]
-    direction LR
-    MCPC["Claude · Copilot · Cursor · Windsurf<br/><i>MCP · stdio / Streamable HTTP</i>"]
-    WEBA["ChatGPT desktop · Chrome OT · Edge<br/><i>WebMCP · document.modelContext</i>"]
-  end
-  subgraph HUMANS["Human &amp; automation surfaces"]
-    direction LR
-    DASH["React dashboard<br/><i>web + desktop</i>"]
-    CLI["CLI · REST API<br/><i>automation, CI</i>"]
-    MOB["Mobile app<br/><i>share-sheet capture</i>"]
-  end
-  subgraph CORE["jobContext capability layer"]
-    FAC["<b>12 consolidated domain tools · 104 actions</b><br/>applications · job_search · documents · materials · people · interviews<br/>stories · brand · insights · wellbeing · certification · workspace"]
-    SVC["shared service layer: one implementation of every capability,<br/>no logic duplicated per transport"]
-    DB[("SQLite + JSON audit trail<br/>per-tenant partitions · files")]
-    FAC --> SVC
-    SVC --> DB
-  end
-  MCPC --> FAC
-  WEBA --> FAC
-  DASH --> FAC
-  CLI --> FAC
-  MOB --> FAC
-  classDef hl stroke:#00B5C8,stroke-width:1.5px;
-  class FAC hl
-    </pre></div>
+    <div class="diagram-wrap"><img class="diagram-image" src="/static/architecture/capability-layer.svg" alt="AI agents, the React dashboard, CLI, and mobile app call the same 12 domain tools and shared service layer, backed by per-tenant SQLite and files." /></div>
     <p>Each tool takes an <code>action</code> parameter; a coverage test guarantees every capability of the historical 88-function surface stays reachable through the facades, so no client, AI or human, ever sees a stale subset. The agent is optional: the same tools serve the CLI, cron jobs, the dashboard, and the mobile app.</p>
   </div>
 
@@ -234,7 +208,7 @@ flowchart TB
         <p>Share-sheet capture with on-device page extraction: the phone reads postings that block datacenter IPs. Talks to the cloud with a keychain-stored API key.</p>
       </div>
     </div>
-    <p><i style="color:var(--faint)">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
+    <p><i class="architecture-motto">Desktop creates knowledge, mobile captures reality, cloud synchronizes.</i></p>
   </div>
 
   <!-- Transports -->
@@ -268,18 +242,7 @@ flowchart TB
   <div class="doc-section">
     <h2>The WebMCP bridge</h2>
     <p>The dashboard is itself an agent surface. On sign-in, the bridge fetches <code>tools/list</code> from <code>/mcp</code> and registers each tool <b>verbatim</b> (names, descriptions, and schemas) as in-page WebMCP tools. There is no second tool surface to maintain, so what a browser agent sees can never drift from what an MCP client sees.</p>
-    <div class="diagram-wrap"><pre class="mermaid">
-sequenceDiagram
-  participant A as In-browser agent
-  participant B as WebMCP bridge (in-page)
-  participant M as /mcp (stateless Streamable HTTP)
-  Note over B: on sign-in: fetch tools/list,<br/>register every tool verbatim
-  A->>B: document.modelContext tool call
-  B->>M: same-origin POST (session cookie)
-  Note over M: CSRF guard: the cookie is<br/>ignored on cross-site requests
-  M-->>B: JSON-RPC result from the same 12 facades<br/>every MCP client gets
-  B-->>A: tool result
-    </pre></div>
+    <div class="diagram-wrap"><img class="diagram-image" src="/static/architecture/webmcp-bridge.svg" alt="The WebMCP bridge registers tools on sign-in, forwards agent calls to the stateless MCP endpoint with a same-origin session cookie, and returns results. Cross-site cookies are ignored." /></div>
     <p><b>Security:</b> an in-page agent acts as the signed-in user, inside their session: the same trust boundary as the user clicking the dashboard by hand. Because the session cookie is ambient, the middleware ignores it on cross-site <code>/mcp</code> requests (<code>Sec-Fetch-Site</code>, with an <code>Origin</code>/<code>Host</code> fallback), so a hostile page can't ride your login. Bearer auth is untouched.</p>
   </div>
 
@@ -357,43 +320,6 @@ sequenceDiagram
     </div>
   </div>
 </footer>
-
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
-<script>
-  /* Theme mermaid to the jobContext design tokens; if the CDN script failed
-     to load, the raw diagram source stays visible as a code block. */
-  if (window.mermaid) {
-    mermaid.initialize({
-      startOnLoad: true,
-      sequence: { mirrorActors: false },
-      theme: 'base',
-      themeVariables: {
-        darkMode: true,
-        background: '#0F172A',
-        primaryColor: '#16213A',
-        primaryTextColor: '#F2F6FC',
-        primaryBorderColor: '#2E4366',
-        lineColor: '#64748B',
-        secondaryColor: '#1B2A44',
-        tertiaryColor: '#111A2B',
-        clusterBkg: '#111A2B',
-        clusterBorder: '#23324D',
-        edgeLabelBackground: '#0F172A',
-        fontFamily: "'Space Grotesk', system-ui, sans-serif",
-        fontSize: '14px',
-        actorBkg: '#16213A',
-        actorBorder: '#2E4366',
-        actorTextColor: '#F2F6FC',
-        actorLineColor: '#64748B',
-        signalColor: '#9AA8BF',
-        signalTextColor: '#D7E3F8',
-        noteBkgColor: '#1B2A44',
-        noteTextColor: '#D7E3F8',
-        noteBorderColor: '#2E4366'
-      }
-    });
-  }
-</script>
 
 </body>
 </html>
