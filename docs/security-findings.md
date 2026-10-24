@@ -37,9 +37,13 @@ The follow-up disposable scan `40127807506` visited 23 URLs and cleared all four
 original classes. It identified medium rule 10055 (`style-src unsafe-hashes`),
 which was addressed by moving the fixed public-template style attributes into
 class rules and removing that CSP allowance, not suppressing the alert. The
-first real-browser run also exposed root-relative popup assets resolving against
-`about:blank` after detaching the opener; popup asset/file URLs now resolve
-against the parent application's origin, independently of the detached opener.
+next disposable scan `40128763231` passed with only informational alerts. The
+real-browser runs also exposed a [confirmed Playwright Chromium routing defect](https://github.com/microsoft/playwright/issues/43496):
+request interception stalls subresources in `about:blank`/`document.write`
+popups. The browser fixture uses a fail-closed loopback allowlisting proxy rather
+than Playwright HTTP interception, retaining external-request blocking and the
+same style/print assertions. Popup URLs are explicitly resolved against the
+parent application's origin, but that alone did not fix the test-tool defect.
 
 - Strict source CSP covers the reviewed public templates, API-key login/callback
   pages, logged-out page and React SPA. Other routes, including OAuth consent,

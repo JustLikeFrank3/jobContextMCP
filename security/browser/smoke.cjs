@@ -9,14 +9,15 @@ const path = require('node:path');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { createRequire } = require('node:module');
+const { createFixtureProxy } = require('./proxy.cjs');
 const requireTool = createRequire(path.resolve(process.env.PLAYWRIGHT_TOOLS, 'package.json'));
 const { chromium } = requireTool('playwright');
 const root = path.resolve(__dirname, '../..');
 const reports = path.join(__dirname, 'reports');
 fs.mkdirSync(reports, { recursive: true });
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'jobcontext-browser-'));
-const results = { checks: [], blockedExternalRequests: [], blockedWebSockets: [] };
-let server, browser, context;
+const results = { checks: [], blockedExternalRequests: [], blockedWebSockets: [], consoleMessages: [], requestFailures: [], popupStates: [], proxyRequests: [], externalPageRequests: [] };
+let server, browser, context, proxy;
 const cspErrors = [], runtimeErrors = [];
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label, timeout = 30000) {
@@ -96,30 +97,35 @@ async function preview(page, name, kind, origin) {
     try { return (await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1000) })).ok; }
     catch { return false; }
   }, 'disposable app health');
-  browser = await chromium.launch({ headless: true });
-  context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
-  await context.route('**/*', async route => {
-    const url = new URL(route.request().url());
-    if (url.origin !== origin) {
-      results.blockedExternalRequests.push(url.href);
-      return route.abort('blockedbyclient');
-    }
-    // One failed Markdown fetch tests the actual raw-iframe fallback. The
-    // iframe navigation still receives the fixture's real file response.
-    if (url.pathname.endsWith('/security-fallback.md') && route.request().resourceType() === 'fetch') {
-      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'Synthetic fetch failure' });
-    }
-    return route.continue();
+  // Playwright Chromium #43496 deadlocks about:blank popup subresources
+  // whenever context.route/page.route is enabled. A local deny-by-default
+  // proxy keeps network isolation without that CDP interception path.
+  proxy = await createFixtureProxy({ port,
+    onBlocked: request => results.blockedExternalRequests.push(request.url),
+    onForwarded: request => results.proxyRequests.push(request.url),
   });
-  // HTTP routing does not intercept WebSocket handshakes. No tested flow
-  // needs WebSockets, so block them before any connection reaches a server.
+  browser = await chromium.launch({
+    headless: true, proxy: { server: proxy.url, bypass: '<-loopback>' },
+  });
+  context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
+  // No tested flow needs WebSockets. Keep browser interception as defense
+  // in depth; the proxy independently denies all CONNECT/upgrade tunnels.
   await context.routeWebSocket('**/*', async socket => {
     results.blockedWebSockets.push(socket.url());
     await socket.close({ code: 1008, reason: 'Browser fixture blocks WebSocket connections' });
   });
+  // Context-level network events cover requests initiated before a popup's
+  // page event is delivered. Keep diagnostics without weakening any checks.
+  context.on('request', request => {
+    if (new URL(request.url()).origin !== origin) results.externalPageRequests.push(request.url());
+  });
+  context.on('requestfailed', request => {
+    results.requestFailures.push({ url: request.url(), resourceType: request.resourceType(), failure: request.failure() });
+  });
   context.on('page', page => {
     page.on('pageerror', err => runtimeErrors.push(err.message));
     page.on('console', msg => {
+      results.consoleMessages.push({ page: page.url(), type: msg.type(), text: msg.text() });
       if (/violates.*Content Security Policy|Refused to.*(script|style|frame)|Content Security Policy.*violat/i.test(msg.text())) {
         cspErrors.push(msg.text());
       }
@@ -142,6 +148,7 @@ async function preview(page, name, kind, origin) {
     }
     assertNoBrowserErrors();
   }
+  assert.equal(results.proxyRequests.some(url => url.endsWith('/static/architecture/capability-layer.svg')), true, 'Chromium must route loopback subresources through the isolation proxy');
   pass('All seven public pages keep authored styles; both architecture diagrams load under strict CSP');
 
   const malicious = '</a><script>window.fixtureInjected=true</script>';
@@ -166,7 +173,7 @@ async function preview(page, name, kind, origin) {
   assert.equal(await page.locator('form.card').evaluate(el => getComputedStyle(el).maxWidth), '420px');
   assert.match(await page.locator('[name="csrf_token"]').inputValue(), /^[A-Za-z0-9_-]{43}$/);
   await page.screenshot({ path: path.join(reports, 'login.png') });
-  const externalBeforeApp = results.blockedExternalRequests.length;
+  const externalBeforeApp = results.externalPageRequests.length;
   await page.locator('#api_key').fill('browser-synthetic-not-a-secret');
   await Promise.all([page.waitForURL(`${origin}/app/materials`), page.getByRole('button', { name: 'Sign in', exact: true }).click()]);
   await page.getByTitle('Preview security-preview.md', { exact: true }).waitFor();
@@ -193,7 +200,7 @@ async function preview(page, name, kind, origin) {
   await preview(page, 'security-preview.md', 'markdown', origin);
   await preview(page, 'security-preview.txt', 'raw', origin);
   await preview(page, 'security-fallback.md', 'fallback', origin);
-  assert.equal(results.blockedExternalRequests.length, externalBeforeApp, 'SPA/preview must use only same-origin assets');
+  assert.equal(results.externalPageRequests.length, externalBeforeApp, 'SPA/preview must use only same-origin assets');
   assertNoBrowserErrors();
   await page.screenshot({ path: path.join(reports, 'materials.png'), fullPage: true });
   results.status = 'passed';
@@ -203,8 +210,19 @@ async function preview(page, name, kind, origin) {
   console.error(err);
   if (context) {
     for (const [index, page] of context.pages().entries()) {
-      try { await page.screenshot({ path: path.join(reports, `failure-${index}.png`), fullPage: true }); }
-      catch { /* preserve the original failure */ }
+      try {
+        const state = await page.evaluate(() => ({
+          url: location.href, origin: location.origin, baseURI: document.baseURI,
+          readyState: document.readyState, openerIsNull: window.opener === null,
+          links: [...document.querySelectorAll('link')].map(el => ({ href: el.href, attr: el.getAttribute('href'), rel: el.rel, hasSheet: Boolean(el.sheet) })),
+          scripts: [...document.scripts].map(el => ({ src: el.src, attr: el.getAttribute('src'), defer: el.defer })),
+          sheets: [...document.styleSheets].map(sheet => ({ href: sheet.href, disabled: sheet.disabled })),
+          head: document.head?.innerHTML, body: document.body?.innerHTML,
+        }));
+        results.popupStates.push({ playwrightUrl: page.url(), ...state });
+        fs.writeFileSync(path.join(reports, `failure-${index}.html`), await page.content());
+        await page.screenshot({ path: path.join(reports, `failure-${index}.png`), fullPage: true });
+      } catch (diagnosticError) { results.popupStates.push({ playwrightUrl: page.url(), diagnosticError: String(diagnosticError) }); }
     }
   }
   process.exitCode = 1;
@@ -213,6 +231,7 @@ async function preview(page, name, kind, origin) {
   results.runtimeErrors = runtimeErrors;
   fs.writeFileSync(path.join(reports, 'results.json'), JSON.stringify(results, null, 2));
   if (browser) await browser.close();
+  if (proxy) await proxy.close();
   if (server && server.exitCode === null) {
     server.kill('SIGTERM');
     await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(5000)]);
