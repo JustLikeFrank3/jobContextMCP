@@ -538,7 +538,7 @@ def _upsert_employer(con, values: dict) -> None:
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "created_at")
     con.execute(
-        f"INSERT INTO employer_directory ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"INSERT INTO employer_directory ({', '.join(cols)}) VALUES ({placeholders}) "  # nosec B608 # cols is the fixed tuple above; all values are bound
         f"ON CONFLICT(canonical_name) DO UPDATE SET {updates}",
         tuple(row[c] for c in cols),
     )

@@ -6,7 +6,7 @@ import { Panel } from '../design-system'
 import { apiPost } from '../auth/api.js'
 import useDesktopMode from '../shell/useDesktopMode.js'
 import { openFileNative } from '../shell/nativeOpen.js'
-import { renderMarkdownDoc, MARKDOWN_DOC_CSS } from './markdownPreview.js'
+import { openPreview, extOf } from './materialsPreview.js'
 
 /* Materials — the four folders that get opened in practice: assessments,
    interview prep, and the shippable PDFs (resumes + cover letters). The
@@ -50,124 +50,6 @@ const EXT_COLOR = {
   png: 'var(--green-300)',
   jpg: 'var(--green-300)',
   jpeg: 'var(--green-300)',
-}
-
-const PREVIEWABLE = new Set(['pdf', 'txt', 'md', 'png', 'jpg', 'jpeg', 'gif', 'svg'])
-
-function extOf(file) {
-  return (file.ext || '').replace('.', '').toLowerCase()
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
-  )
-}
-
-/* Open a same-origin file in a dedicated preview window with a Print toolbar.
-   The file is served from /dashboard/materials/file/... so the iframe is
-   same-origin and contentWindow.print() works for PDFs and text alike.
-   Markdown gets a rendered document view instead of raw source (fetched,
-   rendered with marked, sanitized with DOMPurify — see markdownPreview.js);
-   if the fetch fails it degrades to the raw iframe. */
-function buildPreviewDoc({ name, href, body, extraCss = '' }) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
-<title>${name}</title>
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #0a1018; color: #e6edf6;
-    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-    background: #0e1726; border-bottom: 1px solid #223049; position: sticky; top: 0; }
-  .bar .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; }
-  .btn { appearance: none; cursor: pointer; text-decoration: none; display: inline-flex;
-    align-items: center; gap: 6px; border-radius: 8px; padding: 7px 13px; font-size: 13px;
-    border: 1px solid #2a3a5e; background: #16223a; color: #d6e3f7; }
-  .btn.primary { background: #00b5c8; border-color: transparent; color: #04222a; font-weight: 600; }
-  .btn:hover { filter: brightness(1.08); }
-  /* Dark, not #fff: with color-scheme: dark on this window, a text/markdown
-     document in the iframe adopts the dark UA scheme (light text) and — the
-     schemes matching — keeps a TRANSPARENT canvas, so a white iframe painted
-     white-on-white (judge-filed bug, 2026-08-28). In light-mode browsers the
-     schemes mismatch and the child canvas goes opaque white, so this dark
-     backdrop never touches it. PDFs paint their own opaque viewer either way. */
-  iframe { border: 0; width: 100%; height: calc(100vh - 53px); background: #0a1018; }
-  .msg { padding: 48px 24px; text-align: center; color: #9fb0c8; }
-  .msg .btn { margin-top: 14px; }
-  ${extraCss}
-</style></head><body>
-  <div class="bar">
-    <span class="name">${name}</span>
-    <a class="btn" href="${href}" target="_blank" rel="noreferrer">Open original</a>
-    <button class="btn primary" onclick="doPrint()">Print</button>
-  </div>
-  ${body}
-  <script>
-    function doPrint() {
-      var f = document.getElementById('pv');
-      try {
-        if (f && f.contentWindow) { f.contentWindow.focus(); f.contentWindow.print(); }
-        else { window.print(); }
-      } catch (e) { window.print(); }
-    }
-  </script>
-</body></html>`
-}
-
-function writePreviewDoc(win, doc) {
-  if (win.closed) return
-  win.document.open()
-  win.document.write(doc)
-  win.document.close()
-}
-
-function openPreview(file) {
-  const win = window.open('', '_blank', 'width=940,height=1000')
-  if (!win) {
-    window.alert('Allow pop-ups for this site to preview files in a window.')
-    return
-  }
-  // Sever the opener link before writing content. The preview loads
-  // user-controlled files (including SVG, which can execute script), so a
-  // live window.opener would expose the SPA to reverse-tabnabbing / same-origin
-  // opener attacks. We keep the `win` handle for document.write but null its
-  // opener so the child can't reach back via window.opener / window.top.opener.
-  win.opener = null
-  const name = escapeHtml(file.name)
-  const href = file.href // already URL-encoded by the backend
-  const ext = extOf(file)
-  const rawIframe = `<iframe id="pv" src="${href}" title="${name}"></iframe>`
-
-  if (ext === 'md') {
-    // The window must open synchronously (popup blockers), so show a loading
-    // shell, then swap in the rendered document once the fetch lands.
-    writePreviewDoc(win, buildPreviewDoc({
-      name, href, body: '<div class="msg">Rendering…</div>', extraCss: MARKDOWN_DOC_CSS,
-    }))
-    fetch(href, { credentials: 'same-origin' })
-      .then((res) => {
-        if (!res.ok) throw new Error(`fetch failed (${res.status})`)
-        return res.text()
-      })
-      .then((text) => {
-        const doc = `<main class="doc">${renderMarkdownDoc(text)}</main>`
-        writePreviewDoc(win, buildPreviewDoc({ name, href, body: doc, extraCss: MARKDOWN_DOC_CSS }))
-      })
-      .catch(() => {
-        // Raw-source fallback: exactly the pre-rendering behavior.
-        writePreviewDoc(win, buildPreviewDoc({ name, href, body: rawIframe }))
-      })
-    return
-  }
-
-  const previewable = PREVIEWABLE.has(ext)
-  const body = previewable
-    ? rawIframe
-    : `<div class="msg">This file type can’t be previewed inline.<br/>
-         <a class="btn" href="${href}" download>Download ${name}</a></div>`
-  writePreviewDoc(win, buildPreviewDoc({ name, href, body }))
 }
 
 /* Shared open lifecycle: idle | busy | error. The native open has no

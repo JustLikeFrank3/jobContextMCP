@@ -117,3 +117,6 @@ badge/jobcontext/secrets.py
 # Disposable local DAST output
 security/dast/reports/
 security/sast/reports/
+
+# Disposable browser security regression evidence
+security/browser/reports/

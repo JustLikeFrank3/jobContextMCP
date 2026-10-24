@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import importlib
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -113,9 +114,12 @@ class TestDashboardLoginCoverage:
         assert "Secure" in response.headers["set-cookie"]
 
     def test_login_submit_rejects_invalid_key(self, http_client_authed):
+        page = http_client_authed.get("/dashboard/login")
+        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
         response = http_client_authed.post(
             "/dashboard/login",
-            data={"api_key": "wrong", "next": "/offsite"},
+            data={"api_key": "wrong", "next": "/offsite", "csrf_token": csrf},
+            headers={"Origin": "http://testserver"},
             follow_redirects=False,
         )
 
@@ -123,9 +127,12 @@ class TestDashboardLoginCoverage:
         assert response.headers["location"] == "/dashboard/login?next=/app"
 
     def test_login_submit_sets_session_cookie_on_success(self, http_client_authed):
+        page = http_client_authed.get("/dashboard/login")
+        csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
         response = http_client_authed.post(
             "/dashboard/login",
-            data={"api_key": "test-key", "next": "/dashboard/settings"},
+            data={"api_key": "test-key", "next": "/dashboard/settings", "csrf_token": csrf},
+            headers={"Origin": "http://testserver"},
             follow_redirects=False,
         )
 

@@ -1348,13 +1348,14 @@ def test_push_results_posts_json(monkeypatch):
         def __exit__(self, *args):
             return False
 
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
-        captured["auth"] = request.get_header("Authorization")
-        captured["body"] = json.loads(request.data.decode("utf-8"))
-        return FakeResponse()
+    class FakeOpener:
+        def open(self, request, timeout):
+            captured["url"] = request.full_url
+            captured["auth"] = request.get_header("Authorization")
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            return FakeResponse()
 
-    monkeypatch.setattr(push_mod.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(push_mod.urllib.request, "build_opener", lambda *handlers: FakeOpener())
     result = push_mod.push_results(
         {"rows": []}, url="http://127.0.0.1:9999/", api_key="sekret"
     )

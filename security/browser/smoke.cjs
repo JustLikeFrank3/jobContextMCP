@@ -1,0 +1,222 @@
+/* End-to-end browser regressions against this checkout only. No target input,
+ * live data, remote credentials, service workers or outbound browser requests.
+ * Install Playwright in an ephemeral tool prefix, not the app's dependency tree.
+ */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const net = require('node:net');
+const { spawn } = require('node:child_process');
+const { createRequire } = require('node:module');
+const requireTool = createRequire(path.resolve(process.env.PLAYWRIGHT_TOOLS, 'package.json'));
+const { chromium } = requireTool('playwright');
+const root = path.resolve(__dirname, '../..');
+const reports = path.join(__dirname, 'reports');
+fs.mkdirSync(reports, { recursive: true });
+const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'jobcontext-browser-'));
+const results = { checks: [], blockedExternalRequests: [], blockedWebSockets: [] };
+let server, browser, context;
+const cspErrors = [], runtimeErrors = [];
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+async function until(check, label, timeout = 30000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await delay(100);
+  }
+  throw new Error(`Timed out: ${label}`);
+}
+function pass(check) { results.checks.push(check); console.log('PASS', check); }
+async function freePort() {
+  const socket = net.createServer();
+  await new Promise((resolve, reject) => { socket.once('error', reject); socket.listen(0, '127.0.0.1', resolve); });
+  const port = socket.address().port;
+  await new Promise(resolve => socket.close(resolve));
+  return port;
+}
+function assertNoBrowserErrors() {
+  assert.deepEqual(cspErrors, [], 'Unexpected CSP violation');
+  assert.deepEqual(runtimeErrors, [], 'Uncaught browser error');
+  assert.deepEqual(results.blockedWebSockets, [], 'Unexpected WebSocket connection');
+}
+async function preview(page, name, kind, origin) {
+  const [popup] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByTitle(`Preview ${name}`, { exact: true }).click(),
+  ]);
+  if (kind === 'markdown') await popup.locator('main.doc h1').waitFor();
+  else await popup.locator('iframe#pv').waitFor();
+  // Markdown replaces an initial loading shell using document.write. Wait for
+  // the FINAL document and its deferred same-origin Print script, not shell load.
+  await popup.waitForLoadState('load');
+  await popup.waitForFunction(() => document.readyState === 'complete' &&
+    [...document.styleSheets].some(s => s.href?.endsWith('/app/materials-preview.css')));
+  assert.equal(await popup.evaluate(() => window.opener), null);
+  assert.equal(await popup.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(10, 16, 24)');
+  assert.equal(await popup.evaluate(() => Boolean(window.fixtureInjected)), false);
+  if (kind === 'markdown') {
+    assert.equal(await popup.locator('main.doc h1').textContent(), 'Browser security fixture');
+    assert.equal(await popup.locator('main.doc script').count(), 0);
+  } else {
+    const frame = popup.frameLocator('#pv');
+    await frame.locator('body').waitFor();
+    assert.match(await frame.locator('body').innerText(), /Synthetic (raw|fallback) preview/);
+    assert.equal(new URL(await popup.locator('#pv').getAttribute('src'), origin).origin, origin);
+  }
+  // Observe the real click listener without opening an interactive print dialog.
+  await popup.evaluate(() => {
+    window.printCount = 0;
+    window.print = () => { window.printCount += 1; };
+    const frame = document.querySelector('#pv');
+    if (frame) {
+      frame.contentWindow.print = () => { window.printCount += 1; };
+      frame.contentWindow.focus = () => {};
+    }
+  });
+  await popup.locator('#print-preview').click();
+  assert.equal(await popup.evaluate(() => window.printCount), 1);
+  await popup.emulateMedia({ media: 'print' });
+  assert.equal(await popup.locator('.bar').evaluate(el => getComputedStyle(el).display), 'none');
+  assertNoBrowserErrors();
+  pass(`${kind} preview: inherited CSP, external CSS/Print, no opener, same-origin iframe/sanitized Markdown`);
+  await popup.close();
+}
+(async () => {
+  const port = await freePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const log = fs.openSync(path.join(reports, 'app.log'), 'w');
+  server = spawn(process.env.PYTHON || 'python', [path.join(__dirname, 'start.py'), fixture, String(port)], {
+    cwd: root, stdio: ['ignore', log, log],
+    env: { PATH: process.env.PATH, HOME: fixture, LANG: 'C.UTF-8', PYTHONUNBUFFERED: '1' },
+  });
+  fs.closeSync(log);
+  await until(async () => {
+    if (server.exitCode !== null) throw new Error(`Fixture exited ${server.exitCode}: inspect app.log`);
+    try { return (await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1000) })).ok; }
+    catch { return false; }
+  }, 'disposable app health');
+  browser = await chromium.launch({ headless: true });
+  context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
+  await context.route('**/*', async route => {
+    const url = new URL(route.request().url());
+    if (url.origin !== origin) {
+      results.blockedExternalRequests.push(url.href);
+      return route.abort('blockedbyclient');
+    }
+    // One failed Markdown fetch tests the actual raw-iframe fallback. The
+    // iframe navigation still receives the fixture's real file response.
+    if (url.pathname.endsWith('/security-fallback.md') && route.request().resourceType() === 'fetch') {
+      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'Synthetic fetch failure' });
+    }
+    return route.continue();
+  });
+  // HTTP routing does not intercept WebSocket handshakes. No tested flow
+  // needs WebSockets, so block them before any connection reaches a server.
+  await context.routeWebSocket('**/*', async socket => {
+    results.blockedWebSockets.push(socket.url());
+    await socket.close({ code: 1008, reason: 'Browser fixture blocks WebSocket connections' });
+  });
+  context.on('page', page => {
+    page.on('pageerror', err => runtimeErrors.push(err.message));
+    page.on('console', msg => {
+      if (/violates.*Content Security Policy|Refused to.*(script|style|frame)|Content Security Policy.*violat/i.test(msg.text())) {
+        cspErrors.push(msg.text());
+      }
+    });
+  });
+  const page = await context.newPage();
+  for (const pathname of ['/', '/why', '/setup', '/architecture', '/login', '/privacy', '/terms']) {
+    const response = await page.goto(origin + pathname);
+    assert.equal(response.status(), 200);
+    assert.match(response.headers()['content-security-policy'], /default-src 'none'/);
+    assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).margin), '0px');
+    assert.equal(await page.locator('body').evaluate(el => {
+      const style = getComputedStyle(el);
+      return style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.backgroundImage !== 'none';
+    }), true);
+    if (pathname === '/architecture') {
+      assert.equal(await page.locator('img.diagram-image').count(), 2);
+      assert.equal(await page.locator('img.diagram-image').evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
+      await page.screenshot({ path: path.join(reports, 'architecture.png'), fullPage: true });
+    }
+    assertNoBrowserErrors();
+  }
+  pass('All seven public pages keep authored styles; both architecture diagrams load under strict CSP');
+
+  const malicious = '</a><script>window.fixtureInjected=true</script>';
+  await page.goto(`${origin}/login?next=${encodeURIComponent(malicious)}`);
+  assert.equal(await page.locator('script').count(), 0);
+  assert.equal(await page.evaluate(() => Boolean(window.fixtureInjected)), false);
+  assertNoBrowserErrors();
+  // Independent browser enforcement probe: the API's evaluate can insert a
+  // script node, but Chromium must refuse that node under the delivered CSP.
+  await page.evaluate(() => {
+    const probe = document.createElement('script');
+    probe.textContent = 'window.fixtureInjected=true';
+    document.body.append(probe);
+  });
+  await until(() => cspErrors.length > 0, 'browser blocked inline script');
+  assert.equal(await page.evaluate(() => Boolean(window.fixtureInjected)), false);
+  results.expectedInlineScriptViolation = cspErrors.splice(0);
+  pass('Reflected next payload escaped; browser CSP independently blocks injected inline script');
+
+  await page.goto(`${origin}/dashboard/login?next=%2Fapp%2Fmaterials`);
+  assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).display), 'grid');
+  assert.equal(await page.locator('form.card').evaluate(el => getComputedStyle(el).maxWidth), '420px');
+  assert.match(await page.locator('[name="csrf_token"]').inputValue(), /^[A-Za-z0-9_-]{43}$/);
+  await page.screenshot({ path: path.join(reports, 'login.png') });
+  const externalBeforeApp = results.blockedExternalRequests.length;
+  await page.locator('#api_key').fill('browser-synthetic-not-a-secret');
+  await Promise.all([page.waitForURL(`${origin}/app/materials`), page.getByRole('button', { name: 'Sign in', exact: true }).click()]);
+  await page.getByTitle('Preview security-preview.md', { exact: true }).waitFor();
+  const session = (await context.cookies()).find(cookie => cookie.name === 'jc_session');
+  assert.equal(session?.httpOnly, true);
+  assert.equal((await context.cookies()).some(cookie => cookie.name === 'jc_login_csrf'), false);
+  assertNoBrowserErrors();
+  pass('Real API-key form signs in and removes pre-login cookie; built SPA loads and renders Materials');
+
+  const fonts = await page.evaluate(async () => {
+    const loads = [];
+    for (const family of ['Inter', 'JetBrains Mono', 'Space Grotesk']) {
+      for (const weight of [400, 500, 600, 700]) {
+        const faces = await document.fonts.load(`${weight} 16px "${family}"`, 'AaЖΩă');
+        loads.push({ family, weight, loaded: faces.length > 0 && faces.every(face => face.status === 'loaded') });
+      }
+    }
+    return loads;
+  });
+  assert.equal(fonts.every(item => item.loaded), true, JSON.stringify(fonts));
+  results.fonts = fonts;
+  pass('Three self-hosted font families load at weights 400/500/600/700');
+
+  await preview(page, 'security-preview.md', 'markdown', origin);
+  await preview(page, 'security-preview.txt', 'raw', origin);
+  await preview(page, 'security-fallback.md', 'fallback', origin);
+  assert.equal(results.blockedExternalRequests.length, externalBeforeApp, 'SPA/preview must use only same-origin assets');
+  assertNoBrowserErrors();
+  await page.screenshot({ path: path.join(reports, 'materials.png'), fullPage: true });
+  results.status = 'passed';
+})().catch(async err => {
+  results.status = 'failed';
+  results.error = err.stack;
+  console.error(err);
+  if (context) {
+    for (const [index, page] of context.pages().entries()) {
+      try { await page.screenshot({ path: path.join(reports, `failure-${index}.png`), fullPage: true }); }
+      catch { /* preserve the original failure */ }
+    }
+  }
+  process.exitCode = 1;
+}).finally(async () => {
+  results.unexpectedCspErrors = cspErrors;
+  results.runtimeErrors = runtimeErrors;
+  fs.writeFileSync(path.join(reports, 'results.json'), JSON.stringify(results, null, 2));
+  if (browser) await browser.close();
+  if (server && server.exitCode === null) {
+    server.kill('SIGTERM');
+    await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(5000)]);
+    if (server.exitCode === null) server.kill('SIGKILL');
+  }
+  fs.rmSync(fixture, { recursive: true, force: true });
+});

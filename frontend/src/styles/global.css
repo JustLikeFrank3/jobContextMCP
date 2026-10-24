@@ -149,3 +149,9 @@ a {
   65% { opacity: 1; transform: scale(1.12); }
   100% { transform: scale(1); }
 }
+
+/* Pipeline busy animation lives in a stylesheet, not an inline CSP-blocked tag. */
+@keyframes jcpulse {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}

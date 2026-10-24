@@ -1,0 +1,39 @@
+// Maintained source. Regenerate: python scripts/render_architecture_diagrams.py
+digraph capability_layer {
+  graph [bgcolor="#0F172A", rankdir=TB, compound=true, pad=0.2, nodesep=0.25,
+         ranksep=0.65, fontname="DejaVu Sans", fontsize=14, fontcolor="#F2F6FC"];
+  node [shape=box, style="rounded,filled", color="#2E4366", fillcolor="#16213A",
+        fontname="DejaVu Sans", fontsize=13, fontcolor="#F2F6FC", margin="0.16,0.14"];
+  edge [color="#64748B", arrowsize=0.75];
+
+  subgraph cluster_agents {
+    label="AI agents"; color="#23324D"; style="rounded,filled"; fillcolor="#111A2B";
+    MCPC [label=<Claude · Copilot · Cursor · Windsurf<BR/><I>MCP · stdio / Streamable HTTP</I>>];
+    WEBA [label=<ChatGPT desktop · Chrome OT · Edge<BR/><I>WebMCP · document.modelContext</I>>];
+    { rank=same; MCPC; WEBA; }
+  }
+  subgraph cluster_humans {
+    label="Human & automation surfaces"; color="#23324D"; style="rounded,filled"; fillcolor="#111A2B";
+    DASH [label=<React dashboard<BR/><I>web + desktop</I>>];
+    CLI [label=<CLI · REST API<BR/><I>automation, CI</I>>];
+    MOB [label=<Mobile app<BR/><I>share-sheet capture</I>>];
+    { rank=same; DASH; CLI; MOB; }
+  }
+  MCPC -> DASH [style=invis];
+  WEBA -> MOB [style=invis];
+
+  subgraph cluster_core {
+    label="jobContext capability layer"; labelloc=b; color="#23324D"; style="rounded,filled"; fillcolor="#111A2B";
+    FAC [color="#00B5C8", penwidth=1.5,
+         label=<<B>12 consolidated domain tools · 104 actions</B><BR/>applications · job_search · documents · materials · people · interviews<BR/>stories · brand · insights · wellbeing · certification · workspace>];
+    SVC [label=<shared service layer: one implementation of every capability,<BR/>no logic duplicated per transport>];
+    DB [shape=cylinder, label="SQLite + JSON audit trail\nper-tenant partitions · files"];
+    FAC -> SVC;
+    SVC -> DB;
+  }
+  MCPC -> FAC;
+  WEBA -> FAC;
+  DASH -> FAC;
+  CLI -> FAC;
+  MOB -> FAC;
+}

@@ -94,3 +94,12 @@ inspect artifacts and verify findings truly block. If current findings fail the
 gate, fix or narrowly triage them rather than weakening the default threshold.
 Require appropriate PR checks separately through authorized repository settings.
 Sonar can be skipped for fork PRs, so it is not a universal fork SAST gate.
+
+## Finding fixes and browser regressions
+
+See [security-findings.md](security-findings.md) for query-by-query dispositions,
+login-CSRF details, public/SPA CSP coverage and the explicitly retained legacy-HTML
+source-policy limitation. No medium/high DAST exception or SAST baseline was added.
+The security regression PR workflow tests the relevant Python suites, builds/tests
+the SPA, and checks browser CSP/preview behavior against disposable local state.
+It has no deployment credentials and does not target QA or production.
