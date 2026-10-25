@@ -17,8 +17,16 @@ Why it works this way (verified on hardware, 2026-10-02):
     to give up its slot.  Default: gallery (it pages through bundled PNGs —
     the least useful of the six; "badge" is the GitHub profile card and stays).
 
+  * The app is installed PRECOMPILED (.mpy, via mpy-cross on the Mac), with a
+    small __init__.py loader. Compiling ~80 KB of .py source on the badge
+    itself cost so much RAM and fragmented the heap so badly that the app ran
+    out of memory loading its fonts (2026-10-03); precompiled, startup has
+    ~37 KB more headroom. The loader also frees what the launcher left
+    loaded (the menu module, its sprites and fonts) before importing the app.
+
 The replaced app's folder and the original menu are backed up first, so
---restore puts the badge back exactly as it was.  Stdlib only.
+--restore puts the badge back exactly as it was.  Stdlib only, plus the
+mpy-cross binary:  uv tool install "mpy-cross==1.26.*"  (or pip install).
 """
 
 from __future__ import annotations
@@ -29,14 +37,41 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 APP = "jobcontext"
 APP_SRC = Path(__file__).resolve().parent / APP
-# Copied onto the badge. secrets.py is added when present; the example and
-# anything else stays behind.
-APP_FILES = ("__init__.py", "api.py", "inputs.py", "keyboard.py", "ui.py", "icon.png")
+# Compiled to .mpy for the badge. The app package's own __init__.py becomes
+# app.mpy; a generated loader takes its place (LOADER below).
+MODULES = {"__init__.py": "app.mpy", "api.py": "api.mpy", "inputs.py": "inputs.mpy",
+           "keyboard.py": "keyboard.mpy", "ui.py": "ui.mpy",
+           "screensaver.py": "screensaver.mpy", "tetris.py": "tetris.mpy"}
+ASSETS = ("icon.png",)
+# Kept for the source checks below; every one of these must exist.
+APP_FILES = tuple(MODULES) + ASSETS
+# MicroPython resolves name.py before name.mpy, so a stale .py left on the
+# badge from an older install would silently shadow the compiled module.
+STALE = tuple(src for src in MODULES if src != "__init__.py")
+MPY_VERSION = "mpy v6.3"  # MicroPython 1.26 — the badge reports _mpy=7942
+LOADER = """\
+# Loader written by badge/install.py. The app itself is precompiled (app.mpy
+# and friends) so the badge never runs the compiler; this stub frees what the
+# launcher left in memory first, then loads it.
+import gc
+import sys
+
+for _name in list(sys.modules):
+    if _name.startswith("/system/apps/") and _name != __name__:
+        del sys.modules[_name]
+gc.collect()
+
+from app import init, on_exit, update  # noqa: E402,F401
+"""
+# Personal, gitignored, copied when present: WiFi + token, and the screen
+# saver's contact card (no contact.py = no screen saver).
+OPTIONAL_FILES = ("secrets.py", "contact.py")
 DEFAULT_VOLUME = Path("/Volumes/BADGER")
 BACKUP_ROOT = Path.home() / "badge-backups"
 _MENU = Path("apps/menu/__init__.py")
@@ -101,6 +136,31 @@ def backup(volume: Path, remove: str) -> Path:
     return dest
 
 
+def find_mpy_cross() -> str:
+    """Path to an mpy-cross that emits the badge's bytecode version."""
+    candidates = [shutil.which("mpy-cross"), str(Path.home() / ".local/bin/mpy-cross")]
+    for exe in candidates:
+        if not exe or not Path(exe).is_file():
+            continue
+        try:
+            version = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout
+        except OSError:
+            continue
+        if MPY_VERSION in version:
+            return exe
+        raise InstallError(
+            f"{exe} emits the wrong bytecode ({version.strip()}); the badge needs {MPY_VERSION}. "
+            'Install:  uv tool install "mpy-cross==1.26.*"'
+        )
+    raise InstallError('mpy-cross not found. Install:  uv tool install "mpy-cross==1.26.*"')
+
+
+def compile_module(exe: str, src: Path, dst: Path) -> None:
+    result = subprocess.run([exe, "-o", str(dst), str(src)], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise InstallError(f"mpy-cross failed on {src.name}: {result.stderr.strip()}")
+
+
 def install(volume: Path, remove: str, dry_run: bool) -> None:
     menu_path = volume / _MENU
     if not menu_path.is_file():
@@ -111,18 +171,23 @@ def install(volume: Path, remove: str, dry_run: bool) -> None:
 
     original = menu_path.read_text()
     patched = patch_menu(original, remove)
-    has_secrets = (APP_SRC / "secrets.py").is_file()
+    optional = tuple(f for f in OPTIONAL_FILES if (APP_SRC / f).is_file())
+    has_secrets = "secrets.py" in optional
 
     print(f"menu now:  {', '.join(listed_apps(original))}")
     print(f"menu after: {', '.join(listed_apps(patched))}")
     print(f"delete:    apps/{remove}/" if (volume / "apps" / remove).is_dir() else f"delete:    (apps/{remove} already gone)")
-    print(f"copy:      {', '.join(APP_FILES)}" + (", secrets.py" if has_secrets else ""))
+    print(f"compile:   {', '.join(MODULES)} -> .mpy (+ loader __init__.py)")
+    print(f"copy:      {', '.join(ASSETS + optional)}")
     if not has_secrets:
         print(f"  ! no {APP_SRC / 'secrets.py'} — the app will install but show a")
         print("    'no secrets.py' error until you add one (see secrets.example.py).")
+    if "contact.py" not in optional:
+        print("  (no contact.py — no screen saver; see contact.example.py)")
     if dry_run:
         print("dry run — nothing written.")
         return
+    exe = find_mpy_cross()  # before touching the badge: fail with nothing changed
 
     if patched != original or (volume / "apps" / remove).is_dir():
         saved = backup(volume, remove)
@@ -135,8 +200,22 @@ def install(volume: Path, remove: str, dry_run: bool) -> None:
 
     target = volume / "apps" / APP
     target.mkdir(exist_ok=True)
-    for name in APP_FILES + (("secrets.py",) if has_secrets else ()):
+    # Compile on the Mac, then copy each finished file in one write. mpy-cross
+    # writing straight onto the badge's FAT drive took ~1 minute per file —
+    # it emits many tiny writes, and the USB mass-storage mount is slow at them.
+    with tempfile.TemporaryDirectory() as tmp:
+        for src, dst in MODULES.items():
+            compile_module(exe, APP_SRC / src, Path(tmp) / dst)
+            shutil.copyfile(Path(tmp) / dst, target / dst)
+    for name in STALE:
+        (target / name).unlink(missing_ok=True)
+    (target / "__init__.py").write_text(LOADER)
+    for name in ASSETS + optional:
         shutil.copyfile(APP_SRC / name, target / name)
+    # macOS leaves AppleDouble ._* metadata files on FAT volumes; on the badge
+    # they are just clutter in a small filesystem.
+    for junk in target.glob("._*"):
+        junk.unlink(missing_ok=True)
     menu_path.write_text(patched)
     if (volume / "apps" / remove).is_dir():
         shutil.rmtree(volume / "apps" / remove)

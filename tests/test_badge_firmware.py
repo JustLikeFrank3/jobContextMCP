@@ -56,6 +56,17 @@ class FakeUI:
     def flip(self):
         pass
 
+    QR_QUIET = 2
+    qr_modules = 49  # a typical card: fits beside Tetris at 2px per module
+
+    def qr_code(self, text):
+        self.qr_text = text
+        return (self.qr_modules, bytearray())
+
+    def draw_qr(self, qr, x, y, scale):
+        self.qr_scale = scale
+        self.drawn.append("<qr>")
+
     def present(self):
         pass
 
@@ -108,10 +119,19 @@ class FakeApi:
         self.job_results = []
         self.queued = []
 
+    wifi_ok = True
+    ping_error = None
+
     def connect_wifi(self, status=None):
-        return True
+        self.connects = getattr(self, "connects", 0) + 1
+        return self.wifi_ok
+
+    def _ping_check(self):
+        if self.ping_error:
+            raise self.ApiError(self.ping_error)
 
     def ping(self):
+        self._ping_check()
         return {"ok": True}
 
     def search(self, query, limit=6):
@@ -133,7 +153,11 @@ class FakeApi:
         return {"work_id": 7}
 
     def poll(self, work_id):
+        self.polls = getattr(self, "polls", []) + [work_id]
         return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
+
+
+_APP_MODULES = ("keyboard", "inputs", "screensaver", "tetris", "badgeapp")
 
 
 @pytest.fixture()
@@ -151,7 +175,10 @@ def badge_app(monkeypatch, tmp_path):
 
     monkeypatch.setitem(sys.modules, "ui", fake_ui)
     monkeypatch.setitem(sys.modules, "api", fake_api)
-    for name in ("keyboard", "inputs", "badgeapp"):
+    # No contact card unless a test supplies one — and never the developer's
+    # real badge/jobcontext/contact.py, which sits right on sys.path.
+    monkeypatch.setitem(sys.modules, "contact", None)
+    for name in _APP_MODULES:
         sys.modules.pop(name, None)
     monkeypatch.syspath_prepend(str(_APP))
 
@@ -165,7 +192,7 @@ def badge_app(monkeypatch, tmp_path):
 
     app.init()
     yield app, fake_ui, fake_api
-    for name in ("keyboard", "inputs", "badgeapp"):
+    for name in _APP_MODULES:
         sys.modules.pop(name, None)
 
 
@@ -498,3 +525,460 @@ def test_c_on_style_goes_back_without_generating(badge_app):
     _to_style_screen(app, ui_, api_)
     _tap(app, ui_, "C")
     assert app.state == app.ACTIONS and api_.requested == []
+
+
+# ── contact-card screen saver ──────────────────────────────────────────────────
+
+class _Contact:
+    NAME = "Ada Lovelace"
+    TITLE = "Staff Engineer"
+    EMAIL = "ada@example.com"
+    PHONE = ""
+    LINKEDIN = "ada"
+    GITHUB = "ada-l"
+    WEBSITE = ""
+    IDLE_SECONDS = 30
+
+
+@pytest.fixture()
+def saver_app(badge_app, monkeypatch):
+    app, ui_, api_ = badge_app
+    monkeypatch.setitem(sys.modules, "contact", _Contact)
+    assert app.screensaver.load()
+    app._last_input = time.ticks_ms()
+    return app, ui_, api_
+
+
+def _idle(app, ui_, seconds):
+    ui_.release()
+    ui_.advance_ms(seconds * 1000)
+    app.update()
+
+
+def test_idle_shows_the_contact_card(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 10)
+    assert not app.saving
+    _idle(app, ui_, 25)
+    assert app.saving
+    assert "Ada Lovelace" in ui_.drawn
+    assert any(line.startswith("in/ada") for line in ui_.drawn)
+
+
+def test_card_alternates_with_the_qr(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    assert "<qr>" not in ui_.drawn          # text card first
+    _idle(app, ui_, 8)
+    assert "<qr>" in ui_.drawn              # then the QR page, beside Tetris
+    assert "scan me" in ui_.drawn
+    assert ui_.qr_scale == 2
+    assert ui_.qr_text.startswith("MECARD:N:Ada Lovelace;")
+
+
+def test_dense_qr_takes_the_whole_screen_rather_than_shrinking(saver_app):
+    """1px modules were unscannable on the real badge: never go below 2px
+    to keep Tetris in view — give the QR the screen instead."""
+    app, ui_, _api = saver_app
+    ui_.qr_modules = 55                     # 59 with quiet zone: 1px in the 114px panel
+    _idle(app, ui_, 31)
+    _idle(app, ui_, 8)
+    assert "<qr>" in ui_.drawn
+    assert app.screensaver._qr_full
+    assert ui_.qr_scale == 2                # full screen keeps it scannable
+    assert "scan me" not in ui_.drawn       # no Tetris on the full-screen page
+
+
+def test_waking_press_is_swallowed(saver_app):
+    """Waking with A must not also type an 'A' into the search box."""
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    assert app.saving
+    ui_.press("A")
+    app.update()
+    assert not app.saving
+    app.update()                            # A still held
+    ui_.release()
+    app.update()
+    assert app.query == ""
+    assert app.state == app.SEARCH
+
+
+def test_static_page_is_drawn_once_then_only_tetris(saver_app):
+    """The QR is hundreds of rectangles: paint it on the page flip, not 30x/s."""
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    _idle(app, ui_, 8)                      # flip to the QR page
+    assert ui_.drawn.count("<qr>") == 1
+    for _ in range(5):
+        _idle(app, ui_, 0.2)
+    assert ui_.drawn.count("<qr>") == 1     # not repainted
+    assert "scan me" in ui_.drawn           # but the well label still updates
+
+
+def test_tetris_plays_while_saving(saver_app):
+    app, ui_, _api = saver_app
+    _idle(app, ui_, 31)
+    first = app.screensaver._game.cells()
+    _idle(app, ui_, 3)
+    assert app.screensaver._game.cells() != first
+
+
+def test_working_never_idles_into_the_saver(saver_app):
+    app, ui_, api_ = saver_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    assert app.state == app.WORKING
+    _idle(app, ui_, 120)
+    assert not app.saving and app.state == app.WORKING
+
+
+def test_ready_screen_is_not_covered_after_a_long_generation(saver_app):
+    app, ui_, api_ = saver_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _idle(app, ui_, 90)                     # a slow generation
+    api_.poll_status = "succeeded"
+    _idle(app, ui_, 3)
+    assert app.state == app.DONE and not app.saving
+    _idle(app, ui_, 31)
+    assert app.saving                       # only after a full idle period
+
+
+def test_no_contact_file_means_no_screen_saver(badge_app):
+    app, ui_, _api = badge_app
+    _idle(app, ui_, 600)
+    assert not app.saving
+
+
+def test_qr_payload_is_a_compact_mecard(badge_app):
+    app, _ui, _api = badge_app
+    card = app.screensaver.qr_payload(_Contact)
+    assert card == (
+        "MECARD:N:Ada Lovelace;EMAIL:ada@example.com;"
+        "URL:linkedin.com/in/ada;URL:github.com/ada-l;;"
+    )
+    assert "Staff Engineer" not in card     # title: on the card, not the QR
+    assert "https://" not in card and "TEL:" not in card
+
+
+def test_qr_payload_escapes_mecard_separators(badge_app):
+    app, _ui, _api = badge_app
+
+    class Tricky(_Contact):
+        NAME = "Smith; Jo"
+        EMAIL = "a:b@x.io"
+
+    card = app.screensaver.qr_payload(Tricky)
+    assert "N:Smith\\; Jo;" in card and "EMAIL:a\\:b@x.io;" in card
+
+
+# ── WiFi: several networks, joined by what's in range ──────────────────────────
+
+class _FakeWlan:
+    def __init__(self, visible, joinable):
+        self.visible, self.joinable = visible, joinable
+        self.tried, self.up = [], False
+
+    def active(self, _on):
+        pass
+
+    def isconnected(self):
+        return self.up
+
+    def scan(self):
+        return [(name.encode(), b"", 1, -60, 3, 0) for name in self.visible]
+
+    def connect(self, ssid, _password):
+        self.tried.append(ssid)
+        self.up = ssid in self.joinable
+
+    def disconnect(self):
+        self.up = False
+
+
+def _api_with(monkeypatch, secrets_obj, wlan):
+    import types
+
+    net = types.SimpleNamespace(STA_IF=0, WLAN=lambda _i: wlan)
+    monkeypatch.setitem(sys.modules, "network", net)
+    monkeypatch.setitem(sys.modules, "requests", types.ModuleType("requests"))
+    monkeypatch.setitem(sys.modules, "secrets", secrets_obj)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    return _load("api")
+
+
+def test_wifi_joins_the_listed_network_that_is_in_range(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Frank’s iPhone", "b")])
+    wlan = _FakeWlan(visible=["Starbucks WiFi", "Frank’s iPhone"], joinable={"Frank’s iPhone"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Frank’s iPhone"]          # Home isn't in range: never tried
+
+
+def test_wifi_falls_through_the_list_in_order(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "wrong"), ("Hotspot", "b")])
+    wlan = _FakeWlan(visible=["Home", "Hotspot"], joinable={"Hotspot"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home", "Hotspot"]
+
+
+def test_wifi_still_reads_the_old_single_network_secrets(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_SSID="Home", WIFI_PASSWORD="a")
+    wlan = _FakeWlan(visible=["Home"], joinable={"Home"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True and wlan.tried == ["Home"]
+
+
+def test_wifi_says_so_when_nothing_known_is_in_range(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a")])
+    wlan = _FakeWlan(visible=["Starbucks WiFi"], joinable=set())
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    with pytest.raises(api.ApiError, match="in range"):
+        api.connect_wifi()
+    assert wlan.tried == []
+
+
+def test_wifi_tries_unseen_networks_when_a_hidden_one_is_in_range(monkeypatch):
+    """A hidden hotspot scans as an empty name; it must still be joinable."""
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Frank's Device", "b")])
+    wlan = _FakeWlan(visible=["", "Starbucks"], joinable={"Frank's Device"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home", "Frank's Device"]
+
+
+# ── retry after a connection failure ───────────────────────────────────────────
+
+def test_retry_after_failed_wifi_actually_reconnects(badge_app):
+    """Retry used to jump to SEARCH and look connected when it wasn't."""
+    app, ui_, api_ = badge_app
+    api_.wifi_ok = False
+    app.init()
+    assert app.state == app.ERROR and "wifi" in app.message
+    before = api_.connects
+
+    _tap(app, ui_, "A")                     # still no wifi
+    assert api_.connects == before + 1
+    assert app.state == app.ERROR           # stays on the error, not SEARCH
+
+    api_.wifi_ok = True
+    _tap(app, ui_, "A")                     # hotspot back
+    assert app.state == app.SEARCH and app._online
+
+
+def test_retry_after_a_rejected_token_rechecks_it(badge_app):
+    app, ui_, api_ = badge_app
+    api_.ping_error = "token rejected - regenerate it"
+    app.init()
+    assert app.state == app.ERROR and not app._online
+    _tap(app, ui_, "A")
+    assert app.state == app.ERROR and "token" in app.message
+    api_.ping_error = None
+    _tap(app, ui_, "A")
+    assert app.state == app.SEARCH
+
+
+def test_retry_after_an_ordinary_failure_goes_back_without_reconnecting(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = []
+    api_.job_results = []
+    app.query = "NOBODY"
+    _tap(app, ui_, "C")
+    assert app.state == app.ERROR and app._online
+    before = api_.connects
+    _tap(app, ui_, "A")
+    assert app.state == app.SEARCH and api_.connects == before
+
+
+# ── walked-away generations: background polling + banner ──────────────────────
+
+def _start_and_walk_away(app, ui_, api_):
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")                     # generate
+    assert app.state == app.WORKING
+    _tap(app, ui_, "C")                     # stop waiting
+    assert app.state == app.RESULTS
+    assert [j["work_id"] for j in app.pending] == [7]
+
+
+def _wait(app, ui_, seconds):
+    ui_.release()
+    ui_.advance_ms(int(seconds * 1000))
+    app.update()
+
+
+def test_walked_away_job_is_announced_when_done(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    _wait(app, ui_, 16)
+    assert app.notices == [] and app.pending   # still running
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 16)
+    assert app.pending == []
+    assert app.notices == [(True, "resume ready - Acme")]
+    assert "resume ready - Acme" in ui_.drawn
+
+
+def test_background_poll_is_throttled(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    before = len(api_.polls)
+    for _ in range(10):
+        _wait(app, ui_, 1)                  # 10s: under the 15s interval
+    assert len(api_.polls) <= before + 1
+
+
+def test_banner_shows_over_the_screen_saver(saver_app):
+    app, ui_, api_ = saver_app
+    _start_and_walk_away(app, ui_, api_)
+    _wait(app, ui_, 31)
+    assert app.saving
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 16)
+    assert app.saving and app.notices
+    assert "resume ready - Acme" in ui_.drawn
+
+
+def test_dismissing_the_banner_swallows_the_press(saver_app):
+    app, ui_, api_ = saver_app
+    _start_and_walk_away(app, ui_, api_)
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 31)                     # done, and idled into the saver
+    assert app.notices and app.saving
+    state = app.state
+    ui_.press("A")
+    app.update()
+    assert app.notices == [] and not app.saving
+    app.update()                            # A still held
+    ui_.release()
+    app.update()
+    assert app.state == state               # A didn't also open actions
+
+
+def test_failed_walked_away_job_says_why(badge_app):
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+    api_.poll_status = "failed"
+    _wait(app, ui_, 16)
+    assert app.notices == [(False, "resume failed - Acme: nope")]
+
+
+def test_waiting_it_out_gives_the_done_screen_not_a_banner(badge_app):
+    app, ui_, api_ = badge_app
+    api_.results = [{"job_id": 42, "company": "Acme", "role": "SWE", "score": ""}]
+    api_.poll_status = "running"
+    app.query = "ACME"
+    _tap(app, ui_, "C")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    _tap(app, ui_, "A")
+    api_.poll_status = "succeeded"
+    _wait(app, ui_, 3)
+    assert app.state == app.DONE
+    assert app.pending == [] and app.notices == []
+    _wait(app, ui_, 20)
+    assert app.notices == []
+
+
+def test_repeated_background_poll_failures_are_reported_once(badge_app):
+    """Failed checks used to be silent forever: no banner, ever."""
+    app, ui_, api_ = badge_app
+    _start_and_walk_away(app, ui_, api_)
+
+    def broken(_wid):
+        raise api_.ApiError("network: [Errno 12] ENOMEM")
+
+    api_.poll = broken
+    for _ in range(3):
+        _wait(app, ui_, 16)
+    assert app.notices == []                # a blip or two: stay quiet
+    _wait(app, ui_, 16)
+    assert app.notices == [(False, "can't check on your jobs: network: [Errno 12] ENOMEM")]
+    for _ in range(4):
+        _wait(app, ui_, 16)
+    assert len(app.notices) == 1            # said once, not every 15s
+    assert app.pending                      # and the job is still tracked
+
+
+def test_tls_reserve_is_released_for_each_request(monkeypatch):
+    """The heap reserve exists so a TLS handshake always finds a big block."""
+    import types
+
+    seen = {}
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+        def close(self):
+            pass
+
+    req = types.ModuleType("requests")
+
+    def request(*a, **k):
+        seen["reserve_during"] = api._reserve
+        return Resp()
+
+    req.request = request
+    monkeypatch.setitem(sys.modules, "requests", req)
+    monkeypatch.setitem(sys.modules, "network", types.ModuleType("network"))
+    monkeypatch.setitem(
+        sys.modules, "secrets", types.SimpleNamespace(BASE_URL="https://x", BADGE_TOKEN="t")
+    )
+    api = _load("api")
+    assert isinstance(api._reserve, bytearray) and len(api._reserve) == api._RESERVE_BYTES
+    assert api.ping() == {"ok": True}
+    assert seen["reserve_during"] is None   # released for the handshake
+    assert isinstance(api._reserve, bytearray)  # and taken back after
+
+
+def test_saver_resources_are_built_at_startup(saver_app):
+    """Built while the heap is clean, not on first idle (crashed on hardware)."""
+    app, ui_, _api = saver_app
+    app.init()
+    assert app.screensaver._game is not None and app.screensaver._qr
+
+
+def test_a_failing_saver_never_takes_the_app_down(saver_app, monkeypatch):
+    app, ui_, _api = saver_app
+
+    def boom(_now):
+        raise MemoryError("memory allocation failed")
+
+    monkeypatch.setattr(app.screensaver, "start", boom)
+    _idle(app, ui_, 31)                     # would have crashed jobcontext
+    assert not app.saving and not app.saver_ok
+    assert app.state == app.SEARCH
+    _idle(app, ui_, 120)
+    assert not app.saving                   # stays off for the session
+    _tap(app, ui_, "A")
+    assert app.query == "A"                 # and the app still works

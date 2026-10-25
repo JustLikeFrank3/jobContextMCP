@@ -12,6 +12,7 @@ calling, and polls on an interval rather than every frame, so the freeze is
 visible as a deliberate pause instead of a hang.
 """
 
+import gc
 import json
 
 try:
@@ -37,25 +38,65 @@ class ApiError(Exception):
     """Any non-2xx or transport failure, with a message short enough to draw."""
 
 
+def _networks():
+    """[(ssid, password), ...] from secrets: WIFI_NETWORKS, else the single
+    WIFI_SSID / WIFI_PASSWORD pair older secrets.py files have."""
+    nets = list(getattr(secrets, "WIFI_NETWORKS", None) or [])
+    ssid = getattr(secrets, "WIFI_SSID", "")
+    if ssid and all(ssid != s for s, _p in nets):
+        nets.append((ssid, getattr(secrets, "WIFI_PASSWORD", "")))
+    return nets
+
+
 def connect_wifi(status=None):
-    """Bring up WiFi, returning True once connected.
+    """Bring up WiFi on the first configured network in range; True once up.
+
+    Several networks can be listed (home, phone hotspot, conference) so the
+    badge works wherever you are without editing secrets.py. A scan picks
+    which of them are visible; known networks are tried in the order listed,
+    strongest-first is not worth the surprise of a different network each day.
 
     *status* is an optional callable used to report progress on screen — the
     badge otherwise looks frozen for the ten seconds a DHCP lease can take.
     """
     if secrets is None:
         raise ApiError("no secrets.py - copy secrets.example.py and fill it in")
+    nets = _networks()
+    if not nets:
+        raise ApiError("no wifi in secrets.py - add WIFI_NETWORKS")
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     if wlan.isconnected():
         return True
-    wlan.connect(secrets.WIFI_SSID, secrets.WIFI_PASSWORD)
-    for attempt in range(40):  # ~20s
-        if wlan.isconnected():
-            return True
-        if status:
-            status("connecting to wifi" + "." * (attempt % 4))
-        time.sleep(0.5)
+    if status:
+        status("looking for wifi...")
+    try:
+        visible = set()
+        for entry in wlan.scan():
+            name = entry[0]
+            visible.add(name.decode() if isinstance(name, (bytes, bytearray)) else name)
+    except Exception:  # noqa: BLE001 — a failed scan just means "try them all"
+        visible = None
+    if visible is None:
+        candidates = nets
+    else:
+        candidates = [n for n in nets if n[0] in visible]
+        # A hidden network (a phone hotspot set to "hide") scans with an empty
+        # name, so it can never match by name. If one is in range, the
+        # networks we couldn't see may be it: try them after the visible ones.
+        if "" in visible:
+            candidates += [n for n in nets if n not in candidates]
+    if not candidates:
+        raise ApiError("none of your wifi networks are in range")
+    for ssid, password in candidates:
+        wlan.connect(ssid, password)
+        for attempt in range(30):  # ~15s each
+            if wlan.isconnected():
+                return True
+            if status:
+                status("joining " + ssid + "." * (attempt % 4))
+            time.sleep(0.5)
+        wlan.disconnect()
     return False
 
 
@@ -70,7 +111,39 @@ def _headers():
     }
 
 
+# A TLS handshake needs one large contiguous block. While the screen saver
+# runs, Tetris keeps re-allocating small long-lived objects all over the heap,
+# so after ~30s there is >100 KB free but no single hole big enough: on
+# hardware the 8th background poll failed with ENOMEM (without the saver, 12
+# in a row succeeded). So a block is reserved at import, while the heap is
+# still clean, released just before each request and taken back right after.
+_RESERVE_BYTES = 40 * 1024
+_reserve = None
+
+
+def _hold_reserve():
+    global _reserve
+    if _reserve is None:
+        try:
+            _reserve = bytearray(_RESERVE_BYTES)
+        except MemoryError:
+            _reserve = None  # try again after the next request
+
+
+_hold_reserve()
+
+
 def _request(method, path, body=None):
+    global _reserve
+    _reserve = None
+    gc.collect()
+    try:
+        return _send(method, path, body)
+    finally:
+        _hold_reserve()
+
+
+def _send(method, path, body):
     try:
         response = requests.request(
             method,
