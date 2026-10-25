@@ -40,6 +40,16 @@ except ImportError:
 
 _TIMEOUT = 15
 
+# TLS verification: MicroPython's requests wraps the socket without a
+# verifying context, so badge HTTPS is unverified. The token is badge-scoped
+# for exactly this reason; revoke it after events.
+TLS_VERIFIED = False
+try:
+    import ssl  # type: ignore
+    TLS_VERIFIED = hasattr(ssl, "CERT_REQUIRED")
+except ImportError:
+    pass
+
 
 class ApiError(Exception):
     """Any non-2xx or transport failure, with a message short enough to draw."""
@@ -140,6 +150,13 @@ def _hold_reserve():
 
 
 _hold_reserve()
+
+
+def release_reserve():
+    """Give the 40KB block back — called from on_exit so the next app can
+    allocate it. The reserve is re-taken on the first request after."""
+    global _reserve
+    _reserve = None
 
 
 def _request(method, path, body=None):

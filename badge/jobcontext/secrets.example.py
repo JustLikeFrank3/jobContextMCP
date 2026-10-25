@@ -10,6 +10,9 @@ it as public:
     over your whole job search to whoever picks it up.
   * Use a guest/hotspot WiFi network if you can. These credentials are as
     readable as the token.
+  * TLS is unverified on this MicroPython build (no CERT_REQUIRED), so the
+    token is liftable on hostile WiFi. Badge-scoped, so bounded, but revoke
+    it after an event.
 """
 
 # Every network the badge may use, tried in this order when in range. Phone
