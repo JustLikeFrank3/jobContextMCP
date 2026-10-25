@@ -10,10 +10,19 @@ it as public:
     over your whole job search to whoever picks it up.
   * Use a guest/hotspot WiFi network if you can. These credentials are as
     readable as the token.
+  * TLS is unverified on this MicroPython build (no CERT_REQUIRED), so the
+    token is liftable on hostile WiFi. Badge-scoped, so bounded, but revoke
+    it after an event.
 """
 
-WIFI_SSID = "your-network"
-WIFI_PASSWORD = "your-password"
+# Every network the badge may use, tried in this order when in range. Phone
+# hotspots: the badge is 2.4 GHz only (iPhone: Personal Hotspot -> "Maximize
+# Compatibility" ON), and copy the name exactly — iPhone hotspot names use a
+# curly apostrophe (Frank’s iPhone), not a straight one.
+WIFI_NETWORKS = [
+    ("your-home-network", "your-password"),
+    ("Your’s iPhone", "hotspot-password"),
+]
 
 # Cloud tenant, or your desktop's LAN address while developing.
 BASE_URL = "https://jobcontext.ai"

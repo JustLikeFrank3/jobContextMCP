@@ -23,6 +23,8 @@ a "GitHub Badger with RP2350" running Pimoroni's badgeware firmware
     the loop (the splash and status screens shown before a blocking call).
 """
 
+import time
+
 WIDTH = 160
 HEIGHT = 120
 
@@ -77,6 +79,26 @@ def pressed(name):
         return False
     const = getattr(_fw.io, "BUTTON_" + name, None)
     return const is not None and const in _fw.io.held
+
+
+def battery_level():
+    """0-100, or -1 when the firmware has no battery ADC."""
+    if _fw is None:
+        return -1
+    try:
+        return _fw.badge.battery_level()
+    except AttributeError:
+        return -1
+
+
+def battery_charging():
+    """True while USB is connected and the battery is taking charge."""
+    if _fw is None:
+        return False
+    try:
+        return _fw.badge.is_charging()
+    except AttributeError:
+        return False
 
 
 # ── text helpers ───────────────────────────────────────────────────────────────
@@ -217,11 +239,69 @@ def present():
     _fw.display.update()
 
 
-def header(title, subtitle=""):
+def qr_code(text):
+    """Encode *text* as a QR code: (modules_per_side, runs) or None.
+
+    *runs* is a bytearray of (x, y, length) triples, one per horizontal run
+    of dark modules — about 2 KB for a typical contact card. Deliberately not
+    an offscreen Image: at 2px per module that is ~45 KB in one block, which
+    the badge's fragmented heap could not allocate (on-hardware MemoryError).
+    """
+    try:
+        import qrcode  # type: ignore
+    except ImportError:
+        return None
+    code = qrcode.QRCode()
+    code.set_text(text)
+    n = code.get_size()[0]
+    runs = bytearray()
+    for y in range(n):
+        x = 0
+        while x < n:
+            if not code.get_module(x, y):
+                x += 1
+                continue
+            start = x
+            while x < n and code.get_module(x, y):
+                x += 1
+            runs.extend((start, y, x - start))
+    return n, runs
+
+
+QR_QUIET = 2  # light modules around the code
+
+
+def draw_qr(qr, x, y, scale):
+    """Draw *qr* (from qr_code) with its quiet zone, top-left at (x, y)."""
+    if _fw is None:
+        return
+    n, runs = qr
+    side = (n + 2 * QR_QUIET) * scale
+    rect(x, y, side, side, WHITE)
+    _brush(BLACK)
+    ox = x + QR_QUIET * scale
+    oy = y + QR_QUIET * scale
+    for i in range(0, len(runs), 3):
+        _fw.screen.draw(_fw.shapes.rectangle(
+            ox + runs[i] * scale, oy + runs[i + 1] * scale, runs[i + 2] * scale, scale))
+
+
+def header(title, subtitle="", battery=None, charging=False):
     rect(0, 0, WIDTH, HEADER_H, PANEL)
     text(fit(title, WIDTH - 8, 2), 4, 1, ACCENT, 2)
     if subtitle:
         text(fit(subtitle, WIDTH - 8, 1), 4, HEADER_H + 1, DIM, 1)
+    if battery is not None and battery >= 0:
+        x, y = WIDTH - 20, 3
+        rect(x, y, 16, 8, DIM)
+        rect(x + 16, y + 2, 1, 4, DIM)
+        rect(x + 1, y + 1, 14, 6, BLACK)
+        if charging:
+            w = (time.ticks_ms() // 20) % 14
+            rect(x + 1, y + 1, w, 6, ACCENT)
+        else:
+            w = max(1, round(14 * battery / 100))
+            rect(x + 1, y + 1, w, 6, WARN if battery <= 20 else OK)
 
 
 def footer(hint):
