@@ -29,6 +29,7 @@ Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLi
 | **Desktop** | Tauri 2 app with embedded chat, one-click MCP connect, local SQLite | Daily driver — everything stays on your machine |
 | **Cloud** | Multi-tenant AKS deployment behind Entra ID ([jobcontext.ai](https://jobcontext.ai)) | Remote MCP for Claude.ai/Cursor + in-browser agents via WebMCP (ChatGPT, Chrome/Edge), sync hub, always-on evals |
 | **Mobile** | Expo companion app with share-sheet capture | Queue + assess jobs from your phone, Career Inbox |
+| **Badge** | GitHub Universe 2025 Tufty 2350 firmware | Conference floor — search your pipeline, queue materials from your lanyard |
 
 ---
 
@@ -309,6 +310,7 @@ Everything the code reads — env vars, `config.json` keys, feature flags, per-d
 | [docs/local-cluster.md](docs/local-cluster.md) | k3d locally; k3s on a Raspberry Pi |
 | [desktop/README.md](desktop/README.md) | Desktop architecture, signing, updater, release pipeline |
 | [mobile/README.md](mobile/README.md) | Mobile companion: screens, capture, build/ship |
+| [badge/README.md](badge/README.md) | Conference badge app: install, usage, security model |
 | [CHANGELOG.md](CHANGELOG.md) | Full release history |
 
 Legal: [privacy policy](docs/files/jobcontext-privacy-policy.md) · [terms of service](docs/files/jobcontext-terms-of-service.md). Agent instruction template for Copilot: [copilot-instructions.example.md](copilot-instructions.example.md).
