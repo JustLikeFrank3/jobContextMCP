@@ -157,7 +157,15 @@ class FakeApi:
         return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
 
 
-_APP_MODULES = ("keyboard", "inputs", "screensaver", "tetris", "badgeapp")
+_APP_MODULES = (
+    "keyboard", "inputs", "screensaver", "tetris", "badgeapp",
+    # The package-qualified names too: badgeapp is a real package (see the
+    # fixture's note on spec_from_file_location), so `from . import x` caches
+    # entries as badgeapp.x. Leaving those behind leaks one test's modules —
+    # and one test's fake ui/api — into the next.
+    "badgeapp.keyboard", "badgeapp.inputs", "badgeapp.screensaver",
+    "badgeapp.tetris",
+)
 
 
 @pytest.fixture()
@@ -185,6 +193,23 @@ def badge_app(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("badgeapp", _APP / "__init__.py")
     app = importlib.util.module_from_spec(spec)
     sys.modules["badgeapp"] = app
+
+    # Inject the fakes under their PACKAGE-qualified names, before exec.
+    #
+    # spec_from_file_location on an __init__.py sets submodule_search_locations,
+    # so badgeapp is a real package and `from . import api, ui` resolves — which
+    # means the flat "api"/"ui" entries above are NOT what the app picks up.
+    # This harness used to receive its fakes only because the real api.py raised
+    # ImportError on `import network` and __init__.py fell back to the flat
+    # import: the injection was an accident of that crash. Making those imports
+    # safe (so an unconfigured badge reports on screen instead of killing the
+    # MonaOS launcher) removes the crash, and silently turned nine of these
+    # tests into tests of the real api.py against the stdlib `secrets` module.
+    # Seeding sys.modules here is the intentional version, and depends on
+    # nothing failing.
+    monkeypatch.setitem(sys.modules, "badgeapp.api", fake_api)
+    monkeypatch.setitem(sys.modules, "badgeapp.ui", fake_ui)
+
     spec.loader.exec_module(app)
     # Remembered layout/colour live at the badge's filesystem root; never let
     # a test read or write the host's.

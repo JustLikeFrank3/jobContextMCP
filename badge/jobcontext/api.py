@@ -18,9 +18,16 @@ import json
 try:
     import requests
 except ImportError:  # older MicroPython builds
-    import urequests as requests
+    try:
+        import urequests as requests
+    except ImportError:  # neither — report it, don't take the launcher down
+        requests = None
 
-import network
+try:
+    import network
+except ImportError:  # no WiFi in this build, or imported on a host
+    network = None
+
 import time
 
 try:
@@ -61,6 +68,8 @@ def connect_wifi(status=None):
     """
     if secrets is None:
         raise ApiError("no secrets.py - copy secrets.example.py and fill it in")
+    if network is None:
+        raise ApiError("firmware has no network module")
     nets = _networks()
     if not nets:
         raise ApiError("no wifi in secrets.py - add WIFI_NETWORKS")
@@ -134,6 +143,8 @@ _hold_reserve()
 
 
 def _request(method, path, body=None):
+    if requests is None:
+        raise ApiError("firmware has no requests module")
     global _reserve
     _reserve = None
     gc.collect()
