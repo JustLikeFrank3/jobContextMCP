@@ -28,6 +28,7 @@ from starlette.requests import Request as StarletteRequest
 from lib.app_dirs import resource_root
 from lib.version import __version__ as _APP_VERSION
 from transport.http.config import get_settings
+from transport.http.security_headers import SecurityHeadersMiddleware
 from transport.http.routes import badge as badge_routes
 from transport.http.routes import context as context_routes
 from transport.http.routes import health as health_routes
@@ -255,7 +256,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
         _PUBLIC_PREFIXES = (
             "/.well-known/",
             "/health",
-            "/metrics",       # aggregate counters only — no user data (scraped by ama-metrics)
+            "/metrics",       # aggregate counters only — no user data (scraped by in-cluster Prometheus)
             "/oauth/",
             "/logout",
             "/setup",
@@ -278,6 +279,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/login",
             "/why",
             "/app",              # React SPA shell + hashed assets (data APIs stay protected)
+            "/static/",          # source-controlled public CSS and architecture diagrams
             "/dashboard/login",
             "/dashboard/callback",
             "/dashboard/logout",
@@ -462,6 +464,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     # Registered first so it sits inside CORS (CORS must be outermost).
     app.add_middleware(UserDataContextMiddleware)
     app.add_middleware(MetricsMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     if settings.cors_origins:
         app.add_middleware(
@@ -564,6 +567,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     # Must be registered BEFORE the catch-all MCP mount below, or the mount
     # intercepts these paths first.
     _static = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=_static), name="public-static")
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():

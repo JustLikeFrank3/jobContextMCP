@@ -13,12 +13,13 @@ from __future__ import annotations
 import html
 import hashlib
 import os
+import re
 import secrets
 from typing import Annotated
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from transport.http.security import EntraAuthProvider, get_auth_provider
@@ -44,6 +45,62 @@ def _is_secure(request: Request) -> bool:
 
 _DASHBOARD_ROOT = "/dashboard"
 _LOGIN_PATH = "/dashboard/login"
+_LOGIN_CSRF_COOKIE = "jc_login_csrf"
+_LOGIN_CSRF_SECONDS = 600
+
+
+def _csrf_cookie_name(request: Request) -> str:
+    # __Host- requires Secure, Path=/ and no Domain: a sibling subdomain
+    # cannot inject the pre-login challenge into a TLS browser session.
+    return f"__Host-{_LOGIN_CSRF_COOKIE}" if _is_secure(request) else _LOGIN_CSRF_COOKIE
+
+
+def _validate_login_csrf(request: Request, token: str) -> None:
+    """Require the browser's pre-login challenge AND a same-origin submit.
+
+    The cookie is HttpOnly and never sufficient on its own. The hidden form
+    field proves that the submitter read the login page. Origin/Fetch Metadata
+    checks additionally prevent cookie-injection attacks, including HTTP local
+    mode where the browser cannot use a Secure __Host- cookie.
+    """
+    cookie = request.cookies.get(_csrf_cookie_name(request), "")
+    valid_token = re.fullmatch(r"[A-Za-z0-9_-]{43}", token)
+    if not valid_token or not re.fullmatch(r"[A-Za-z0-9_-]{43}", cookie) or not secrets.compare_digest(cookie, token):
+        raise HTTPException(403, "Login form expired or invalid; reload the sign-in page")
+
+    fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+    if fetch_site and fetch_site != "same-origin":
+        raise HTTPException(403, "Submit the sign-in form from this site")
+    source = request.headers.get("origin") or request.headers.get("referer")
+    if source:
+        try:
+            origin = urlsplit(source)
+            same_origin = (
+                origin.scheme == ("https" if _is_secure(request) else "http")
+                and origin.netloc.lower() == request.headers.get("host", "").lower()
+                and origin.username is None and origin.password is None
+            )
+        except ValueError:
+            same_origin = False
+        if not same_origin:
+            raise HTTPException(403, "Submit the sign-in form from this site")
+    elif fetch_site != "same-origin":
+        # This is a browser-only form, not an API-key authentication endpoint.
+        # Old clients can use Referer; clients with no provenance fail closed.
+        raise HTTPException(403, "Submit the sign-in form from this site")
+
+
+def _login_message(title: str, body: str, status_code: int = 200) -> HTMLResponse:
+    """Render trusted/escaped login messages without inline CSS."""
+    return HTMLResponse(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>{title}</title>'
+        '<link rel="stylesheet" href="/static/dashboard-login.css">'
+        f'</head><body><main class="card"><h2>{title}</h2>{body}</main></body></html>',
+        status_code=status_code,
+        headers={"Cache-Control": "no-store"},
+    )
 
 # Internal destinations a post-login redirect may land on. The React SPA lives
 # under /app, the legacy server-rendered dashboard under /dashboard, and
@@ -101,61 +158,29 @@ async def dashboard_login_page(request: Request, next: str = _DEFAULT_NEXT) -> H
     return resp
 
   if not provider.auth_enabled:
-    return HTMLResponse(
-      '<!doctype html><meta charset="utf-8"><title>Dashboard Login</title>'
-      '<body style="font-family:Inter,Arial,sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
-      '<h2>Authentication disabled</h2>'
+    return _login_message(
+      "Authentication disabled",
       '<p>API_KEY is not set. Login is not required.</p>'
-      f'<p><a href="{_DEFAULT_NEXT}" style="color:#00B5C8">Open dashboard</a></p>'
-      '</body>',
-      status_code=200,
+      f'<p><a href="{_DEFAULT_NEXT}">Open dashboard</a></p>',
     )
 
   next_url = _safe_next(next)
   safe_next_url = html.escape(next_url, quote=True)
+  csrf_token = secrets.token_urlsafe(32)
   page_html = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>jobContextMCP — Dashboard Login</title>
-  <style>
-    :root {{
-      --bg: #0b1220; --panel: #111a2b; --line: #23324d;
-      --text: #e6edf7; --muted: #9aa8bf; --accent: #00B5C8;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0; min-height: 100vh; display: grid; place-items: center;
-      background: linear-gradient(180deg, #0b1220 0%, #0a1020 100%);
-      color: var(--text);
-      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      padding: 16px;
-    }}
-    .card {{
-      width: 100%; max-width: 420px; background: var(--panel);
-      border: 1px solid var(--line); border-radius: 14px; padding: 20px;
-    }}
-    h1 {{ margin: 0 0 8px; font-size: 1.1rem; }}
-    p {{ margin: 0 0 14px; color: var(--muted); font-size: .88rem; line-height: 1.45; }}
-    label {{ display: block; margin: 0 0 8px; font-size: .82rem; color: var(--muted); }}
-    input {{
-      width: 100%; background: #0e1628; color: var(--text);
-      border: 1px solid var(--line); border-radius: 10px;
-      padding: 10px 12px; font-size: .92rem; margin: 0 0 12px;
-    }}
-    button {{
-      width: 100%; border: 0; border-radius: 10px; padding: 10px 12px;
-      background: var(--accent); color: #0b1220; font-weight: 700; cursor: pointer;
-    }}
-    .hint {{ margin-top: 12px; color: var(--muted); font-size: .78rem; }}
-  </style>
+  <link rel="stylesheet" href="/static/dashboard-login.css" />
 </head>
 <body>
   <form class="card" method="post" action="{_LOGIN_PATH}">
     <h1>Dashboard Login</h1>
     <p>Enter your API key to create a browser session on this device.</p>
     <input type="hidden" name="next" value="{safe_next_url}" />
+    <input type="hidden" name="csrf_token" value="{csrf_token}" />
     <label for="api_key">API key</label>
     <input id="api_key" name="api_key" type="password" autocomplete="current-password" required />
     <button type="submit">Sign in</button>
@@ -163,7 +188,12 @@ async def dashboard_login_page(request: Request, next: str = _DEFAULT_NEXT) -> H
   </form>
 </body>
 </html>"""
-  return HTMLResponse(page_html)
+  response = HTMLResponse(page_html, headers={"Cache-Control": "no-store"})
+  response.set_cookie(
+      _csrf_cookie_name(request), csrf_token, httponly=True, samesite="strict",
+      secure=_is_secure(request), max_age=_LOGIN_CSRF_SECONDS, path="/",
+  )
+  return response
 
 
 @router.post("/login")
@@ -171,12 +201,17 @@ async def dashboard_login_submit(
     request: Request,
   api_key: Annotated[str, Form()],
   next: Annotated[str, Form()] = _DEFAULT_NEXT,
+  csrf_token: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
     provider = get_auth_provider()
     next_url = _safe_next(next)
 
     if not provider.auth_enabled:
         return RedirectResponse(url=next_url, status_code=303)
+
+    # Entra uses its own PKCE GET/callback flow and never renders this form.
+    if not isinstance(provider, EntraAuthProvider):
+        _validate_login_csrf(request, csrf_token)
 
     login_result = provider.authenticate_login(api_key)
     if not login_result:
@@ -185,6 +220,11 @@ async def dashboard_login_submit(
     _, session_token = login_result
 
     resp = RedirectResponse(url=next_url, status_code=303)
+    resp.delete_cookie(
+        _csrf_cookie_name(request), path="/", httponly=True, samesite="strict",
+        secure=_is_secure(request),
+    )
+    resp.headers["Cache-Control"] = "no-store"
     secure_cookie = _is_secure(request)
     resp.set_cookie(
         key="jc_session",
@@ -239,11 +279,9 @@ async def dashboard_entra_callback(
     """Handle Entra PKCE callback, exchange code for token, set jc_session cookie."""
     if error:
         safe_error = html.escape(error)
-        return HTMLResponse(
-            f'<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
-            f'<h2>Login failed</h2><p>{safe_error}</p>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
-            status_code=400,
+        return _login_message(
+            "Login failed", f'<p>{safe_error}</p>'
+            f'<p><a href="{_LOGIN_PATH}">Try again</a></p>', status_code=400,
         )
 
     verifier = request.cookies.get("pkce_verifier", "")
@@ -256,12 +294,10 @@ async def dashboard_entra_callback(
     token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 
     if not client_secret:
-        return HTMLResponse(
-            '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
-            '<h2>Server auth not configured</h2>'
+        return _login_message(
+            "Server auth not configured",
             '<p>ENTRA_CLIENT_SECRET is missing in runtime configuration.</p>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
-            status_code=500,
+            f'<p><a href="{_LOGIN_PATH}">Try again</a></p>', status_code=500,
         )
 
     async with httpx.AsyncClient() as client:
@@ -277,12 +313,9 @@ async def dashboard_entra_callback(
 
     if resp.status_code != 200:
         safe_response_text = html.escape(resp.text[:400])
-        return HTMLResponse(
-            '<html><body style="font-family:sans-serif;background:#0b1220;color:#e6edf7;padding:24px">'
-            '<h2>Token exchange failed</h2>'
-            f'<pre>{safe_response_text}</pre>'
-            f'<p><a href="{_LOGIN_PATH}" style="color:#00B5C8">Try again</a></p></body></html>',
-            status_code=400,
+        return _login_message(
+            "Token exchange failed", f'<pre>{safe_response_text}</pre>'
+            f'<p><a href="{_LOGIN_PATH}">Try again</a></p>', status_code=400,
         )
 
     tokens = resp.json()

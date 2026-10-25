@@ -623,31 +623,30 @@ async def logout_post(request: Request) -> RedirectResponse:
     return resp
 
 
-@router.get("/logged-out", include_in_schema=False)
-async def logged_out(request: Request) -> HTMLResponse:
-    """Post-logout landing page with local cache clear instructions."""
-    mcp_auth_path = "~/.mcp-auth/mcp-remote-0.1.37"
-    html = f"""<!DOCTYPE html>
+_LOGGED_OUT_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Logged out — jobContextMCP</title>
   <style>
-    body {{ font-family: -apple-system, sans-serif; max-width: 560px;
-           margin: 80px auto; padding: 0 24px; color: #1a1a1a; }}
-    h1 {{ font-size: 1.4rem; margin-bottom: 8px; }}
-    p  {{ color: #555; line-height: 1.6; }}
-    code {{ background: #f4f4f4; padding: 2px 6px; border-radius: 4px;
-            font-size: .9rem; }}
-    pre  {{ background: #f4f4f4; padding: 14px; border-radius: 6px;
-            overflow-x: auto; font-size: .85rem; }}
-    .step {{ margin-top: 20px; }}
-    .home-btn {{
+    body { font-family: -apple-system, sans-serif; max-width: 560px;
+           margin: 80px auto; padding: 0 24px; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    p  { color: #555; line-height: 1.6; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px;
+            font-size: .9rem; }
+    pre  { background: #f4f4f4; padding: 14px; border-radius: 6px;
+            overflow-x: auto; font-size: .85rem; }
+    .step { margin-top: 20px; }
+    .home-btn {
       display: inline-block; margin-top: 28px;
       background: #1a1a1a; color: #fff; text-decoration: none;
       border-radius: 8px; padding: 10px 20px; font-size: .9rem;
-    }}
-    .home-btn:hover {{ background: #333; }}
+    }
+    .home-btn:hover { background: #333; }
+
+    /* Fixed presentation classes keep public pages free of inline style attributes. */
+    .step p.reauth-note { margin-top:6px; }
   </style>
 </head>
 <body>
@@ -657,14 +656,19 @@ async def logged_out(request: Request) -> HTMLResponse:
      the local token cache that Claude Desktop stores on this machine:</p>
   <div class="step">
     <strong>1. Open a terminal and run:</strong>
-    <pre>rm -rf "{mcp_auth_path}"</pre>
+    <pre>rm -rf "~/.mcp-auth/mcp-remote-0.1.37"</pre>
   </div>
   <div class="step">
     <strong>2. Quit and reopen Claude Desktop.</strong><br>
-    <p style="margin-top:6px">Claude Desktop will re-authenticate on next start
+    <p class="reauth-note">Claude Desktop will re-authenticate on next start
     and open a new browser login prompt.</p>
   </div>
   <a class="home-btn" href="/dashboard/login">Sign in again</a>
 </body>
 </html>"""
-    return HTMLResponse(content=html)
+
+
+@router.get("/logged-out", include_in_schema=False)
+async def logged_out(request: Request) -> HTMLResponse:
+    """Post-logout landing page with local cache clear instructions."""
+    return HTMLResponse(content=_LOGGED_OUT_HTML)

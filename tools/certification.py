@@ -213,7 +213,7 @@ _CLOSED_STATUSES = ("closed", "rejected", "withdrawn", "passed")
 
 def _event_id(*parts: str) -> str:
     """Stable short id for a source record (events carry no ids of their own)."""
-    return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _method_from(notes: str, default: str) -> str:
@@ -538,7 +538,7 @@ def _upsert_employer(con, values: dict) -> None:
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "created_at")
     con.execute(
-        f"INSERT INTO employer_directory ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"INSERT INTO employer_directory ({', '.join(cols)}) VALUES ({placeholders}) "  # nosec B608 # cols is the fixed tuple above; all values are bound
         f"ON CONFLICT(canonical_name) DO UPDATE SET {updates}",
         tuple(row[c] for c in cols),
     )

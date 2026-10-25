@@ -243,7 +243,6 @@ export default function Pipeline() {
           </div>
         </Panel>
       )}
-      <style>{'@keyframes jcpulse{0%{margin-left:-40%}100%{margin-left:100%}}'}</style>
 
       {shown.length === 0 ? (
         <EmptyState

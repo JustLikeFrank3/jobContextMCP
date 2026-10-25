@@ -9,34 +9,56 @@ name: SonarCloud
 #                           branches like `qa` is BLOCKED on the free plan — the
 #                           old push-to-qa scan produced a red gate you couldn't
 #                           inspect.)
-#   • push → main           Main-branch analysis (fully visible in UI + API),
-#                           so post-merge findings show up immediately.
+#   • deploy workflow call → main: same-commit SAST release gate.
 #   • workflow_dispatch     On-demand scan (pick any branch in the Actions tab)
 #                           without needing a deploy.
 #
-# Deploy (build/push/rollout) stays in deploy.yml. This workflow only measures.
+# Deploy calls this workflow before building/publishing main. QA uses the
+# secretless Bandit gate because this Sonar plan does not support QA branches.
 
 on:
+  # deploy.yml intentionally ignores mobile-only pushes; retain main analysis
+  # for that source even when no container deployment is required.
   push:
-    branches:
-      - main
+    branches: [main]
+    paths: ['mobile/**']
+  workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: true
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
+# The token is read-only; no checkout credential persists in the worktree.
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sonar:
+    # SonarCloud requires SONAR_TOKEN. Never expose it to a fork or Dependabot
+    # PR, and never use pull_request_target to run contributor-controlled code.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # Full history so SonarCloud computes new-code / blame accurately.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
 
@@ -48,7 +70,7 @@ jobs:
         run: pytest -m "not live_llm" --cov --cov-report=xml
 
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         with:
           # Upload success alone is not a passing quality gate.
           args: -Dsonar.qualitygate.wait=true
@@ -56,3 +78,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+
+      - name: Retain coverage and Sonar task reference
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sonar-measurements
+          path: |
+            coverage.xml
+            .scannerwork/report-task.txt
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
