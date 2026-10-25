@@ -117,7 +117,7 @@ class ButtonInput(TextInput):
 
     def __init__(self):
         self.kb = OnScreenKeyboard()
-        self._edges = _Edges(("UP", "DOWN", "A", "B", "C"), repeat=("UP", "DOWN"))
+        self._edges = _Edges(("UP", "DOWN", "A", "B", "C", "HOME"), repeat=("UP", "DOWN"))
 
     def available(self):
         return True
@@ -147,8 +147,12 @@ class ButtonInput(TextInput):
 class BleKeyboardInput(TextInput):
     """A paired Bluetooth keyboard. Not implemented — see the module docstring.
 
-    Probed on hardware 2026-10-02: the stock firmware has no gap_pair, so
-    bonding is not compiled in and this cannot work without a custom build.
+    Probed on hardware 2026-10-02 and again 2026-10-25: the stock firmware
+    has no gap_pair, so bonding is not compiled in and this cannot work
+    without a custom build. A working reference exists (p4_ble_keyboard.py
+    in the moybyte project) but targets ESP32-P4 on NimBLE; this badge is
+    RP2350 on BTstack, so the protocol logic ports and the stack layer does
+    not.
 
     Kept as a real class rather than a TODO comment so the wiring is already
     in place: implement available()/poll() here and the app picks it up with

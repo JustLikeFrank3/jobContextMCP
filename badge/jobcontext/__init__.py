@@ -16,6 +16,7 @@ things here (search, enqueue, poll) draw a frame *before* they call out and
 poll on an interval rather than every pass.
 """
 
+import gc
 import json
 import time
 
@@ -67,7 +68,7 @@ source = None
 _online = False
 _last_poll = 0
 _prev_buttons = {}
-_BUTTONS = ("UP", "DOWN", "A", "B", "C")
+_BUTTONS = ("UP", "DOWN", "A", "B", "C", "HOME")
 _last_input = 0
 saving = False  # the contact-card screen saver is up
 saver_ok = True  # cleared if the saver ever fails; the app carries on
@@ -84,6 +85,13 @@ _notice_since = 0
 _any_prev = False
 _bg_failures = 0
 _BG_FAILURES_TO_SAY = 4   # ~1 minute of failed checks before saying so
+
+# Battery: sampled on an interval so the ADC read (10 samples each) doesn't
+# stall the frame loop. The launcher menu draws the same indicator.
+_BATT_POLL_MS = 30000
+_battery_level = -1  # -1 = unknown / not sampled yet
+_battery_charging = False
+_battery_last_poll = 0
 
 
 def init():
@@ -120,12 +128,27 @@ def _connect():
 
 
 def on_exit():
-    pass
+    """Clean up before the launcher reclaims the screen.
+
+    The 40KB TLS reserve in api.py is held for the app's whole life; giving
+    it back here means the next app that needs a contiguous block (a big
+    image, another TLS session) can have it. The saver holds a Tetris game
+    and a rendered QR; dropping those references lets gc reclaim them.
+    """
+    global saving
+    saving = False
+    screensaver.unload()
+    api.release_reserve()
+    gc.collect()
 
 
 # ── frame ──────────────────────────────────────────────────────────────────────
 
 def update():
+    if _home_pressed():
+        _go(SEARCH)
+        return
+    _poll_battery()
     if _notice_input():
         return
     _background_poll()
@@ -254,6 +277,27 @@ def _notify(ok, text):
     notices.append((ok, text))
 
 
+def _poll_battery():
+    """Sample battery level on an interval; cheap enough to skip most frames."""
+    global _battery_level, _battery_charging, _battery_last_poll
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _battery_last_poll) < _BATT_POLL_MS:
+        return
+    _battery_last_poll = now
+    try:
+        _battery_level = ui.battery_level()
+        _battery_charging = ui.battery_charging()
+    except Exception:  # noqa: BLE001 — no battery ADC on this firmware
+        _battery_level = -1
+
+
+def _home_pressed():
+    """True when the Home button fired this frame. Home is the exit gesture:
+    the launcher watches for it, but if it doesn't act, we treat it as a
+    request to leave the app gracefully."""
+    return _edge("HOME")
+
+
 def _background_poll():
     """Check one walked-away job every _BG_POLL_MS, from any screen.
 
@@ -348,7 +392,7 @@ def _update_search():
             return
 
     ui.clear()
-    ui.header("jobcontext", "who are you talking to?")
+    ui.header("jobcontext", "who are you talking to?", _battery_level, _battery_charging)
     source.draw(query)
     ui.footer("U/D pick  A type  B del  C search")
 
@@ -415,7 +459,7 @@ def _update_results():
         return
 
     ui.clear()
-    ui.header("results", str(len(results)) + " for " + query.strip())
+    ui.header("results", str(len(results)) + " for " + query.strip(), _battery_level, _battery_charging)
     # Three rows fit between header and footer; scroll so the selection is
     # always on screen with one row of context above it where possible.
     first = max(0, min(selected - 1, len(results) - _ROWS))
@@ -471,7 +515,7 @@ def _update_jobs():
         return
 
     ui.clear()
-    ui.header("open roles", str(len(jobs)) + " for " + query.strip())
+    ui.header("open roles", str(len(jobs)) + " for " + query.strip(), _battery_level, _battery_charging)
     first = max(0, min(job_selected - 1, len(jobs) - _ROWS))
     y = 30
     for i in range(first, min(first + _ROWS, len(jobs))):
@@ -507,7 +551,7 @@ def _update_actions():
 
     hit = results[selected]
     ui.clear()
-    ui.header(hit.get("company", ""), hit.get("role", ""))
+    ui.header(hit.get("company", ""), hit.get("role", ""), _battery_level, _battery_charging)
     y = 32
     for i, (_key, label) in enumerate(MATERIALS):
         chosen = i == action_index
@@ -569,7 +613,7 @@ def _update_style():
 
     rows = _style_rows()
     ui.clear()
-    ui.header(MATERIALS[action_index][1], results[selected].get("company", ""))
+    ui.header(MATERIALS[action_index][1], results[selected].get("company", ""), _battery_level, _battery_charging)
     labels = {
         "layout": "Layout: " + LAYOUTS[layout_index][1],
         "colour": "Colour: " + COLOURS[colour_index],
@@ -633,7 +677,7 @@ def _update_working():
             return
 
     ui.clear()
-    ui.header("working", "job #" + str(work_id))
+    ui.header("working", "job #" + str(work_id), _battery_level, _battery_charging)
     # A spinner, because a static screen during a 30s LLM call reads as a crash.
     dots = "." * (1 + (time.ticks_ms() // 400) % 3)
     ui.text("generating" + dots, 6, 38, ui.WHITE, 3)
@@ -650,11 +694,11 @@ def _update_terminal():
 
     ui.clear()
     if state == DONE:
-        ui.header("done", "")
+        ui.header("done", "", _battery_level, _battery_charging)
         ui.text("ready", 6, 22, ui.OK, 3)
         _draw_lines(message, 46, ui.WHITE)
     else:
-        ui.header("problem", "")
+        ui.header("problem", "", _battery_level, _battery_charging)
         _draw_lines(message, 24, ui.WARN)
 
     # Not connected (startup failed, or a request lost the network): A has to
@@ -679,7 +723,7 @@ def _update_terminal():
 
 def _draw_splash(text):
     ui.clear()
-    ui.header("jobcontext", "")
+    ui.header("jobcontext", "", _battery_level, _battery_charging)
     _draw_lines(text, 50, ui.DIM, 2)
     ui.present()
 
@@ -687,7 +731,7 @@ def _draw_splash(text):
 def _draw_status(text):
     """Draw before a blocking call so the pause looks intentional."""
     ui.clear()
-    ui.header("jobcontext", "")
+    ui.header("jobcontext", "", _battery_level, _battery_charging)
     _draw_lines(text, 50, ui.WHITE, 2)
     ui.present()
 

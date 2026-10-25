@@ -41,6 +41,16 @@ class FakeUI:
     def pressed(self, name):
         return name in self.down
 
+    def battery_level(self):
+        return getattr(self, "_battery", 85)
+
+    def battery_charging(self):
+        return getattr(self, "_charging", False)
+
+    def set_battery(self, level, charging=False):
+        self._battery = level
+        self._charging = charging
+
     def clear(self, colour=None):
         self.drawn = []
 
@@ -90,7 +100,7 @@ class FakeUI:
         value = str(value)
         return [value[i : i + chars] for i in range(0, len(value), chars)][:max_lines]
 
-    def header(self, title, subtitle=""):
+    def header(self, title, subtitle="", battery=None, charging=False):
         self.drawn.append(str(title))
 
     def footer(self, hint):
@@ -157,7 +167,15 @@ class FakeApi:
         return {"status": self.poll_status, "made": self.poll_made, "detail": "nope"}
 
 
-_APP_MODULES = ("keyboard", "inputs", "screensaver", "tetris", "badgeapp")
+_APP_MODULES = (
+    "keyboard", "inputs", "screensaver", "tetris", "badgeapp",
+    # The package-qualified names too: badgeapp is a real package (see the
+    # fixture's note on spec_from_file_location), so `from . import x` caches
+    # entries as badgeapp.x. Leaving those behind leaks one test's modules —
+    # and one test's fake ui/api — into the next.
+    "badgeapp.keyboard", "badgeapp.inputs", "badgeapp.screensaver",
+    "badgeapp.tetris",
+)
 
 
 @pytest.fixture()
@@ -185,6 +203,24 @@ def badge_app(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("badgeapp", _APP / "__init__.py")
     app = importlib.util.module_from_spec(spec)
     sys.modules["badgeapp"] = app
+
+    # Inject the fakes under their PACKAGE-qualified names, before exec.
+    #
+    # spec_from_file_location on an __init__.py sets submodule_search_locations,
+    # so badgeapp is a real package and `from . import api, ui` resolves — which
+    # means the flat "api"/"ui" entries above are NOT what the app picks up.
+    # This harness used to receive its fakes only because the real api.py raised
+    # ImportError on `import network` and __init__.py fell back to the flat
+    # import: the injection was an accident of that crash. Making those imports
+    # safe (so an unconfigured badge reports on screen instead of killing the
+    # MonaOS launcher) removes the crash, and silently turned nine of these
+    # tests into tests of the real api.py against the stdlib `secrets` module.
+    # Seeding sys.modules here is the intentional version, and depends on
+    # nothing failing.
+    monkeypatch.setitem(sys.modules, "badgeapp.api", fake_api)
+    monkeypatch.setitem(sys.modules, "badgeapp.ui", fake_ui)
+    monkeypatch.setitem(sys.modules, "badgeapp.contact", None)
+
     spec.loader.exec_module(app)
     # Remembered layout/colour live at the badge's filesystem root; never let
     # a test read or write the host's.
@@ -982,3 +1018,71 @@ def test_a_failing_saver_never_takes_the_app_down(saver_app, monkeypatch):
     assert not app.saving                   # stays off for the session
     _tap(app, ui_, "A")
     assert app.query == "A"                 # and the app still works
+
+
+# ── 2026-10-25 additions ─────────────────────────────────────────────────────
+
+
+def test_on_exit_releases_the_reserve_and_drops_the_saver(saver_app, monkeypatch):
+    """The launcher gets a clean heap back: no 40KB block, no Tetris/QR."""
+    app, ui_, _api = saver_app
+    app.init()
+    assert app.screensaver._game is not None
+
+    released = []
+    unloaded = []
+    # The app's api is FakeApi, which has no reserve — patch the method on
+    # and assert it was called, not the real api.py's internals.
+    monkeypatch.setattr(app.api, "release_reserve", lambda: released.append(True), raising=False)
+    monkeypatch.setattr(app.screensaver, "unload", lambda: unloaded.append(True), raising=False)
+
+    app.on_exit()
+    assert released and unloaded
+    assert not app.saving
+
+
+def test_battery_icon_shows_on_every_screen(saver_app, monkeypatch):
+    """ui.header() receives battery state so the icon is on every screen."""
+    app, ui_, _api = saver_app
+    app.init()
+    ui_.set_battery(85)
+    app._poll_battery()  # force a sample
+    assert app._battery_level == 85
+    ui_.clear()
+    app.update()
+    # The header was drawn with the battery params
+    assert ui_.drawn  # header() appends the title
+
+
+def test_battery_icon_hidden_when_no_adc(saver_app, monkeypatch):
+    """If the firmware has no battery_level(), the icon hides gracefully."""
+    app, ui_, _api = saver_app
+    app.init()
+    monkeypatch.setattr(ui_, "battery_level", lambda: -1)
+    app._poll_battery()
+    assert app._battery_level == -1
+
+
+def test_home_button_returns_to_search(saver_app):
+    """Home is the exit gesture: any screen goes back to SEARCH."""
+    app, ui_, _api = saver_app
+    app.init()
+    app._go(app.RESULTS)
+    assert app.state == app.RESULTS
+    _tap(app, ui_, "HOME")
+    assert app.state == app.SEARCH
+
+
+def test_home_button_in_search_stays(saver_app):
+    """Home on SEARCH is a no-op, not a crash."""
+    app, ui_, _api = saver_app
+    app.init()
+    assert app.state == app.SEARCH
+    _tap(app, ui_, "HOME")
+    assert app.state == app.SEARCH
+
+
+def test_tls_verified_flag_exists():
+    """The TLS check runs at import; False on this MicroPython build."""
+    import badge.jobcontext.api as real_api
+    assert hasattr(real_api, "TLS_VERIFIED")

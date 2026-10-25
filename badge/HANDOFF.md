@@ -185,4 +185,103 @@ to fix that; don't bypass it with a bare `state = ...` assignment.
 
 - Not yet run end-to-end against a deployed server (the badge routes were
   never deployed; first attempt 404'd at `/api/badge/ping`).
-- Badge HTTPS is unverified (see §2).
+- Badge HTTPS is unverified (see §2). The 2026-10-25 pass added a
+  `TLS_VERIFIED` constant to `api.py` and a note in `secrets.example.py`;
+  the fix needs a MicroPython build with `ssl.CERT_REQUIRED`.
+
+---
+
+## 7. 2026-10-25 fixes (post-hardware-death)
+
+The badge died of memory exhaustion 2026-10-23. PR #396 (already in qa) is
+the fix: 66 KB → 104 KB free after init, measured on hardware. The badge
+itself is currently unbootable (bootrom works, firmware doesn't execute —
+likely the 12 MHz crystal); a replacement is expected for the 2026
+conference.
+
+Changes in this pass:
+
+- **`on_exit` cleanup** — drops the saver's Tetris game + QR and releases
+  api.py's 40KB TLS reserve, then `gc.collect()`. The next app gets a clean
+  heap.
+- **Home button exit** — `HOME` added to `_BUTTONS` and `ButtonInput`'s
+  edge detection. `update()` checks `_home_pressed()` first and `_go(SEARCH)`
+  on any screen. Whether the launcher intercepts Home first is untested on
+  the new hardware.
+- **Battery indicator** — `ui.header()` takes `battery` and `charging`
+  params; every screen shows a 16×8 icon top-right. Sampled every 30s so the
+  ADC read (10 samples) doesn't stall the frame loop.
+- **BLE keyboard** — docstring updated with the 2026-10-25 probe: still no
+  `gap_pair` in the firmware. The `p4_ble_keyboard.py` reference targets
+  ESP32-P4/NimBLE, not RP2350/BTstack.
+- **TLS verification** — `api.py` now checks `ssl.CERT_REQUIRED` at import
+  and sets `TLS_VERIFIED`. `False` on the current build; the badge-scoped
+  token remains the mitigation.
+
+### Traps — things an edit will plausibly break
+
+**1. `_go()` is not decoration.** Every state change must go through it,
+never a bare `state = ...`. The on-screen keyboard and `_edge()` track
+button edges separately, so without re-arming, the `C` press that submits a
+search is still held when the results screen reads it and bounces straight
+back. There is a regression test.
+
+**2. The test fixture injects fakes under package-qualified names.**
+`spec_from_file_location` on an `__init__.py` makes `badgeapp` a real
+package, so `from . import api` resolves and the flat `sys.modules["api"]`
+entry is *not* what the app picks up. The fixture seeds `badgeapp.api` /
+`badgeapp.ui` before `exec_module`. Do not "simplify" that back to the flat
+names — nine tests would silently start exercising the real `api.py` against
+the stdlib `secrets` module and still pass.
+
+**3. `.py` shadows `.mpy`.** MicroPython imports `name.py` before `name.mpy`,
+so `install.py` deletes stale `.py` modules. Leaving one behind silently
+reverts that module to the slow, memory-hungry path.
+
+**4. mpy-cross must emit mpy v6.3** (MicroPython 1.26). `install.py` checks
+before touching the badge; do not loosen that check.
+
+**5. The 40 KB reserve in `api.py` is load-bearing.** Tetris fragments the
+heap with small long-lived objects, so TLS handshakes failed with `ENOMEM`
+despite >100 KB free. The reserve is grabbed at import while the heap is
+clean and released immediately before each request. Removing it breaks
+background polling only when the screen saver is running — which no test
+will catch. `on_exit` releases it; it is re-taken on the next request.
+
+**6. `badge_materials` is an async orchestrator, not a generator.** It calls
+the `@tracked` generators from the dispatcher so the badge gets one id to
+poll. Do not collapse it into a direct call; see `HANDOFF.md`.
+
+**7. Battery indicator is drawn in `ui.header()`, not by the app.** Every
+`ui.header()` call passes `_battery_level` and `_battery_charging`. Adding a
+new screen means passing them too — or the icon vanishes on that screen.
+
+**8. Home button is in `_BUTTONS` and `ButtonInput._edges`.** Removing it
+from either means the exit gesture stops working. `_home_pressed()` calls
+`_edge("HOME")`, which needs `_prev_buttons["HOME"]` to exist.
+
+### The one unmerged commit
+
+`be9a2ec` makes `api.py`'s `network` and `requests` imports safe. MonaOS
+imports an app's module to launch it, so an `ImportError` at module scope
+takes down the *launcher*, not the app — a blank screen indistinguishable
+from dead hardware. The `secrets` case was already handled; these were the
+last two holes. It has no PR yet.
+
+### Known gaps (2026-10-25)
+
+- **BLE keyboard** — scaffolded in `inputs.py`, not implemented. The gate is
+  whether `bluetooth.BLE()` exposes `gap_pair`; without pairing/bonding
+  compiled in, no keyboard will send reports. `badge/probe.py` answers it.
+  A working reference exists (`p4_ble_keyboard.py` in the moybyte project)
+  but targets ESP32-P4 on NimBLE; this badge is RP2350 on BTstack, so the
+  protocol logic ports and the stack layer does not.
+- **TLS verification** — check whether `ssl` exposes `CERT_REQUIRED` on this
+  firmware. If not, badge HTTPS is unverified and the token is liftable on
+  hostile WiFi. Badge-scoped, so bounded, but revoke it after an event.
+- **Battery indicator** — untested on the replacement badge. The ADC read
+  assumes `badge.battery_level()` exists; if the firmware build differs,
+  `_poll_battery()` catches `AttributeError` and hides the icon.
+- **Home button exit** — untested. If the launcher intercepts Home first,
+  `_home_pressed()` never fires. If it doesn't, the app exits to SEARCH and
+  the launcher takes over from there.

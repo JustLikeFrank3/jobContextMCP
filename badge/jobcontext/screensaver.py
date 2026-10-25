@@ -74,6 +74,18 @@ def enabled():
     return contact is not None
 
 
+def unload():
+    """Drop the game and QR so gc can reclaim them — called from on_exit.
+
+    The saver's ~2KB of QR runs and the Tetris game's small objects are
+    exactly what fragments the heap over a long session. Dropping the
+    references lets the next app (or the launcher's menu) allocate cleanly.
+    """
+    global _game, _qr
+    _game = None
+    _qr = None
+
+
 def idle_ms():
     try:
         seconds = int(getattr(contact, "IDLE_SECONDS", 30))
