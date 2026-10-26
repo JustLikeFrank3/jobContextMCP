@@ -39,9 +39,11 @@ function NavIcon({ name }) {
 
 function NavItem({ item, active, onSelect }) {
   return (
-    <div
+    <button type="button"
       onClick={() => onSelect(item.key)}
+      aria-current={active ? 'page' : undefined}
       style={{
+        border: 0, fontFamily: 'inherit', lineHeight: 'inherit', textAlign: 'left', width: '100%',
         position: 'relative', display: 'flex', alignItems: 'center', gap: 11,
         padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
         fontSize: '13.5px', fontWeight: 'var(--fw-medium)',
@@ -50,10 +52,10 @@ function NavItem({ item, active, onSelect }) {
         boxShadow: active ? 'inset 0 0 0 1px rgba(0,181,200,.22), 0 0 18px rgba(0,181,200,.1)' : 'none',
       }}
     >
-      <div style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, borderRadius: 3, background: active ? 'var(--cyan-500)' : 'transparent' }} />
+      <span style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, borderRadius: 3, background: active ? 'var(--cyan-500)' : 'transparent' }} />
       <NavIcon name={item.key} />
       {item.label}
-    </div>
+    </button>
   )
 }
 
@@ -115,9 +117,9 @@ export default function Sidebar({ primary, secondary, active, onSelect, isDeskto
           {card.detail}
         </div>
         {!isDesktop && (
-          <div onClick={onSignOut} style={{ marginTop: 8, fontSize: 11.5, fontWeight: 'var(--fw-semibold)', color: 'var(--cyan-300)', cursor: 'pointer' }}>
+          <button type="button" onClick={onSignOut} style={{ border: 0, padding: 0, background: 'none', fontFamily: 'inherit', lineHeight: 'inherit', marginTop: 8, fontSize: 11.5, fontWeight: 'var(--fw-semibold)', color: 'var(--cyan-300)', cursor: 'pointer' }}>
             Sign out
-          </div>
+          </button>
         )}
       </div>
     </div>

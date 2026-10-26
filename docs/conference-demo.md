@@ -2,42 +2,27 @@
 
 ## Release status — October 26, 2026
 
-The fallback is implemented on `feat/conference-demo`, based on `qa`.
-It is **not deployed yet**. Publication was subsequently authorized for handoff
-to Dot; no QA merge or production promotion has been attempted here. Recheck
-the live environment and other pending branches before completing the release.
+The fallback is published in PR #401 on `feat/conference-demo`. This update
+integrates the repaired QA base `4d05044d06856fa09238392a632f298dbba0c487`
+without removing its security or keyboard regression coverage. The security
+repair is already deployed; the fallback itself requires its own exact-head
+CI, QA rollout and production promotion. Check the current PR/deployment
+results rather than assuming a merge is a successful deployment.
 
-Existing release evidence:
+The latest reported provider-backed QA resume check (work **#705**, company
+**Conference Demo QA 2026-10-26**, role **Platform Engineer — synthetic test**)
+returned `401 PermissionDenied: Principal does not have access to API/Operation`
+and a context package rather than a resume. That was a connector check, not
+an authenticated browser or badge-route end-to-end rehearsal. No successful
+provider-backed recheck is claimed. A cover-letter test using private master
+resume data was not authorized and remains unexecuted.
 
-- QA commit `b3acd98a3e8fdcb8dba7f1d8ebd244229a2e653e` passed tests, Bandit,
-  disposable-app ZAP, image build and AKS rollout:
-  https://github.com/JustLikeFrank3/jobContextMCP/actions/runs/40244728898
-- Main release `21a418c404cd753569fe6675bfee443ee3b0bc9e` (PR #398) passed
-  tests, Bandit and ZAP, but failed Sonar's quality gate. Its production build
-  and deployment were skipped:
-  https://github.com/JustLikeFrank3/jobContextMCP/actions/runs/40246040884
-- Both environments answered `/health` and `/ready` with HTTP 200. Anonymous
-  `/api/badge/ping` and `/api/dashboard/me` returned HTTP 401. This proves
-  availability and authentication refusal, **not authenticated route
-  functionality or a successful production release**.
-- QA's connected workspace check confirmed the master resume and server-level
-  Foundry generation configuration. The browser requires Microsoft sign-in;
-  an authenticated browser rehearsal is still required.
-- A real QA resume submission (work **#705**, company
-  **Conference Demo QA 2026-10-26**, role **Platform Engineer — synthetic test**)
-  reached the provider but returned `401 PermissionDenied: Principal does not
-  have access to API/Operation.` It returned a context package rather than a
-  generated resume. **QA generation is currently blocked by provider
-  authorization.** This was a connector generation check, not a browser or
-  badge-route end-to-end test. A cover-letter submission was separately
-  blocked by automatic approval review over private master-resume use and was
-  not executed. The synthetic QA application record remains clearly labeled.
-- Local validation passed: **104 frontend tests**, Vite production build,
-  targeted ESLint, and **132 backend/security/badge tests**. Browser smoke
-  coverage was added to CI; check the published PR for its current result.
-
-Do not merge to main or claim the fallback is conference-ready until the
-QA rehearsal below passes. Keep the production quality gates enabled.
+Automated browser/backend tests use only disposable synthetic data and an
+offline executor. They verify authentication boundaries, queued-work UI,
+recovery, and layouts, but do **not** prove live provider authorization or
+that real resume/cover-letter files were generated and downloaded. Do not
+claim the live generation demo is conference-ready until an authorized QA
+rehearsal passes. Never weaken production quality gates to release this UI.
 
 ## Why a small additional screen was needed
 
@@ -159,8 +144,8 @@ permissions or expose an anonymous demo mode.
    these boundaries; do not disable auth for a live rehearsal.
 6. Verify the screen at a phone width (390px) and laptop width (1440px),
    including navigation, touch targets and Materials access.
-7. Only after this passes, open a `qa → main` promotion PR. Resolve the
-   existing Sonar failure without bypassing the gate. Verify production's
+7. Only after this passes, open a `qa → main` promotion PR. Keep the
+   already-repaired Sonar and security gates enabled. Verify production's
    exact SHA deployment, then repeat the bounded authenticated smoke there.
 
 Local regression commands:

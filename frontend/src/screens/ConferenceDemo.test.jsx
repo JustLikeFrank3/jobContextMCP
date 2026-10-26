@@ -164,3 +164,57 @@ test('double click sends a single generation request', async () => {
   await act(async () => { button('Generate documents').click(); button('Generate documents').click() })
   expect(request.mock.calls.filter(([path]) => path === '/api/badge/materials')).toHaveLength(1)
 })
+
+function deferred() {
+  let resolve
+  const promise = new Promise(done => { resolve = done })
+  return { promise, resolve }
+}
+
+test('a late URL recovery cannot replace a newer selected generation', async () => {
+  const recovery = deferred()
+  const newer = { ...run, id: 32 }
+  const impl = request.getMockImplementation()
+  window.history.replaceState({ idx: 2, key: 'retained' }, '', '/app/conference-demo?work=31')
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work/31') return recovery.promise
+    if (path === '/api/work?limit=50') return { items: [newer] }
+    return impl(path, body)
+  })
+  await render()
+  await click('View status #32')
+  await act(async () => recovery.resolve(run))
+  expect(host.textContent).toContain('Generation #32')
+  expect(host.textContent).not.toContain('Generation #31')
+  expect(window.location.search).toBe('?work=32')
+  expect(window.history.state).toEqual({ idx: 2, key: 'retained' })
+})
+
+test('a generation response after leaving cannot rewrite the new page URL', async () => {
+  const submission = deferred()
+  const impl = request.getMockImplementation()
+  request.mockImplementation((path, body) => path === '/api/badge/materials' ? submission.promise : impl(path, body))
+  await render(); await search(); await click('Select')
+  await click('Generate documents')
+  await act(async () => root.render(<div>Materials screen</div>))
+  window.history.replaceState({ idx: 3 }, '', '/app/materials')
+  await act(async () => submission.resolve({ work_id: 31 }))
+  expect(window.location.pathname + window.location.search).toBe('/app/materials')
+  expect(window.history.state).toEqual({ idx: 3 })
+  expect(request.mock.calls.filter(([path]) => path === '/api/badge/materials')).toHaveLength(1)
+})
+
+test('late initial history cannot overwrite a newer recovery list', async () => {
+  const initialHistory = deferred()
+  const impl = request.getMockImplementation()
+  let historyCalls = 0
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work?limit=50') return ++historyCalls === 1 ? initialHistory.promise : { items: [run] }
+    return impl(path, body)
+  })
+  await render()
+  await click('Refresh recent generations')
+  await act(async () => initialHistory.resolve({ items: [] }))
+  expect(button('View status #31')).toBeDefined()
+  expect(host.textContent).not.toContain('No badge or conference generations')
+})

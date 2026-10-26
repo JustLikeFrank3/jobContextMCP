@@ -89,16 +89,14 @@ def _selftest(app_dir: Path) -> int:
     """
     import tempfile
 
-    failures = 0
-
-    def check(name: str, fn) -> None:
-        nonlocal failures
+    def check(name: str, fn) -> int:
         try:
             detail = fn()
             print(f"PASS {name}{f' ({detail})' if detail else ''}", flush=True)
         except Exception as exc:  # noqa: BLE001 — report every failure, keep going
-            failures += 1
             print(f"FAIL {name}: {exc!r}", flush=True)
+            return 1
+        return 0
 
     def _config() -> str:
         import lib.config as cfg
@@ -135,11 +133,15 @@ def _selftest(app_dir: Path) -> int:
         assert size > 500, f"suspicious PDF size {size}"
         return f"{size} bytes"
 
-    check("config", _config)
-    check("sqlite", _sqlite)
-    check("tools", _tools)
-    check("templates", _templates)
-    check("pdf", _pdf)
+    # Aggregate explicit results rather than mutating a counter in a closure.
+    # Every check still runs, so one failure cannot hide another packaging issue.
+    failures = sum(check(name, fn) for name, fn in (
+        ("config", _config),
+        ("sqlite", _sqlite),
+        ("tools", _tools),
+        ("templates", _templates),
+        ("pdf", _pdf),
+    ))
 
     print(f"SELFTEST {'PASS' if failures == 0 else f'FAIL ({failures})'}", flush=True)
     return 0 if failures == 0 else 1

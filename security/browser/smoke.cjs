@@ -204,6 +204,35 @@ async function preview(page, name, kind, origin) {
   assertNoBrowserErrors();
   await page.screenshot({ path: path.join(reports, 'materials.png'), fullPage: true });
 
+  // Native button activation must work in a real browser, not only synthetic
+  // jsdom click events. Exercise Enter and Space, including cancel/re-entry,
+  // without importing any posts or contacting an external service.
+  async function activate(name, key) {
+    const control = page.getByRole('button', { name, exact: true });
+    await control.focus();
+    assert.equal(await control.evaluate(el => el === document.activeElement), true);
+    await control.press(key);
+  }
+  await activate('Posts', 'Enter');
+  for (const key of ['Enter', 'Space']) {
+    await activate('↧ Import from LinkedIn', key);
+    const fileInput = page.getByLabel('Choose CSV file', { exact: true });
+    assert.equal(await fileInput.getAttribute('type'), 'file');
+    await fileInput.focus();
+    assert.equal(await fileInput.evaluate(el => el === document.activeElement), true);
+    assert.equal(await fileInput.evaluate(el => getComputedStyle(el.closest('label')).outlineStyle), 'solid');
+    await activate('Use sample Shares.csv', key === 'Enter' ? 'Space' : 'Enter');
+    await page.getByText('Map & preview', { exact: true }).waitFor();
+    await activate('Cancel', key);
+    await page.getByRole('button', { name: '↧ Import from LinkedIn', exact: true }).waitFor();
+  }
+  await page.screenshot({ path: path.join(reports, 'posts-keyboard.png'), fullPage: true });
+  await activate('Materials', 'Enter');
+  await page.getByTitle('Preview security-preview.md', { exact: true }).waitFor();
+  assert.equal(results.externalPageRequests.length, externalBeforeApp, 'Keyboard flows must remain same-origin');
+  assertNoBrowserErrors();
+  pass('Native sidebar/import controls respond to Enter/Space; sample preview cancels and reopens without side effects');
+
   // The real built dashboard at phone and laptop widths; real authenticated
   // routes and queued work, with only the fixture executor replacing the LLM.
   await page.goto(`${origin}/app/conference-demo`);

@@ -21,11 +21,26 @@ export default function ConferenceDemo() {
   const [current, setCurrent] = useState(null)
   const [pollError, setPollError] = useState('')
   const [pollAttempt, setPollAttempt] = useState(0)
+  const mounted = useRef(false)
+  const trackingVersion = useRef(0)
+  const recentVersion = useRef(0)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      trackingVersion.current += 1
+      recentVersion.current += 1
+    }
+  }, [])
 
   const refreshRecent = useCallback(async () => {
+    const version = ++recentVersion.current
     const rows = recentGenerations(await request('/api/work?limit=50'))
-    setRecent(rows)
-    setHistoryLoaded(true)
+    if (mounted.current && version === recentVersion.current) {
+      setRecent(rows)
+      setHistoryLoaded(true)
+    }
     return rows
   }, [])
 
@@ -45,17 +60,26 @@ export default function ConferenceDemo() {
   useEffect(() => {
     const id = Number(new URLSearchParams(window.location.search).get('work'))
     if (!Number.isSafeInteger(id) || id <= 0) return
+    const version = trackingVersion.current
+    let stopped = false
     request(`/api/work/${id}`).then(item => {
-      if (item.kind === 'badge_materials') setCurrent({ ...item, made: madeFrom(item) })
-    }).catch(e => setError(errorText(e)))
+      if (!stopped && version === trackingVersion.current && item.kind === 'badge_materials') {
+        setCurrent({ ...item, made: madeFrom(item) })
+      }
+    }).catch(e => {
+      if (!stopped && version === trackingVersion.current) setError(errorText(e))
+    })
+    return () => { stopped = true }
   }, [])
 
   function track(item) {
+    if (!mounted.current) return
+    trackingVersion.current += 1
     setPollError('')
     setCurrent({ ...item, made: madeFrom(item) })
     const url = new URL(window.location.href)
     url.searchParams.set('work', item.id)
-    window.history.replaceState(null, '', url)
+    window.history.replaceState(window.history.state, '', url)
     setPollAttempt(n => n + 1)
   }
 
@@ -81,7 +105,8 @@ export default function ConferenceDemo() {
         // Pause on errors; an explicit check retries only the GET.
       }
     }
-    poll()
+    // poll catches request failures and records them; effects cannot await.
+    void poll()
     return () => { stopped = true; clearTimeout(timer) }
   }, [workId, workStatus, online, pollAttempt, refreshRecent])
 
@@ -90,43 +115,48 @@ export default function ConferenceDemo() {
     locked.current = true
     setBusy(true)
     setError('')
-    try { await fn() } catch (e) { setError(errorText(e)) }
-    finally { locked.current = false; setBusy(false) }
+    try { await fn() } catch (e) { if (mounted.current) setError(errorText(e)) }
+    finally {
+      locked.current = false
+      if (mounted.current) setBusy(false)
+    }
   }
 
-  function search(event) {
+  async function search(event) {
     event.preventDefault()
-    action(async () => {
+    await action(async () => {
       setSelected(null)
       setResults(null)
       const endpoint = source === 'pipeline' ? 'search' : 'jobs'
       const data = await request(`/api/badge/${endpoint}?q=${encodeURIComponent(query.trim())}&limit=12`)
-      setResults({ ...data, source })
+      if (mounted.current) setResults({ ...data, source })
     })
   }
 
-  function choose(job) {
-    action(async () => {
+  async function choose(job) {
+    await action(async () => {
       setSelected(null)
       const chosen = results.source === 'pipeline' ? job : await request('/api/badge/jobs/queue', {
         search_id: results.search_id, number: job.number,
       })
-      setSelected(chosen)
+      if (mounted.current) setSelected(chosen)
     })
   }
 
   const active = recent.some(item => !terminal(item.status)) || (current && !terminal(current.status))
 
-  function generate() {
+  async function generate() {
     if (!selected || active || uncertain || !historyLoaded) return
-    action(async () => {
+    await action(async () => {
       try {
         const inputs = { job_id: selected.job_id, material }
         const out = await request('/api/badge/materials', inputs)
+        if (!mounted.current) return
         if (!Number.isSafeInteger(out?.work_id) || out.work_id <= 0) throw new Error('Missing work id')
         track({ id: out.work_id, inputs, status: 'queued', artifacts: {} })
         refreshRecent().catch(() => {})
       } catch (e) {
+        if (!mounted.current) return
         // A missing response / 5xx does not prove the server rejected the POST.
         if (![401, 403, 410, 422, 429].includes(e?.status)) {
           setUncertain(true)
