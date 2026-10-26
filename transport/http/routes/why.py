@@ -10,8 +10,8 @@ WHY_HTML: str = r'''<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>jobContext &mdash; Why use it</title>
+<link rel="stylesheet" href="/fonts/fonts.css" />
 <style id="ds-tokens">
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
    jobContext — Color tokens
    Redesign palette. Anchored on the brand sheet: deep navy ink,

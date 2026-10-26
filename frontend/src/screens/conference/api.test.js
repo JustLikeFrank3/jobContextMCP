@@ -26,6 +26,20 @@ test('a hung mutation times out without an automatic retry', async () => {
   expect(fetch).toHaveBeenCalledTimes(1)
 })
 
+test('a hung status GET times out after 35 seconds without generating or retrying', async () => {
+  vi.useFakeTimers()
+  const fetch = vi.fn((_, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))))
+  vi.stubGlobal('fetch', fetch)
+  const result = request('/api/badge/work/31').catch(e => e)
+  await vi.advanceTimersByTimeAsync(34999)
+  expect(fetch.mock.calls[0][1].signal.aborted).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  expect((await result).name).toBe('AbortError')
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch.mock.calls[0][1].method).toBe('GET')
+  expect(fetch.mock.calls[0][1].body).toBeUndefined()
+})
+
 test.each([401, 403, 404, 410, 429, 503, 502])('HTTP %s stays an error with actionable guidance', async status => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ status, ok: false, text: async () => '{}' })))
   await expect(request('/api/badge/ping')).rejects.toMatchObject({ status })

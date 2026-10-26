@@ -19,7 +19,7 @@ from starlette.datastructures import MutableHeaders
 _BASE_POLICY = "base-uri 'self'; object-src 'none'; frame-ancestors 'self'"
 _SOURCES = (
     "default-src 'none'; script-src 'self'; "
-    "img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; font-src 'self'; "
     "connect-src 'self'; frame-src 'self'; "
     "form-action 'self' https://login.microsoftonline.com"
 )
@@ -52,14 +52,13 @@ class _TemplateStyles(HTMLParser):
             self._style = None
 
 
-def _strict_policy(trusted_template: str = "", *, local_fonts: bool = False) -> str:
+def _strict_policy(trusted_template: str = "") -> str:
     styles = _TemplateStyles()
     styles.feed(trusted_template)
     # Public templates use classes, never style attributes. Hash only authored
     # style blocks; do not relax the policy with unsafe-inline/unsafe-hashes.
-    sources = ["'self'", *([] if local_fonts else ["https://fonts.googleapis.com"]), *sorted(styles.blocks)]
-    resources = _SOURCES.replace(" https://fonts.gstatic.com", "") if local_fonts else _SOURCES
-    return f"{_BASE_POLICY}; {resources}; style-src {' '.join(sources)}"
+    sources = ["'self'", *sorted(styles.blocks)]
+    return f"{_BASE_POLICY}; {_SOURCES}; style-src {' '.join(sources)}"
 
 
 @lru_cache(maxsize=1)
@@ -87,7 +86,7 @@ def _public_policies() -> dict[str, str]:
 
 def content_security_policy(path: str) -> str:
     if path == "/app" or path.startswith("/app/"):
-        return _strict_policy(local_fonts=True)
+        return _strict_policy()
     return _public_policies().get(path, _BASE_POLICY)
 
 

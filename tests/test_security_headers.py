@@ -46,6 +46,11 @@ def test_public_pages_allow_authored_styles_only(http_client_authed, path):
     policy = response.headers["content-security-policy"]
     assert "default-src 'none'" in policy
     assert "script-src 'self'" in policy
+    assert "font-src 'self';" in policy
+    assert "fonts.googleapis.com" not in policy
+    assert "fonts.gstatic.com" not in policy
+    assert "fonts.googleapis.com" not in response.text
+    assert "fonts.gstatic.com" not in response.text
     assert "'unsafe-inline'" not in policy
     assert "'unsafe-eval'" not in policy
     assert "'unsafe-hashes'" not in policy

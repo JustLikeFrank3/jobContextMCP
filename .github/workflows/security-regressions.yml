@@ -33,7 +33,8 @@ jobs:
           npm ci --ignore-scripts --prefix frontend
       - name: Security and authentication regressions
         run: |
-          python -m pytest tests/test_security_headers.py tests/test_dashboard_login_csrf.py \
+          python -m pytest tests/test_security_headers.py tests/test_public_fonts.py tests/test_privacy_disclosure.py \
+            tests/test_cookie_privacy.py tests/test_dashboard_login_csrf.py \
             tests/test_dashboard_coverage.py tests/test_entra_auth.py tests/test_oauth_keybridge.py \
             tests/test_webmcp_csrf.py tests/test_eval_push_security.py tests/test_sql_security.py \
             tests/test_badge_api.py tests/test_badge_template_choices.py -q

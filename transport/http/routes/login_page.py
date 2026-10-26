@@ -12,8 +12,8 @@ _LOGIN_TMPL: str = r'''<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sign in — jobContext</title>
+<link rel="stylesheet" href="/fonts/fonts.css" />
 <style id="ds-tokens">
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
    jobContext — Color tokens
    Redesign palette. Anchored on the brand sheet: deep navy ink,
@@ -276,6 +276,9 @@ _LOGIN_TMPL: str = r'''<!doctype html>
   /* Fixed presentation classes keep public pages free of inline style attributes. */
   a.submit.microsoft-signin { display:block;text-align:center;text-decoration:none;border-radius:var(--radius-md);padding:12px 16px;background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-body); }
   .hint.invitation-hint { margin-top:20px; }
+  .legal-links { margin:14px 0 0; color:var(--muted); font-size:var(--fs-xs); line-height:1.6; }
+  .legal-links a { color:var(--cyan-300); text-decoration:underline; text-underline-offset:3px; }
+  .legal-links a:focus-visible { outline:2px solid var(--cyan-300); outline-offset:4px; border-radius:2px; }
 </style>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -322,6 +325,7 @@ _LOGIN_TMPL: str = r'''<!doctype html>
       <a class="submit microsoft-signin" href="/dashboard/login?next=__NEXT_HREF__">
         Sign in with Microsoft
       </a>
+      <p class="legal-links"><a href="/privacy#cookies-and-browser-storage">Privacy &amp; browser storage</a> <span aria-hidden="true">&middot;</span> <a href="/terms">Terms</a></p>
       <div class="hint invitation-hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
         You must have a valid invitation to sign in.
