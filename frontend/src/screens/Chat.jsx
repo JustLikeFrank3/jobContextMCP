@@ -128,21 +128,22 @@ const CHIP_STYLE = {
   display: 'inline-flex', alignItems: 'center', gap: 8, maxWidth: '100%',
   background: 'var(--surface-raised)', border: '1px solid var(--border-soft)',
   borderRadius: 'var(--radius-md)', padding: '5px 10px',
-  fontSize: 'var(--fs-xs)', color: 'var(--muted)', cursor: 'pointer',
+  fontSize: 'var(--fs-xs)', fontFamily: 'inherit', lineHeight: 'inherit',
+  textAlign: 'left', color: 'var(--muted)', cursor: 'pointer',
 }
 
 function ToolChip({ item }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{ alignSelf: 'flex-start', maxWidth: '85%' }}>
-      <div style={CHIP_STYLE} onClick={() => setOpen((v) => !v)} role="button" tabIndex={0}>
+      <button type="button" style={CHIP_STYLE} onClick={() => setOpen((v) => !v)} aria-expanded={open && !item.running}>
         <span aria-hidden="true" style={{ color: 'var(--cyan-400)' }}>{'⚙'}</span>
         <code style={{ fontSize: 'var(--fs-2xs)' }}>{item.name}</code>
         {item.running
           ? <span style={{ color: 'var(--cyan-300)' }}>running{'…'}</span>
           : <span style={{ color: 'var(--green-300)' }}>{'✓'}</span>}
         {!item.running && <span style={{ color: 'var(--faint)' }}>{open ? '▴' : '▾'}</span>}
-      </div>
+      </button>
       {open && !item.running && (
         <pre
           style={{
@@ -199,27 +200,28 @@ function SessionRail({ sessions, activeId, onSelect, onNew }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       <Button size="sm" variant="ghost" onClick={onNew}>+ New chat</Button>
       {sessions.map((session) => (
-        <div
+        <button
           key={session.id}
+          type="button"
           onClick={() => onSelect(session.id)}
-          role="button"
-          tabIndex={0}
+          aria-pressed={session.id === activeId}
           style={{
+            textAlign: 'left', fontFamily: 'inherit', lineHeight: 'inherit',
             padding: '7px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
             border: `1px solid ${session.id === activeId ? 'var(--cyan-400)' : 'var(--border-soft)'}`,
             background: session.id === activeId ? 'var(--surface-sunken)' : 'transparent',
           }}
         >
-          <div
+          <span
             style={{
-              fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap', overflow: 'hidden',
+              display: 'block', fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap', overflow: 'hidden',
               textOverflow: 'ellipsis',
               color: session.id === activeId ? 'var(--text-strong)' : 'var(--muted)',
             }}
           >
             {session.title || 'Untitled'}
-          </div>
-        </div>
+          </span>
+        </button>
       ))}
     </div>
   )
@@ -254,23 +256,34 @@ function ModelIndicator() {
   )
 }
 
-function Composer({ streaming, onSend, onStop }) {
+function Composer({ streaming, onSend, onStop, onError }) {
   const [text, setText] = useState('')
-  const submit = () => {
+  const [submitting, setSubmitting] = useState(false)
+  const submit = async () => {
     const trimmed = text.trim()
-    if (!trimmed || streaming) return
+    if (!trimmed || streaming || submitting) return
     setText('')
-    onSend(trimmed)
+    setSubmitting(true)
+    try {
+      await onSend(trimmed)
+    } catch {
+      // Session creation can fail before the stream's own error handler runs.
+      // Keep the unsent draft, without replacing anything typed in the meantime.
+      setText((current) => current || trimmed)
+      onError('Could not start the chat. Your message was not sent. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
     <div style={{ display: 'flex', gap: 9, alignItems: 'flex-end', marginTop: 12 }}>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
+        onKeyDown={async (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            submit()
+            await submit()
           }
         }}
         rows={1}
@@ -285,7 +298,7 @@ function Composer({ streaming, onSend, onStop }) {
       {streaming ? (
         <Button size="sm" variant="ghost" onClick={onStop}>Stop</Button>
       ) : (
-        <Button size="sm" onClick={submit}>Send</Button>
+        <Button size="sm" onClick={submit} disabled={submitting}>Send</Button>
       )}
     </div>
   )
@@ -295,6 +308,7 @@ export default function Chat() {
   const isDesktop = useDesktopMode()
   const [sessions, setSessions] = useState([])
   const [activeId, setActiveId] = useState(null)
+  const [sendError, setSendError] = useState('')
   const { items, streaming, send, stop, reset } = useChatStream()
   const scrollRef = useRef(null)
 
@@ -322,6 +336,7 @@ export default function Chat() {
   }, [items])
 
   async function handleSend(text) {
+    setSendError('')
     let sessionId = activeId
     if (sessionId == null) {
       const created = await apiPost('/api/chat/sessions', {})
@@ -342,7 +357,9 @@ export default function Chat() {
     if (!seed || !isDesktop || seededRef.current) return
     seededRef.current = true
     window.history.replaceState({}, '')
-    handleSend(seed)
+    handleSend(seed).catch(() => {
+      setSendError('Could not start the suggested chat. Please try sending your message again.')
+    })
   }, [isDesktop]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isDesktop) {
@@ -384,7 +401,8 @@ export default function Chat() {
             </div>
           )}
         </div>
-        <Composer streaming={streaming} onSend={handleSend} onStop={stop} />
+        {sendError && <div role="alert" style={{ color: 'var(--danger-soft)', marginTop: 12 }}>{sendError}</div>}
+        <Composer streaming={streaming} onSend={handleSend} onStop={stop} onError={setSendError} />
         <ModelIndicator />
       </Panel>
     </div>

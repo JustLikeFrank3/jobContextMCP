@@ -197,12 +197,15 @@ export default function App() {
   const [booted, setBooted] = useState(false)
 
   useEffect(() => {
-    ensurePushRegistration()
+    // Registration contains its own error boundary; push must never block boot.
+    void ensurePushRegistration()
   }, [])
   useEffect(() => {
     // Our animated splash takes over from the native launch screen.
     SplashScreen.hideAsync().catch(() => {})
-    Promise.all([
+    // Both inputs settle successfully, even when keychain access fails. No
+    // result is needed: boot is gated only on completion and the intro timer.
+    void Promise.all([
       isConnected().catch(() => false),
       new Promise((resolve) => setTimeout(resolve, SPLASH_MIN_MS)),
     ]).then(() => setBooted(true))

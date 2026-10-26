@@ -16,6 +16,7 @@ test('signup omits credentials, includes attribution, and shows only the thank-y
   await act(async () => root.render(<Discovery />))
   for (const [key, value] of Object.entries({ name:'Pat', email:'pat@example.com', segment_answer:'coach', current_tools:'Notes', ai_assistant:'Claude', best_window:'Friday 2pm Eastern' })) host.querySelector(`[name="${key}"]`).value = value
   expect(host.querySelector('[name="incentive_preference"]')).toBeNull()
+  expect(host.querySelector('form button').getAttribute('type')).toBe('submit')
   await act(async () => host.querySelector('form').dispatchEvent(new Event('submit', { bubbles:true, cancelable:true })))
   const [url, request] = fetch.mock.calls[0]
   expect(url).toBe('/api/discovery/signup'); expect(request.credentials).toBe('omit')
@@ -69,4 +70,24 @@ test('review displays both signup programs and their separate answers', async ()
   expect(host.textContent).toContain('Next week')
   expect(host.textContent).toContain('Monday')
   expect(host.textContent).not.toContain('[object Object]')
+  expect(host.querySelector('.discovery-actions form button').getAttribute('type')).toBe('submit')
+})
+
+test('review filter values use explicit alphabetical ordering without changing participant order', async () => {
+  window.history.replaceState({}, '', '/discovery/review')
+  const participants = [
+    { id: 2, name: 'Second', contact: '', status: 'screened', segment: 'coach', channel: 'referral', consent: {} },
+    { id: 10, name: 'Tenth', contact: '', status: 'consented', segment: 'career change', channel: 'other', consent: {} },
+    { id: 1, name: 'First', contact: '', status: 'screened', segment: 'coach', channel: 'discord', consent: {} },
+  ]
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+    ledger: { participants, sessions: [], incentives: [] }, report: { numbers: {}, errors: [], warnings: [] },
+  }) }))
+  await act(async () => root.render(<Discovery />))
+  const filters = host.querySelectorAll('.discovery-grid select')
+  expect([...filters[0].options].map(option => option.text)).toEqual(['All', 'consented', 'screened'])
+  expect([...filters[1].options].map(option => option.text)).toEqual(['All', 'career change', 'coach'])
+  expect([...filters[2].options].map(option => option.text)).toEqual(['All', 'discord', 'other', 'referral'])
+  expect([...host.querySelectorAll('summary strong')].map(node => node.textContent)).toEqual(['Tenth', 'Second', 'First'])
+  expect(host.querySelector('button').getAttribute('type')).toBe('button')
 })
