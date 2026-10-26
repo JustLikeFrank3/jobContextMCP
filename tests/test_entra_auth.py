@@ -60,6 +60,7 @@ def _make_token(
     payload: dict[str, Any] = {
         "aud": audience,
         "iss": "https://login.microsoftonline.com/test-tenant/v2.0",
+        "tid": "test-tenant",
         "sub": "test-subject",
         "oid": "test-oid-123",
         "name": "Test User",
@@ -115,6 +116,7 @@ class TestValidateToken:
         with (
             patch.object(auth_mod, "_get_jwks_client", return_value=mock_client),
             patch.object(auth_mod, "CLIENT_ID", client_id),
+            patch.object(auth_mod, "TENANT_ID", "test-tenant"),
         ):
             return auth_mod.validate_token(token)
 
@@ -138,6 +140,16 @@ class TestValidateToken:
     def test_wrong_audience_raises(self):
         token = _make_token(audience="wrong-client-id")
         with pytest.raises(jwt.InvalidTokenError):
+            self._run(token)
+
+    def test_foreign_tenant_raises(self):
+        token = _make_token(extra_claims={"tid": "another-tenant"})
+        with pytest.raises(jwt.InvalidTokenError, match="tenant"):
+            self._run(token)
+
+    def test_missing_tenant_claim_raises(self):
+        token = _make_token(extra_claims={"tid": None})
+        with pytest.raises(jwt.InvalidTokenError, match="tenant"):
             self._run(token)
 
     def test_bad_signature_raises(self):
@@ -386,6 +398,14 @@ class TestEntraAuthProvider:
             user = provider.authenticate_request(f"Bearer {token}", None)
         assert user is not None
         assert user.id == "sub-xyz"
+
+    def test_missing_stable_identity_claim_is_rejected(self):
+        """A verified token without oid/sub must not share an 'unknown' tenant."""
+        provider = self._provider()
+        token = _make_token()
+        with patch("lib.auth.validate_token", return_value={"name": "Unidentified"}):
+            user = provider.authenticate_request(f"Bearer {token}", None)
+        assert user is None
 
 
 # ===========================================================================
@@ -888,22 +908,50 @@ class TestUserDataContextMiddleware:
             folder.mkdir(parents=True, exist_ok=True)
             (folder / f"{oid}-private.txt").write_text(f"private to {oid}", encoding="utf-8")
 
+        from lib import work
+        from lib.user_context import reset_data_folder, set_data_folder
+
+        original_kind = work._KINDS.get("security_isolation_probe")
+        work.register_kind("security_isolation_probe", lambda _inputs: {})
+        partition = Path(config.DATA_FOLDER) / "users" / "u1"
+        token = set_data_folder(partition)
+        try:
+            work_item_id = work.enqueue("security_isolation_probe", {"owner": "u1"})
+        finally:
+            reset_data_folder(token)
+
         provider = _StubAuthProvider(users["u1"])
         monkeypatch.setattr("transport.http.security.get_auth_provider", lambda: provider)
         monkeypatch.setattr("transport.http.auth.get_auth_provider", lambda: provider)
 
-        app = create_app()
-        with TestClient(app, raise_server_exceptions=True) as client:
-            for oid, other_oid in (("u1", "u2"), ("u2", "u1")):
-                provider._user = users[oid]
-                response = client.get("/dashboard/materials/data")
-                assert response.status_code == 200
-                names = [
-                    entry["name"]
-                    for entry in response.json()["folders"]["cover_letters"]["files"]
-                ]
-                assert f"{oid}-private.txt" in names
-                assert f"{other_oid}-private.txt" not in names
+        try:
+            app = create_app()
+            with TestClient(app, raise_server_exceptions=True) as client:
+                for oid, other_oid in (("u1", "u2"), ("u2", "u1")):
+                    provider._user = users[oid]
+                    response = client.get("/dashboard/materials/data")
+                    assert response.status_code == 200
+                    names = [
+                        entry["name"]
+                        for entry in response.json()["folders"]["cover_letters"]["files"]
+                    ]
+                    assert f"{oid}-private.txt" in names
+                    assert f"{other_oid}-private.txt" not in names
+
+                provider._user = users["u1"]
+                assert client.get(f"/api/work/{work_item_id}").status_code == 200
+                provider._user = users["u2"]
+                assert client.get(f"/api/work/{work_item_id}").status_code == 404
+                stats = client.get("/api/work/stats").json()
+                assert all(
+                    row["kind"] != "security_isolation_probe"
+                    for row in stats["by_kind_status"]
+                )
+        finally:
+            if original_kind is None:
+                work._KINDS.pop("security_isolation_probe", None)
+            else:
+                work._KINDS["security_isolation_probe"] = original_kind
 
     def test_admin_api_key_session_cannot_access_tenant_data(self, monkeypatch, isolated_server):
         from transport.http.app import create_app

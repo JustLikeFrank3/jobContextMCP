@@ -57,7 +57,10 @@ def scope_permits(scope: str, path: str) -> bool:
     """Return True if a credential with *scope* may reach *path*."""
     if scope != "badge":
         return True
-    return path.startswith(BADGE_ALLOWED_PREFIXES)
+    return any(
+        path == prefix or path.startswith(prefix + "/")
+        for prefix in BADGE_ALLOWED_PREFIXES
+    )
 
 
 def _system_user() -> User:
@@ -200,7 +203,11 @@ class EntraAuthProvider(AuthProvider):
             raise AuthUnavailable("token validation failed unexpectedly") from exc
 
         name = claims.get("name") or claims.get("preferred_username") or "user"
-        uid = claims.get("oid") or claims.get("sub") or "unknown"
+        uid = claims.get("oid") or claims.get("sub")
+        if not isinstance(uid, str) or not uid.strip():
+            # Never route a verified-but-unidentified token into a shared
+            # sentinel partition. Entra identities need a stable owner key.
+            return None
         return User(id=uid, name=name)
 
     def authenticate_login(self, credential: str) -> tuple[User, str] | None:

@@ -97,6 +97,17 @@ def test_badge_key_blocked_before_routing(badge_env):
     assert client.get("/mcp", headers=_auth(_key("badge"))).status_code == 403
 
 
+def test_badge_scope_does_not_match_sibling_path_prefixes(badge_env):
+    """A badge credential is limited to the exact API path segment."""
+    client, _root = badge_env
+    token = _key("badge")
+
+    assert client.get("/api/badge", headers=_auth(token)).status_code != 403
+    assert client.get("/api/badge/unknown", headers=_auth(token)).status_code != 403
+    for path in ("/api/badge-admin", "/api/badger/unknown"):
+        assert client.get(path, headers=_auth(token)).status_code == 403
+
+
 def test_full_key_still_reaches_everything(badge_env):
     """The scope gate must not become a regression for ordinary PATs."""
     client, _root = badge_env
