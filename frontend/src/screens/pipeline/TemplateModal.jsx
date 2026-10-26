@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Button } from '../../design-system'
-import { apiPost } from '../../auth/api.js'
+import { apiSend } from '../../auth/api.js'
 import { Modal, modalField, modalLabel, actionError } from './shared.jsx'
 
 /* Template chooser (resume + cover letter, live preview) */
-export default function TemplateModal({ job, resumeTemplates, clTemplates, styles, onClose, onSaved }) {
+export default function TemplateModal({ job, resumeTemplates, clTemplates, styles, onClose, onSaved, onSaveStart }) {
   const rTemplates = resumeTemplates?.length ? resumeTemplates : ['modern', 'executive', 'sidebar', 'portfolio']
   const cTemplates = clTemplates?.length ? clTemplates : rTemplates
   const sStyles = styles?.length ? styles : ['navy', 'slate', 'forest', 'warm', 'classic']
@@ -31,13 +31,28 @@ export default function TemplateModal({ job, resumeTemplates, clTemplates, style
 
   async function save() {
     setSaving(true); setErr(''); setSavedMsg('')
+    const controller = new AbortController()
+    let timer
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error('Saving could not be confirmed. Close and reload the saved template choices before trying again.'))
+      }, 35000)
+    })
     try {
+      onSaveStart?.()
       const endpoint = isResume ? '/dashboard/pipeline/select-template' : '/dashboard/pipeline/select-cl-template'
-      await apiPost(endpoint, { job_id: job.id, template: tpl, style: sty })
+      const saveAndReload = async () => {
+        await apiSend(endpoint, { body: { job_id: job.id, template: tpl, style: sty }, signal: controller.signal })
+        if (controller.signal.aborted) return
+        await onSaved()
+      }
+      await Promise.race([saveAndReload(), timeout])
       setSavedMsg(`${isResume ? 'Resume' : 'Cover letter'} template set: ${tpl} / ${sty}.`)
-      onSaved()
-    } catch (e) { setErr(actionError(e)) } finally { setSaving(false) }
+    } catch (e) { setErr(actionError(e)) } finally { clearTimeout(timer); setSaving(false) }
   }
+
+  const close = () => { if (!saving) onClose() }
 
   const seg = (on) => ({
     padding: '6px 16px', borderRadius: 7, fontSize: 'var(--fs-xs)', fontWeight: 'var(--fw-semibold)',
@@ -48,7 +63,7 @@ export default function TemplateModal({ job, resumeTemplates, clTemplates, style
   })
 
   return (
-    <Modal title={`Templates — ${job.company}`} onClose={onClose} maxWidth={760}>
+    <Modal title={`Templates — ${job.company}`} onClose={close} maxWidth={760}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
         <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
           <button type="button" style={seg(isResume)} onClick={() => { setTab('resume'); setSavedMsg('') }}>Resume</button>
@@ -81,7 +96,7 @@ export default function TemplateModal({ job, resumeTemplates, clTemplates, style
       {savedMsg && <div style={{ color: 'var(--green-300)', fontSize: 'var(--fs-sm)', marginTop: 12 }}>{savedMsg}</div>}
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
-        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        <Button variant="ghost" size="sm" onClick={close} disabled={saving}>Close</Button>
         <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : `Use this ${isResume ? 'resume' : 'cover letter'} template`}</Button>
       </div>
     </Modal>

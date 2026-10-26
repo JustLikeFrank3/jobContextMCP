@@ -5,9 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 const request = vi.fn()
+const apiPost = vi.fn()
+vi.mock('../auth/api.js', async importOriginal => ({ ...await importOriginal(), apiSend: (path, options) => apiPost(path, options.body) }))
 vi.mock('./conference/api.js', async importOriginal => ({ ...await importOriginal(), request: (...args) => request(...args) }))
 const { default: ConferenceDemo } = await import('./ConferenceDemo.jsx')
-let root, host
+let root, host, savedJob
 const job = { job_id: 7, company: 'Acme', role: 'Engineer', status: 'pending' }
 const run = { id: 31, kind: 'badge_materials', inputs: { job_id: 7, material: 'both' }, status: 'succeeded', artifacts: { resume: 'made', cover_letter: 'made' } }
 const button = text => [...host.querySelectorAll('button')].find(b => b.textContent === text)
@@ -18,8 +20,16 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/app/conference-demo')
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+  savedJob = { id: 7, company: 'Acme', role: 'Engineer', resume_template: '', resume_style: '', cl_template: '', cl_style: '' }
+  apiPost.mockReset()
+  apiPost.mockImplementation(async (path, body) => {
+    const prefix = path.endsWith('/select-cl-template') ? 'cl' : 'resume'
+    savedJob = { ...savedJob, [`${prefix}_template`]: body.template, [`${prefix}_style`]: body.style }
+    return { ok: true }
+  })
   request.mockReset()
   request.mockImplementation(async (path, body) => {
+    if (path === '/dashboard/pipeline/data') return { jobs: [savedJob], resume_templates: ['modern', 'executive', 'sidebar', 'portfolio'], cl_templates: ['modern', 'executive', 'sidebar', 'portfolio'], template_styles: ['navy', 'slate', 'forest', 'warm', 'classic'] }
     if (path === '/api/work?limit=50') return { items: [] }
     if (path === '/api/work/31') return run
     if (path.startsWith('/api/badge/search?')) return { count: 1, results: [job] }
@@ -47,7 +57,7 @@ async function search(source = 'pipeline') {
 
 test('existing pipeline → select → both documents → existing Materials, without another job', async () => {
   await render(); await search(); await click('Select'); await click('Generate documents')
-  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both' })
+  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both', template: '', style: 'navy', cl_template: '', cl_style: 'navy' })
   expect(request.mock.calls.some(([path]) => path === '/api/badge/jobs/queue')).toBe(false)
   expect(host.textContent).toContain('Completed')
   expect(window.location.search).toBe('?work=31')
@@ -58,7 +68,7 @@ test('open position is explicitly queued before generation', async () => {
   await render(); await search('open'); await click('Add & select')
   expect(request).toHaveBeenCalledWith('/api/badge/jobs/queue', { search_id: 'stored-search', number: 2 })
   await click('Generate documents')
-  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both' })
+  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both', template: '', style: 'navy', cl_template: '', cl_style: 'navy' })
 })
 
 test('directory-only results cannot generate', async () => {
@@ -217,4 +227,92 @@ test('late initial history cannot overwrite a newer recovery list', async () => 
   await act(async () => initialHistory.resolve({ items: [] }))
   expect(button('View status #31')).toBeDefined()
   expect(host.textContent).not.toContain('No badge or conference generations')
+})
+
+
+test('existing template picker persists independent document choices and queues those exact choices', async () => {
+  await render(); await search(); await click('Select'); await click('Choose templates')
+  const modal = () => document.querySelector('[role="dialog"]')
+  const modalButton = text => [...modal().querySelectorAll('button')].find(b => b.textContent === text)
+  await change(modal().querySelectorAll('select')[0], 'executive')
+  await change(modal().querySelectorAll('select')[1], 'forest')
+  expect(modal().querySelector('iframe').getAttribute('src')).toBe('/dashboard/pipeline/preview-template/executive/forest')
+  await act(async () => modalButton('Use this resume template').click())
+  expect(apiPost).toHaveBeenCalledWith('/dashboard/pipeline/select-template', { job_id: 7, template: 'executive', style: 'forest' })
+  await act(async () => modalButton('Cover Letter').click())
+  await change(modal().querySelectorAll('select')[0], 'sidebar')
+  await change(modal().querySelectorAll('select')[1], 'warm')
+  await act(async () => modalButton('Use this cover letter template').click())
+  await act(async () => modalButton('Close').click())
+  expect(host.textContent).toContain('Resume layout: executive / forest. Cover letter layout: sidebar / warm.')
+  await click('Choose templates')
+  expect(modal().querySelectorAll('select')[0].value).toBe('executive')
+  await act(async () => modalButton('Cover Letter').click())
+  expect(modal().querySelectorAll('select')[0].value).toBe('sidebar')
+  expect(modal().querySelectorAll('select')[1].value).toBe('warm')
+  await act(async () => modalButton('Close').click())
+  await click('Generate documents')
+  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both', template: 'executive', style: 'forest', cl_template: 'sidebar', cl_style: 'warm' })
+  expect(host.textContent).toContain('Queued layouts: resume executive / forest; cover letter sidebar / warm.')
+})
+
+test('saved template choices are loaded for a selected job and not silently replaced on fetch failure', async () => {
+  savedJob = { ...savedJob, resume_template: 'portfolio', resume_style: 'classic', cl_template: 'modern', cl_style: 'slate' }
+  const impl = request.getMockImplementation()
+  let fail = true
+  request.mockImplementation((path, body) => path === '/dashboard/pipeline/data' && fail ? Promise.reject(new TypeError('Offline')) : impl(path, body))
+  await render(); await search(); await click('Select')
+  expect(button('Generate documents').disabled).toBe(true)
+  fail = false
+  await click('Load saved template choices')
+  expect(host.textContent).toContain('Resume layout: portfolio / classic. Cover letter layout: modern / slate.')
+  await click('Generate documents')
+  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both', template: 'portfolio', style: 'classic', cl_template: 'modern', cl_style: 'slate' })
+})
+
+test('closing the picker without saving does not alter queued choices', async () => {
+  await render(); await search(); await click('Select'); await click('Choose templates')
+  const modal = document.querySelector('[role="dialog"]')
+  await change(modal.querySelectorAll('select')[0], 'sidebar')
+  await act(async () => [...modal.querySelectorAll('button')].find(b => b.textContent === 'Close').click())
+  expect(apiPost).not.toHaveBeenCalled()
+  await click('Generate documents')
+  expect(request).toHaveBeenCalledWith('/api/badge/materials', { job_id: 7, material: 'both', template: '', style: 'navy', cl_template: '', cl_style: 'navy' })
+})
+
+
+test('picker save timeout releases every close path without retrying the POST', async () => {
+  await render(); await search(); await click('Select'); await click('Choose templates')
+  apiPost.mockImplementation(() => new Promise(() => {}))
+  vi.useFakeTimers()
+  try {
+    const dialog = () => document.querySelector('[role="dialog"]')
+    const modalButton = text => [...dialog().querySelectorAll('button')].find(b => b.textContent === text)
+    await act(async () => modalButton('Use this resume template').click())
+    expect(modalButton('Close').disabled).toBe(true)
+    await act(async () => dialog().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(dialog()).not.toBeNull()
+    await act(async () => { await vi.advanceTimersByTimeAsync(35000) })
+    expect(dialog().textContent).toContain('Saving could not be confirmed')
+    expect(modalButton('Close').disabled).toBe(false)
+    await act(async () => modalButton('Close').click())
+    expect(dialog()).toBeNull()
+    expect(apiPost).toHaveBeenCalledTimes(1)
+    expect(button('Generate documents').disabled).toBe(true)
+  } finally { vi.useRealTimers() }
+})
+
+test('saved selection with a failed reload cannot silently generate using stale choices', async () => {
+  await render(); await search(); await click('Select'); await click('Choose templates')
+  const impl = request.getMockImplementation()
+  request.mockImplementation((path, body) => path === '/dashboard/pipeline/data' ? Promise.reject(new TypeError('Lost response')) : impl(path, body))
+  const dialog = document.querySelector('[role="dialog"]')
+  await change(dialog.querySelectorAll('select')[0], 'executive')
+  await act(async () => [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Use this resume template').click())
+  await act(async () => [...dialog.querySelectorAll('button')].find(b => b.textContent === 'Close').click())
+  expect(button('Generate documents').disabled).toBe(true)
+  request.mockImplementation(impl)
+  await click('Load saved template choices')
+  expect(host.textContent).toContain('Resume layout: executive / navy.')
+  expect(button('Generate documents').disabled).toBe(false)
 })
