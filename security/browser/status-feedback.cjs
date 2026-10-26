@@ -53,7 +53,9 @@ async function checkStatusFeedback({ context, origin, reports, until }) {
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: path.join(reports, `conference-status-${width}.png`), fullPage: true });
+    await page.screenshot({ path: path.join(reports, `conference-status-${width}.png`), fullPage: true, animations: 'disabled' });
+    const statusPanel = page.getByRole('heading', { name: `Generation #${workId}`, exact: true }).locator('..');
+    await statusPanel.screenshot({ path: path.join(reports, `conference-status-panel-${width}.png`), animations: 'disabled' });
   }
   await check.focus();
   mode = 'error';
