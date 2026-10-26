@@ -233,23 +233,54 @@ async function preview(page, name, kind, origin) {
   assertNoBrowserErrors();
   pass('Native sidebar/import controls respond to Enter/Space; sample preview cancels and reopens without side effects');
 
-  // The real built dashboard at phone and laptop widths; real authenticated
-  // routes and queued work, with only the fixture executor replacing the LLM.
-  await page.goto(`${origin}/app/conference-demo`);
-  await page.getByRole('heading', { name: 'Recent generations' }).waitFor();
-  await page.getByLabel('Company or role').fill('Conference Fixture');
-  await page.getByRole('button', { name: 'Search', exact: true }).click();
-  await page.getByRole('button', { name: 'Select', exact: true }).click();
-  await page.getByRole('button', { name: 'Generate documents', exact: true }).click();
-  await until(async () => (await page.locator('[role="status"]').textContent()) === 'Completed', 'conference generation completes');
-  assert.match(page.url(), /work=\d+/);
-  await page.reload();
-  await page.getByText('Completed', { exact: true }).waitFor();
+  // Real authenticated routes and saved template choices at both viewport
+  // sizes. Only the disposable fixture executor replaces the external LLM.
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 844 });
+    await page.goto(`${origin}/app/conference-demo`);
     await page.getByRole('heading', { name: 'Recent generations' }).waitFor();
+    await page.getByLabel('Company or role').fill('Conference Fixture');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose templates', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Templates — Conference Fixture', exact: true });
+    const choices = width === 1440
+      ? { template: 'executive', style: 'forest', cl_template: 'sidebar', cl_style: 'warm' }
+      : { template: 'portfolio', style: 'classic', cl_template: 'modern', cl_style: 'slate' };
+    await dialog.getByLabel('Template', { exact: true }).selectOption(choices.template);
+    await dialog.getByLabel('Style', { exact: true }).selectOption(choices.style);
+    await dialog.getByRole('button', { name: 'Use this resume template', exact: true }).click();
+    await dialog.getByText(`Resume template set: ${choices.template} / ${choices.style}.`, { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: 'Cover Letter', exact: true }).click();
+    await dialog.getByLabel('Template', { exact: true }).selectOption(choices.cl_template);
+    await dialog.getByLabel('Style', { exact: true }).selectOption(choices.cl_style);
+    await dialog.getByRole('button', { name: 'Use this cover letter template', exact: true }).click();
+    await dialog.getByText(`Cover letter template set: ${choices.cl_template} / ${choices.cl_style}.`, { exact: true }).waitFor();
+    assert.equal(await dialog.locator('iframe').getAttribute('src'), `/dashboard/pipeline/preview-cl/${choices.cl_template}/${choices.cl_style}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `Template picker fits at ${width}px`);
+    await page.screenshot({ path: path.join(reports, `conference-picker-${width}.png`), fullPage: true, animations: 'disabled' });
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    // Reopen the existing picker: persisted choices, not just local select state.
+    await page.getByRole('button', { name: 'Choose templates', exact: true }).click();
+    assert.equal(await dialog.getByLabel('Template', { exact: true }).inputValue(), choices.template);
+    assert.equal(await dialog.getByLabel('Style', { exact: true }).inputValue(), choices.style);
+    await dialog.getByRole('button', { name: 'Cover Letter', exact: true }).click();
+    assert.equal(await dialog.getByLabel('Template', { exact: true }).inputValue(), choices.cl_template);
+    assert.equal(await dialog.getByLabel('Style', { exact: true }).inputValue(), choices.cl_style);
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    const submission = page.waitForRequest(r => new URL(r.url()).pathname === '/api/badge/materials' && r.method() === 'POST');
+    await page.getByRole('button', { name: 'Generate documents', exact: true }).click();
+    assert.deepEqual((await submission).postDataJSON(), { job_id: 1, material: 'both', ...choices });
+    await until(async () => (await page.locator('[role="status"]').textContent()) === 'Completed', 'conference generation completes');
+    const workId = new URL(page.url()).searchParams.get('work');
+    assert.match(workId, /^\d+$/);
+    const stored = await page.evaluate(async id => (await fetch(`/api/work/${id}`)).json(), workId);
+    for (const [key, value] of Object.entries(choices)) assert.equal(stored.inputs[key], value, `Queued ${key}`);
+    await page.reload();
+    await page.getByText('Completed', { exact: true }).waitFor();
+    await page.getByText(`Queued layouts: resume ${choices.template} / ${choices.style}; cover letter ${choices.cl_template} / ${choices.cl_style}.`, { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `No overflow at ${width}px`);
-    await page.screenshot({ path: path.join(reports, `conference-${width}.png`), fullPage: true });
+    await page.screenshot({ path: path.join(reports, `conference-${width}.png`), fullPage: true, animations: 'disabled' });
   }
   await context.setOffline(true);
   await page.getByText('You are offline.', { exact: false }).waitFor();
@@ -257,7 +288,7 @@ async function preview(page, name, kind, origin) {
   await context.setOffline(false);
   await page.getByRole('button', { name: 'Refresh recent generations', exact: true }).click();
   assertNoBrowserErrors();
-  pass('Conference fallback: real session, search/select/async completion, reload recovery, 390px/1440px layout, offline controls');
+  pass('Conference fallback: saved template choices reach queued work, both document layouts, reload recovery, 390px/1440px layout, offline controls');
   results.status = 'passed';
 })().catch(async err => {
   results.status = 'failed';

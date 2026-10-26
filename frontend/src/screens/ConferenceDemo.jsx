@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button, Panel } from '../design-system'
 import { loginUrl } from '../auth/api.js'
 import { errorText, madeFrom, recentGenerations, request, terminal, wantedFor } from './conference/api.js'
+import TemplateModal from './pipeline/TemplateModal.jsx'
 import './conference/demo.css'
 
 export default function ConferenceDemo() {
@@ -11,6 +12,9 @@ export default function ConferenceDemo() {
   const [source, setSource] = useState('pipeline')
   const [results, setResults] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [templateData, setTemplateData] = useState(null)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const templateVersion = useRef(0)
   const [material, setMaterial] = useState('both')
   const [busy, setBusy] = useState(false)
   const locked = useRef(false)
@@ -31,6 +35,7 @@ export default function ConferenceDemo() {
       mounted.current = false
       trackingVersion.current += 1
       recentVersion.current += 1
+      templateVersion.current += 1
     }
   }, [])
 
@@ -122,10 +127,29 @@ export default function ConferenceDemo() {
     }
   }
 
+  function clearSelection() {
+    templateVersion.current += 1
+    setSelected(null)
+    setTemplateData(null)
+    setTemplatesOpen(false)
+  }
+
+  async function loadTemplateSettings(jobId) {
+    if (!mounted.current) return
+    const version = ++templateVersion.current
+    setTemplateData(null)
+    const data = await request('/dashboard/pipeline/data')
+    const job = data.jobs?.find(item => item.id === jobId)
+    if (!job) throw Object.assign(new Error('Selected job is unavailable'), { status: 404 })
+    if (mounted.current && version === templateVersion.current) {
+      setTemplateData({ job, resumeTemplates: data.resume_templates, clTemplates: data.cl_templates, styles: data.template_styles })
+    }
+  }
+
   async function search(event) {
     event.preventDefault()
     await action(async () => {
-      setSelected(null)
+      clearSelection()
       setResults(null)
       const endpoint = source === 'pipeline' ? 'search' : 'jobs'
       const data = await request(`/api/badge/${endpoint}?q=${encodeURIComponent(query.trim())}&limit=12`)
@@ -135,21 +159,28 @@ export default function ConferenceDemo() {
 
   async function choose(job) {
     await action(async () => {
-      setSelected(null)
+      clearSelection()
       const chosen = results.source === 'pipeline' ? job : await request('/api/badge/jobs/queue', {
         search_id: results.search_id, number: job.number,
       })
-      if (mounted.current) setSelected(chosen)
+      if (mounted.current) {
+        setSelected(chosen)
+        await loadTemplateSettings(chosen.job_id)
+      }
     })
   }
 
   const active = recent.some(item => !terminal(item.status)) || (current && !terminal(current.status))
 
   async function generate() {
-    if (!selected || active || uncertain || !historyLoaded) return
+    if (!selected || !templateData || active || uncertain || !historyLoaded) return
     await action(async () => {
       try {
-        const inputs = { job_id: selected.job_id, material }
+        const inputs = {
+          job_id: selected.job_id, material,
+          template: templateData.job.resume_template || '', style: templateData.job.resume_style || 'navy',
+          cl_template: templateData.job.cl_template || '', cl_style: templateData.job.cl_style || 'navy',
+        }
         const out = await request('/api/badge/materials', inputs)
         if (!mounted.current) return
         if (!Number.isSafeInteger(out?.work_id) || out.work_id <= 0) throw new Error('Missing work id')
@@ -176,7 +207,7 @@ export default function ConferenceDemo() {
     {error && <p role="alert">{error} <a href={loginUrl('/app/conference-demo')} target="_blank" rel="noreferrer">Sign in in another tab</a></p>}
     <Panel>
       <form onSubmit={search}>
-        <label>Search in<select value={source} onChange={e => { setSource(e.target.value); setResults(null); setSelected(null) }} disabled={busy}>
+        <label>Search in<select value={source} onChange={e => { setSource(e.target.value); setResults(null); clearSelection() }} disabled={busy}>
           <option value="pipeline">My pipeline</option><option value="open">Open positions</option>
         </select></label>
         <label>Company or role<input value={query} onChange={e => setQuery(e.target.value)} maxLength={120} placeholder="e.g. GitHub or platform engineer" required disabled={busy} /></label>
@@ -195,14 +226,22 @@ export default function ConferenceDemo() {
     </Panel>
     {selected && <Panel>
       <h2>Selected: {selected.company}</h2><p>{selected.role} · Job #{selected.job_id}</p>
+      {templateData ? <>
+        <p>Resume layout: {templateData.job.resume_template || 'legacy'} / {templateData.job.resume_style || 'navy'}. Cover letter layout: {templateData.job.cl_template || 'legacy'} / {templateData.job.cl_style || 'navy'}.</p>
+        <Button disabled={busy || !online} onClick={() => setTemplatesOpen(true)}>Choose templates</Button>
+      </> : <>
+        <p>Load the saved template choices before generating. No selection will be silently replaced.</p>
+        <Button disabled={busy || !online} onClick={() => action(() => loadTemplateSettings(selected.job_id))}>Load saved template choices</Button>
+      </>}
       <label>Documents<select value={material} onChange={e => setMaterial(e.target.value)} disabled={busy}>
         <option value="both">Resume + cover letter</option><option value="resume">Resume only</option><option value="cover_letter">Cover letter only</option>
       </select></label>
-      <Button onClick={generate} disabled={busy || !online || !!active || uncertain || !historyLoaded}>Generate documents</Button>
+      <Button onClick={generate} disabled={busy || !online || !templateData || !!active || uncertain || !historyLoaded}>Generate documents</Button>
       {active && <p>A generation is already queued or running. Check it below before starting another.</p>}
     </Panel>}
     {current && <Panel>
       <h2>Generation #{current.id}</h2>
+      <p>Queued layouts: resume {current.inputs?.template || 'legacy'} / {current.inputs?.style || 'navy'}; cover letter {(current.inputs?.cl_template ?? current.inputs?.template) || 'legacy'} / {current.inputs?.cl_style || current.inputs?.style || 'navy'}.</p>
       <p role="status">{current.status === 'succeeded' ? (missing.length ? 'Partially completed' : 'Completed') : current.status}</p>
       <p>Created: {current.made?.join(', ').replaceAll('_', ' ') || 'none reported yet'}.</p>
       {missing.length > 0 && <p role="alert">Not created: {missing.join(', ').replaceAll('_', ' ')}. Open Materials to keep the completed document; select only the missing document to try again.</p>}
@@ -222,6 +261,15 @@ export default function ConferenceDemo() {
         <Button disabled={busy} onClick={() => track(item)}>View status #{item.id}</Button>
       </div>)}
     </Panel>
+    {templatesOpen && selected && <TemplateModal
+      job={templateData?.job || { id: selected.job_id, company: selected.company }}
+      resumeTemplates={templateData?.resumeTemplates}
+      clTemplates={templateData?.clTemplates}
+      styles={templateData?.styles}
+      onClose={() => setTemplatesOpen(false)}
+      onSaveStart={() => { templateVersion.current += 1; setTemplateData(null) }}
+      onSaved={() => loadTemplateSettings(selected.job_id)}
+    />}
     <p>Before the conference, download one successful resume and cover letter from Materials to Files on your phone and to your laptop. They are your offline demonstration; new searches and generation require a connection.</p>
   </div>
 }

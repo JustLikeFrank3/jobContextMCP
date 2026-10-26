@@ -2,20 +2,16 @@
 
 ## Release status — October 26, 2026
 
-The fallback is published in PR #401 on `feat/conference-demo`. This update
-integrates the repaired QA base `4d05044d06856fa09238392a632f298dbba0c487`
-without removing its security or keyboard regression coverage. The security
-repair is already deployed; the fallback itself requires its own exact-head
-CI, QA rollout and production promotion. Check the current PR/deployment
-results rather than assuming a merge is a successful deployment.
+The base conference fallback shipped through PR #402 at production commit
+`5ff288a`. This branch adds the missing template picker and requires its own
+exact-head CI, QA rollout and production promotion; the new chooser is not
+live merely because it is documented here.
 
-The latest reported provider-backed QA resume check (work **#705**, company
-**Conference Demo QA 2026-10-26**, role **Platform Engineer — synthetic test**)
-returned `401 PermissionDenied: Principal does not have access to API/Operation`
-and a context package rather than a resume. That was a connector check, not
-an authenticated browser or badge-route end-to-end rehearsal. No successful
-provider-backed recheck is claimed. A cover-letter test using private master
-resume data was not authorized and remains unexecuted.
+The earlier QA provider check (work #705) failed with `401 PermissionDenied`.
+A separate authorized production resume-generation check was subsequently
+reported successful by the release owner on October 26. The tests for this
+template-picker change remain synthetic and do not repeat live generation
+or claim a new provider-backed cover-letter rehearsal.
 
 Automated browser/backend tests use only disposable synthetic data and an
 offline executor. They verify authentication boundaries, queued-work UI,
@@ -33,8 +29,10 @@ discovery interface and its generation requests wait synchronously.
 
 The new screen lives inside the existing authenticated dashboard shell. It
 reuses the existing badge discovery and background-generation routes and
-links to Pipeline and Materials. There is no new backend, credential store,
-service worker, public demo tenant, or change to the badge firmware/API.
+links to Pipeline and Materials. There is no new service, credential store,
+service worker or public demo tenant, and badge firmware is unchanged. The
+existing badge-generation API accepts optional independent cover-letter
+layout/colour overrides; older clients keep their shared-choice defaults.
 
 ## Launch after QA deployment
 
@@ -63,12 +61,19 @@ service worker, public demo tenant, or change to the badge firmware/API.
    Employer-directory-only matches cannot generate documents.
 4. Check the selected company, role and job ID. The compact badge API clips
    long titles: use **Pipeline** to inspect the full role/JD if ambiguous.
-5. Choose **Resume + cover letter**, **Resume only**, or **Cover letter only**.
+5. Check the saved layout/colour summary. Tap **Choose templates** to use
+   the same picker as Pipeline, preview and save the resume and cover-letter
+   choices independently. Close and reopen it to confirm the saved choices.
+   A job with no saved choice keeps the legacy layout until you explicitly
+   save a template; loading or cancelling the picker does not change it.
+6. Choose **Resume + cover letter**, **Resume only**, or **Cover letter only**.
    Tap **Generate documents** once. Generation uses the server's saved master
    resume and existing generator; no API key is pasted into this screen.
-6. Keep the displayed generation number. The URL gains `?work=<number>` and
-   can be bookmarked. Work continues server-side if this page closes.
-7. When complete, tap **Open Materials to preview or download**, find the
+7. Keep the displayed generation number. The URL gains `?work=<number>` and
+   can be bookmarked. The queued layout/colour summary is a snapshot of the
+   selected values, preserved after refresh. Work continues server-side if
+   this page closes.
+8. When complete, tap **Open Materials to preview or download**, find the
    company/role, and open the newly generated resume and letter. Review
    generated content and provenance before sharing it as an application.
 
@@ -116,7 +121,10 @@ the backend still scopes reads to the authenticated tenant.
 | `GET /api/badge/search?q=…&limit=12` | Existing pipeline and directory search |
 | `GET /api/badge/jobs?q=…&limit=12` | Open-role discovery |
 | `POST /api/badge/jobs/queue` | Explicit selection of discovered job |
-| `POST /api/badge/materials` | Queue generation and obtain a work ID |
+| `GET /dashboard/pipeline/data` | Existing saved job template choices and valid options |
+| `POST /dashboard/pipeline/select-template`, `select-cl-template` | Existing per-job template persistence |
+| Existing Pipeline template-preview routes | Authenticated layout/colour previews |
+| `POST /api/badge/materials` | Queue generation with explicit document choices and obtain a work ID |
 | `GET /api/badge/work/{id}` | Compact generation polling |
 | `GET /api/work?limit=50`, `GET /api/work/{id}` | Authenticated recovery after refresh/lost response |
 | Existing Materials routes | Preview/download generated files |

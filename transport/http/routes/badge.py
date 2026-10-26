@@ -315,6 +315,24 @@ class MaterialsRequest(BaseModel):
     # neither and gets exactly what it always got.
     template: str = ""
     style: str = "navy"
+    # Optional per-document overrides used by the dashboard's existing picker.
+    # None preserves older badge clients' one-choice-for-both contract; an
+    # explicit empty template still means the legacy cover-letter layout.
+    cl_template: str | None = None
+    cl_style: str | None = None
+
+
+def _material_choices(inputs: dict) -> tuple[str, str, str, str]:
+    """Resolve independent choices without changing legacy shared defaults."""
+    template = inputs.get("template", "")
+    style = inputs.get("style") or "navy"
+    cl_template = inputs.get("cl_template")
+    if cl_template is None:
+        cl_template = template
+    cl_style = inputs.get("cl_style")
+    if cl_style is None:
+        cl_style = style
+    return template, style, cl_template, cl_style or "navy"
 
 
 def _generate_materials(inputs: dict) -> dict:
@@ -335,8 +353,7 @@ def _generate_materials(inputs: dict) -> dict:
 
     job_id = int(inputs["job_id"])
     material = inputs.get("material", "resume")
-    template = inputs.get("template", "")
-    style = inputs.get("style") or "navy"
+    template, style, cl_template, cl_style = _material_choices(inputs)
 
     with get_connection() as con:
         row = con.execute(
@@ -357,7 +374,7 @@ def _generate_materials(inputs: dict) -> dict:
             result = str(generate.generate_resume(company, role, jd, template=template, style=style))
         else:
             result = str(
-                generate.generate_cover_letter(company, role, jd, cl_template=template, cl_style=style)
+                generate.generate_cover_letter(company, role, jd, cl_template=cl_template, cl_style=cl_style)
             )
         failure = _generation_failure(result)
         if failure:
@@ -417,23 +434,29 @@ async def badge_materials(
         )
     from lib.template_loader import template_style_error
 
-    # Same gate the generators and export use, for both document kinds (a
-    # "both" request applies one choice to each), checked here so a bad value
-    # is a 422 now rather than a failed work row a minute later.
-    for is_cl in (False, True):
-        err = template_style_error(request.template, request.style, cover_letter=is_cl)
+    # Same gate as generation/export, before a work item is enqueued. Older
+    # clients still apply one choice to both documents; the dashboard may save
+    # distinct resume and cover-letter choices through its existing picker.
+    cl_template = request.template if request.cl_template is None else request.cl_template
+    cl_style = request.style if request.cl_style is None else request.cl_style
+    for template, style, is_cl in (
+        (request.template, request.style, False),
+        (cl_template, cl_style, True),
+    ):
+        err = template_style_error(template, style, cover_letter=is_cl)
         if err:
             raise HTTPException(status_code=422, detail=err)
-    work_id = work.enqueue(
-        _KIND,
-        {
-            "job_id": request.job_id,
-            "material": request.material,
-            "template": request.template,
-            "style": request.style,
-        },
-        origin="badge",
-    )
+    inputs = {
+        "job_id": request.job_id,
+        "material": request.material,
+        "template": request.template,
+        "style": request.style,
+    }
+    for name in ("cl_template", "cl_style"):
+        value = getattr(request, name)
+        if value is not None:
+            inputs[name] = value
+    work_id = work.enqueue(_KIND, inputs, origin="badge")
     return {"status": "queued", "work_id": work_id}
 
 

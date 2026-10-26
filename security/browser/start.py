@@ -80,6 +80,7 @@ def main():
         "PYTHONUNBUFFERED": "1", "PYTHONDONTWRITEBYTECODE": "1",
         "JOBCONTEXT_CONFIG": str(config), "HOST": "127.0.0.1", "PORT": str(port),
         "API_KEY": "browser-synthetic-not-a-secret", "ENABLE_REMOTE": "false",
+        "USE_SQLITE": "1", "SQLITE_ONLY": "1",
     })
     block_external_connections()
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
