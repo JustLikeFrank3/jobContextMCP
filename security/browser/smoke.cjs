@@ -209,6 +209,10 @@ async function preview(page, name, kind, origin) {
   assertNoBrowserErrors();
   pass('Real API-key form signs in and removes pre-login cookie; built SPA loads and renders Materials');
 
+  await require('./status-feedback.cjs').checkStatusFeedback({ context, origin, reports, until });
+  assertNoBrowserErrors();
+  pass('Conference status: visible pending/unchanged feedback, no overlapping checks, error recovery, keyboard activation, phone/laptop layout, no mutation');
+
   const fonts = await page.evaluate(async () => {
     const loads = [];
     for (const family of ['Inter', 'JetBrains Mono', 'Space Grotesk']) {

@@ -119,6 +119,29 @@ test('polling network failure pauses; Check status retries GET without generatin
   expect(request.mock.calls.filter(([path]) => path === '/api/badge/materials')).toHaveLength(1)
 })
 
+test('Check status acknowledges an unchanged running result and blocks overlapping clicks', async () => {
+  vi.useFakeTimers()
+  const pending = deferred()
+  const impl = request.getMockImplementation()
+  let checks = 0
+  request.mockImplementation((path, body) => path === '/api/badge/work/31'
+    ? (++checks <= 2 ? { status: 'running', made: [] } : pending.promise)
+    : impl(path, body))
+  await render(); await search(); await click('Select'); await click('Generate documents')
+  expect(host.textContent).toContain('Last checked:')
+  expect(host.textContent).toContain('Still running on the server.')
+  const previousCheck = host.querySelector('time').dateTime
+  await act(async () => { button('Check status').click(); button('Check status').click() })
+  expect(button('Checking status…').disabled).toBe(true)
+  expect(host.textContent).toContain('Checking the server for an update…')
+  expect(checks).toBe(3)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); pending.resolve({ status: 'running', made: [] }) })
+  expect(button('Check status').disabled).toBe(false)
+  expect(host.querySelector('time').dateTime).not.toBe(previousCheck)
+  expect(host.textContent).toContain('Still running on the server.')
+  expect(request.mock.calls.filter(([path]) => path === '/api/badge/materials')).toHaveLength(1)
+})
+
 test('URL work handle resumes after refresh without any POST', async () => {
   window.history.replaceState(null, '', '/app/conference-demo?work=31')
   await render()
@@ -176,10 +199,139 @@ test('double click sends a single generation request', async () => {
 })
 
 function deferred() {
-  let resolve
-  const promise = new Promise(done => { resolve = done })
-  return { promise, resolve }
+  let resolve, reject
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
 }
+
+test.each([
+  [Object.assign(new DOMException('Aborted', 'AbortError')), 'request could not be confirmed'],
+  [{ status: 401 }, 'Session expired'],
+  [{ status: 503 }, 'temporarily unavailable'],
+])('automatic status check prevents overlap, pauses on %j, and retries only GET', async (failure, message) => {
+  vi.useFakeTimers()
+  const pending = deferred()
+  const impl = request.getMockImplementation()
+  let checks = 0
+  window.history.replaceState(null, '', '/app/conference-demo?work=31')
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work/31') return Promise.resolve({ ...run, status: 'running' })
+    if (path === '/api/badge/work/31') return ++checks === 2 ? pending.promise : { status: checks === 1 ? 'running' : 'succeeded', made: ['resume', 'cover_letter'] }
+    return impl(path, body)
+  })
+  await render()
+  const previousCheck = host.querySelector('time').dateTime
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+  expect(button('Checking status…').disabled).toBe(true)
+  await click('Checking status…')
+  expect(checks).toBe(2)
+  await act(async () => pending.reject(failure))
+  expect(host.textContent).toContain('Status check paused')
+  expect(host.textContent).toContain(message)
+  expect(host.querySelector('time').dateTime).toBe(previousCheck)
+  expect(button('Check status').disabled).toBe(false)
+  await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+  expect(checks).toBe(2)
+  await click('Check status')
+  expect(host.textContent).toContain('Completed')
+  expect(host.textContent).not.toContain('Status check paused')
+  expect(button('Check status')).toBeUndefined()
+  expect(request.mock.calls.every(([, body]) => body === undefined)).toBe(true)
+})
+
+test('offline interruption clears pending feedback and ignores the old status response', async () => {
+  const pending = deferred()
+  const impl = request.getMockImplementation()
+  let checks = 0
+  window.history.replaceState(null, '', '/app/conference-demo?work=31')
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work/31') return Promise.resolve({ ...run, status: 'running' })
+    if (path === '/api/badge/work/31') return ++checks === 1 ? pending.promise : { status: 'running', made: [] }
+    return impl(path, body)
+  })
+  await render()
+  expect(button('Checking status…').disabled).toBe(true)
+  await act(async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    window.dispatchEvent(new Event('offline'))
+  })
+  expect(button('Check status').disabled).toBe(true)
+  expect(host.textContent).not.toContain('Checking the server')
+  await act(async () => pending.resolve({ status: 'succeeded', made: ['resume', 'cover_letter'] }))
+  expect(host.textContent).not.toContain('Completed')
+  expect(host.querySelector('time')).toBeNull()
+  await act(async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
+    window.dispatchEvent(new Event('online'))
+  })
+  expect(host.textContent).toContain('Still running on the server.')
+  expect(button('Check status').disabled).toBe(false)
+})
+
+test.each([null, {}, { ok: true, raw: '<html>Sign in</html>' }, { status: 'unknown' }])('malformed status response %j pauses without falsely confirming the old status', async response => {
+  vi.useFakeTimers()
+  const impl = request.getMockImplementation()
+  let malformed = false
+  window.history.replaceState(null, '', '/app/conference-demo?work=31')
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work/31') return Promise.resolve({ ...run, status: 'running' })
+    if (path === '/api/badge/work/31') return malformed ? response : { status: 'running', made: [] }
+    return impl(path, body)
+  })
+  await render()
+  const previousCheck = host.querySelector('time').dateTime
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  malformed = true
+  await click('Check status')
+  expect(host.textContent).toContain('Status check paused')
+  expect(host.querySelector('time').dateTime).toBe(previousCheck)
+  expect(host.textContent).not.toContain('Still running on the server.')
+  expect(host.textContent).not.toContain('<html>')
+  expect(button('Check status').disabled).toBe(false)
+  malformed = false
+  await click('Check status')
+  expect(host.textContent).toContain('Still running on the server.')
+  expect(request.mock.calls.every(([, body]) => body === undefined)).toBe(true)
+})
+
+test('switching runs discards the old pending check and its timestamp', async () => {
+  const pending = deferred(), next = deferred()
+  const impl = request.getMockImplementation()
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work?limit=50') return { items: [{ ...run, status: 'running' }, { ...run, id: 32, status: 'running' }] }
+    if (path === '/api/badge/work/31') return pending.promise
+    if (path === '/api/badge/work/32') return next.promise
+    return impl(path, body)
+  })
+  await render(); await click('View status #31'); await click('View status #32')
+  await act(async () => pending.resolve({ status: 'succeeded', made: ['resume', 'cover_letter'] }))
+  expect(host.textContent).toContain('Generation #32')
+  expect(host.textContent).not.toContain('Completed')
+  expect(host.querySelector('time')).toBeNull()
+  expect(button('Checking status…').disabled).toBe(true)
+  await act(async () => next.resolve({ status: 'running', made: [] }))
+  expect(host.textContent).toContain('Still running on the server.')
+  expect(button('Check status').disabled).toBe(false)
+})
+
+test('leaving the screen ignores a pending status check and never schedules another', async () => {
+  vi.useFakeTimers()
+  const pending = deferred()
+  const impl = request.getMockImplementation()
+  window.history.replaceState(null, '', '/app/conference-demo?work=31')
+  request.mockImplementation((path, body) => {
+    if (path === '/api/work/31') return Promise.resolve({ ...run, status: 'running' })
+    if (path === '/api/badge/work/31') return pending.promise
+    return impl(path, body)
+  })
+  await render()
+  await act(async () => root.render(<div>Materials screen</div>))
+  window.history.replaceState(null, '', '/app/materials')
+  await act(async () => { pending.resolve({ status: 'running', made: [] }); await vi.advanceTimersByTimeAsync(10000) })
+  expect(host.textContent).toBe('Materials screen')
+  expect(window.location.pathname).toBe('/app/materials')
+  expect(request.mock.calls.filter(([path]) => path === '/api/badge/work/31')).toHaveLength(1)
+})
 
 test('a late URL recovery cannot replace a newer selected generation', async () => {
   const recovery = deferred()
