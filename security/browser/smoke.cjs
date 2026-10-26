@@ -343,8 +343,12 @@ async function preview(page, name, kind, origin) {
   ]);
   assert.deepEqual(await context.cookies(), [], 'Sign out removes the only session cookie');
   assert.deepEqual(await browserStorage(page), { local: [], session: [] });
-  const anonymous = await context.request.get(`${origin}/api/dashboard/me`);
-  assert.equal(anonymous.status(), 401, 'Signed-out session cannot access protected data');
+  // Use the actual browser transport: APIRequestContext opens a CONNECT
+  // tunnel even for this HTTP target, which the isolation proxy rightly denies.
+  const anonymousStatus = await page.evaluate(async () => (
+    await fetch('/api/dashboard/me', { credentials: 'same-origin' })
+  ).status);
+  assert.equal(anonymousStatus, 401, 'Signed-out session cannot access protected data');
   assert.deepEqual(results.externalPageRequests, [], 'Public and signed-in fixture flows must remain same-origin');
   assertNoBrowserErrors();
   pass('Privacy inventory: no public storage or third-party requests; Evals draft survives reload and clears on save; sign-out removes session cookie');
