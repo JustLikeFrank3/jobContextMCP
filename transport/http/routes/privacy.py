@@ -7,8 +7,8 @@ PRIVACY_HTML: str = r'''<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Privacy Policy &mdash; jobContext</title>
+<link rel="stylesheet" href="/fonts/fonts.css" />
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 :root {
   --ink-950:#070B14;--ink-900:#0A0F1C;--ink-850:#0B1220;--ink-800:#0F172A;
   --ink-700:#111A2B;--ink-600:#16213A;--ink-500:#1B2A44;--ink-450:#22324E;
@@ -44,6 +44,10 @@ h1{font-size:2rem;font-weight:700;color:var(--text-strong);line-height:1.15;marg
 /* Body content */
 h2{font-size:1.1rem;font-weight:700;color:var(--text-strong);margin:2rem 0 .6rem;padding-bottom:.4rem;border-bottom:1px solid var(--line-soft);}
 p{color:var(--muted);font-size:.95rem;margin-bottom:.75rem;}
+.storage-list{padding-left:1.25rem;color:var(--muted);font-size:.95rem;margin:.75rem 0 1rem;}
+.storage-list li{margin-bottom:.65rem;}
+.storage-list code{font-family:var(--font-mono);font-size:.9em;overflow-wrap:anywhere;}
+#cookies-and-browser-storage{scroll-margin-top:80px;}
 table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.875rem;}
 th{text-align:left;padding:.5rem .75rem;color:var(--text-soft);font-weight:600;border-bottom:1px solid var(--line);}
 td{padding:.5rem .75rem;color:var(--muted);border-bottom:1px solid var(--line-soft);}
@@ -143,6 +147,18 @@ footer{border-top:1px solid var(--line);padding:1.5rem;}
 
   <h2>10. Security</h2>
   <p>We protect your data with Microsoft Entra ID authentication and per-user data isolation. No system is perfectly secure, but we work to safeguard your information. If we become aware of a breach affecting your personal information, we will notify you as required by law.</p>
+
+  <h2 id="cookies-and-browser-storage">Cookies and browser storage</h2>
+  <p>We use the following first-party cookies and browser storage to provide sign-in, protect account connections, and keep unfinished form input. We do not use the items listed below for advertising.</p>
+  <ul class="storage-list">
+    <li><code>jc_session</code> keeps you signed in: up to 1 hour on the hosted Microsoft sign-in service, removed on sign-out. API-key sign-in deployments use up to 30 days.</li>
+    <li><code>pkce_verifier</code> protects Microsoft sign-in: expires after 10 minutes and is removed after a successful callback.</li>
+    <li><code>__Host-jc_login_csrf</code> (<code>jc_login_csrf</code> on non-HTTPS local deployments) protects API-key sign-in: expires after 10 minutes and is removed after successful sign-in. The hosted Microsoft flow does not use this form.</li>
+    <li><code>oura_state</code> protects optional Oura account connection: expires after 10 minutes and is cleared when jobContext handles the connection callback.</li>
+    <li><code>jc-evals-golden-draft</code> uses <code>sessionStorage</code> to preserve an unfinished Evals form&rsquo;s company, role, job description, and output type in that tab&rsquo;s browser session. It is removed after the server confirms a successful save.</li>
+  </ul>
+  <p>Microsoft and Oura&rsquo;s sign-in/connection pages are separate services that may use their own cookies under their privacy policies. We do not control their browser storage.</p>
+  <p>You can remove or block cookies and site storage in browser settings. Blocking storage needed for sign-in or account connection may prevent those features working; clearing draft storage removes unsaved input.</p>
 
   <h2>11. Children</h2>
   <p>The Service is not directed to anyone under 18. We do not knowingly collect personal information from anyone under 18. If you believe a minor has provided us information, contact us and we will delete it.</p>

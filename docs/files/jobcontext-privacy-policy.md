@@ -112,6 +112,20 @@ Depending on where you live, you may have additional rights under laws such as t
 
 We protect your data with measures including Microsoft Entra ID authentication and per-user data isolation. No system is perfectly secure, but we work to safeguard your information and to limit access to it. If we become aware of a breach affecting your personal information, we will notify you as required by law.
 
+## Cookies and browser storage
+
+We use the following first-party cookies and browser storage to provide sign-in, protect account connections, and keep unfinished form input. We do not use the items listed below for advertising.
+
+- `jc_session` keeps you signed in: up to 1 hour on the hosted Microsoft sign-in service, removed on sign-out. API-key sign-in deployments use up to 30 days.
+- `pkce_verifier` protects Microsoft sign-in: expires after 10 minutes and is removed after a successful callback.
+- `__Host-jc_login_csrf` (`jc_login_csrf` on non-HTTPS local deployments) protects API-key sign-in: expires after 10 minutes and is removed after successful sign-in. The hosted Microsoft flow does not use this form.
+- `oura_state` protects optional Oura account connection: expires after 10 minutes and is cleared when jobContext handles the connection callback.
+- `jc-evals-golden-draft` uses `sessionStorage` to preserve an unfinished Evals form’s company, role, job description, and output type in that tab’s browser session. It is removed after the server confirms a successful save.
+
+Microsoft and Oura’s sign-in/connection pages are separate services that may use their own cookies under their privacy policies. We do not control their browser storage.
+
+You can remove or block cookies and site storage in browser settings. Blocking storage needed for sign-in or account connection may prevent those features working; clearing draft storage removes unsaved input.
+
 ## 11. Children
 
 The Service is not directed to anyone under 18, and we do not knowingly collect personal information from anyone under 18. If you believe a minor has provided us information, contact us and we will delete it.

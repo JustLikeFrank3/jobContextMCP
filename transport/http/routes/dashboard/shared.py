@@ -36,7 +36,7 @@ def _auth_header_js() -> str:
 
 
 BASE_CSS = """
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  @import url('/fonts/fonts.css');
   :root {
     /* brand */
     --bg: #0a0f1c; --bg-2: #0b1220; --panel: #111a2b; --panel-2: #16213a;

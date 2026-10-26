@@ -572,17 +572,22 @@ async def oauth_token_proxy(request: Request):
 async def logout(request: Request) -> RedirectResponse:
     """User-facing logout page.
 
-    Clears the Entra browser session via the end_session_endpoint, then
+    Clears the app session cookie and the Entra browser session via the end_session_endpoint, then
     shows instructions for clearing the local mcp-remote token cache.
     Visit https://app.jobcontext.ai/logout in a browser.
     """
+    from transport.http.routes.dashboard.login import _is_secure
+
     tenant_id = os.environ.get("ENTRA_TENANT_ID", "")
     base = _base_url(request)
     entra_logout = (
         f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout"
         f"?post_logout_redirect_uri={base}/logged-out"
     )
-    return RedirectResponse(url=entra_logout, status_code=302)
+    response = RedirectResponse(url=entra_logout, status_code=302)
+    response.delete_cookie("jc_session", path="/", httponly=True,
+                           samesite="lax", secure=_is_secure(request))
+    return response
 
 
 @router.post("/logout", include_in_schema=False)
