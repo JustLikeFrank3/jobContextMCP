@@ -1,0 +1,12 @@
+.conference-demo { display: grid; gap: 16px; max-width: 900px; }
+.conference-demo p { line-height: 1.5; }
+.conference-demo h2 { font-size: 18px; margin: 0 0 12px; }
+.conference-demo a { color: var(--cyan-300); }
+.conference-demo form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.conference-demo label { display: grid; gap: 6px; flex: 1 1 220px; margin-bottom: 12px; }
+.conference-demo input, .conference-demo select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); color: var(--text); font-size: 16px; }
+.conference-demo button { min-height: 44px; white-space: normal; }
+.conference-demo [role="alert"] { padding: 12px; border: 1px solid var(--warn); border-radius: 8px; }
+.conference-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.conference-result > :first-child { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 500px) { .conference-demo form > *, .conference-result button { width: 100%; } }

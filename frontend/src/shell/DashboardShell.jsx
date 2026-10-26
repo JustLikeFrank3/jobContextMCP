@@ -25,6 +25,7 @@ const PRIMARY_NAV = [
 ]
 
 const SECONDARY_NAV = [
+  { label: 'Conference demo', key: 'conference-demo' },
   { label: 'Job Hunt', key: 'job-hunt' },
   { label: 'Materials', key: 'materials' },
   { label: 'Rejections', key: 'rejections' },
@@ -36,6 +37,7 @@ const SECONDARY_NAV = [
 const CHAT_ITEM = { label: 'Chat', key: 'chat' }
 
 const PAGE_META = {
+  'conference-demo': ['Conference demo', 'Search → select → tailored documents'],
   home: ['Home', 'Your career command center'],
   pipeline: [
     'Pipeline',
