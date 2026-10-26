@@ -16,7 +16,7 @@
 
 # jobContext
 
-The memory layer for your job search: a desktop app, a hosted cloud workspace, and a mobile companion built on one capability layer. Your resume, pipeline, interview history, outreach context, and portfolio live as structured context that persists across sessions — AI assistants (GitHub Copilot, Claude, Cursor, Windsurf) plug in over the [Model Context Protocol](https://modelcontextprotocol.io/), in-browser agents (ChatGPT desktop's browser, Chrome origin trial, Edge preview) drive the dashboard itself over [WebMCP](docs/webmcp.md), and the dashboard, CLI, and mobile app drive the same tools over HTTP. You never re-explain yourself from scratch.
+The memory layer for your job search: a desktop app, a hosted cloud workspace, and a mobile companion built on one capability layer — with a [conference badge client](#jobcontext-conference-badge) for your lanyard. Your resume, pipeline, interview history, outreach context, and portfolio live as structured context that persists across sessions — AI assistants (GitHub Copilot, Claude, Cursor, Windsurf) plug in over the [Model Context Protocol](https://modelcontextprotocol.io/), in-browser agents (ChatGPT desktop's browser, Chrome origin trial, Edge preview) drive the dashboard itself over [WebMCP](docs/webmcp.md), and the dashboard, CLI, and mobile app drive the same tools over HTTP. You never re-explain yourself from scratch.
 
 Built in Python with [FastMCP](https://github.com/jlowin/fastmcp), FastAPI, SQLite (dual-write JSON audit trail), a React dashboard, WeasyPrint/LaTeX PDF export, and pluggable LLM generation (OpenAI, Azure AI Foundry, Anthropic Claude, or local Ollama — all BYOK, or run keyless and let your AI client do the writing).
 
@@ -48,7 +48,7 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 **Works with:** GitHub Copilot · VS Code · Claude Desktop · Claude.ai · Cursor · Windsurf · in-browser agents via WebMCP (ChatGPT desktop, Chrome origin trial, Edge) · HTTP clients · CLI automation
 
-**Jump to:** [Desktop](#jobcontext-desktop) · [Mobile](#jobcontext-mobile--ios-beta-testflight) · [Dashboard & output](#output) · [Tool surface](#the-tool-surface) · [Truth & evals](#truth-evals--observability) · [Setup](#setup) · [Configuration](#configuration) · [Docs](#documentation) · [Releases](#recent-releases)
+**Jump to:** [Desktop](#jobcontext-desktop) · [Mobile](#jobcontext-mobile--ios-beta-testflight) · [Conference badge](#jobcontext-conference-badge) · [Dashboard & output](#output) · [Tool surface](#the-tool-surface) · [Truth & evals](#truth-evals--observability) · [Setup](#setup) · [Configuration](#configuration) · [Docs](#documentation) · [Releases](#recent-releases)
 
 ---
 
@@ -68,6 +68,13 @@ The whole platform as a native app — no terminal, no Python, no account.
 Download, drag to Applications (or run the installer), double-click.
 
 **[⬇ Download the latest desktop release](https://github.com/JustLikeFrank3/jobContextMCP/releases?q=desktop&expanded=true)** — look for the newest `desktop-v*` tag.
+
+**Release channels:** desktop installers ship as `desktop-v*` **beta
+prereleases**, separately from the cloud product's `v*` releases. Branch CI
+artifacts and cloud deployments are not desktop releases: the app bundles
+its own frontend and backend, so newer changes on `main` reach installed
+apps only through a new desktop build. Read the selected release's notes
+for its exact source version, included changes, and platform installers.
 
 | Platform | File | Notes |
 |----------|------|-------|
@@ -97,6 +104,46 @@ The Expo companion app, now in TestFlight beta. *Desktop creates knowledge, mobi
 | Restoring your context | Home: today's priority + readiness | Pipeline: assessed vs awaiting | Wellbeing: check-ins + Oura |
 
 Screens, capture flow, and build/ship docs: [mobile/README.md](mobile/README.md).
+
+---
+
+## jobContext Conference Badge
+
+The GitHub Universe 2025 **Pimoroni Tufty 2350 "Tufty Edition"** runs a MicroPython
+client in [`badge/jobcontext/`](badge/jobcontext/). It is another interface to
+your workspace, not a separate job-search database or an on-device LLM.
+
+- **Search and capture:** search your pipeline by company or role, discover
+  open positions through the server's configured search provider, and add a
+  selected opening to your pipeline.
+- **Generate from your lanyard:** choose a resume, cover letter, or both,
+  select the layout and colour, and queue generation on the server. The badge
+  polls compact work status and can notify you after you leave the waiting
+  screen; open the generated files in the dashboard's Materials screen.
+- **Wearable contact card:** an optional name/title/link card alternates with
+  a vCard QR code, alongside self-playing Tetris. Multi-network Wi-Fi settings
+  support configured home, hotspot, and conference networks.
+
+**Device limits:** text entry uses the UP/DOWN/A/B/C buttons. Bluetooth
+keyboard input is scaffolded but **not implemented**; the probed stock
+firmware lacks the pairing/bonding support it needs. Search and generation
+need Wi-Fi and a reachable server; the badge is not an offline generator.
+Use the supplied installer to precompile the app for its constrained memory.
+
+**Credential boundary:** use a **badge-scoped API key**, never a full-access
+key. It is limited to `/api/badge/*` and cannot access MCP or the dashboard.
+The badge's mountable filesystem stores credentials in plain text, and its
+MicroPython HTTPS client does not verify server certificates; use a trusted
+network and revoke the badge token after the event.
+
+Start with the [device setup and button guide](badge/README.md); see the
+[API and scoped-key design](docs/badge.md) for the server implementation.
+Without the badge, use the authenticated [phone/laptop conference
+fallback](docs/conference-demo.md), which reuses the same discovery and
+background-generation APIs with saved template choices and recovery controls.
+The fallback guide includes a live-rehearsal checklist and locally saved
+PDFs as the no-network escape route; software tests are not proof of a
+successful live hardware or provider-backed rehearsal.
 
 ---
 
@@ -189,6 +236,7 @@ flowchart LR
         AI["MCP clients<br/>(Copilot · Claude · Cursor)"]
         WMCP["In-browser agents<br/>(ChatGPT · Chrome OT · Edge)"]
         WEB["Dashboard SPA + mobile app"]
+        BADGE["Conference badge<br/>(MicroPython · scoped API key)"]
         CLI["cli.py / scripts"]
     end
     subgraph Server
@@ -206,6 +254,7 @@ flowchart LR
     AI -->|stdio / streamable-http| TOOLS
     WMCP -->|"WebMCP bridge<br/>(document.modelContext)"| WEB
     WEB --> HTTP
+    BADGE -->|/api/badge/*| HTTP
     CLI --> TOOLS
     HTTP --> TOOLS
     HTTP --> WORK
@@ -309,6 +358,9 @@ Everything the code reads — env vars, `config.json` keys, feature flags, per-d
 | [docs/local-cluster.md](docs/local-cluster.md) | k3d locally; k3s on a Raspberry Pi |
 | [desktop/README.md](desktop/README.md) | Desktop architecture, signing, updater, release pipeline |
 | [mobile/README.md](mobile/README.md) | Mobile companion: screens, capture, build/ship |
+| [badge/README.md](badge/README.md) | Conference badge: hardware, installation, button input, contact card |
+| [docs/badge.md](docs/badge.md) | Badge API, scoped credentials, asynchronous generation, firmware tests |
+| [docs/conference-demo.md](docs/conference-demo.md) | Phone/laptop fallback, template choices, recovery, live rehearsal checklist |
 | [CHANGELOG.md](CHANGELOG.md) | Full release history |
 
 Legal: [privacy policy](docs/files/jobcontext-privacy-policy.md) · [terms of service](docs/files/jobcontext-terms-of-service.md). Agent instruction template for Copilot: [copilot-instructions.example.md](copilot-instructions.example.md).
