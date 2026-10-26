@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import DashboardShell from './shell/DashboardShell.jsx'
 import Home from './screens/Home.jsx'
 import Pipeline from './screens/Pipeline.jsx'
+import ConferenceDemo from './screens/ConferenceDemo.jsx'
 import JobHunt from './screens/JobHunt.jsx'
 import Materials from './screens/Materials.jsx'
 import Rejections from './screens/Rejections.jsx'
@@ -31,6 +32,7 @@ export default function App() {
       >
         <Route path="/" element={<Home />} />
         <Route path="/pipeline" element={<Pipeline />} />
+        <Route path="/conference-demo" element={<ConferenceDemo />} />
         <Route path="/job-hunt" element={<JobHunt />} />
         <Route path="/materials" element={<Materials />} />
         <Route path="/rejections" element={<Rejections />} />

@@ -203,6 +203,32 @@ async function preview(page, name, kind, origin) {
   assert.equal(results.externalPageRequests.length, externalBeforeApp, 'SPA/preview must use only same-origin assets');
   assertNoBrowserErrors();
   await page.screenshot({ path: path.join(reports, 'materials.png'), fullPage: true });
+
+  // The real built dashboard at phone and laptop widths; real authenticated
+  // routes and queued work, with only the fixture executor replacing the LLM.
+  await page.goto(`${origin}/app/conference-demo`);
+  await page.getByRole('heading', { name: 'Recent generations' }).waitFor();
+  await page.getByLabel('Company or role').fill('Conference Fixture');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await page.getByRole('button', { name: 'Generate documents', exact: true }).click();
+  await until(async () => (await page.locator('[role="status"]').textContent()) === 'Completed', 'conference generation completes');
+  assert.match(page.url(), /work=\d+/);
+  await page.reload();
+  await page.getByText('Completed', { exact: true }).waitFor();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.getByRole('heading', { name: 'Recent generations' }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `No overflow at ${width}px`);
+    await page.screenshot({ path: path.join(reports, `conference-${width}.png`), fullPage: true });
+  }
+  await context.setOffline(true);
+  await page.getByText('You are offline.', { exact: false }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Search', exact: true }).isEnabled(), false);
+  await context.setOffline(false);
+  await page.getByRole('button', { name: 'Refresh recent generations', exact: true }).click();
+  assertNoBrowserErrors();
+  pass('Conference fallback: real session, search/select/async completion, reload recovery, 390px/1440px layout, offline controls');
   results.status = 'passed';
 })().catch(async err => {
   results.status = 'failed';

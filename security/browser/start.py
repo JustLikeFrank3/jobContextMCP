@@ -84,12 +84,24 @@ def main():
     block_external_connections()
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     import uvicorn
+    from transport.http.main import app
+    from lib.db import get_connection
+    from lib import work
+
+    # Conference smoke uses real authenticated routes and dispatcher, but only
+    # synthetic data and an offline executor. Never call a paid search or LLM.
+    with get_connection() as con:
+        con.execute("INSERT INTO job_queue (company, role, jd, status) VALUES (?, ?, ?, ?)",
+                    ("Conference Fixture", "Platform Engineer", "Synthetic job description", "pending"))
+    work.register_kind("badge_materials", lambda inputs: {
+        "company": "Conference Fixture", "resume": "Synthetic resume", "cover_letter": "Synthetic letter",
+    })
 
     # uvloop performs native socket I/O and bypasses the Python socket guard.
     # This fixture must use asyncio's guarded Python sockets, independently of
     # production's auto-selected event loop.
     uvicorn.run(
-        "transport.http.main:app", host="127.0.0.1", port=port,
+        app, host="127.0.0.1", port=port,
         loop="asyncio", reload=False, log_level="info",
     )
 
