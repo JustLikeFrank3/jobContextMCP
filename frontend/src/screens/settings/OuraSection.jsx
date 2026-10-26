@@ -234,7 +234,12 @@ function PatConnect({ onReload }) {
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') connect() }}
+          onKeyDown={async (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              await connect()
+            }
+          }}
           placeholder="Personal access token"
           style={INPUT_STYLE_FLEX}
         />

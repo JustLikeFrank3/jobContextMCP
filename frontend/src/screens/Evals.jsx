@@ -152,11 +152,11 @@ function TriageCard({ claim, meanings }) {
       setSaving(false)
     }
   }
-  const pick = (r) => {
+  const pick = async (r) => {
     const prev = ruling
     const next = ruling === r ? '' : r
     setRuling(next)
-    send(next, note, prev)
+    await send(next, note, prev)
   }
 
   return (
@@ -179,7 +179,7 @@ function TriageCard({ claim, meanings }) {
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          onBlur={() => { if (ruling) send(ruling, note) }}
+          onBlur={async () => { if (ruling) await send(ruling, note) }}
           placeholder="Note — for a D, tell the story: it becomes the master edit"
           style={{
             flex: 1, minWidth: 220, background: 'var(--well, #1b2a44)',

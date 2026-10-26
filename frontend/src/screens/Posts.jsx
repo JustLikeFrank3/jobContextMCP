@@ -7,6 +7,7 @@ import { apiPost } from '../auth/api.js'
 import { useApi, Screen, fmtDate } from './_shared.jsx'
 import ImportFlow, { StepIndicator } from './posts/ImportFlow.jsx'
 import { fmtK } from './posts/csv.js'
+import { useModalKeyboard } from './pipeline/shared.jsx'
 
 /* Posts — LinkedIn content + engagement, per the desktop design handoff.
    Data: GET /dashboard/posts/data (_posts_payload).
@@ -19,6 +20,7 @@ import { fmtK } from './posts/csv.js'
 const MONO = { fontFamily: 'var(--font-mono)' }
 
 function MetricSheet({ post, onClose, onSaved }) {
+  const keyboard = useModalKeyboard(onClose)
   const digits = (v) => v.replace(/[^0-9]/g, '')
   const [imp, setImp] = useState(String(post.impressions || ''))
   const [rx, setRx] = useState(String(post.reactions || ''))
@@ -54,13 +56,19 @@ function MetricSheet({ post, onClose, onSaved }) {
   // .jc-page animates `transform`, which captures fixed descendants.
   return createPortal(
     <div
+      ref={keyboard.ref}
+      onKeyDown={keyboard.onKeyDown}
+      role="dialog"
+      aria-modal="true"
+      tabIndex={-1}
+      aria-label="Update metrics"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(4,7,14,.66)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
     >
       <div style={{ width: 440, maxWidth: '100%', background: '#0E1524', borderRadius: 20, border: '1px solid rgba(255,255,255,.1)', padding: 24, boxShadow: '0 30px 80px rgba(0,0,0,.6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 18, fontWeight: 'var(--fw-bold)', color: 'var(--text)' }}>Update metrics</div>
-          <div onClick={onClose} style={{ cursor: 'pointer', color: '#8A99B5', fontSize: 24, lineHeight: 1 }}>×</div>
+          <button type="button" aria-label="Close metrics" onClick={onClose} style={{ border: 0, padding: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: '#8A99B5', fontSize: 24, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ marginTop: 6, fontSize: '12.5px', color: '#8A99B5', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {post.text || post.title}
@@ -80,9 +88,9 @@ function MetricSheet({ post, onClose, onSaved }) {
           </div>
         </div>
         {err && <div style={{ marginTop: 12, color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)' }}>{err}</div>}
-        <div onClick={busy ? undefined : save} style={{ marginTop: 22, textAlign: 'center', background: 'var(--cyan-500)', color: '#04222A', fontWeight: 'var(--fw-bold)', fontSize: 15, padding: 13, borderRadius: 14, cursor: busy ? 'wait' : 'pointer' }}>
+        <button type="button" disabled={busy} onClick={save} style={{ display: 'block', width: '100%', border: 0, fontFamily: 'inherit', lineHeight: 'inherit', marginTop: 22, textAlign: 'center', background: 'var(--cyan-500)', color: '#04222A', fontWeight: 'var(--fw-bold)', fontSize: 15, padding: 13, borderRadius: 14, cursor: busy ? 'wait' : 'pointer' }}>
           {busy ? 'Saving…' : 'Save metrics'}
-        </div>
+        </button>
       </div>
     </div>,
     document.body,
@@ -112,9 +120,9 @@ function PostCard({ post, isDesktop, onEdit }) {
         <span>♥ {fmtK(post.reactions)}</span>
         <span>💬 {fmtK(post.comments)}</span>
       </div>
-      <div onClick={onEdit} style={{ cursor: 'pointer', fontSize: 12, fontWeight: 'var(--fw-semibold)', color: 'var(--cyan-300)', background: 'rgba(0,181,200,.12)', border: '1px solid rgba(0,181,200,.24)', padding: '7px 14px', borderRadius: 9, flexShrink: 0 }}>
+      <button type="button" onClick={onEdit} style={{ fontFamily: 'inherit', lineHeight: 'inherit', cursor: 'pointer', fontSize: 12, fontWeight: 'var(--fw-semibold)', color: 'var(--cyan-300)', background: 'rgba(0,181,200,.12)', border: '1px solid rgba(0,181,200,.24)', padding: '7px 14px', borderRadius: 9, flexShrink: 0 }}>
         Update
-      </div>
+      </button>
     </div>
   )
 }
@@ -133,12 +141,12 @@ export default function Posts() {
     importing ? (
       <StepIndicator step={step} />
     ) : (
-      <div
+      <button type="button"
         onClick={() => { setMode('import'); setStep(1) }}
-        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 'var(--fw-bold)', color: '#04222A', background: 'var(--cyan-500)', padding: '9px 16px', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,181,200,.25)' }}
+        style={{ border: 0, fontFamily: 'inherit', lineHeight: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 'var(--fw-bold)', color: '#04222A', background: 'var(--cyan-500)', padding: '9px 16px', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,181,200,.25)' }}
       >
         ↧ Import from LinkedIn
-      </div>
+      </button>
     ),
     [importing, step],
   )

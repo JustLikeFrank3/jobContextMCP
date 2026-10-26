@@ -19,6 +19,8 @@ export default function Settings() {
     getConfig().then((c) => {
       setUrl(c.url)
       setHasPat(Boolean(c.pat))
+    }).catch(() => {
+      Alert.alert('Could not load settings', 'Your saved connection could not be read. Reopen Settings to try again.')
     })
   }, [])
 

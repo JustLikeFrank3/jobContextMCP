@@ -67,7 +67,11 @@ export default function DataSection({ isDesktop }) {
                     type="file"
                     accept=".zip,application/zip"
                     style={{ display: 'none' }}
-                    onChange={(e) => { importZip(e.target.files?.[0]); e.target.value = '' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ''
+                      await importZip(file)
+                    }}
                   />
                   <Button
                     variant="ghost"

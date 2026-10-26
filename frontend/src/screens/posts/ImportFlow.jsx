@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { apiPost } from '../../auth/api.js'
 import { parseCSV, autoDetectMap, extractHashtags, numCell, fmtK } from './csv.js'
 
@@ -54,6 +54,7 @@ const FIELD_DEFS = [
 
 export default function ImportFlow({ step, setStep, onDone, onCancel }) {
   const [dragOver, setDragOver] = useState(false)
+  const [uploadFocused, setUploadFocused] = useState(false)
   const [fileName, setFileName] = useState('')
   const [headers, setHeaders] = useState([])
   const [rows, setRows] = useState([])
@@ -61,7 +62,6 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const fileRef = useRef(null)
 
   function ingest(text, name) {
     const parsed = parseCSV(text)
@@ -124,6 +124,8 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
         </div>
 
         <label
+          onFocus={() => setUploadFocused(true)}
+          onBlur={() => setUploadFocused(false)}
           onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) readFile(f) }}
           onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true) }}
           onDragLeave={(e) => { e.preventDefault(); setDragOver(false) }}
@@ -133,6 +135,7 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
             borderRadius: 24, border: `2px dashed ${dragOver ? 'var(--cyan-500)' : 'rgba(0,181,200,.4)'}`,
             background: dragOver ? 'rgba(0,181,200,.1)' : 'rgba(0,181,200,.03)',
             cursor: 'pointer', transition: 'all .18s', overflow: 'hidden',
+            outline: uploadFocused ? '2px solid var(--cyan-300)' : undefined, outlineOffset: 4,
           }}
         >
           <div style={{ position: 'absolute', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,181,200,.16), rgba(0,181,200,0) 68%)', animation: 'jc-glowRing 3.5s ease-in-out infinite', pointerEvents: 'none' }} />
@@ -142,15 +145,15 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
           <div style={{ position: 'relative', fontSize: 18, fontWeight: 'var(--fw-semibold)', color: 'var(--text)' }}>Drag your CSV here</div>
           <div style={{ position: 'relative', fontSize: 13, color: '#8A99B5', ...MONO }}>Shares.csv · Engagement.csv · analytics export</div>
           <div style={{ position: 'relative', marginTop: 6, fontSize: '13.5px', fontWeight: 'var(--fw-bold)', color: '#04222A', background: 'var(--cyan-500)', padding: '10px 22px', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,181,200,.3)' }}>Choose file…</div>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = '' }} />
+          <input type="file" aria-label="Choose CSV file" accept=".csv,text/csv" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = '' }} />
         </label>
 
         {err && <div style={{ marginTop: 14, color: 'var(--danger-soft)', fontSize: 'var(--fs-sm)' }}>{err}</div>}
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#8A99B5' }}>
-          <span onClick={() => ingest(SAMPLE_CSV, 'Shares.csv (sample)')} style={{ cursor: 'pointer', color: 'var(--cyan-300)', fontWeight: 'var(--fw-semibold)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" onClick={() => ingest(SAMPLE_CSV, 'Shares.csv (sample)')} style={{ border: 0, padding: 0, background: 'none', font: 'inherit', cursor: 'pointer', color: 'var(--cyan-300)', fontWeight: 'var(--fw-semibold)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             Use sample Shares.csv
-          </span>
+          </button>
           <span>to preview the flow</span>
         </div>
       </div>
@@ -247,10 +250,12 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
             <span style={{ color: 'var(--cyan-300)', fontWeight: 'var(--fw-bold)', fontSize: 16 }}>{validRows.length}</span> posts ready to import
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <div onClick={onCancel} style={{ cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-semibold)', color: '#C9D6EC', background: 'rgba(255,255,255,.06)', padding: '11px 18px', borderRadius: 11 }}>Cancel</div>
-            <div
+            <button type="button" onClick={onCancel} style={{ border: 0, fontFamily: 'inherit', lineHeight: 'inherit', cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-semibold)', color: '#C9D6EC', background: 'rgba(255,255,255,.06)', padding: '11px 18px', borderRadius: 11 }}>Cancel</button>
+            <button type="button"
+              disabled={!canImport}
               onClick={confirm}
               style={{
+                border: 0, fontFamily: 'inherit', lineHeight: 'inherit',
                 cursor: canImport ? 'pointer' : 'not-allowed',
                 fontSize: '13.5px', fontWeight: 'var(--fw-bold)', color: '#04222A',
                 background: canImport ? 'var(--cyan-500)' : '#455266',
@@ -259,7 +264,7 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
               }}
             >
               {busy ? 'Importing…' : `Import ${validRows.length} posts →`}
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -306,8 +311,8 @@ export default function ImportFlow({ step, setStep, onDone, onCancel }) {
         ))}
       </div>
       <div style={{ marginTop: 26, display: 'flex', gap: 10 }}>
-        <div onClick={onDone} style={{ cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-bold)', color: '#04222A', background: 'var(--cyan-500)', padding: '12px 24px', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,181,200,.28)' }}>View in Posts</div>
-        <div onClick={() => { setResult(null); setFileName(''); setHeaders([]); setRows([]); setMap({ text: -1, date: -1, imp: -1, rx: -1, cm: -1 }); setStep(1) }} style={{ cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-semibold)', color: '#C9D6EC', background: 'rgba(255,255,255,.06)', padding: '12px 20px', borderRadius: 12 }}>Import another</div>
+        <button type="button" onClick={onDone} style={{ border: 0, fontFamily: 'inherit', lineHeight: 'inherit', cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-bold)', color: '#04222A', background: 'var(--cyan-500)', padding: '12px 24px', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,181,200,.28)' }}>View in Posts</button>
+        <button type="button" onClick={() => { setResult(null); setFileName(''); setHeaders([]); setRows([]); setMap({ text: -1, date: -1, imp: -1, rx: -1, cm: -1 }); setStep(1) }} style={{ border: 0, fontFamily: 'inherit', lineHeight: 'inherit', cursor: 'pointer', fontSize: '13.5px', fontWeight: 'var(--fw-semibold)', color: '#C9D6EC', background: 'rgba(255,255,255,.06)', padding: '12px 20px', borderRadius: 12 }}>Import another</button>
       </div>
     </div>
   )
