@@ -151,6 +151,14 @@ async function preview(page, name, kind, origin) {
       assert.equal(await page.locator('a[href^="/privacy"]').count(), 1);
       assert.equal(await page.locator('a[href="/terms"]').count(), 1);
     }
+    if (pathname === '/login' || pathname === '/privacy') {
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: 844 });
+        await page.evaluate(() => document.fonts.ready.then(() => true));
+        await page.screenshot({ path: path.join(reports, `public-${pathname.slice(1)}-${width}.png`), fullPage: true, animations: 'disabled' });
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
     if (pathname === '/architecture') {
       assert.equal(await page.locator('img.diagram-image').count(), 2);
       assert.equal(await page.locator('img.diagram-image').evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
