@@ -36,7 +36,7 @@ jobs:
           python -m pytest tests/test_security_headers.py tests/test_dashboard_login_csrf.py \
             tests/test_dashboard_coverage.py tests/test_entra_auth.py tests/test_oauth_keybridge.py \
             tests/test_webmcp_csrf.py tests/test_eval_push_security.py tests/test_sql_security.py \
-            tests/test_badge_api.py -q
+            tests/test_badge_api.py tests/test_badge_template_choices.py -q
           python -m unittest discover -s security/dast -p 'test_*.py' -v
           node --test security/browser/proxy.test.cjs
       - name: Build and test the real frontend
