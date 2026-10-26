@@ -1,4 +1,4 @@
-"""Public marketing landing page for jobContext (served at /). Self-contained — tokens + Google Fonts inlined. Generated from the jobContext Design System."""
+"""Public marketing landing page for jobContext (served at /). Local design tokens and same-origin font assets. Generated from the jobContext Design System."""
 from __future__ import annotations
 
 LANDING_HTML: str = r'''<!doctype html>
@@ -20,8 +20,8 @@ LANDING_HTML: str = r'''<!doctype html>
 <meta name="twitter:title"       content="jobContext &mdash; The memory layer for your career" />
 <meta name="twitter:description" content="Give your AI a memory of your entire job search. Applications, stories, contacts, truth-gated resume generation, interview prep, on desktop, cloud, and mobile." />
 <meta name="twitter:image"       content="https://jobcontext.ai/og-image.png" />
+<link rel="stylesheet" href="/fonts/fonts.css" />
 <style id="ds-tokens">
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 /* ============================================================
    jobContext — Color tokens
    Redesign palette. Anchored on the brand sheet: deep navy ink,

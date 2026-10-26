@@ -60,6 +60,19 @@ _PNG_MEDIA_TYPE = "image/png"
 # resource_root() is sys._MEIPASS-aware so the SPA also resolves from inside
 # a PyInstaller bundle (desktop app).
 _SPA_DIST = resource_root() / "frontend" / "dist"
+_FONT_SOURCE = resource_root() / "frontend" / "public" / "fonts"
+
+
+def _mount_fonts(app: FastAPI) -> None:
+    """Share local font assets with public pages, even without a SPA build."""
+    # Vite copies public/fonts into dist/fonts, which travels into the Docker
+    # image and frozen desktop bundle. Source runs can use the same pinned
+    # assets without having to build the SPA or contact a font CDN.
+    for directory in (_SPA_DIST / "fonts", _FONT_SOURCE):
+        if (directory / "fonts.css").is_file():
+            app.mount("/fonts", StaticFiles(directory=directory), name="public-fonts")
+            return
+    _logger.warning("Local font assets not found; browser fallback fonts will be used")
 
 
 def _mount_spa(app: FastAPI) -> None:
@@ -280,6 +293,7 @@ class UserDataContextMiddleware(BaseHTTPMiddleware):
             "/why",
             "/app",              # React SPA shell + hashed assets (data APIs stay protected)
             "/static/",          # source-controlled public CSS and architecture diagrams
+            "/fonts/",           # pinned, same-origin font assets and license notices
             "/dashboard/login",
             "/dashboard/callback",
             "/dashboard/logout",
@@ -568,6 +582,7 @@ def create_app(mcp: "FastMCP | None" = None) -> FastAPI:
     # intercepts these paths first.
     _static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=_static), name="public-static")
+    _mount_fonts(app)
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():

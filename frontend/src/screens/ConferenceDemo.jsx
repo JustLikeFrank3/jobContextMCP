@@ -25,6 +25,9 @@ export default function ConferenceDemo() {
   const [current, setCurrent] = useState(null)
   const [pollError, setPollError] = useState('')
   const [pollAttempt, setPollAttempt] = useState(0)
+  const [checkingStatus, setCheckingStatus] = useState(false)
+  const [lastStatusCheck, setLastStatusCheck] = useState(null)
+  const statusRequestPending = useRef(false)
   const mounted = useRef(false)
   const trackingVersion = useRef(0)
   const recentVersion = useRef(0)
@@ -81,6 +84,7 @@ export default function ConferenceDemo() {
     if (!mounted.current) return
     trackingVersion.current += 1
     setPollError('')
+    setLastStatusCheck(null)
     setCurrent({ ...item, made: madeFrom(item) })
     const url = new URL(window.location.href)
     url.searchParams.set('work', item.id)
@@ -91,14 +95,28 @@ export default function ConferenceDemo() {
   const workId = current?.id
   const workStatus = current?.status
   useEffect(() => {
-    if (!workId || terminal(workStatus) || !online) return
+    if (!workId || terminal(workStatus) || !online) {
+      statusRequestPending.current = false
+      setCheckingStatus(false)
+      return
+    }
     let stopped = false
     let timer
     async function poll() {
+      statusRequestPending.current = true
+      setCheckingStatus(true)
       try {
         const item = await request(`/api/badge/work/${workId}`)
         if (stopped) return
+        // A redirected HTML page or malformed success response is not evidence
+        // that the previous status was confirmed by the server.
+        if (!['queued', 'running', 'succeeded', 'failed', 'cancelled'].includes(item?.status)) {
+          throw new Error('Invalid generation status response')
+        }
+        statusRequestPending.current = false
         setPollError('')
+        setLastStatusCheck(new Date())
+        setCheckingStatus(false)
         setCurrent(old => ({ ...old, ...item }))
         if (terminal(item.status)) {
           refreshRecent().catch(() => {})
@@ -106,14 +124,28 @@ export default function ConferenceDemo() {
           timer = setTimeout(poll, 3000)
         }
       } catch (e) {
-        if (!stopped) setPollError(errorText(e))
+        if (!stopped) {
+          statusRequestPending.current = false
+          setCheckingStatus(false)
+          setPollError(errorText(e))
+        }
         // Pause on errors; an explicit check retries only the GET.
       }
     }
     // poll catches request failures and records them; effects cannot await.
     void poll()
-    return () => { stopped = true; clearTimeout(timer) }
+    return () => { stopped = true; statusRequestPending.current = false; clearTimeout(timer) }
   }, [workId, workStatus, online, pollAttempt, refreshRecent])
+
+  function checkStatus() {
+    // Guard synchronously too: repeated activations before React rerenders must
+    // not restart an in-flight automatic or manual GET.
+    if (!online || statusRequestPending.current) return
+    statusRequestPending.current = true
+    setCheckingStatus(true)
+    setPollError('')
+    setPollAttempt(n => n + 1)
+  }
 
   async function action(fn) {
     if (locked.current) return
@@ -247,7 +279,11 @@ export default function ConferenceDemo() {
       {missing.length > 0 && <p role="alert">Not created: {missing.join(', ').replaceAll('_', ' ')}. Open Materials to keep the completed document; select only the missing document to try again.</p>}
       {current.status === 'failed' && <p role="alert">Generation failed. {current.detail || 'Check Materials for any saved files, then try the failed document once or show your saved example.'}</p>}
       {pollError && <p role="alert">Status check paused. {pollError}</p>}
-      {!terminal(current.status) && <><p>You can leave this page; generation continues on the server. Keep this URL or select the run below to resume. After a few minutes, switch to your saved example while checking this run.</p><Button disabled={!online || busy} onClick={() => { setPollError(''); setPollAttempt(n => n + 1) }}>Check status</Button></>}
+      <div aria-live="polite">
+        {checkingStatus && <p>Checking the server for an update…</p>}
+        {lastStatusCheck && <p>Last checked: <time dateTime={lastStatusCheck.toISOString()}>{lastStatusCheck.toLocaleTimeString()}</time>. {!checkingStatus && !pollError && online && !terminal(current.status) && `Still ${current.status} on the server. Status refreshes automatically every 3 seconds; checking does not restart generation.`}</p>}
+      </div>
+      {!terminal(current.status) && <><p>You can leave this page; generation continues on the server. Keep this URL or select the run below to resume. After a few minutes, switch to your saved example while checking this run.</p><Button disabled={!online || busy || checkingStatus} aria-busy={checkingStatus} onClick={checkStatus}>{checkingStatus ? 'Checking status…' : 'Check status'}</Button></>}
       <p><Link to="/materials">Open Materials to preview or download</Link></p>
     </Panel>}
     <Panel>

@@ -185,6 +185,7 @@ async def dashboard_login_page(request: Request, next: str = _DEFAULT_NEXT) -> H
     <input id="api_key" name="api_key" type="password" autocomplete="current-password" required />
     <button type="submit">Sign in</button>
     <div class="hint">Cookie is HTTP-only and stored for 30 days on this browser.</div>
+    <div class="hint"><a href="/privacy#cookies-and-browser-storage">Privacy &amp; browser storage</a> &middot; <a href="/terms">Terms</a></div>
   </form>
 </body>
 </html>"""

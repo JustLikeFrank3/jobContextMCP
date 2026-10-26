@@ -279,7 +279,7 @@ function GoldenSection({ golden, hasRun, reload }) {
         placeholder="Paste the full job description here" value={jd}
         onChange={(e) => { setJd(e.target.value); persist({ jd: e.target.value }) }} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10 }}>
-        <select style={{ ...inputStyle, width: 'auto' }} value={kind} onChange={(e) => setKind(e.target.value)}>
+        <select style={{ ...inputStyle, width: 'auto' }} value={kind} onChange={(e) => { setKind(e.target.value); persist({ kind: e.target.value }) }}>
           <option value="resume">resume</option>
           <option value="cover_letter">cover letter</option>
         </select>

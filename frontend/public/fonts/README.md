@@ -1,15 +1,20 @@
-# Self-hosted dashboard fonts
+# Self-hosted web fonts
 
-The dashboard loads these fonts from the same origin, not a runtime Google Fonts
-stylesheet. Google serves user-agent-dependent CSS, which cannot have one stable
-SRI digest. Vendoring the actual font bytes removes that external stylesheet
-trust dependency and permits `style-src` / `font-src` self-only on the SPA.
+The dashboard, public pages, and legacy server-rendered pages load these fonts
+from the same origin, not a runtime Google Fonts stylesheet. Public pages use
+`/fonts/fonts.css`, served from the built SPA assets in packaged deployments
+or this source directory when running without an SPA build. Google serves
+user-agent-dependent CSS, which cannot have one stable SRI digest. Vendoring the actual font bytes removes that external stylesheet
+trust dependency and permits same-origin-only font sources on the SPA and
+public pages.
 
 These are **unmodified variable WOFF2 files**, with descriptive local filenames.
 Font-family names and Unicode ranges are unchanged. All 16 subsets returned by
 Google Fonts are retained, including Cyrillic, Greek, Vietnamese and Latin
 extensions where the family provides them. Normal weights 400–700 retain the
 previous dashboard weights (400, 500, 600, 700; JetBrains previously 400/500/700).
+Space Grotesk also exposes weight 300 for public-page light text; the existing
+unmodified files already include the full 300–700 variable axis.
 `font-display: swap` and the existing fallback stacks are unchanged.
 
 ## Provenance

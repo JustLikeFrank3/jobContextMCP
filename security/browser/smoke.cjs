@@ -41,6 +41,9 @@ function assertNoBrowserErrors() {
   assert.deepEqual(runtimeErrors, [], 'Uncaught browser error');
   assert.deepEqual(results.blockedWebSockets, [], 'Unexpected WebSocket connection');
 }
+async function browserStorage(page) {
+  return page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage) }));
+}
 async function preview(page, name, kind, origin) {
   const [popup] = await Promise.all([
     page.waitForEvent('popup'),
@@ -141,6 +144,21 @@ async function preview(page, name, kind, origin) {
       const style = getComputedStyle(el);
       return style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.backgroundImage !== 'none';
     }), true);
+    assert.deepEqual(await context.cookies(), [], `Public ${pathname} must not set cookies`);
+    assert.deepEqual(await browserStorage(page), { local: [], session: [] }, `Public ${pathname} must not write browser storage`);
+    assert.equal(await page.locator('link[href="/fonts/fonts.css"]').count(), 1, `Public ${pathname} uses same-origin fonts`);
+    if (pathname === '/login') {
+      assert.equal(await page.locator('a[href^="/privacy"]').count(), 1);
+      assert.equal(await page.locator('a[href="/terms"]').count(), 1);
+    }
+    if (pathname === '/login' || pathname === '/privacy') {
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: 844 });
+        await page.evaluate(() => document.fonts.ready.then(() => true));
+        await page.screenshot({ path: path.join(reports, `public-${pathname.slice(1)}-${width}.png`), fullPage: true, animations: 'disabled' });
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
     if (pathname === '/architecture') {
       assert.equal(await page.locator('img.diagram-image').count(), 2);
       assert.equal(await page.locator('img.diagram-image').evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
@@ -148,6 +166,7 @@ async function preview(page, name, kind, origin) {
     }
     assertNoBrowserErrors();
   }
+  assert.deepEqual(results.externalPageRequests, [], 'Public pages must not request third-party assets');
   assert.equal(results.proxyRequests.some(url => url.endsWith('/static/architecture/capability-layer.svg')), true, 'Chromium must route loopback subresources through the isolation proxy');
   pass('All seven public pages keep authored styles; both architecture diagrams load under strict CSP');
 
@@ -169,6 +188,8 @@ async function preview(page, name, kind, origin) {
   pass('Reflected next payload escaped; browser CSP independently blocks injected inline script');
 
   await page.goto(`${origin}/dashboard/login?next=%2Fapp%2Fmaterials`);
+  assert.equal(await page.locator('a[href^="/privacy"]').count(), 1);
+  assert.equal(await page.locator('a[href="/terms"]').count(), 1);
   assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).display), 'grid');
   assert.equal(await page.locator('form.card').evaluate(el => getComputedStyle(el).maxWidth), '420px');
   assert.match(await page.locator('[name="csrf_token"]').inputValue(), /^[A-Za-z0-9_-]{43}$/);
@@ -179,9 +200,18 @@ async function preview(page, name, kind, origin) {
   await page.getByTitle('Preview security-preview.md', { exact: true }).waitFor();
   const session = (await context.cookies()).find(cookie => cookie.name === 'jc_session');
   assert.equal(session?.httpOnly, true);
+  assert.equal(session?.sameSite, 'Lax');
+  assert.equal(session?.path, '/');
+  assert.ok(Math.abs(session.expires - Date.now() / 1000 - 30 * 24 * 60 * 60) < 120, 'API-key session has the disclosed 30-day expiry');
   assert.equal((await context.cookies()).some(cookie => cookie.name === 'jc_login_csrf'), false);
+  assert.deepEqual((await context.cookies()).map(cookie => cookie.name), ['jc_session']);
+  assert.deepEqual(await browserStorage(page), { local: [], session: [] });
   assertNoBrowserErrors();
   pass('Real API-key form signs in and removes pre-login cookie; built SPA loads and renders Materials');
+
+  await require('./status-feedback.cjs').checkStatusFeedback({ context, origin, reports, until });
+  assertNoBrowserErrors();
+  pass('Conference status: visible pending/unchanged feedback, no overlapping checks, error recovery, keyboard activation, phone/laptop layout, no mutation');
 
   const fonts = await page.evaluate(async () => {
     const loads = [];
@@ -289,6 +319,43 @@ async function preview(page, name, kind, origin) {
   await page.getByRole('button', { name: 'Refresh recent generations', exact: true }).click();
   assertNoBrowserErrors();
   pass('Conference fallback: saved template choices reach queued work, both document layouts, reload recovery, 390px/1440px layout, offline controls');
+
+  // The only app-owned Web Storage use preserves an unfinished golden-set
+  // form. Exercise it with synthetic text, never Run or any provider call.
+  await page.goto(`${origin}/app/evals`);
+  await page.getByPlaceholder('Company', { exact: true }).fill('Privacy Fixture');
+  await page.getByPlaceholder('Role title', { exact: true }).fill('Synthetic Role');
+  await page.getByPlaceholder('Paste the full job description here', { exact: true }).fill('Synthetic privacy audit job description.');
+  await page.locator('select:has(option[value="cover_letter"])').selectOption('cover_letter');
+  assert.deepEqual(await browserStorage(page), { local: [], session: ['jc-evals-golden-draft'] });
+  const draft = await page.evaluate(() => JSON.parse(sessionStorage.getItem('jc-evals-golden-draft')));
+  assert.deepEqual(draft, { company: 'Privacy Fixture', role: 'Synthetic Role', jd: 'Synthetic privacy audit job description.', kind: 'cover_letter' });
+  await page.reload();
+  assert.equal(await page.getByPlaceholder('Company', { exact: true }).inputValue(), 'Privacy Fixture');
+  assert.equal(await page.getByPlaceholder('Paste the full job description here', { exact: true }).inputValue(), draft.jd);
+  assert.equal(await page.locator('select:has(option[value="cover_letter"])').inputValue(), 'cover_letter');
+  const save = page.waitForResponse(response => new URL(response.url()).pathname === '/dashboard/evals/golden' && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Add entry', exact: true }).click();
+  const saved = await save;
+  assert.equal(saved.status(), 200);
+  assert.ok((await saved.json()).entry.id, 'Draft clears only after a confirmed save');
+  await until(async () => (await browserStorage(page)).session.length === 0, 'saved draft removed from sessionStorage');
+  assert.deepEqual(await browserStorage(page), { local: [], session: [] });
+  await Promise.all([
+    page.waitForURL(`${origin}/`),
+    page.getByRole('button', { name: 'Sign out', exact: true }).click(),
+  ]);
+  assert.deepEqual(await context.cookies(), [], 'Sign out removes the only session cookie');
+  assert.deepEqual(await browserStorage(page), { local: [], session: [] });
+  // Use the actual browser transport: APIRequestContext opens a CONNECT
+  // tunnel even for this HTTP target, which the isolation proxy rightly denies.
+  const anonymousStatus = await page.evaluate(async () => (
+    await fetch('/api/dashboard/me', { credentials: 'same-origin' })
+  ).status);
+  assert.equal(anonymousStatus, 401, 'Signed-out session cannot access protected data');
+  assert.deepEqual(results.externalPageRequests, [], 'Public and signed-in fixture flows must remain same-origin');
+  assertNoBrowserErrors();
+  pass('Privacy inventory: no public storage or third-party requests; Evals draft survives reload and clears on save; sign-out removes session cookie');
   results.status = 'passed';
 })().catch(async err => {
   results.status = 'failed';

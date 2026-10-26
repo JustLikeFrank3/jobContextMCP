@@ -7,8 +7,8 @@ TERMS_HTML: str = r'''<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Terms of Service &mdash; jobContext</title>
+<link rel="stylesheet" href="/fonts/fonts.css" />
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 :root {
   --ink-950:#070B14;--ink-900:#0A0F1C;--ink-850:#0B1220;--ink-800:#0F172A;
   --ink-700:#111A2B;--ink-600:#16213A;--ink-500:#1B2A44;--ink-450:#22324E;
