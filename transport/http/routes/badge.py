@@ -322,6 +322,19 @@ class MaterialsRequest(BaseModel):
     cl_style: str | None = None
 
 
+def _material_choices(inputs: dict) -> tuple[str, str, str, str]:
+    """Resolve independent choices without changing legacy shared defaults."""
+    template = inputs.get("template", "")
+    style = inputs.get("style") or "navy"
+    cl_template = inputs.get("cl_template")
+    if cl_template is None:
+        cl_template = template
+    cl_style = inputs.get("cl_style")
+    if cl_style is None:
+        cl_style = style
+    return template, style, cl_template, cl_style or "navy"
+
+
 def _generate_materials(inputs: dict) -> dict:
     """Work executor (kind=badge_materials): look up the job, generate, report paths.
 
@@ -340,15 +353,7 @@ def _generate_materials(inputs: dict) -> dict:
 
     job_id = int(inputs["job_id"])
     material = inputs.get("material", "resume")
-    template = inputs.get("template", "")
-    style = inputs.get("style") or "navy"
-    cl_template = inputs.get("cl_template")
-    if cl_template is None:
-        cl_template = template
-    cl_style = inputs.get("cl_style")
-    if cl_style is None:
-        cl_style = style
-    cl_style = cl_style or "navy"
+    template, style, cl_template, cl_style = _material_choices(inputs)
 
     with get_connection() as con:
         row = con.execute(
