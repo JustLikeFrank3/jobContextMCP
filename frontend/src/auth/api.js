@@ -76,10 +76,11 @@ export async function apiFetch(path, options = {}) {
  *
  * Returns parsed JSON, or { ok: true, raw } when the body is not JSON.
  */
-export async function apiSend(path, { method = 'POST', body, headers } = {}) {
+export async function apiSend(path, { method = 'POST', body, headers, signal } = {}) {
   const hasBody = body !== undefined
   const res = await fetch(path, {
     method,
+    signal,
     credentials: 'same-origin',
     headers: {
       Accept: 'application/json',

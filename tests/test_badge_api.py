@@ -609,3 +609,61 @@ def test_materials_records_the_choice_on_the_work_row(badge_env, monkeypatch):
     while not seen and time.time() < deadline:
         time.sleep(0.05)
     assert seen and seen[0]["template"] == "sidebar" and seen[0]["style"] == "warm"
+
+
+# The conference dashboard reuses these routes through its session cookie.
+def test_dashboard_cookie_can_search_queue_generate_and_recover(badge_env, web_search, monkeypatch):
+    client, _root = badge_env
+    client.cookies.set("jc_session", _key("full"))
+    assert client.get("/api/badge/ping").json()["ok"] is True
+    result = client.get("/api/badge/jobs?q=GitHub").json()
+    queued = client.post("/api/badge/jobs/queue", json={
+        "search_id": result["search_id"], "number": 1,
+    }).json()
+    from lib import work
+
+    monkeypatch.setitem(work._KINDS, "badge_materials", lambda inputs: {
+        "resume": "synthetic-resume", "cover_letter": "synthetic-letter",
+    })
+    out = client.post("/api/badge/materials", json={
+        "job_id": queued["job_id"], "material": "both",
+    })
+    assert out.status_code == 200
+    work_id = out.json()["work_id"]
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        body = client.get(f"/api/badge/work/{work_id}").json()
+        if body["status"] == "succeeded":
+            break
+        time.sleep(0.05)
+    assert body["made"] == ["resume", "cover_letter"]
+    assert client.get(f"/api/work/{work_id}").json()["inputs"]["job_id"] == queued["job_id"]
+    assert any(r["id"] == work_id for r in client.get("/api/work").json()["items"])
+
+
+def test_conference_work_recovery_stays_in_the_session_tenant(badge_env, monkeypatch):
+    client, _root = badge_env
+    from lib import work
+    from lib.api_keys import create_key
+
+    monkeypatch.setitem(work._KINDS, "badge_materials", lambda inputs: {"resume": "synthetic"})
+    client.cookies.set("jc_session", _key("full"))
+    work_id = client.post("/api/badge/materials", json={"job_id": 1}).json()["work_id"]
+    assert client.get(f"/api/work/{work_id}").status_code == 200
+    _, other = create_key(oid="other-conference-user", label="other", scope="full")
+    client.cookies.clear()
+    client.cookies.set("jc_session", other)
+    assert client.get(f"/api/work/{work_id}").status_code == 404
+    assert client.get(f"/api/badge/work/{work_id}").status_code == 404
+    assert client.get("/api/work").json()["items"] == []
+
+
+def test_badge_cookie_cannot_reach_dashboard_recovery_or_materials(badge_env):
+    client, _root = badge_env
+    client.cookies.set("jc_session", _key("badge"))
+    assert client.get("/api/badge/ping").status_code == 200
+    for path in ("/api/work", "/api/work/1", "/dashboard/materials/data", "/api/dashboard/me"):
+        assert client.get(path).status_code == 403
+    client.cookies.clear()
+    for path in ("/api/badge/ping", "/api/work", "/dashboard/materials/data"):
+        assert client.get(path, headers={"Accept": "application/json"}).status_code == 401
