@@ -87,9 +87,11 @@ def main():
     from transport.http.main import app
     from lib.db import get_connection
     from lib import work
+    from lib.user_provisioning import provision_user_data
 
     # Conference smoke uses real authenticated routes and dispatcher, but only
     # synthetic data and an offline executor. Never call a paid search or LLM.
+    provision_user_data(root / "data")
     with get_connection() as con:
         con.execute("INSERT INTO job_queue (company, role, jd, status) VALUES (?, ?, ?, ?)",
                     ("Conference Fixture", "Platform Engineer", "Synthetic job description", "pending"))
