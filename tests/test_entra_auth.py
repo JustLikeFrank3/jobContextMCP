@@ -874,6 +874,37 @@ class TestUserDataContextMiddleware:
         names = [f["name"] for f in data["folders"]["cover_letters"]["files"]]
         assert "u1-cover-letter.txt" in names
 
+    def test_two_authenticated_users_see_only_their_own_materials(self, monkeypatch, isolated_server):
+        from lib import config
+        from transport.http.app import create_app
+        from transport.http.security import User
+
+        users = {
+            "u1": User(id="u1", name="User One", roles=("user",)),
+            "u2": User(id="u2", name="User Two", roles=("user",)),
+        }
+        for oid in users:
+            folder = Path(config.DATA_FOLDER) / "users" / oid / "workspace" / "02-Cover-Letters"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"{oid}-private.txt").write_text(f"private to {oid}", encoding="utf-8")
+
+        provider = _StubAuthProvider(users["u1"])
+        monkeypatch.setattr("transport.http.security.get_auth_provider", lambda: provider)
+        monkeypatch.setattr("transport.http.auth.get_auth_provider", lambda: provider)
+
+        app = create_app()
+        with TestClient(app, raise_server_exceptions=True) as client:
+            for oid, other_oid in (("u1", "u2"), ("u2", "u1")):
+                provider._user = users[oid]
+                response = client.get("/dashboard/materials/data")
+                assert response.status_code == 200
+                names = [
+                    entry["name"]
+                    for entry in response.json()["folders"]["cover_letters"]["files"]
+                ]
+                assert f"{oid}-private.txt" in names
+                assert f"{other_oid}-private.txt" not in names
+
     def test_admin_api_key_session_cannot_access_tenant_data(self, monkeypatch, isolated_server):
         from transport.http.app import create_app
         from transport.http.security import User

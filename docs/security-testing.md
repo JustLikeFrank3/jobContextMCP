@@ -103,3 +103,8 @@ source-policy limitation. No medium/high DAST exception or SAST baseline was add
 The security regression PR workflow tests the relevant Python suites, builds/tests
 the SPA, and checks browser CSP/preview behavior against disposable local state.
 It has no deployment credentials and does not target QA or production.
+
+For requirement-to-evidence mapping and the authenticated tenant-isolation gaps,
+see [security-assurance-matrix.md](security-assurance-matrix.md). The matrix
+describes current synthetic regression evidence and explicitly lists remaining
+coverage work; it is not an authorization to run active assessments.
