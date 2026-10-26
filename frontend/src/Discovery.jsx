@@ -59,7 +59,7 @@ function Signup() {
       </fieldset>}
       <div className="discovery-trap" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
       {error && <p role="alert" className="discovery-error">{error}</p>}
-      <button disabled={busy}>{busy ? 'Sending…' : beta ? 'Join the beta list' : 'Count me in'}</button>
+      <button type="submit" disabled={busy}>{busy ? 'Sending…' : beta ? 'Join the beta list' : 'Count me in'}</button>
       <p className="discovery-note">Signing up expresses interest. Recording and quote permissions are collected separately.</p>
     </form>
   </>
@@ -92,7 +92,7 @@ function ActionForm({ participant, sessions, onSaved }) {
       {action === 'incentive' && <><Field name="earned_by" label="Completed interview session ID, or beta_complete" maxLength={80} /><Field name="type" label="Incentive" options={['gift_card', 'pro_access', 'none']} defaultValue="gift_card" /><Field name="amount" label="Amount in USD" type="number" defaultValue="25" /><Field name="reference" label="Payment or access reference (required when sent)" required={false} maxLength={300} /><label className="discovery-check"><input type="checkbox" name="pending" defaultChecked /> Pending delivery</label></>}
       {action === 'status' && <Field name="status" label="Status" options={['dropped', 'declined']} />}
       {error && <p role="alert" className="discovery-error">{error}</p>}
-      <button disabled={busy}>{busy ? 'Saving…' : actionLabels[action]}</button>
+      <button type="submit" disabled={busy}>{busy ? 'Saving…' : actionLabels[action]}</button>
     </form>
   </div>
 }
@@ -120,9 +120,9 @@ function Review() {
     {report.errors.length > 0 && <p className="discovery-error">Figures below are provisional. Publishing and snapshots are blocked until these errors are resolved.</p>}
     {report.warnings.map((text, i) => <p key={i} className="discovery-warning">{text}</p>)}
     <div className="discovery-stats">{Object.entries(report.numbers).map(([key, value]) => <div key={key}><strong>{key === 'consent_on_file_rate' ? `${Math.round(value * 100)}%` : value}</strong><span>{friendly(key)}</span></div>)}</div>
-    <button onClick={freeze} disabled={busy || report.errors.length > 0}>{busy ? 'Saving snapshot…' : 'Snapshot'}</button>
+    <button type="button" onClick={freeze} disabled={busy || report.errors.length > 0}>{busy ? 'Saving snapshot…' : 'Snapshot'}</button>
     {snapshot && <pre role="status">{snapshot}</pre>}{error && <p role="alert" className="discovery-error">{error}</p>}
-    <div className="discovery-grid">{Object.keys(filters).map(key => <label key={key}>{friendly(key)}<select value={filters[key]} onChange={e => setFilters({ ...filters, [key]: e.target.value })}><option value="">All</option>{[...new Set(ledger.participants.map(p => p[key]))].sort().map(v => <option key={v}>{v}</option>)}</select></label>)}</div>
+    <div className="discovery-grid">{Object.keys(filters).map(key => <label key={key}>{friendly(key)}<select value={filters[key]} onChange={e => setFilters({ ...filters, [key]: e.target.value })}><option value="">All</option>{[...new Set(ledger.participants.map(p => p[key]))].sort((a, b) => a.localeCompare(b)).map(v => <option key={v}>{v}</option>)}</select></label>)}</div>
     <p>{people.length} participant{people.length === 1 ? '' : 's'}</p>
     {people.map(p => { const sessions = ledger.sessions.filter(s => s.participant_id === p.id); const incentives = ledger.incentives.filter(i => i.participant_id === p.id); return <details key={p.id} className="discovery-person">
       <summary><strong>{p.name}</strong> · {p.contact} <span>#{p.id} / {p.status} / {(p.programs || [p.program]).join(' + ')}</span></summary>

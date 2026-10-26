@@ -35,7 +35,7 @@ function useMcpClients() {
 
 function McpClientRow({ client, onConnect, busy }) {
   const status = client.connected ? 'connected' : client.installed ? 'detected' : 'not detected'
-  const tone = client.connected ? 'green' : client.installed ? 'muted' : 'muted'
+  const tone = client.connected ? 'green' : 'muted'
   return (
     <div
       style={{
