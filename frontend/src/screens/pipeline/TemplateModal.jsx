@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '../../design-system'
 import { apiSend } from '../../auth/api.js'
 import { Modal, modalField, modalLabel, actionError } from './shared.jsx'
 
 /* Template chooser (resume + cover letter, live preview) */
 export default function TemplateModal({ job, resumeTemplates, clTemplates, styles, onClose, onSaved, onSaveStart }) {
+  const templateLabel = useId()
+  const styleLabel = useId()
   const rTemplates = resumeTemplates?.length ? resumeTemplates : ['modern', 'executive', 'sidebar', 'portfolio']
   const cTemplates = clTemplates?.length ? clTemplates : rTemplates
   const sStyles = styles?.length ? styles : ['navy', 'slate', 'forest', 'warm', 'classic']
@@ -73,14 +75,14 @@ export default function TemplateModal({ job, resumeTemplates, clTemplates, style
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
         <label style={{ flex: 1, minWidth: 180 }}>
-          <span style={modalLabel}>Template</span>
-          <select style={modalField} value={tpl} onChange={(e) => (isResume ? setRTpl : setCTpl)(e.target.value)}>
+          <span id={templateLabel} style={modalLabel}>Template</span>
+          <select aria-labelledby={templateLabel} style={modalField} value={tpl} onChange={(e) => (isResume ? setRTpl : setCTpl)(e.target.value)}>
             {templates.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
         <label style={{ flex: 1, minWidth: 180 }}>
-          <span style={modalLabel}>Style</span>
-          <select style={modalField} value={sty} onChange={(e) => (isResume ? setRSty : setCSty)(e.target.value)}>
+          <span id={styleLabel} style={modalLabel}>Style</span>
+          <select aria-labelledby={styleLabel} style={modalField} value={sty} onChange={(e) => (isResume ? setRSty : setCSty)(e.target.value)}>
             {sStyles.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
