@@ -104,7 +104,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: jcmcp
-          image: <ACR_NAME>.azurecr.io/jcmcp:<IMAGE_TAG>
+          image: __IMAGE_REF__
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
