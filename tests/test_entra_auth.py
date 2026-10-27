@@ -895,6 +895,10 @@ class TestUserDataContextMiddleware:
         assert "u1-cover-letter.txt" in names
 
     def test_two_authenticated_users_see_only_their_own_materials(self, monkeypatch, isolated_server):
+        import json
+        import zipfile
+        from io import BytesIO
+
         from lib import config
         from transport.http.app import create_app
         from transport.http.security import User
@@ -904,9 +908,20 @@ class TestUserDataContextMiddleware:
             "u2": User(id="u2", name="User Two", roles=("user",)),
         }
         for oid in users:
-            folder = Path(config.DATA_FOLDER) / "users" / oid / "workspace" / "02-Cover-Letters"
+            user_root = Path(config.DATA_FOLDER) / "users" / oid
+            workspace = user_root / "workspace"
+            folder = workspace / "02-Cover-Letters"
             folder.mkdir(parents=True, exist_ok=True)
             (folder / f"{oid}-private.txt").write_text(f"private to {oid}", encoding="utf-8")
+            (user_root / config.JOB_QUEUE_FILE.name).write_text(
+                json.dumps({"jobs": [{"id": 5001 if oid == "u1" else 5002,
+                                      "company": f"{oid} Co", "role": "Engineer"}]}),
+                encoding="utf-8",
+            )
+            (user_root / "config.json").write_text(
+                json.dumps({"contact": {"name": f"{oid} original" if oid == "u1" else ""}}),
+                encoding="utf-8",
+            )
 
         from lib import work
         from lib.user_context import reset_data_folder, set_data_folder
@@ -939,6 +954,56 @@ class TestUserDataContextMiddleware:
                     assert f"{other_oid}-private.txt" not in names
 
                 provider._user = users["u1"]
+                owner_file = client.get("/dashboard/materials/file/cover_letters/u1-private.txt")
+                assert owner_file.status_code == 200
+                assert owner_file.text == "private to u1"
+
+                provider._user = users["u2"]
+                assert client.get("/dashboard/materials/file/cover_letters/u1-private.txt").status_code == 404
+                export = client.get("/api/dashboard/export")
+                assert export.status_code == 200
+                with zipfile.ZipFile(BytesIO(export.content)) as archive:
+                    exported_paths = archive.namelist()
+                assert "workspace/02-Cover-Letters/u2-private.txt" in exported_paths
+                assert "workspace/02-Cover-Letters/u1-private.txt" not in exported_paths
+
+                contact_write = client.post(
+                    "/api/sync/contact", json={"contact": {"name": "U2 synced"}}
+                )
+                assert contact_write.status_code == 200
+                u1_config = json.loads(
+                    (Path(config.DATA_FOLDER) / "users" / "u1" / "config.json").read_text()
+                )
+                u2_config = json.loads(
+                    (Path(config.DATA_FOLDER) / "users" / "u2" / "config.json").read_text()
+                )
+                assert u1_config["contact"]["name"] == "u1 original"
+                assert u2_config["contact"]["name"] == "U2 synced"
+
+                denied_remove = client.post(
+                    "/dashboard/pipeline/remove", json={"job_id": 5001}
+                )
+                assert denied_remove.status_code == 404
+                u1_jobs = json.loads(
+                    (Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name).read_text()
+                )["jobs"]
+                assert [job["id"] for job in u1_jobs] == [5001]
+
+                provider._user = users["u1"]
+                owner_remove = client.post(
+                    "/dashboard/pipeline/remove", json={"job_id": 5001}
+                )
+                assert owner_remove.status_code == 200
+                u1_jobs = json.loads(
+                    (Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name).read_text()
+                )["jobs"]
+                u2_jobs = json.loads(
+                    (Path(config.DATA_FOLDER) / "users" / "u2" / config.JOB_QUEUE_FILE.name).read_text()
+                )["jobs"]
+                assert u1_jobs == []
+                assert [job["id"] for job in u2_jobs] == [5002]
+
+                provider._user = users["u1"]
                 assert client.get(f"/api/work/{work_item_id}").status_code == 200
                 provider._user = users["u2"]
                 assert client.get(f"/api/work/{work_item_id}").status_code == 404
@@ -952,6 +1017,107 @@ class TestUserDataContextMiddleware:
                 work._KINDS.pop("security_isolation_probe", None)
             else:
                 work._KINDS["security_isolation_probe"] = original_kind
+
+    def test_mcp_application_write_uses_authenticated_user_partition(self, monkeypatch, isolated_server):
+        import json
+
+        from lib import config
+        from transport.http.app import create_app
+        from transport.http.security import User
+
+        users = {
+            "u1": User(id="u1", name="User One", roles=("user",)),
+            "u2": User(id="u2", name="User Two", roles=("user",)),
+        }
+        provider = _StubAuthProvider(users["u1"])
+        monkeypatch.setattr("transport.http.security.get_auth_provider", lambda: provider)
+        monkeypatch.setattr("transport.http.auth.get_auth_provider", lambda: provider)
+
+        # Use the production facade registrations over the real Streamable
+        # HTTP transport; only identity validation is stubbed to synthetic
+        # users. Disable only MCP Host checks for this local TestClient.
+        from mcp.server.fastmcp import FastMCP
+        from mcp.server.transport_security import TransportSecuritySettings
+        from tools import consolidated
+
+        mcp = FastMCP(
+            "tenant-isolation-test",
+            stateless_http=True,
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            ),
+        )
+        consolidated.register(mcp)
+        app = create_app(mcp)
+        headers = {
+            "Authorization": "Bearer synthetic-test-credential",
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
+
+        def parse_rpc(response):
+            if "text/event-stream" not in response.headers.get("content-type", ""):
+                return response.json()
+            data = [line[6:] for line in response.text.splitlines() if line.startswith("data: ")]
+            assert data, response.text
+            return json.loads(data[-1])
+
+        with TestClient(
+            app, raise_server_exceptions=True, base_url="http://localhost"
+        ) as client:
+            initialize = client.post("/mcp", headers=headers, json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "tenant-isolation-test", "version": "1"},
+                },
+            })
+            assert initialize.status_code == 200, initialize.text
+            initialize_body = parse_rpc(initialize)
+            assert "result" in initialize_body, initialize_body
+
+            def update_as(oid: str, status: str):
+                provider._user = users[oid]
+                return client.post("/mcp", headers=headers, json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "applications",
+                        "arguments": {
+                            "action": "update",
+                            "company": "Tenant Isolation Synthetic Co",
+                            "role": "Synthetic Role",
+                            "status": status,
+                            "notes": f"write by {oid}",
+                        },
+                    },
+                })
+
+            response1 = update_as("u1", "applied")
+            assert response1.status_code == 200, response1.text
+            body1 = parse_rpc(response1)
+            assert "error" not in body1, body1
+
+            response2 = update_as("u2", "interview")
+            assert response2.status_code == 200, response2.text
+            body2 = parse_rpc(response2)
+            assert "error" not in body2, body2
+
+        status_path = Path(config.STATUS_FILE.name)
+        u1_status = json.loads(
+            (Path(config.DATA_FOLDER) / "users" / "u1" / status_path).read_text()
+        )
+        u2_status = json.loads(
+            (Path(config.DATA_FOLDER) / "users" / "u2" / status_path).read_text()
+        )
+        assert u1_status["applications"][0]["status"] == "applied"
+        assert u1_status["applications"][0]["notes"] == "write by u1"
+        assert u2_status["applications"][0]["status"] == "interview"
+        assert u2_status["applications"][0]["notes"] == "write by u2"
 
     def test_admin_api_key_session_cannot_access_tenant_data(self, monkeypatch, isolated_server):
         from transport.http.app import create_app
