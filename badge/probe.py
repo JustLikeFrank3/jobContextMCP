@@ -249,12 +249,91 @@ def ble_host_capability():
         print("  BLE() construction failed: %s: %s" % (type(exc).__name__, exc))
 
 
+def i2c_bus():
+    """Can the badge talk I2C, on which pins, and what is on the bus?
+
+    This decides whether a wired keyboard (M5Stack CardKB / CardKB2 over the
+    qwiic port) is possible at all — the BLE route is closed, so I2C is the
+    remaining way to get real keys. Nothing in the codebase knows which GPIO
+    the qwiic port is wired to, so ask the firmware rather than guess: driving
+    arbitrary pins as a bus is a good way to fight whatever else is on them.
+
+    With a keyboard plugged in, the address it answers on appears below. The
+    original CardKB is 0x5F; the CardKB2 is a different chip (ESP32-C61) and
+    its address is not documented anywhere reachable, so the driver scans
+    rather than hardcodes — this is where that scan gets its answer.
+    """
+    _hr("I2C / qwiic")
+    try:
+        import machine
+    except ImportError as exc:
+        print("  no machine module (%s) — I2C is out" % exc)
+        return
+
+    if not hasattr(machine, "I2C"):
+        print("  machine has no I2C — a wired keyboard is not possible")
+        print("  machine exports: %s" % [a for a in dir(machine) if not a.startswith("_")])
+        return
+
+    # Some firmwares hand you a preconfigured bus; that is authoritative and
+    # saves guessing pins entirely.
+    for mod_name in ("badgeware", "qwiic", "board"):
+        try:
+            mod = __import__(mod_name)
+        except ImportError:
+            continue
+        for attr in ("i2c", "I2C", "qwiic"):
+            if hasattr(mod, attr):
+                print("  %s.%s exists -> %r" % (mod_name, attr, getattr(mod, attr)))
+
+    for bus_id in (0, 1):
+        try:
+            bus = machine.I2C(bus_id)
+        except Exception as exc:  # noqa: BLE001 — an unusable id is the answer
+            print("  I2C(%d)  !! %s: %s" % (bus_id, type(exc).__name__, exc))
+            continue
+        print("  I2C(%d)  %r" % (bus_id, bus))
+        try:
+            found = bus.scan()
+            print("    scan -> %s" % ([hex(a) for a in found] or "nothing on this bus"))
+            if 0x5F in found:
+                print("    0x5F present — that is a CardKB-family keyboard")
+        except Exception as exc:  # noqa: BLE001
+            print("    scan !! %s: %s" % (type(exc).__name__, exc))
+
+    print("  If every bus is empty with a keyboard attached: check GND is")
+    print("  connected (easy to skip when each device has its own power),")
+    print("  then swap SDA/SCL — harmless, the bus just stays quiet.")
+
+
+def wifi_identity():
+    """The badge's MAC, for captive portals that register devices by address.
+
+    Conference and hotel portals usually have a 'register a device' page for
+    gear that cannot display a login form. The badge is exactly that, so its
+    MAC is the way past a portal without a hotspot.
+    """
+    _hr("wifi identity")
+    try:
+        import network
+    except ImportError as exc:
+        print("  no network module (%s)" % exc)
+        return
+    try:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        mac = wlan.config("mac")
+        print("  MAC: %s" % ":".join("%02x" % b for b in mac))
+    except Exception as exc:  # noqa: BLE001
+        print("  could not read MAC: %s: %s" % (type(exc).__name__, exc))
+
+
 def run():
     print("=" * 52)
     print(" jobcontext badge probe")
     print("=" * 52)
     for step in (platform_info, module_scan, display_api, buttons,
-                 net_and_tls, ble_host_capability):
+                 net_and_tls, ble_host_capability, i2c_bus, wifi_identity):
         try:
             step()
         except Exception as exc:  # noqa: BLE001 — never let one check end the run
