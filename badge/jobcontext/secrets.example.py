@@ -29,3 +29,12 @@ BASE_URL = "https://jobcontext.ai"
 
 # Dashboard → API Keys → scope "Conference badge".
 BADGE_TOKEN = "jcmcp_replace_me"
+
+# Optional. A wired keyboard on the qwiic port (M5Stack CardKB / CardKB2) is
+# found by scanning, so normally you set nothing here: 0x5F is the CardKB
+# family's documented address, and a lone unknown device on an otherwise empty
+# bus is taken to be the thing you just plugged in. Set this only when the bus
+# has several devices and none of them is 0x5F — the scan declines to guess
+# which stranger is the keyboard rather than send keystroke reads to a sensor.
+# badge/probe.py prints what is actually on the bus.
+# KEYBOARD_I2C_ADDR = 0x5F

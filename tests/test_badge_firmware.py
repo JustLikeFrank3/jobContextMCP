@@ -444,6 +444,181 @@ def test_ble_source_is_declared_unavailable(badge_app):
     assert isinstance(inputs.best_available(), inputs.ButtonInput)
 
 
+# ── I2C keyboard (M5Stack CardKB / CardKB2 on the qwiic port) ──────────────────
+# The BLE route is closed (no gap_pair in this firmware), so a wired bus is the
+# only way to real keys. None of this needs the badge: a fake bus answers.
+
+
+class FakeI2C:
+    """A bus with devices on it. `keys` is the byte stream one address returns."""
+
+    def __init__(self, devices=(), keys=(), fail_scan=False, fail_read=False):
+        self.devices = list(devices)
+        self.keys = list(keys)
+        self.fail_scan = fail_scan
+        self.fail_read = fail_read
+        self.reads = []
+
+    def scan(self):
+        if self.fail_scan:
+            raise OSError("bus error")
+        return list(self.devices)
+
+    def readfrom(self, address, count):
+        self.reads.append(address)
+        if self.fail_read:
+            raise OSError("cable yanked")
+        return bytes([self.keys.pop(0)]) if self.keys else bytes([0])
+
+
+def _kbd(badge_app_modules, **kwargs):
+    """An I2CKeyboardInput wired to a fake bus, discovery already done."""
+    import inputs
+
+    bus = FakeI2C(**kwargs)
+    source = inputs.I2CKeyboardInput(i2c=bus, address=0x5F)
+    return source, bus
+
+
+def _drain(source, ui_, presses):
+    """Collect events for a byte stream, stepping past the inter-read floor."""
+    out = []
+    for _ in range(presses):
+        ui_.advance_ms(50)
+        out.extend(source.poll())
+    return out
+
+
+def test_i2c_keyboard_types_characters(badge_app):
+    _app, ui_, _api = badge_app
+    source, _bus = _kbd(badge_app, keys=[ord("A"), ord("c"), ord("m"), ord("e")])
+    assert _drain(source, ui_, 4) == [
+        ("char", "A"), ("char", "c"), ("char", "m"), ("char", "e")
+    ]
+
+
+def test_i2c_keyboard_maps_control_keys(badge_app):
+    """Backspace, Enter and Esc must become the app's own events, not text."""
+    _app, ui_, _api = badge_app
+    source, _bus = _kbd(badge_app, keys=[0x08, 0x0D, 0x1B, 0x09])
+    assert _drain(source, ui_, 4) == [
+        ("back",), ("submit",), ("cancel",), ("submit",)
+    ]
+
+
+def test_i2c_keyboard_ignores_zero_and_junk(badge_app):
+    """0 means 'no key'. High codes are arrow keys and friends — typing a
+    square into the search box is worse than ignoring them."""
+    _app, ui_, _api = badge_app
+    source, _bus = _kbd(badge_app, keys=[0, 0xB5, 0x00, ord("x")])
+    assert _drain(source, ui_, 4) == [("char", "x")]
+
+
+def test_i2c_keyboard_respects_the_read_floor(badge_app):
+    """The CardKB drops keys when polled flat out, so reads are rate limited.
+    At frame rate that floor is what makes it reliable."""
+    _app, ui_, _api = badge_app
+    source, bus = _kbd(badge_app, keys=[ord("a"), ord("b")])
+
+    source.poll()
+    before = len(bus.reads)
+    source.poll()          # immediately again — must not touch the bus
+    source.poll()
+    assert len(bus.reads) == before
+
+    ui_.advance_ms(50)
+    source.poll()
+    assert len(bus.reads) == before + 1
+
+
+def test_i2c_keyboard_survives_a_yanked_cable(badge_app):
+    """A read that raises must return no events, not take down the frame loop."""
+    _app, ui_, _api = badge_app
+    source, _bus = _kbd(badge_app, keys=[ord("a")], fail_read=True)
+    ui_.advance_ms(50)
+    assert source.poll() == []
+
+
+def test_i2c_discovery_prefers_the_documented_address(badge_app, monkeypatch):
+    import inputs
+
+    bus = FakeI2C(devices=[0x3C, 0x5F, 0x68])
+    source = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(source, "_candidate_buses", lambda: [bus])
+    assert source.available() is True
+    assert source._address == 0x5F
+
+
+def test_i2c_discovery_accepts_a_lone_unknown_device(badge_app, monkeypatch):
+    """CardKB2 is a different chip from the 0x5F original and its address is
+    undocumented, so a keyboard that needs someone to edit a constant is a
+    keyboard that does not work. One device on an otherwise empty bus is the
+    thing just plugged into the qwiic port."""
+    import inputs
+
+    bus = FakeI2C(devices=[0x42])
+    source = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(source, "_candidate_buses", lambda: [bus])
+    assert source.available() is True
+    assert source._address == 0x42
+
+
+def test_i2c_discovery_declines_to_guess_between_strangers(badge_app, monkeypatch):
+    """Two unknown devices and no 0x5F: picking one at random would send
+    keystroke reads to someone else's sensor. Decline, and say so via config."""
+    import inputs
+
+    bus = FakeI2C(devices=[0x42, 0x43])
+    source = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(source, "_candidate_buses", lambda: [bus])
+    assert source.available() is False
+
+
+def test_i2c_discovery_honours_configured_address(badge_app, monkeypatch):
+    import inputs
+
+    bus = FakeI2C(devices=[0x42, 0x43])
+    source = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(source, "_candidate_buses", lambda: [bus])
+    monkeypatch.setattr(source, "_configured_address", lambda: 0x43)
+    assert source.available() is True
+    assert source._address == 0x43
+
+
+def test_i2c_absent_bus_is_not_an_error(badge_app, monkeypatch):
+    """No machine.I2C, no qwiic, a bus that will not scan — all of it must
+    read as 'no keyboard', never as a crash at startup."""
+    import inputs
+
+    source = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(source, "_candidate_buses", lambda: [FakeI2C(fail_scan=True)])
+    assert source.available() is False
+
+    other = inputs.I2CKeyboardInput()
+    monkeypatch.setattr(other, "_candidate_buses", lambda: [])
+    assert other.available() is False
+    assert other.poll() == []
+
+
+def test_best_available_prefers_a_keyboard_then_falls_back(badge_app, monkeypatch):
+    import inputs
+
+    monkeypatch.setattr(inputs.I2CKeyboardInput, "available", lambda self: True)
+    assert isinstance(inputs.best_available(), inputs.I2CKeyboardInput)
+
+    monkeypatch.setattr(inputs.I2CKeyboardInput, "available", lambda self: False)
+    assert isinstance(inputs.best_available(), inputs.ButtonInput)
+
+
+def test_search_footer_follows_the_input_source(badge_app):
+    """'A type' describes a button nobody presses once a keyboard is attached."""
+    import inputs
+
+    assert "A type" in inputs.ButtonInput.hint
+    assert "A type" not in inputs.I2CKeyboardInput.hint
+    assert "ENTER" in inputs.I2CKeyboardInput.hint
+
+
 # ── the real ui shim, host-side ────────────────────────────────────────────────
 # With no badgeware importable, ui measures every glyph as 5px — enough to pin
 # down the text helpers without a badge.
