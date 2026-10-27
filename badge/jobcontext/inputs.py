@@ -305,6 +305,219 @@ class I2CKeyboardInput(TextInput):
         ui.text("keyboard " + hex(self._address), 4, 62, ui.DIM, 1)
 
 
+class WebInput(ButtonInput):
+    """Type on your phone; the badge serves the form.
+
+    The buttons keep working — this *extends* ButtonInput rather than
+    replacing it, because the phone is an addition and the carousel is what
+    you fall back to when the phone is in a pocket or the network drops.
+
+    Why this route exists: BLE HID needs bonding the firmware does not have,
+    and the wired I2C keyboard needs parts and a cable chain. This needs
+    nothing. When the phone is the hotspot — which is already the recommended
+    network, because conference WiFi puts a captive portal in front of the
+    API — the phone and the badge are on the same network by construction.
+
+    Binding is lazy. init() picks the input source *before* WiFi comes up, so
+    there is no socket to open yet; poll() binds on the first frame after the
+    interface has an address, and gives up gracefully if it cannot.
+
+    Anyone on the same network can type into the badge. On a personal hotspot
+    that is you and nobody else, which is the intended setup. Do not use this
+    on a shared conference network expecting privacy — the form takes a
+    search string, so the cost is a stranger searching your pipeline, but it
+    is not nothing.
+    """
+
+    name = "web"
+    hint = "type on your phone  C search"
+    port = 80
+
+    def __init__(self):
+        ButtonInput.__init__(self)
+        self._sock = None
+        self._conn = None
+        self._address = ""
+        self._bind_failed = False
+
+    # ── availability ───────────────────────────────────────────────────────
+
+    def available(self):
+        """Optimistic: the modules exist. The socket cannot be opened yet
+        because WiFi is not up when sources are chosen."""
+        try:
+            import network  # noqa: F401
+            import socket  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    def _ip(self):
+        try:
+            import network
+
+            wlan = network.WLAN(network.STA_IF)
+            if not wlan.isconnected():
+                return ""
+            return wlan.ifconfig()[0]
+        except Exception:  # noqa: BLE001 — no address is a normal early state
+            return ""
+
+    def _ensure_bound(self):
+        """Open the listening socket once the interface has an address."""
+        if self._sock is not None or self._bind_failed:
+            return self._sock is not None
+        address = self._ip()
+        if not address:
+            return False
+        try:
+            import socket
+
+            sock = socket.socket()
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", self.port))
+            sock.listen(1)
+            sock.setblocking(False)
+        except Exception:  # noqa: BLE001 — port taken, no sockets, whatever
+            self._bind_failed = True
+            return False
+        self._sock, self._address = sock, address
+        return True
+
+    # ── accepting ──────────────────────────────────────────────────────────
+
+    def _accept(self):
+        """Stash one pending connection. True if we are holding one.
+
+        Separate from poll() so the screen saver can ask 'is someone typing?'
+        without consuming the request — see pending().
+        """
+        if self._conn is not None:
+            return True
+        if not self._ensure_bound():
+            return False
+        try:
+            conn, _addr = self._sock.accept()
+        except Exception:  # noqa: BLE001 — EAGAIN every frame nobody is typing
+            return False
+        self._conn = conn
+        return True
+
+    def pending(self):
+        """True when a phone has knocked. The app treats this as activity, so
+        the screen saver does not start — or stay up — while someone types."""
+        try:
+            return self._accept()
+        except Exception:  # noqa: BLE001
+            return False
+
+    # ── serving ────────────────────────────────────────────────────────────
+
+    def poll(self):
+        events = ButtonInput.poll(self)
+        if not self._accept():
+            return events
+        conn, self._conn = self._conn, None
+        try:
+            events.extend(self._serve(conn))
+        except Exception:  # noqa: BLE001 — a half-open phone must not crash us
+            pass
+        finally:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return events
+
+    def _serve(self, conn):
+        try:
+            conn.settimeout(0.4)  # the only blocking moment, and only on a hit
+            raw = conn.recv(512)
+        except Exception:  # noqa: BLE001 — phone opened and wandered off
+            return []
+        text = _as_text(raw)
+        query = _query_param(text, "q")
+        if query:
+            conn.send(_PAGE % ("searching for " + _escape(query)))
+            # Replace rather than append: the phone sends the whole string, and
+            # concatenating onto whatever the buttons left behind is never what
+            # anyone meant.
+            return [("set", query), ("submit",)]
+        conn.send(_PAGE % "")
+        return []
+
+    # ── drawing ────────────────────────────────────────────────────────────
+
+    def draw(self, text_so_far):
+        ButtonInput.draw(self, text_so_far)
+        if self._sock is not None and self._address:
+            ui.text("http://" + self._address, 4, ui.HEIGHT - 30, ui.ACCENT, 1)
+        elif self._bind_failed:
+            ui.text("phone typing unavailable", 4, ui.HEIGHT - 30, ui.DIM, 1)
+        else:
+            ui.text("phone typing: waiting for wifi", 4, ui.HEIGHT - 30, ui.DIM, 1)
+
+
+# A whole page in one string: the badge has no filesystem to spare and no
+# templating. autofocus + autocapitalize off means you land in the field ready
+# to type the moment it opens.
+_PAGE = (
+    "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
+    "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<title>jobcontext badge</title>"
+    "<style>body{font:17px system-ui;margin:0;padding:24px;background:#0b1220;color:#eee}"
+    "input{font:17px system-ui;width:100%%;padding:12px;border-radius:8px;border:1px solid #345;"
+    "background:#0e1628;color:#eee;box-sizing:border-box}"
+    "button{font:17px system-ui;margin-top:12px;padding:12px 20px;border:0;border-radius:8px;"
+    "background:#3cc8d2;color:#06202a;font-weight:700}p{color:#8fa}</style>"
+    "<h2>jobcontext</h2><form><input name=q autofocus autocapitalize=off "
+    "autocomplete=off placeholder='company or role'>"
+    "<button>Search on badge</button></form><p>%s</p>"
+)
+
+
+def _as_text(raw):
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            return raw.decode()
+        except Exception:  # noqa: BLE001 — binary junk is not a request
+            return ""
+    return raw or ""
+
+
+def _query_param(request, name):
+    """Pull one parameter out of the request line. MicroPython has no urllib."""
+    line = request.split("\r\n", 1)[0]
+    if "?" not in line:
+        return ""
+    path = line.split(" ")[1] if " " in line else line
+    if "?" not in path:
+        return ""
+    for pair in path.split("?", 1)[1].split("&"):
+        key, _, value = pair.partition("=")
+        if key == name:
+            return _unquote(value)[:64]
+    return ""
+
+
+def _unquote(value):
+    out = value.replace("+", " ")
+    parts = out.split("%")
+    if len(parts) == 1:
+        return out
+    decoded = parts[0]
+    for part in parts[1:]:
+        try:
+            decoded += chr(int(part[:2], 16)) + part[2:]
+        except ValueError:  # a stray % that was not an escape
+            decoded += "%" + part
+    return decoded
+
+
+def _escape(value):
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 class BleKeyboardInput(TextInput):
     """A paired Bluetooth keyboard. Not implemented — see the module docstring.
 
@@ -330,6 +543,52 @@ class BleKeyboardInput(TextInput):
         return []
 
 
+def phone_keyboard_enabled():
+    """Is the phone keyboard switched on for this install?
+
+    Off unless something says otherwise, because it opens a listening socket
+    and anyone on the network can type into it. badge/install_phone.py writes
+    a `features.py` turning it on; badge/install.py deletes that file, so the
+    plain installer really is the buttons-only build you fall back to rather
+    than the same build with a stale flag left behind.
+
+    secrets.py wins over the generated file, for flipping it without a
+    reinstall.
+    """
+    for mod in (_optional("secrets"), _optional("features")):
+        value = getattr(mod, "PHONE_KEYBOARD", None) if mod is not None else None
+        if value is not None:
+            return bool(value)
+    return False
+
+
+def _optional(name):
+    """Import a sibling module if it exists, package-relative or flat.
+
+    Written out rather than computed: a relative __import__ needs globals,
+    and the explicit form matches how api.py reaches secrets.py.
+    """
+    if name == "secrets":
+        try:
+            from . import secrets  # type: ignore
+            return secrets
+        except ImportError:
+            try:
+                import secrets  # type: ignore
+                return secrets
+            except ImportError:
+                return None
+    try:
+        from . import features  # type: ignore
+        return features
+    except ImportError:
+        try:
+            import features  # type: ignore
+            return features
+        except ImportError:
+            return None
+
+
 def best_available():
     """Return the richest input source this badge can actually offer.
 
@@ -338,7 +597,11 @@ def best_available():
     moment it is not. BLE stays first in the list so it wins automatically if
     a firmware with bonding ever ships.
     """
-    for source in (BleKeyboardInput(), I2CKeyboardInput(), ButtonInput()):
+    candidates = [BleKeyboardInput(), I2CKeyboardInput()]
+    if phone_keyboard_enabled():
+        candidates.append(WebInput())
+    candidates.append(ButtonInput())
+    for source in candidates:
         if source.available():
             return source
     return ButtonInput()
