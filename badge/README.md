@@ -113,7 +113,39 @@ using it automatically.
 Two cheaper alternatives, if the goal is just faster typing: have the phone
 serve as the keyboard over the badge's own WiFi, or invert the BLE direction
 so the badge is a peripheral the existing Expo app writes into — that
-direction MicroPython supports well.
+direction MicroPython supports well. Note the blocker is specific to HID: a
+*custom* GATT characteristic needs no encryption and so no bonding, which is
+why the phone route stays open while keyboards do not.
+
+## A wired keyboard (this one works)
+
+With BLE closed, the qwiic port is the way to real keys. An **M5Stack CardKB
+or CardKB2** speaks plain I2C: read one byte, `0` means no key, anything else
+is the character code, and the keyboard handles its own Fn/Sym layers. Plug it
+in and `best_available()` picks it up — no configuration, no pairing.
+
+Wiring, in order of what will bite you:
+
+- **Connect three wires: GND, SDA, SCL. Leave VCC disconnected.** The CardKB2
+  wants 5 V and the badge's qwiic supplies 3.3 V; feeding its 5 V into the
+  badge's rail is the one way to damage something here. Power the keyboard
+  from its own USB-C.
+- **GND is not optional.** It is the wire people skip when each device has its
+  own supply, and then nothing works.
+- **Connectors differ**: HY2.0-4P (2.0 mm) on the keyboard, JST-SH (1.0 mm) on
+  the badge. You need an adapter cable, or a Grove→Dupont→Qwiic chain for
+  bring-up — the loose-wire version makes omitting VCC trivial.
+- **If the scan finds nothing, swap SDA and SCL.** Harmless; the bus just
+  stays quiet. Keep the run short — I2C over long floppy jumpers gets flaky,
+  and dropping to 100 kHz helps before you suspect anything else.
+
+The CardKB2 has four modes (`Fn + Sym + 1..4`). **I2C is mode 1 and the
+factory default.** Its BLE HID mode is the same dead end as any other BLE
+keyboard, and ESP-NOW cannot reach a CYW43439 at all.
+
+Run `badge/probe.py` first: it reports whether `machine.I2C` exists, which
+buses work, and what is on them. If the firmware has no I2C, this route is
+closed too and nothing needs buying.
 
 ## Layout
 

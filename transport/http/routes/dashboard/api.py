@@ -135,7 +135,13 @@ def _backfill_contact_name(user: User) -> None:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(cfg, indent=2, ensure_ascii=False))
-        update_runtime_config({"contact": contact})
+        # Only refresh the in-memory global config in single-user/desktop
+        # mode. Under a per-tenant data-folder override (multi-tenant / AKS)
+        # the live _cfg is shared across all tenants, and get_contact_info()
+        # already reads each tenant's config.json per request — mutating the
+        # global here would leak this tenant's contact block to others.
+        if override is None:
+            update_runtime_config({"contact": contact})
     except Exception:  # noqa: BLE001 — greeting must never break Home
         pass
 

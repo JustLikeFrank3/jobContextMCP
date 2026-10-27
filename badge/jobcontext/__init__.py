@@ -394,7 +394,9 @@ def _update_search():
     ui.clear()
     ui.header("jobcontext", "who are you talking to?", _battery_level, _battery_charging)
     source.draw(query)
-    ui.footer("U/D pick  A type  B del  C search")
+    # The legend comes from the source: with a keyboard attached, "A type"
+    # describes a button nobody is pressing.
+    ui.footer(getattr(source, "hint", "") or "U/D pick  A type  B del  C search")
 
 
 def _run_search():

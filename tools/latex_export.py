@@ -21,6 +21,7 @@ list_latex_output_pdfs() -> list[Path]
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -270,12 +271,17 @@ def _compile_tex(tex_file: Path, tmp_path: Path, expected_pdf: Path) -> Path:
         errors.append(str(exc))
 
     if tectonic is not None:
+        # --untrusted confines \input/\openin to the working directory (no
+        # absolute or parent paths) and disables shell-escape, so a tenant's
+        # section content can't read pod files (/proc/self/environ, the
+        # service-account token) or other tenants' data into the PDF.
         result = subprocess.run(
-            [tectonic, str(tex_file)],
+            [tectonic, "--untrusted", str(tex_file)],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
             timeout=60,
+            env={**os.environ, "TECTONIC_UNTRUSTED_MODE": "1"},
         )
         if result.returncode == 0 and expected_pdf.exists():
             return expected_pdf
@@ -289,11 +295,15 @@ def _compile_tex(tex_file: Path, tmp_path: Path, expected_pdf: Path) -> Path:
         # success is judged by whether the PDF was actually produced.
         for _ in range(2):  # second pass resolves hyperref references
             result = subprocess.run(
-                [pdflatex, "-interaction=nonstopmode", str(tex_file)],
+                [pdflatex, "-no-shell-escape", "-interaction=nonstopmode", str(tex_file)],
                 cwd=str(tmp_path),
                 capture_output=True,
                 text=True,
                 timeout=120,
+                # Paranoid file access: refuse reads/writes of absolute and
+                # parent-directory paths, so \input/\openin can't reach pod
+                # files or escape the temp compile dir.
+                env={**os.environ, "openin_any": "p", "openout_any": "p"},
             )
         if expected_pdf.exists():
             return expected_pdf
@@ -618,11 +628,12 @@ def generate_resume_latex(
             resume_fh.write(header_src)
 
         result = subprocess.run(
-            [tectonic, str(tmp_path / _RESUME_TEX)],
+            [tectonic, "--untrusted", str(tmp_path / _RESUME_TEX)],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
             timeout=120,
+            env={**os.environ, "TECTONIC_UNTRUSTED_MODE": "1"},
         )
         if result.returncode != 0:
             raise RuntimeError(
