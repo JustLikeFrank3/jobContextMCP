@@ -191,3 +191,54 @@ def test_appledouble_clutter_is_removed(installer, volume):
     (app / "._ui.py").write_bytes(b"mac metadata")
     installer.install(volume, "gallery", dry_run=False)
     assert not list(app.glob("._*"))
+
+
+# ── the phone-keyboard install variant ────────────────────────────────────────
+# badge/install_phone.py is the same install plus a generated features.py.
+# badge/install.py is the way back, which only works if it REMOVES that file.
+
+
+def test_features_file_is_written_when_asked(installer, volume):
+    installer.install(volume, "gallery", dry_run=False, features={"PHONE_KEYBOARD": True})
+    written = (volume / "apps/jobcontext/features.py").read_text()
+    assert "PHONE_KEYBOARD = True" in written
+    # Plain source, not .mpy: someone reading the badge to work out why the
+    # phone form is running should be able to.
+    assert not (volume / "apps/jobcontext/features.mpy").exists()
+
+
+def test_plain_install_removes_a_stale_features_file(installer, volume):
+    """The fallback has to be a real fallback. Without this, reinstalling with
+    install.py leaves the flag behind and the phone form keeps listening."""
+    installer.install(volume, "gallery", dry_run=False, features={"PHONE_KEYBOARD": True})
+    assert (volume / "apps/jobcontext/features.py").is_file()
+
+    installer.install(volume, "gallery", dry_run=False)
+    assert not (volume / "apps/jobcontext/features.py").exists()
+
+
+def test_features_default_is_off(installer, volume):
+    installer.install(volume, "gallery", dry_run=False)
+    assert not (volume / "apps/jobcontext/features.py").exists()
+
+
+def test_phone_installer_delegates_with_the_flag(monkeypatch):
+    """install_phone.py must not grow its own copy of the install logic —
+    one installer to maintain, and no way for the two to drift."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "badge_install_phone", _SCRIPT.parent / "install_phone.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    seen = {}
+    monkeypatch.setattr(
+        mod.install, "main", lambda argv=None, features=None: seen.update(
+            argv=argv, features=features
+        ) or 0
+    )
+    assert mod.main(["--dry-run"]) == 0
+    assert seen["argv"] == ["--dry-run"]
+    assert seen["features"] == {"PHONE_KEYBOARD": True}
