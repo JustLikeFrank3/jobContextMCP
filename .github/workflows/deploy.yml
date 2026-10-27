@@ -41,6 +41,11 @@ jobs:
       contents: read
     uses: ./.github/workflows/dast.yml
 
+  dependency-review:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dependency-review.yml
+
   sonar:
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -162,7 +167,7 @@ jobs:
           exit 1
 
   build-and-deploy:
-    needs: [test, sast, dast, sonar]
+    needs: [test, sast, dast, sonar, dependency-review]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
@@ -180,6 +185,7 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build & push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -208,8 +214,10 @@ jobs:
       - name: Deploy new image
         run: |
           # Substitute placeholders and apply configmap + deployment so all
-          # changes are picked up on every deploy — not just the image tag.
-          ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          # changes are picked up on every deploy. Pin the rollout to the
+          # immutable digest emitted by the build that just passed the gates.
+          IMAGE_REF="${{ env.IMAGE }}@${{ steps.build.outputs.digest }}"
+          [[ "$IMAGE_REF" =~ @sha256:[a-f0-9]{64}$ ]] || { echo "Invalid build digest: $IMAGE_REF"; exit 1; }
           sed \
             -e "s|__LLM_PROVIDER__|${{ env.LLM_PROVIDER }}|g" \
             -e "s|__FOUNDRY_ENDPOINT__|${{ env.FOUNDRY_ENDPOINT }}|g" \
@@ -218,7 +226,7 @@ jobs:
             -e "s|__STORAGE_ACCOUNT__|${{ env.STORAGE_ACCOUNT }}|g" \
             -e "s|__ENTRA_OWNER_OID__|${{ env.ENTRA_OWNER_OID }}|g" \
             k8s/configmap.yaml | kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
-          sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|${{ github.sha }}|g" \
+          sed "s|__IMAGE_REF__|${IMAGE_REF}|g" \
             k8s/deployment.yaml | \
             kubectl apply -f - -n ${{ env.K8S_NAMESPACE }}
           kubectl apply -f k8s/ingress.yaml -n ${{ env.K8S_NAMESPACE }}
@@ -226,7 +234,7 @@ jobs:
             -n ${{ env.K8S_NAMESPACE }} --timeout=300s
 
   build-and-deploy-qa:
-    needs: [test, sast, dast]
+    needs: [test, sast, dast, dependency-review]
     if: github.ref == 'refs/heads/qa'
     runs-on: ubuntu-latest
     env:
@@ -253,6 +261,7 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build & push QA image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -274,7 +283,8 @@ jobs:
 
       - name: Deploy QA
         run: |
-          ACR_NAME=$(echo "${{ env.ACR }}" | cut -d. -f1)
+          IMAGE_REF="${{ env.IMAGE }}@${{ steps.build.outputs.digest }}"
+          [[ "$IMAGE_REF" =~ @sha256:[a-f0-9]{64}$ ]] || { echo "Invalid build digest: $IMAGE_REF"; exit 1; }
           sed \
             -e "s|__QA_LLM_PROVIDER__|${{ env.QA_LLM_PROVIDER }}|g" \
             -e "s|__QA_FOUNDRY_ENDPOINT__|${{ env.QA_FOUNDRY_ENDPOINT }}|g" \
@@ -283,7 +293,7 @@ jobs:
             -e "s|__QA_STORAGE_ACCOUNT__|${{ secrets.QA_STORAGE_ACCOUNT }}|g" \
             -e "s|__QA_ENTRA_OWNER_OID__|${{ secrets.ENTRA_OWNER_OID }}|g" \
             k8s/qa/configmap.yaml | kubectl apply -f - -n ${{ env.QA_K8S_NAMESPACE }}
-          sed "s|<ACR_NAME>|${ACR_NAME}|g; s|<IMAGE_TAG>|qa-${{ github.sha }}|g" \
+          sed "s|__IMAGE_REF__|${IMAGE_REF}|g" \
             k8s/qa/deployment.yaml | \
             kubectl apply -f - -n ${{ env.QA_K8S_NAMESPACE }}
           kubectl apply -f k8s/qa/service.yaml -n ${{ env.QA_K8S_NAMESPACE }}

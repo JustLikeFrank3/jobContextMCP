@@ -61,6 +61,7 @@ def _token(kid: str | None = _LIVE_KID, *, audience: str = "test-client-id") -> 
         {
             "aud": audience,
             "iss": "https://login.microsoftonline.com/test-tenant/v2.0",
+            "tid": "test-tenant",
             "sub": "test-subject",
             "oid": "test-oid-123",
             "name": "Test User",
@@ -141,6 +142,7 @@ def jwks():
         patch.object(auth_mod, "_get_jwks_client", return_value=client),
         patch.object(auth_mod, "time", clock),
         patch.object(auth_mod, "CLIENT_ID", "test-client-id"),
+        patch.object(auth_mod, "TENANT_ID", "test-tenant"),
     ):
         yield client, clock
     auth_mod._reset_jwks_state_for_tests()

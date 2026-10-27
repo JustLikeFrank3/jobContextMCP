@@ -351,6 +351,17 @@ def validate_token(token: str) -> dict:
         audience=allowed_audiences,
         options={"verify_iss": False},
     )
+    # Entra signing keys are not a tenant boundary by themselves. Bind the
+    # signed identity to the configured directory before using oid as a data
+    # partition key; otherwise a token for the same app audience from another
+    # tenant could be accepted if the app registration permits it.
+    token_tenant = claims.get("tid")
+    if (
+        not isinstance(token_tenant, str)
+        or not TENANT_ID
+        or token_tenant.casefold() != TENANT_ID.casefold()
+    ):
+        raise jwt.InvalidTokenError("token tenant does not match configured tenant")
     return claims
 
 
