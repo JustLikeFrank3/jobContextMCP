@@ -106,16 +106,20 @@ def connect_wifi(status=None):
         if "" in visible:
             candidates += [n for n in nets if n not in candidates]
     if not candidates:
-        raise ApiError("none of your wifi networks are in range")
-    for ssid, password in candidates:
-        wlan.connect(ssid, password)
-        for attempt in range(30):  # ~15s each
-            if wlan.isconnected():
-                return True
-            if status:
-                status("joining " + ssid + "." * (attempt % 4))
-            time.sleep(0.5)
-        wlan.disconnect()
+        # Flaky conference APs vanish from one scan and answer the next, so a
+        # miss is a reason to try everything — not to refuse.
+        candidates = nets
+    for _round in range(2):
+        for ssid, password in candidates:
+            wlan.connect(ssid, password)
+            for attempt in range(30):  # ~15s each
+                if wlan.isconnected():
+                    return True
+                if status:
+                    status("joining " + ssid + "." * (attempt % 4))
+                time.sleep(0.5)
+            wlan.disconnect()
+        candidates = nets  # second round: everything, scan be damned
     return False
 
 
@@ -165,6 +169,15 @@ def _request(method, path, body=None):
     global _reserve
     _reserve = None
     gc.collect()
+    # Conference WiFi drops mid-session: a cheap isconnected() check and
+    # rejoin here turns "network: ECONNABORTED" into a few seconds' pause.
+    if network is not None:
+        try:
+            wlan = network.WLAN(network.STA_IF)
+            if not wlan.isconnected():
+                connect_wifi()
+        except Exception:  # noqa: BLE001 — let the request itself report it
+            pass
     try:
         return _send(method, path, body)
     finally:

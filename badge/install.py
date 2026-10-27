@@ -62,12 +62,47 @@ LOADER = """\
 import gc
 import sys
 
+# The launcher's own modules linger in sys.modules under plain names (its
+# app.py and ui.py would shadow ours), so drop anything cached under a name
+# this app owns before importing.
+for _name in ("app", "api", "inputs", "keyboard", "ui", "screensaver",
+              "tetris", "secrets", "contact", "features"):
+    sys.modules.pop(_name, None)
 for _name in list(sys.modules):
     if _name.startswith("/system/apps/") and _name != __name__:
         del sys.modules[_name]
 gc.collect()
 
+_DIR = "/system/apps/jobcontext"
+if _DIR not in sys.path:
+    sys.path.insert(0, _DIR)
+
 from app import init, on_exit, update  # noqa: E402,F401
+
+# Two launcher generations: the old badgeware firmware imports this module
+# and drives init/update/on_exit itself; BadgeOS (where `badge` is a builtin)
+# runs apps as scripts that own the frame loop, so this stub provides one.
+try:
+    badge  # noqa: B018
+except NameError:
+    pass
+else:
+    import machine
+
+    def _home(_pin):
+        machine.reset()  # back to the launcher, same as the stock apps
+
+    try:
+        machine.Pin.board.BUTTON_HOME.irq(trigger=machine.Pin.IRQ_FALLING, handler=_home)
+    except AttributeError:
+        pass
+    init()
+    try:
+        while True:
+            update()
+            badge.update()
+    finally:
+        on_exit()
 """
 # Personal, gitignored, copied when present: WiFi + token, and the screen
 # saver's contact card (no contact.py = no screen saver).
@@ -109,6 +144,11 @@ def listed_apps(source: str) -> list[str]:
     return re.findall(r'^\s*\(\s*"[^"]*"\s*,\s*"([^"]+)"\s*\),', source, re.M)
 
 
+def uses_dynamic_app_discovery(source: str) -> bool:
+    """Detect the newer Badgeware launcher that discovers /system/apps folders."""
+    return re.search(r"shared_apps\(\s*['\"]?/system/apps['\"]?\s*\)", source) is not None
+
+
 # ── filesystem steps ───────────────────────────────────────────────────────────
 
 def wait_for_volume(volume: Path, timeout: int) -> Path:
@@ -126,13 +166,16 @@ def wait_for_volume(volume: Path, timeout: int) -> Path:
     raise InstallError(f"{volume} never appeared (waited {timeout}s)")
 
 
-def backup(volume: Path, remove: str) -> Path:
+def backup(volume: Path, remove: str | None, replace_app: str | None = None) -> Path:
     dest = BACKUP_ROOT / _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     (dest / "apps/menu").mkdir(parents=True)
     shutil.copy2(volume / _MENU, dest / _MENU)
-    if (volume / "apps" / remove).is_dir():
+    if remove and (volume / "apps" / remove).is_dir():
         shutil.copytree(volume / "apps" / remove, dest / "apps" / remove)
-    (dest / "REMOVED_APP").write_text(remove + "\n")
+    if replace_app and (volume / "apps" / replace_app).is_dir():
+        shutil.copytree(volume / "apps" / replace_app, dest / "apps" / replace_app)
+        (dest / "REPLACED_APP").write_text(replace_app + "\n")
+    (dest / "REMOVED_APP").write_text((remove or "") + "\n")
     return dest
 
 
@@ -161,7 +204,13 @@ def compile_module(exe: str, src: Path, dst: Path) -> None:
         raise InstallError(f"mpy-cross failed on {src.name}: {result.stderr.strip()}")
 
 
-def install(volume: Path, remove: str, dry_run: bool, features: "dict | None" = None) -> None:
+def install(
+    volume: Path,
+    remove: str,
+    dry_run: bool,
+    features: "dict | None" = None,
+    skip_secrets: bool = False,
+) -> None:
     """Install the app. *features* writes a generated features.py of flags.
 
     None — the default, and what badge/install.py alone ever passes — DELETES
@@ -177,15 +226,35 @@ def install(volume: Path, remove: str, dry_run: bool, features: "dict | None" = 
         raise InstallError(f"missing from {APP_SRC}: {', '.join(missing)}")
 
     original = menu_path.read_text()
-    patched = patch_menu(original, remove)
-    optional = tuple(f for f in OPTIONAL_FILES if (APP_SRC / f).is_file())
+    dynamic_menu = uses_dynamic_app_discovery(original)
+    if dynamic_menu:
+        # Current Badgeware scans /system/apps and creates an app tile for
+        # every package directory; it has no fixed slot to patch or evict.
+        patched = original
+        remove_app = None
+    else:
+        patched = patch_menu(original, remove)
+        remove_app = remove
+    optional = tuple(
+        name for name in OPTIONAL_FILES
+        if (APP_SRC / name).is_file() and not (skip_secrets and name == "secrets.py")
+    )
     has_secrets = "secrets.py" in optional
 
-    print(f"menu now:  {', '.join(listed_apps(original))}")
-    print(f"menu after: {', '.join(listed_apps(patched))}")
-    print(f"delete:    apps/{remove}/" if (volume / "apps" / remove).is_dir() else f"delete:    (apps/{remove} already gone)")
+    if dynamic_menu:
+        print("launcher:  dynamically discovers app folders; no menu edit or stock-app removal")
+    else:
+        print(f"menu now:  {', '.join(listed_apps(original))}")
+        print(f"menu after: {', '.join(listed_apps(patched))}")
+        print(
+            f"delete:    apps/{remove_app}/"
+            if (volume / "apps" / remove_app).is_dir()
+            else f"delete:    (apps/{remove_app} already gone)"
+        )
     print(f"compile:   {', '.join(MODULES)} -> .mpy (+ loader __init__.py)")
     print(f"copy:      {', '.join(ASSETS + optional)}")
+    if skip_secrets and (APP_SRC / "secrets.py").is_file():
+        print("  ! secrets.py deliberately omitted; add a newly rotated badge token before network use.")
     if features:
         print(f"features:  {', '.join('%s=%r' % kv for kv in sorted(features.items()))}")
     else:
@@ -200,16 +269,28 @@ def install(volume: Path, remove: str, dry_run: bool, features: "dict | None" = 
         return
     exe = find_mpy_cross()  # before touching the badge: fail with nothing changed
 
-    if patched != original or (volume / "apps" / remove).is_dir():
-        saved = backup(volume, remove)
+    target = volume / "apps" / APP
+    target_exists = target.is_dir()
+    needs_backup = (
+        patched != original
+        or (remove_app and (volume / "apps" / remove_app).is_dir())
+        or (dynamic_menu and target_exists)
+    )
+    if needs_backup:
+        saved = backup(
+            volume,
+            remove_app,
+            replace_app=APP if dynamic_menu and target_exists else None,
+        )
         print(f"backup:    {saved}")
+    elif dynamic_menu:
+        print("backup:    skipped (new app folder; launcher is unchanged)")
     else:
         # Already installed: this run only refreshes app files. A backup now
         # would hold the patched menu and no removed app — a restore point
         # that restores nothing. The first install's backup is the real one.
         print("backup:    skipped (already installed; restore from the first install's backup)")
 
-    target = volume / "apps" / APP
     target.mkdir(exist_ok=True)
     # Compile on the Mac, then copy each finished file in one write. mpy-cross
     # writing straight onto the badge's FAT drive took ~1 minute per file —
@@ -237,13 +318,25 @@ def install(volume: Path, remove: str, dry_run: bool, features: "dict | None" = 
     # they are just clutter in a small filesystem.
     for junk in target.glob("._*"):
         junk.unlink(missing_ok=True)
-    menu_path.write_text(patched)
-    if (volume / "apps" / remove).is_dir():
-        shutil.rmtree(volume / "apps" / remove)
+    if patched != original:
+        menu_path.write_text(patched)
+    if remove_app and (volume / "apps" / remove_app).is_dir():
+        shutil.rmtree(volume / "apps" / remove_app)
     print("installed.")
 
 
 def restore(volume: Path, saved: Path, dry_run: bool) -> None:
+    replaced_marker = saved / "REPLACED_APP"
+    if replaced_marker.is_file():
+        replaced = replaced_marker.read_text().strip()
+        print(f"restore:   apps/{replaced}/ from {saved}; keep dynamic launcher menu")
+        if dry_run:
+            print("dry run — nothing written.")
+            return
+        shutil.rmtree(volume / "apps" / replaced, ignore_errors=True)
+        shutil.copytree(saved / "apps" / replaced, volume / "apps" / replaced)
+        return
+
     removed = (saved / "REMOVED_APP").read_text().strip()
     print(f"restore:   menu + apps/{removed}/ from {saved}; delete apps/{APP}/")
     if dry_run:
@@ -271,6 +364,11 @@ def main(argv: "list[str] | None" = None, features: "dict | None" = None) -> int
     parser.add_argument("--remove", default="gallery", help="stock app whose menu slot jobcontext takes (default: gallery)")
     parser.add_argument("--volume", type=Path, default=DEFAULT_VOLUME)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--skip-secrets",
+        action="store_true",
+        help="do not copy the local secrets.py (use after rotating exposed credentials)",
+    )
     parser.add_argument("--restore", type=Path, metavar="BACKUP_DIR", help="undo an install from its backup")
     parser.add_argument("--no-eject", action="store_true")
     parser.add_argument("--wait", type=int, default=120, help="seconds to wait for the drive (default 120)")
@@ -281,7 +379,7 @@ def main(argv: "list[str] | None" = None, features: "dict | None" = None) -> int
         if args.restore:
             restore(volume, args.restore.expanduser(), args.dry_run)
         else:
-            install(volume, args.remove, args.dry_run, features)
+            install(volume, args.remove, args.dry_run, features, skip_secrets=args.skip_secrets)
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
