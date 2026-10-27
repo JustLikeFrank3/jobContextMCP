@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from lib import config
+from lib.helpers import contained_path, UnsafePathError
 from lib.io import _read, _load_master_context
 
 
@@ -223,7 +224,10 @@ def delete_material(filename: str) -> str:
 
 def read_existing_resume(filename: str) -> str:
     """Read the full text of an existing resume from 01-Current-Optimized/. Use list_existing_materials() to find available filenames."""
-    path = config.get_active_optimized_resumes_dir() / filename
+    try:
+        path = contained_path(config.get_active_optimized_resumes_dir(), filename)
+    except UnsafePathError:
+        return f"Not found: {filename}\nUse list_existing_materials() to see available resumes."
     if not path.exists():
         return f"Not found: {filename}\nUse list_existing_materials() to see available resumes."
     return _read(path)
@@ -232,7 +236,10 @@ def read_existing_resume(filename: str) -> str:
 def read_reference_file(filename: str) -> str:
     """Read a file from 06-Reference-Materials/ (e.g. template format, consolidated resume, skills variants, GM feedback). Pass the filename only — use list_existing_materials() to discover what's available."""
     ref_dir = config.get_active_reference_materials_dir()
-    path = ref_dir / filename
+    try:
+        path = contained_path(ref_dir, filename)
+    except UnsafePathError:
+        return f"Not found: {filename}"
     if not path.exists():
         available = sorted(f.name for f in ref_dir.iterdir()) if ref_dir.exists() else []
         return f"Not found: {filename}\nAvailable: {available}"
@@ -258,7 +265,10 @@ def save_resume_txt(filename: str, content: str) -> str:
         filename += ".txt"
     out_dir = config.get_active_optimized_resumes_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / filename
+    try:
+        path = contained_path(out_dir, filename)
+    except UnsafePathError:
+        return f"Error: invalid filename — {filename}"
     path.write_text(_unwrap(content), encoding="utf-8")
     return f"✓ Resume saved: {path}"
 
@@ -282,7 +292,10 @@ def save_cover_letter_txt(filename: str, content: str) -> str:
         filename += ".txt"
     out_dir = config.get_active_cover_letters_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / filename
+    try:
+        path = contained_path(out_dir, filename)
+    except UnsafePathError:
+        return f"Error: invalid filename — {filename}"
     path.write_text(_unwrap(content), encoding="utf-8")
     return f"✓ Cover letter saved: {path}"
 
@@ -305,13 +318,16 @@ def resume_diff(file_a: str, file_b: str) -> str:
     import difflib
 
     def _resolve(name: str) -> Path:
-        _ws = config.get_active_workspace_folder()
         if name.startswith("ref:"):
-            return config.get_active_reference_materials_dir() / name[4:]
-        return config.get_active_optimized_resumes_dir() / name
+            return contained_path(config.get_active_reference_materials_dir(), name[4:])
+        return contained_path(config.get_active_optimized_resumes_dir(), name)
 
-    path_a = _resolve(file_a)
-    path_b = _resolve(file_b)
+    try:
+        path_a = _resolve(file_a)
+        path_b = _resolve(file_b)
+    except UnsafePathError as exc:
+        return f"File not found: {exc}"
+
 
     for p, label in ((path_a, file_a), (path_b, file_b)):
         if not p.exists():

@@ -124,10 +124,26 @@ class FileRef(BaseModel):
     rel: str
 
 
+# Paths the file-sync endpoints must never read or write, even inside the
+# caller's own partition. ``config.json`` carries machine-local settings that
+# can repoint the server's own LLM credential (azure_foundry_endpoint, the
+# resolved folders), and the SQLite database is owned by the row journal, not
+# file sync. Legitimate clients already exclude these from their manifest;
+# enforce it server-side so a crafted /files/put can't smuggle them in.
+def _is_sync_excluded(rel: str) -> bool:
+    import posixpath
+
+    norm = posixpath.normpath(rel.replace("\\", "/")).lstrip("/")
+    first = norm.split("/", 1)[0]
+    return first in ("config.json", "db") or norm.endswith(".db")
+
+
 def _resolve_rel(rel: str) -> Path:
     """Resolve a sync-relative path inside the user root (traversal-proof)."""
     from transport.http.desktop import _validated_member_path
 
+    if _is_sync_excluded(rel):
+        raise HTTPException(status_code=422, detail=f"Path not syncable: {rel!r}")
     root = _user_root().resolve()
     return _validated_member_path(root, rel)
 

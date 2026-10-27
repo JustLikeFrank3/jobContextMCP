@@ -8,6 +8,30 @@ from lib import config
 _ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+class UnsafePathError(ValueError):
+    """A user-supplied filename escaped its allowed base directory."""
+
+
+def contained_path(base, name: str):
+    """Resolve *name* against *base* and guarantee it stays inside *base*.
+
+    ``base / name`` alone is not safe: a ``name`` of ``../other`` or an
+    absolute path silently escapes the per-tenant directory (``Path("/a") /
+    "/etc/x" == Path("/etc/x")``). Resolve both sides and require the result
+    to live under *base*; otherwise raise :class:`UnsafePathError`. The base
+    itself is created if missing so resolution is stable.
+    """
+    from pathlib import Path
+
+    base = Path(base)
+    base.mkdir(parents=True, exist_ok=True)
+    base_resolved = base.resolve()
+    candidate = (base_resolved / str(name)).resolve()
+    if candidate != base_resolved and base_resolved not in candidate.parents:
+        raise UnsafePathError(f"path escapes its allowed directory: {name!r}")
+    return candidate
+
+
 def sanitize_filename(name: str) -> str:
     """Make a single filename component safe on every supported platform."""
     cleaned = _ILLEGAL_FILENAME_CHARS.sub("-", name)

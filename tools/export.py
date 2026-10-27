@@ -30,6 +30,7 @@ from jinja2 import Environment, FileSystemLoader
 import weasyprint
 
 from lib import config
+from lib.helpers import contained_path, UnsafePathError
 from lib.template_loader import (
     render_resume_to_pdf as _render_resume_to_pdf,
     template_style_error,
@@ -91,6 +92,7 @@ def _resolve_output_path(
     pdf_dir = config.get_active_workspace_folder() / folder_name
     pdf_dir.mkdir(parents=True, exist_ok=True)
     fname = output_filename or (default_stem + ".pdf")
+    fname = pathlib.Path(fname).name  # strip any directory component
     if not fname.endswith(".pdf"):
         fname += ".pdf"
     return pdf_dir / fname
@@ -133,10 +135,13 @@ def export_resume_pdf(
     # Resolve filename
     if not filename.endswith(".txt"):
         filename += ".txt"
-    source = opt_dir / filename
+    try:
+        source = contained_path(opt_dir, filename)
+    except UnsafePathError:
+        return f"Error: file not found — {filename}"
     if not source.exists():
         # fuzzy match
-        matches = list(opt_dir.glob(f"*{pathlib.Path(filename).stem}*"))
+        matches = list(opt_dir.glob(f"*{pathlib.Path(filename).name}*"))
         if not matches:
             return f"Error: file not found — {filename}"
         source = matches[0]
@@ -198,9 +203,12 @@ def export_cover_letter_pdf(
 
     if not filename.endswith(".txt"):
         filename += ".txt"
-    source = cl_dir / filename
+    try:
+        source = contained_path(cl_dir, filename)
+    except UnsafePathError:
+        return f"Error: file not found — {filename}"
     if not source.exists():
-        matches = list(cl_dir.glob(f"*{pathlib.Path(filename).stem}*"))
+        matches = list(cl_dir.glob(f"*{pathlib.Path(filename).name}*"))
         if not matches:
             return f"Error: file not found — {filename}"
         source = matches[0]
@@ -270,9 +278,12 @@ def export_cover_letter_latex(
         cl_dir = config.get_active_cover_letters_dir()
         if not filename.endswith(".txt"):
             filename += ".txt"
-        source = cl_dir / filename
+        try:
+            source = contained_path(cl_dir, filename)
+        except UnsafePathError:
+            return f"Error: file not found — {filename}"
         if not source.exists():
-            matches = list(cl_dir.glob(f"*{pathlib.Path(filename).stem}*"))
+            matches = list(cl_dir.glob(f"*{pathlib.Path(filename).name}*"))
             if not matches:
                 return f"Error: file not found — {filename}"
             source = matches[0]
