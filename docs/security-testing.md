@@ -1,11 +1,13 @@
 # Security testing
 
-`deploy.yml` now calls reusable security jobs for the **same commit** before any
-image publish or rollout: QA requires tests + Bandit + DAST; main additionally
-requires SonarCloud. Deployment checkouts use `github.sha`, not a mutable branch
-tip, so badge commits cannot change the code after scanning. Failure or skipping
-a required dependency prevents the corresponding deployment job. The existing
-push/manual triggers still apply; this patch itself does not trigger a deployment.
+`deploy.yml` calls reusable security jobs for the **same commit** before any
+image publish or rollout: QA requires tests + Bandit + DAST + dependency review;
+main additionally requires SonarCloud. Deployment checkouts use `github.sha`,
+not a mutable branch tip, and rollout manifests pin the image digest emitted by
+that exact build. Failure or skipping a required dependency prevents the
+corresponding deployment job. Manual dispatch may run checks on another ref,
+but branch-specific deployment jobs run only for `refs/heads/qa` and
+`refs/heads/main`.
 
 PR workflows provide early feedback, while release safety does not depend on
 branch-protection settings. Administrators can separately require the applicable
@@ -40,12 +42,27 @@ mandatory SAST gate is Python-only.
 ## SCA — dependency review
 
 `Dependency Review / dependency-review` compares dependency changes in PRs to qa
-and main. Newly introduced **high/critical** advisories block; lower severities
-remain visible. It needs GitHub's dependency graph/review support, but no secrets,
-checkout, package execution or write permissions. This is PR-delta SCA, not a
-whole-installed-graph audit: Python requirements use ranges, so resolved transitive
-Python vulnerabilities may require a future lockfile + installed-environment audit.
-Existing vulnerabilities and native/runtime system packages need separate review.
+and main, and is also a reusable prerequisite for QA and main deployment. For
+push and manual dispatch, the workflow explicitly compares the event's before
+SHA with the checked-out head SHA; an absent/zero base fails closed instead of
+skipping SCA. Newly introduced **high/critical** advisories block; lower
+severities remain visible. It needs GitHub's dependency graph/review support,
+but no secrets, package execution or write permissions. This is PR/commit-delta
+SCA, not a whole-installed-graph audit: Python requirements use ranges, so
+resolved transitive Python vulnerabilities may require a future lockfile +
+installed-environment audit. Existing vulnerabilities and native/runtime system
+packages need separate review.
+
+## Artifact provenance
+
+Both QA and main build jobs check out `github.sha`, run after their required
+gates, and deploy the Buildx `digest` output from that same build. The rollout
+fails unless the reference matches `repository@sha256:<64 lowercase hex>`;
+mutable `latest`/commit tags are still published for convenience but are not
+used by the Kubernetes deployment. `tests/test_deployment_security_workflows.py`
+guards branch conditions, required dependencies, digest wiring, and manifest
+placeholders. This is configuration-level evidence; operators should still
+inspect the resulting pod's resolved `imageID` as deployment evidence.
 
 ## DAST — ZAP against a disposable HTTP app
 
@@ -103,3 +120,19 @@ source-policy limitation. No medium/high DAST exception or SAST baseline was add
 The security regression PR workflow tests the relevant Python suites, builds/tests
 the SPA, and checks browser CSP/preview behavior against disposable local state.
 It has no deployment credentials and does not target QA or production.
+
+For requirement-to-evidence mapping and the authenticated tenant-isolation gaps,
+see [security-assurance-matrix.md](security-assurance-matrix.md). The matrix
+describes current synthetic regression evidence and explicitly lists remaining
+coverage work; it is not an authorization to run active assessments.
+
+`tests/test_deployment_security_workflows.py` guards the release workflow's
+branch-specific manual-dispatch behavior, required pre-deploy gates, exact-SHA
+checkout, and Buildx digest-to-manifest wiring. `security/dast/test_runner.py`
+and `test_check_report.py` exercise missing reports, stale-report reuse,
+execution errors/timeouts, unexpected targets and finding policy without
+starting Docker or scanning a service. These tests are regression evidence for
+workflow logic; they do not prove GitHub ruleset configuration, registry
+retention, or the runtime imageID of a live pod. The Dependency Review action
+is a required pre-deploy job, but it remains a commit-delta review, not a full
+resolved dependency inventory.

@@ -20,6 +20,13 @@ if 'zap-full-scan.py' in args:
         }))
     sys.exit(int(os.environ.get('SCAN_EXIT', '0')))
 '''
+FAKE_TIMEOUT = '''#!/usr/bin/env python3
+import subprocess, sys
+args = sys.argv[1:]
+if len(args) < 2 or args[0] != '20m':
+    sys.exit(125)
+sys.exit(subprocess.call(args[1:]))
+'''
 
 
 class RunnerTests(unittest.TestCase):
@@ -35,6 +42,9 @@ class RunnerTests(unittest.TestCase):
             docker = binary / 'docker'
             docker.write_text(FAKE_DOCKER)
             docker.chmod(0o755)
+            timeout = binary / 'timeout'
+            timeout.write_text(FAKE_TIMEOUT)
+            timeout.chmod(0o755)
             calls = root / 'calls.jsonl'
             reports = dest / 'reports'
             reports.mkdir()

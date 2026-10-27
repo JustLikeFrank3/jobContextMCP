@@ -5,18 +5,70 @@ name: Dependency Review
 on:
   pull_request:
     branches: [qa, main]
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  resolve-range:
+    runs-on: ubuntu-latest
+    outputs:
+      base-ref: ${{ steps.range.outputs.base-ref }}
+      head-ref: ${{ steps.range.outputs.head-ref }}
+    steps:
+      - name: Checkout exact commit and history
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve comparison range
+        id: range
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              base="$PR_BASE"
+              head="$PR_HEAD"
+              ;;
+            push)
+              base="$EVENT_BEFORE"
+              head="$HEAD_SHA"
+              ;;
+            workflow_dispatch)
+              base="$(git rev-parse "${HEAD_SHA}^" 2>/dev/null || true)"
+              head="$HEAD_SHA"
+              ;;
+            *)
+              echo "Unsupported dependency-review event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          if [[ -z "$base" || -z "$head" || "$base" =~ ^0+$ ]]; then
+            echo "Unable to resolve dependency review range; refusing to skip SCA." >&2
+            exit 1
+          fi
+          echo "base-ref=$base" >> "$GITHUB_OUTPUT"
+          echo "head-ref=$head" >> "$GITHUB_OUTPUT"
+
   dependency-review:
+    needs: resolve-range
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Review dependency changes
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
+          base-ref: ${{ needs.resolve-range.outputs.base-ref }}
+          head-ref: ${{ needs.resolve-range.outputs.head-ref }}
           # Block newly introduced high/critical advisories in all scopes.
           fail-on-severity: high
           fail-on-scopes: runtime, development, unknown
