@@ -219,7 +219,12 @@ def _screensaver_frame():
     """
     global _last_input, saving
     now = time.ticks_ms()
-    if any(ui.pressed(name) for name in _BUTTONS):
+    # A phone knocking on the web form counts as someone using the badge. The
+    # check is non-destructive — the request is stashed, not consumed — so the
+    # search screen still serves it on the next frame. Without this the saver
+    # covers the screen mid-typing and, worse, stops the frame that would have
+    # answered the phone at all.
+    if any(ui.pressed(name) for name in _BUTTONS) or _source_pending():
         _last_input = now
         if saving:
             saving = False
@@ -238,6 +243,21 @@ def _screensaver_frame():
             saving = True
             return True
     return False
+
+
+def _source_pending():
+    """True when the input source has something waiting (a phone request).
+
+    Sources that cannot be knocked on — the buttons, a wired keyboard — do not
+    define pending(), so this reads False for them.
+    """
+    probe = getattr(source, "pending", None)
+    if probe is None:
+        return False
+    try:
+        return bool(probe())
+    except Exception:  # noqa: BLE001 — a flaky socket must not wedge the saver
+        return False
 
 
 def _saver_guard(fn, *args):
@@ -379,12 +399,19 @@ def _draw_notice():
 # ── search ─────────────────────────────────────────────────────────────────────
 
 def _update_search():
-    global query
+    global query, _last_input
 
     for event in source.poll():
         kind = event[0]
+        # Any event is activity, not just a button press — otherwise the
+        # screen saver starts while someone is typing on their phone.
+        _last_input = time.ticks_ms()
         if kind == "char" and len(query) < _MAX_QUERY:
             query += event[1]
+        elif kind == "set":
+            # The phone sends the whole string; appending it to whatever the
+            # buttons left behind is never what anyone meant.
+            query = event[1][:_MAX_QUERY]
         elif kind == "back":
             query = query[:-1]
         elif kind == "submit" and query.strip():

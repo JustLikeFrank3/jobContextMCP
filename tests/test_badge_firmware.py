@@ -1261,3 +1261,340 @@ def test_tls_verified_flag_exists():
     """The TLS check runs at import; False on this MicroPython build."""
     import badge.jobcontext.api as real_api
     assert hasattr(real_api, "TLS_VERIFIED")
+
+
+# ── phone keyboard (badge serves a form over WiFi) ────────────────────────────
+# The route that needs no hardware: BLE HID is closed (no gap_pair) and the
+# wired keyboard needs parts, but when the phone is the hotspot it is already
+# on the same network as the badge. A fake socket stands in for the radio.
+
+
+class FakeConn:
+    def __init__(self, request=b"", recv_raises=False):
+        self.request = request
+        self.recv_raises = recv_raises
+        self.sent = []
+        self.closed = False
+        self.timeout = None
+
+    def settimeout(self, value):
+        self.timeout = value
+
+    def recv(self, _n):
+        if self.recv_raises:
+            raise OSError("phone wandered off")
+        return self.request
+
+    def send(self, data):
+        self.sent.append(data)
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSocket:
+    """One listening socket with a queue of connections to hand out."""
+
+    SOL_SOCKET = 1
+    SO_REUSEADDR = 2
+
+    def __init__(self, queue=None, bind_raises=False):
+        self.queue = list(queue or [])
+        self.bind_raises = bind_raises
+        self.bound = None
+        self.blocking = None
+
+    # module-level interface
+    def socket(self):
+        return self
+
+    # socket interface
+    def setsockopt(self, *a):
+        pass
+
+    def bind(self, addr):
+        if self.bind_raises:
+            raise OSError("address in use")
+        self.bound = addr
+
+    def listen(self, _n):
+        pass
+
+    def setblocking(self, flag):
+        self.blocking = flag
+
+    def accept(self):
+        if not self.queue:
+            raise OSError(11, "EAGAIN")
+        return self.queue.pop(0), ("10.0.0.9", 50000)
+
+
+class FakeWLAN:
+    def __init__(self, connected=True, ip="192.168.4.1"):
+        self._connected = connected
+        self._ip = ip
+
+    def isconnected(self):
+        return self._connected
+
+    def ifconfig(self):
+        return (self._ip, "255.255.255.0", "192.168.4.1", "192.168.4.1")
+
+
+class FakeNetwork:
+    STA_IF = 0
+
+    def __init__(self, wlan=None):
+        self._wlan = wlan or FakeWLAN()
+
+    def WLAN(self, _mode):  # noqa: N802 — mirrors MicroPython's API
+        return self._wlan
+
+
+def _web(monkeypatch, queue=None, wlan=None, bind_raises=False):
+    """A WebInput wired to fake network + socket modules."""
+    import inputs
+
+    sock = FakeSocket(queue=queue, bind_raises=bind_raises)
+    monkeypatch.setitem(sys.modules, "socket", sock)
+    monkeypatch.setitem(sys.modules, "network", FakeNetwork(wlan))
+    return inputs.WebInput(), sock
+
+
+def _get(path):
+    return ("GET %s HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n" % path).encode()
+
+
+def test_web_serves_the_form_on_a_bare_request(badge_app, monkeypatch):
+    _app, _ui, _api = badge_app
+    conn = FakeConn(_get("/"))
+    source, _sock = _web(monkeypatch, queue=[conn])
+
+    assert source.poll() == []          # a bare GET is not input
+    body = b"".join(conn.sent) if isinstance(conn.sent[0], bytes) else "".join(conn.sent)
+    body = body if isinstance(body, str) else body.decode()
+    assert "<form" in body and "name=q" in body
+    assert conn.closed
+
+
+def test_web_query_becomes_set_then_submit(badge_app, monkeypatch):
+    """The phone sends a whole string, so it replaces the query rather than
+    appending to whatever the buttons left behind."""
+    _app, _ui, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[FakeConn(_get("/?q=acme+corp"))])
+
+    assert source.poll() == [("set", "acme corp"), ("submit",)]
+
+
+def test_web_decodes_percent_escapes(badge_app, monkeypatch):
+    _app, _ui, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[FakeConn(_get("/?q=AT%26T%20Labs"))])
+
+    assert source.poll()[0] == ("set", "AT&T Labs")
+
+
+def test_web_buttons_keep_working(badge_app, monkeypatch, ):
+    """WebInput extends the buttons rather than replacing them — the phone is
+    an addition, and the carousel is the fallback when it is in a pocket."""
+    import inputs
+
+    _app, ui_, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[])
+    assert isinstance(source, inputs.ButtonInput)
+
+    ui_.release()
+    source.poll()
+    ui_.press("A")
+    assert source.poll() == [("char", "A")]
+
+
+def test_web_binds_only_once_wifi_is_up(badge_app, monkeypatch):
+    """init() picks the source before _connect() runs, so there is no address
+    to bind to yet. Binding is lazy and must not fail the app."""
+    _app, _ui, _api = badge_app
+    offline = FakeWLAN(connected=False)
+    source, sock = _web(monkeypatch, queue=[FakeConn(_get("/?q=acme"))], wlan=offline)
+
+    assert source.poll() == []     # nothing bound, nothing served
+    assert sock.bound is None
+
+    offline._connected = True
+    assert source.poll() == [("set", "acme"), ("submit",)]
+    assert sock.bound == ("0.0.0.0", 80)
+
+
+def test_web_survives_a_failed_bind(badge_app, monkeypatch):
+    """Port taken, no sockets, whatever — the badge still runs on buttons."""
+    _app, _ui, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[FakeConn(_get("/?q=acme"))], bind_raises=True)
+
+    assert source.poll() == []
+    assert source._bind_failed is True
+    assert source.poll() == []     # and does not retry forever
+
+
+def test_web_survives_a_half_open_phone(badge_app, monkeypatch):
+    """A connection that opens and never speaks must not crash the frame loop."""
+    _app, _ui, _api = badge_app
+    conn = FakeConn(recv_raises=True)
+    source, _sock = _web(monkeypatch, queue=[conn])
+
+    assert source.poll() == []
+    assert conn.closed
+
+
+def test_web_pending_does_not_consume_the_request(badge_app, monkeypatch):
+    """The screen saver asks 'is someone typing?' every frame. If that check
+    ate the request, the phone would hang and the search would never run."""
+    _app, _ui, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[FakeConn(_get("/?q=acme"))])
+
+    assert source.pending() is True
+    assert source.pending() is True          # idempotent
+    assert source.poll() == [("set", "acme"), ("submit",)]
+
+
+def test_web_pending_is_false_when_nobody_knocks(badge_app, monkeypatch):
+    _app, _ui, _api = badge_app
+    source, _sock = _web(monkeypatch, queue=[])
+    assert source.pending() is False
+
+
+def test_set_event_replaces_the_query(badge_app):
+    """End to end through the state machine: a phone-sent string replaces what
+    the buttons typed, and submits."""
+    app, _ui, api_ = badge_app
+    api_.results = [{"job_id": 7, "company": "Acme", "role": "SWE", "score": "8/10"}]
+    app.query = "TYPO"
+
+    class OneShot:
+        hint = ""
+
+        def __init__(self):
+            self.done = False
+
+        def poll(self):
+            if self.done:
+                return []
+            self.done = True
+            return [("set", "acme corp"), ("submit",)]
+
+        def draw(self, _text):
+            pass
+
+        def rearm(self):
+            pass
+
+    app.source = OneShot()
+    app.update()
+    assert api_.searched == ["acme corp"]
+    assert app.state == app.RESULTS
+
+
+def test_phone_request_counts_as_activity(badge_app, monkeypatch):
+    """Without this the saver covers the screen mid-typing — and worse, stops
+    the frame that would have answered the phone."""
+    app, ui_, _api = badge_app
+
+    class Knocking:
+        hint = ""
+
+        def pending(self):
+            return True
+
+        def poll(self):
+            return []
+
+        def draw(self, _t):
+            pass
+
+        def rearm(self):
+            pass
+
+    app.source = Knocking()
+    assert app._source_pending() is True
+
+    class Quiet(Knocking):
+        def pending(self):
+            return False
+
+    app.source = Quiet()
+    assert app._source_pending() is False
+
+    class Boom(Knocking):
+        def pending(self):
+            raise OSError("flaky socket")
+
+    app.source = Boom()
+    assert app._source_pending() is False
+
+
+def test_sources_without_pending_read_false(badge_app):
+    """Buttons and the wired keyboard cannot be knocked on."""
+    import inputs
+
+    app, _ui, _api = badge_app
+    app.source = inputs.ButtonInput()
+    assert app._source_pending() is False
+
+
+def test_phone_keyboard_is_off_unless_switched_on(badge_app, monkeypatch):
+    """Off by default: it opens a listening socket, and anyone on the network
+    can type into it. install.py ships it off; install_phone.py turns it on."""
+    import inputs
+
+    monkeypatch.setattr(inputs, "_optional", lambda name: None)
+    assert inputs.phone_keyboard_enabled() is False
+    assert isinstance(inputs.best_available(), inputs.ButtonInput)
+
+
+def test_features_file_turns_the_phone_keyboard_on(badge_app, monkeypatch):
+    import inputs
+
+    class Features:
+        PHONE_KEYBOARD = True
+
+    monkeypatch.setattr(
+        inputs, "_optional", lambda name: Features if name == "features" else None
+    )
+    assert inputs.phone_keyboard_enabled() is True
+
+    # WebInput.available() wants the radio modules, which a host does not have.
+    monkeypatch.setitem(sys.modules, "network", FakeNetwork())
+    monkeypatch.setitem(sys.modules, "socket", FakeSocket())
+    assert isinstance(inputs.best_available(), inputs.WebInput)
+
+
+def test_secrets_overrides_the_generated_features_file(badge_app, monkeypatch):
+    """So the switch can be flipped without a reinstall."""
+    import inputs
+
+    class Features:
+        PHONE_KEYBOARD = True
+
+    class Secrets:
+        PHONE_KEYBOARD = False
+
+    monkeypatch.setattr(
+        inputs, "_optional",
+        lambda name: Secrets if name == "secrets" else Features,
+    )
+    assert inputs.phone_keyboard_enabled() is False
+
+
+def test_a_secrets_without_the_flag_does_not_veto(badge_app, monkeypatch):
+    """Every existing secrets.py lacks PHONE_KEYBOARD, and on a host `import
+    secrets` finds the stdlib module. Neither must mask features.py."""
+    import inputs
+
+    class Features:
+        PHONE_KEYBOARD = True
+
+    class BareSecrets:
+        pass
+
+    monkeypatch.setattr(
+        inputs, "_optional",
+        lambda name: BareSecrets if name == "secrets" else Features,
+    )
+    assert inputs.phone_keyboard_enabled() is True

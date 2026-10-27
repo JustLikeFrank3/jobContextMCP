@@ -117,6 +117,34 @@ direction MicroPython supports well. Note the blocker is specific to HID: a
 *custom* GATT characteristic needs no encryption and so no bonding, which is
 why the phone route stays open while keyboards do not.
 
+## Typing on your phone (no hardware)
+
+The route that needs nothing bought. When your phone is the hotspot — already
+the recommended network, because conference WiFi puts a captive portal in
+front of the API — the phone and the badge are on the same network by
+construction. The badge serves a one-field form; you type, submit, and the
+search runs on the badge.
+
+```sh
+python badge/install_phone.py     # phone keyboard ON
+python badge/install.py           # phone keyboard OFF — the way back
+```
+
+The badge shows its address on the search screen once WiFi is up. The buttons
+keep working throughout: the phone is an addition, not a replacement, and the
+carousel is what you fall back to when the phone is in a pocket.
+
+**`install.py` is a real fallback.** It deletes the generated `features.py`,
+so reinstalling with it gives you the buttons-only build rather than the same
+build with a stale flag. Set `PHONE_KEYBOARD` in `secrets.py` to flip the
+switch without reinstalling.
+
+Anyone on the same network can type into the badge. On a personal hotspot
+that is you and nobody else. On a shared network a stranger could run
+searches against your pipeline — they cannot read the results, which render
+on the badge in your hand, but do not switch this on at a conference and walk
+away from it.
+
 ## A wired keyboard (this one works)
 
 With BLE closed, the qwiic port is the way to real keys. An **M5Stack CardKB
