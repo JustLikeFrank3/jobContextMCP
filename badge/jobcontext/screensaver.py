@@ -174,9 +174,11 @@ def _render_qr():
 def draw(now):
     """Advance Tetris as time allows and draw the frame.
 
-    The card and the QR are static, so they are drawn only when the page
-    changes; every other frame repaints just the Tetris well. A dense QR is
-    hundreds of rectangles — fine once, wasteful at 30 fps.
+    On the original badge the card and the QR are drawn only when the page
+    changes — a dense QR was hundreds of rectangles, fine once, wasteful at
+    30 fps. BadgeOS double-buffers, so anything drawn once lands in a single
+    buffer and vanishes on the next flip: there the page redraws every frame
+    (cheap — its QR is one blit).
     """
     global _last_step, _shown_page
     while time.ticks_diff(now, _last_step) >= _STEP_MS:
@@ -184,7 +186,7 @@ def draw(now):
         _last_step += _STEP_MS
 
     page = "qr" if _qr and (time.ticks_diff(now, _started) // _PAGE_MS) % 2 == 1 else "card"
-    if page != _shown_page:
+    if page != _shown_page or ui.badgeos():
         _shown_page = page
         ui.clear(ui.BLACK)
         if page == "qr":

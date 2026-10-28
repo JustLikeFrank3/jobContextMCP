@@ -41,14 +41,20 @@ MicroPython firmware.
    `BADGER`), and:
 
    ```sh
-   python3 badge/install.py          # --dry-run to preview first
+  python3 badge/install.py          # --dry-run to preview first
    ```
 
-   A plain `cp -r` is not enough: the launcher only shows apps named in a
-   hard-coded list in `apps/menu/__init__.py`, on a 3x2 grid the six stock
-   apps already fill. The installer gives jobcontext **gallery's** slot
-   (`--remove <app>` to choose another), backs up what it changes to
-   `~/badge-backups/`, and ejects. `--restore <backup>` undoes it.
+  The installer supports both launcher generations. Older firmware has a
+  fixed app list, so the installer swaps jobcontext into one stock app's slot
+  (default `gallery`, or `--remove <app>`), backs up what it changes to
+  `~/badge-backups/`, and ejects. Newer BadgeOS firmware scans `apps/`
+  dynamically; the installer detects this and adds `apps/jobcontext/` without
+  editing the menu or removing a stock app. `--restore <backup>` restores a
+  backed-up install.
+
+  If local credentials were exposed or revoked, use `--skip-secrets` so the
+  installer does not copy the gitignored local `secrets.py`; configure a newly
+  minted badge-scoped token on the badge before using network features.
 
 4. **Reset** and pick *jobcontext* from the app menu.
 
