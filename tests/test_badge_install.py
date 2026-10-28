@@ -1,12 +1,9 @@
-"""badge/install.py against a fake /Volumes/BADGER.
-
-The menu source below is the apps list exactly as it ships on the badge
-(read off the hardware 2026-10-02); the installer's whole job is editing it.
-"""
+"""badge/install.py against legacy fixed-menu and current dynamic-menu drives."""
 from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -25,6 +22,21 @@ apps = [
 ]
 
 mona = SpriteSheet("/system/assets/mona-sprites/mona-default.png", 11, 1)
+'''
+
+DYNAMIC_MENU = '''from app import shared as shared_apps
+
+APP_ORDER = ("badge", "contacts", "settings")
+apps = shared_apps("/system/apps")
+'''
+
+DYNAMIC_MENU_APP = '''from icons import ICONS
+
+APP_ORDER = (
+    "badge",
+    "contacts",
+    "settings",
+)
 '''
 
 
@@ -50,6 +62,17 @@ def volume(tmp_path):
     (vol / "apps/gallery/images").mkdir(parents=True)
     (vol / "apps/gallery/__init__.py").write_text("# gallery")
     (vol / "apps/gallery/images/duck.png").write_bytes(b"png")
+    return vol
+
+
+@pytest.fixture()
+def dynamic_volume(tmp_path):
+    vol = tmp_path / "BADGER"
+    (vol / "apps/menu").mkdir(parents=True)
+    (vol / "apps/menu/__init__.py").write_text(DYNAMIC_MENU)
+    (vol / "apps/menu/app.py").write_text(DYNAMIC_MENU_APP)
+    (vol / "apps/badge").mkdir()
+    (vol / "apps/badge/__init__.py").write_text("# stock app")
     return vol
 
 
@@ -95,6 +118,53 @@ def test_install_then_restore_round_trips(installer, volume):
     assert not (volume / "apps/jobcontext").exists()
 
 
+def test_dynamic_launcher_installs_without_editing_menu_or_removing_stock_apps(
+    installer, dynamic_volume
+):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+
+    assert (dynamic_volume / "apps/menu/__init__.py").read_text() == DYNAMIC_MENU
+    assert (dynamic_volume / "apps/badge/__init__.py").read_text() == "# stock app"
+    assert (dynamic_volume / "apps/jobcontext/app.mpy").is_file()
+    assert not (dynamic_volume / "apps/gallery").exists()
+
+
+def test_dynamic_launcher_gets_tile_icon_and_first_slot(installer, dynamic_volume):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+
+    menu_app = (dynamic_volume / "apps/menu/app.py").read_text()
+    assert 'APP_ORDER = (\n    "jobcontext",' in menu_app
+    assert 'ICONS["jobcontext"] = ' in menu_app
+    # idempotent on reinstall
+    assert installer.patch_badgeos_menu(menu_app) == menu_app
+
+
+def test_dynamic_menu_patch_restores_from_backup(installer, dynamic_volume):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+    saved = next(iter(installer.BACKUP_ROOT.iterdir()))
+    assert (saved / "apps/menu/app.py").read_text() == DYNAMIC_MENU_APP
+
+    installer.restore(dynamic_volume, saved, dry_run=False)
+    assert (dynamic_volume / "apps/menu/app.py").read_text() == DYNAMIC_MENU_APP
+    assert not (dynamic_volume / "apps/jobcontext").exists()
+
+
+def test_dynamic_launcher_reinstall_can_restore_existing_jobcontext(
+    installer, dynamic_volume
+):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+    app_init = dynamic_volume / "apps/jobcontext/__init__.py"
+    app_init.write_text("old loader")
+
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+    saved = next(path for path in installer.BACKUP_ROOT.iterdir() if (path / "REPLACED_APP").exists())
+    assert (saved / "apps/jobcontext/__init__.py").read_text() == "old loader"
+
+    installer.restore(dynamic_volume, saved, dry_run=False)
+    assert app_init.read_text() == "old loader"
+    assert (dynamic_volume / "apps/menu/__init__.py").read_text() == DYNAMIC_MENU
+
+
 def test_dry_run_writes_nothing(installer, volume):
     installer.install(volume, "gallery", dry_run=True)
     assert (volume / "apps/menu/__init__.py").read_text() == STOCK_MENU
@@ -117,6 +187,19 @@ def test_reinstall_refreshes_files_without_a_useless_backup(installer, volume):
 
     assert list(installer.BACKUP_ROOT.iterdir()) == [first]
     assert (volume / "apps/jobcontext/ui.mpy").read_bytes() != b"stale"
+
+
+def test_skip_secrets_does_not_copy_local_credentials(installer, dynamic_volume, tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    for name in installer.APP_FILES:
+        shutil.copy2(installer.APP_SRC / name, source / name)
+    (source / "secrets.py").write_text("BADGE_TOKEN = 'must not copy'\n")
+    monkeypatch.setattr(installer, "APP_SRC", source)
+
+    installer.install(dynamic_volume, "gallery", dry_run=False, skip_secrets=True)
+
+    assert not (dynamic_volume / "apps/jobcontext/secrets.py").exists()
 
 
 def test_install_removes_stale_py_that_would_shadow_the_mpy(installer, volume):

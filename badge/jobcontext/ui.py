@@ -3,6 +3,18 @@
 Everything hardware-specific is isolated in this one module on purpose: the
 rest of the app talks to the small surface defined here.
 
+Two firmware generations are supported, detected at init():
+
+  * The original badgeware firmware (`badgeware.io.held`, PixelFont,
+    brushes, a run() loop that calls init/update/on_exit) — the notes below
+    describe it, verified with badge/probe.py (2026-10-02).
+  * BadgeOS (the GitHub Universe conference badge): `badge`, `screen`,
+    `font`, `color` and BUTTON_* are injected builtins, apps own their frame
+    loop, drawing is pens + screen.rectangle/text, and `badge.mode(LORES)`
+    gives the same 160x120 space all coordinates here assume. Its bottom
+    buttons are silkscreened <, > and Enter — footer legends translate via
+    LABELS, and pressed() maps A/B/C to LEFT/RIGHT/SELECT positionally.
+
 Verified against the hardware with badge/probe.py (2026-10-02): the badge is
 a "GitHub Badger with RP2350" running Pimoroni's badgeware firmware
 (MicroPython 1.26).  What that means for this file:
@@ -51,52 +63,138 @@ _FONT_DIR = "/system/assets/fonts/"
 HEADER_H = 14
 FOOTER_H = 11
 
-_fw = None  # the badgeware module, once init() has found it
+_fw = None  # the badgeware module, once init() has found it (older firmware)
+_bi = None  # a namespace of BadgeOS's injected names (badge, screen, color)
+_g2_buttons = {}  # alias -> resolved BUTTON_* constant on BadgeOS
 _fonts = {}
 _brushes = {}
+_pens = {}
+_heights = {}
 _current_font = None
+
+# Button legend text per logical name. The old badge silkscreens A/B/C; the
+# BadgeOS badge's bottom row is <, > and Enter, so footers translate.
+LABELS = {"A": "A", "B": "B", "C": "C", "A/B": "A/B", "U/D": "U/D"}
+
+# Logical name -> BadgeOS button constants, tried in order. Positional: A is
+# the left button, B the middle (reads as BUTTON_RIGHT), C the right (Enter).
+_G2_BUTTONS = {
+    "A": ("LEFT",),
+    "B": ("RIGHT",),
+    "C": ("SELECT",),
+    "UP": ("UP",),
+    "DOWN": ("DOWN",),
+    "HOME": ("HOME",),
+}
+
+
+class _Namespace:
+    pass
 
 
 def init():
-    global _fw
+    global _fw, _bi
     try:
         import badgeware  # type: ignore
     except ImportError:
+        badgeware = None
+    if badgeware is not None and hasattr(badgeware, "io"):
+        _fw = badgeware
+        for scale, name in _FONT_FILES.items():
+            try:
+                _fonts[scale] = badgeware.PixelFont.load(_FONT_DIR + name)
+            except OSError:
+                pass
+        return True
+    # BadgeOS: badge/screen/font/color exist only as *bare-name* builtins (a
+    # C-level fallback the Python-visible builtins module does not reflect),
+    # so they are probed by reference and the NameError means "not BadgeOS".
+    try:
+        g = _Namespace()
+        g.badge = badge  # noqa: F821
+        g.screen = screen  # noqa: F821
+        g.color = color  # noqa: F821
+        g.image = image  # noqa: F821
+        # Not the bare name: this module's own rect() shadows the builtin.
+        import picovector
+        g.rect = picovector.rect
+        # The original .ppf faces ship as builtins too — same metrics the
+        # whole layout was drawn around (bacteria/futile are 20-24px tall
+        # and overlap everything).
+        _fonts[1] = font.winds  # noqa: F821
+        _fonts[2] = font.ark  # noqa: F821
+        _fonts[3] = font.absolute  # noqa: F821
+        g.badge.mode(LORES | VSYNC)  # noqa: F821 — 160x120, like the old badge
+    except (NameError, ImportError):
         return False
-    _fw = badgeware
-    for scale, name in _FONT_FILES.items():
+    for alias, get in (("LEFT", lambda: BUTTON_LEFT), ("RIGHT", lambda: BUTTON_RIGHT),  # noqa: F821
+                       ("SELECT", lambda: BUTTON_SELECT), ("BACK", lambda: BUTTON_BACK),  # noqa: F821
+                       ("UP", lambda: BUTTON_UP), ("DOWN", lambda: BUTTON_DOWN),  # noqa: F821
+                       ("HOME", lambda: BUTTON_HOME)):  # noqa: F821
         try:
-            _fonts[scale] = badgeware.PixelFont.load(_FONT_DIR + name)
-        except OSError:
+            _g2_buttons[alias] = get()
+        except NameError:
             pass
+    _bi = g
+    LABELS.update({"A": "<", "B": ">", "C": "ENT", "A/B": "</>"})
     return True
+
+
+def _screen():
+    return _fw.screen if _fw is not None else _bi.screen
+
+
+def _off():
+    return _fw is None and _bi is None
+
+
+def badgeos():
+    """True on the BadgeOS conference badge — for the few places where the
+    *meaning* of a button changes, not just its label."""
+    return _bi is not None
 
 
 def pressed(name):
     """True if button *name* is currently down. Unknown buttons read False so
     a firmware that lacks one degrades instead of crashing."""
-    if _fw is None:
+    if _fw is not None:
+        const = getattr(_fw.io, "BUTTON_" + name, None)
+        return const is not None and const in _fw.io.held
+    if _bi is None:
         return False
-    const = getattr(_fw.io, "BUTTON_" + name, None)
-    return const is not None and const in _fw.io.held
+    for alias in _G2_BUTTONS.get(name, (name,)):
+        const = _g2_buttons.get(alias)
+        if const is not None and _bi.badge.held(const):
+            return True
+    return False
+
+
+def _badge_obj():
+    if _fw is not None:
+        return getattr(_fw, "badge", None)
+    if _bi is not None:
+        return getattr(_bi, "badge", None)
+    return None
 
 
 def battery_level():
     """0-100, or -1 when the firmware has no battery ADC."""
-    if _fw is None:
+    bdg = _badge_obj()
+    if bdg is None:
         return -1
     try:
-        return _fw.badge.battery_level()
+        return bdg.battery_level()
     except AttributeError:
         return -1
 
 
 def battery_charging():
     """True while USB is connected and the battery is taking charge."""
-    if _fw is None:
+    bdg = _badge_obj()
+    if bdg is None:
         return False
     try:
-        return _fw.badge.is_charging()
+        return bdg.is_charging()
     except AttributeError:
         return False
 
@@ -133,20 +231,29 @@ def _use_font(scale):
     global _current_font
     font = _fonts.get(scale) or _fonts.get(2)
     if font is not None and font is not _current_font:
-        _fw.screen.font = font
+        _screen().font = font
         _current_font = font
 
 
 def text_width(value, scale=2):
-    if _fw is None:
+    if _off():
         return len(str(value)) * 5
     _use_font(scale)
-    return int(_fw.screen.measure_text(_ascii(value))[0])
+    return int(_screen().measure_text(_ascii(value))[0])
 
 
 def line_height(scale=2):
     font = _fonts.get(scale)
-    return font.height if font is not None else 11
+    if font is None:
+        return 11
+    if _fw is not None:
+        return font.height
+    height = _heights.get(scale)
+    if height is None:
+        _use_font(scale)
+        height = int(_screen().measure_text("Ag")[1])
+        _heights[scale] = height
+    return height
 
 
 def fit(value, width, scale=2):
@@ -194,34 +301,52 @@ def fit_tail(value, width, scale=2):
 
 # ── drawing ────────────────────────────────────────────────────────────────────
 
-def _brush(colour):
-    brush = _brushes.get(colour)
-    if brush is None:
-        brush = _fw.brushes.color(*colour)
-        _brushes[colour] = brush
-    _fw.screen.brush = brush
+def _ink(colour):
+    if _fw is not None:
+        brush = _brushes.get(colour)
+        if brush is None:
+            brush = _fw.brushes.color(*colour)
+            _brushes[colour] = brush
+        _fw.screen.brush = brush
+        return
+    pen = _pens.get(colour)
+    if pen is None:
+        pen = _bi.color.rgb(*colour)
+        _pens[colour] = pen
+    _bi.screen.pen = pen
+
+
+def _fill(x, y, w, h):
+    """Fill a rectangle in the current ink."""
+    if _fw is not None:
+        _fw.screen.draw(_fw.shapes.rectangle(int(x), int(y), int(w), int(h)))
+    else:
+        _bi.screen.rectangle(int(x), int(y), int(w), int(h))
 
 
 def clear(colour=BLACK):
-    if _fw is None:
+    if _off():
         return
-    _brush(colour)
-    _fw.screen.clear()
+    _ink(colour)
+    if _fw is not None:
+        _fw.screen.clear()
+    else:
+        _fill(0, 0, WIDTH, HEIGHT)
 
 
 def text(value, x, y, colour=WHITE, scale=2):
-    if _fw is None:
+    if _off():
         return
     _use_font(scale)
-    _brush(colour)
-    _fw.screen.text(_ascii(value), int(x), int(y))
+    _ink(colour)
+    _screen().text(_ascii(value), int(x), int(y))
 
 
 def rect(x, y, w, h, colour):
-    if _fw is None:
+    if _off():
         return
-    _brush(colour)
-    _fw.screen.draw(_fw.shapes.rectangle(int(x), int(y), int(w), int(h)))
+    _ink(colour)
+    _fill(x, y, w, h)
 
 
 def hline(y, colour=DIM):
@@ -229,24 +354,33 @@ def hline(y, colour=DIM):
 
 
 def flip():
-    """No-op: badgeware's run() pushes the frame after every update()."""
+    """No-op: both firmwares push the frame from their own loop."""
 
 
 def present():
     """Push the current frame now — for screens drawn outside the frame loop."""
-    if _fw is None:
-        return
-    _fw.display.update()
+    if _fw is not None:
+        _fw.display.update()
+    elif _bi is not None:
+        _bi.badge.update()
 
 
 def qr_code(text):
-    """Encode *text* as a QR code: (modules_per_side, runs) or None.
+    """Encode *text* as a QR code, or None when this firmware can't.
 
-    *runs* is a bytearray of (x, y, length) triples, one per horizontal run
-    of dark modules — about 2 KB for a typical contact card. Deliberately not
-    an offscreen Image: at 2px per module that is ~45 KB in one block, which
-    the badge's fragmented heap could not allocate (on-hardware MemoryError).
+    BadgeOS has image.qr() built in — (modules_per_side, Image). The older
+    firmware's qrcode module gives (modules_per_side, runs): a bytearray of
+    (x, y, length) triples, one per horizontal run of dark modules — about
+    2 KB for a typical contact card. Deliberately not an offscreen Image
+    there: at 2px per module that is ~45 KB in one block, which that badge's
+    fragmented heap could not allocate (on-hardware MemoryError).
     """
+    if _bi is not None:
+        try:
+            img = _bi.image.qr(text, _bi.image.QR_LOW, 1)
+        except (AttributeError, ValueError, MemoryError):
+            return None
+        return img.width, img
     try:
         import qrcode  # type: ignore
     except ImportError:
@@ -273,17 +407,20 @@ QR_QUIET = 2  # light modules around the code
 
 def draw_qr(qr, x, y, scale):
     """Draw *qr* (from qr_code) with its quiet zone, top-left at (x, y)."""
-    if _fw is None:
+    if _off():
         return
-    n, runs = qr
+    n, data = qr
     side = (n + 2 * QR_QUIET) * scale
     rect(x, y, side, side, WHITE)
-    _brush(BLACK)
     ox = x + QR_QUIET * scale
     oy = y + QR_QUIET * scale
-    for i in range(0, len(runs), 3):
-        _fw.screen.draw(_fw.shapes.rectangle(
-            ox + runs[i] * scale, oy + runs[i + 1] * scale, runs[i + 2] * scale, scale))
+    if _bi is not None:
+        # data is an Image; blit with a larger destination rect scales it
+        _bi.screen.blit(data, _bi.rect(0, 0, n, n), _bi.rect(ox, oy, n * scale, n * scale))
+        return
+    _ink(BLACK)
+    for i in range(0, len(data), 3):
+        _fill(ox + data[i] * scale, oy + data[i + 1] * scale, data[i + 2] * scale, scale)
 
 
 def header(title, subtitle="", battery=None, charging=False):
@@ -305,6 +442,9 @@ def header(title, subtitle="", battery=None, charging=False):
 
 
 def footer(hint):
-    """One line of button legend along the bottom — the badge has no labels."""
+    """One line of button legend along the bottom — the badge has no labels.
+    Logical button tokens (A, B, C, A/B, U/D) are translated to whatever this
+    badge's buttons are really called, so hint strings stay firmware-neutral."""
+    hint = " ".join(LABELS.get(word, word) for word in hint.split(" "))
     rect(0, HEIGHT - FOOTER_H, WIDTH, FOOTER_H, PANEL)
     text(fit(hint, WIDTH - 6, 1), 3, HEIGHT - FOOTER_H, DIM, 1)
