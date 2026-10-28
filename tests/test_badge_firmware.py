@@ -27,6 +27,7 @@ class FakeUI:
     def __init__(self):
         self.down = set()
         self.drawn = []
+        self.is_badgeos = False
         # Simulated millisecond clock. The app throttles its work-item polling
         # to one call every _POLL_MS, so a test that wants a second poll has
         # to move time forward rather than just calling update() again.
@@ -37,6 +38,9 @@ class FakeUI:
 
     def init(self):
         return True
+
+    def badgeos(self):
+        return self.is_badgeos
 
     def pressed(self, name):
         return name in self.down
@@ -261,6 +265,33 @@ def test_typing_builds_a_query(badge_app):
 
     _tap(app, ui_, "B")  # backspace
     assert app.query == "A"
+
+
+@pytest.mark.parametrize(
+    "badgeos, previous, next_, type_, back, submit",
+    [(False, "UP", "DOWN", "A", "B", "C"),
+     (True, "A", "B", "C", "UP", "DOWN")],
+    ids=["legacy", "badgeos"],
+)
+def test_button_layout_types_deletes_and_submits(
+    badge_app, badgeos, previous, next_, type_, back, submit
+):
+    app, ui_, api_ = badge_app
+    ui_.is_badgeos = badgeos
+    app.init()
+    api_.results = [{"job_id": 3, "company": "Acme", "role": "SWE", "score": ""}]
+
+    _tap(app, ui_, next_)
+    _tap(app, ui_, type_)
+    assert app.query == "B"
+    _tap(app, ui_, previous)
+    _tap(app, ui_, type_)
+    assert app.query == "BA"
+    _tap(app, ui_, back)
+    assert app.query == "B"
+    _tap(app, ui_, submit)
+    assert api_.searched == ["B"]
+    assert app.state == app.RESULTS
 
 
 def test_carousel_wraps_backwards(badge_app):
@@ -958,15 +989,35 @@ def test_wifi_still_reads_the_old_single_network_secrets(monkeypatch):
     assert api.connect_wifi() is True and wlan.tried == ["Home"]
 
 
-def test_wifi_says_so_when_nothing_known_is_in_range(monkeypatch):
+def test_wifi_returns_false_after_two_rounds_when_no_network_joins(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Hotspot", "b")])
+    wlan = _FakeWlan(visible=["Starbucks WiFi"], joinable=set())
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is False
+    assert wlan.tried == ["Home", "Hotspot", "Home", "Hotspot"]
+    assert not wlan.isconnected()
+
+
+def test_wifi_joins_a_configured_network_missed_by_scan(monkeypatch):
     import types
 
     secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a")])
-    wlan = _FakeWlan(visible=["Starbucks WiFi"], joinable=set())
+    wlan = _FakeWlan(visible=["Starbucks WiFi"], joinable={"Home"})
     api = _api_with(monkeypatch, secrets_obj, wlan)
-    with pytest.raises(api.ApiError, match="in range"):
-        api.connect_wifi()
-    assert wlan.tried == []
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home"]
+
+
+def test_wifi_second_round_tries_networks_missing_from_scan(monkeypatch):
+    import types
+
+    secrets_obj = types.SimpleNamespace(WIFI_NETWORKS=[("Home", "a"), ("Hotspot", "b")])
+    wlan = _FakeWlan(visible=["Home"], joinable={"Hotspot"})
+    api = _api_with(monkeypatch, secrets_obj, wlan)
+    assert api.connect_wifi() is True
+    assert wlan.tried == ["Home", "Home", "Hotspot"]
 
 
 def test_wifi_tries_unseen_networks_when_a_hidden_one_is_in_range(monkeypatch):
