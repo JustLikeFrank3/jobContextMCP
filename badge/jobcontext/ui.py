@@ -80,7 +80,7 @@ LABELS = {"A": "A", "B": "B", "C": "C", "A/B": "A/B", "U/D": "U/D"}
 # the left button, B the middle (reads as BUTTON_RIGHT), C the right (Enter).
 _G2_BUTTONS = {
     "A": ("LEFT",),
-    "B": ("RIGHT", "BACK"),
+    "B": ("RIGHT",),
     "C": ("SELECT",),
     "UP": ("UP",),
     "DOWN": ("DOWN",),
@@ -114,11 +114,18 @@ def init():
         g.badge = badge  # noqa: F821
         g.screen = screen  # noqa: F821
         g.color = color  # noqa: F821
-        _fonts[1] = font.sins  # noqa: F821
-        _fonts[2] = font.bacteria  # noqa: F821
-        _fonts[3] = font.futile  # noqa: F821
+        g.image = image  # noqa: F821
+        # Not the bare name: this module's own rect() shadows the builtin.
+        import picovector
+        g.rect = picovector.rect
+        # The original .ppf faces ship as builtins too — same metrics the
+        # whole layout was drawn around (bacteria/futile are 20-24px tall
+        # and overlap everything).
+        _fonts[1] = font.winds  # noqa: F821
+        _fonts[2] = font.ark  # noqa: F821
+        _fonts[3] = font.absolute  # noqa: F821
         g.badge.mode(LORES | VSYNC)  # noqa: F821 — 160x120, like the old badge
-    except NameError:
+    except (NameError, ImportError):
         return False
     for alias, get in (("LEFT", lambda: BUTTON_LEFT), ("RIGHT", lambda: BUTTON_RIGHT),  # noqa: F821
                        ("SELECT", lambda: BUTTON_SELECT), ("BACK", lambda: BUTTON_BACK),  # noqa: F821
@@ -139,6 +146,12 @@ def _screen():
 
 def _off():
     return _fw is None and _bi is None
+
+
+def badgeos():
+    """True on the BadgeOS conference badge — for the few places where the
+    *meaning* of a button changes, not just its label."""
+    return _bi is not None
 
 
 def pressed(name):
@@ -353,13 +366,21 @@ def present():
 
 
 def qr_code(text):
-    """Encode *text* as a QR code: (modules_per_side, runs) or None.
+    """Encode *text* as a QR code, or None when this firmware can't.
 
-    *runs* is a bytearray of (x, y, length) triples, one per horizontal run
-    of dark modules — about 2 KB for a typical contact card. Deliberately not
-    an offscreen Image: at 2px per module that is ~45 KB in one block, which
-    the badge's fragmented heap could not allocate (on-hardware MemoryError).
+    BadgeOS has image.qr() built in — (modules_per_side, Image). The older
+    firmware's qrcode module gives (modules_per_side, runs): a bytearray of
+    (x, y, length) triples, one per horizontal run of dark modules — about
+    2 KB for a typical contact card. Deliberately not an offscreen Image
+    there: at 2px per module that is ~45 KB in one block, which that badge's
+    fragmented heap could not allocate (on-hardware MemoryError).
     """
+    if _bi is not None:
+        try:
+            img = _bi.image.qr(text, _bi.image.QR_LOW, 1)
+        except (AttributeError, ValueError, MemoryError):
+            return None
+        return img.width, img
     try:
         import qrcode  # type: ignore
     except ImportError:
@@ -388,14 +409,18 @@ def draw_qr(qr, x, y, scale):
     """Draw *qr* (from qr_code) with its quiet zone, top-left at (x, y)."""
     if _off():
         return
-    n, runs = qr
+    n, data = qr
     side = (n + 2 * QR_QUIET) * scale
     rect(x, y, side, side, WHITE)
-    _ink(BLACK)
     ox = x + QR_QUIET * scale
     oy = y + QR_QUIET * scale
-    for i in range(0, len(runs), 3):
-        _fill(ox + runs[i] * scale, oy + runs[i + 1] * scale, runs[i + 2] * scale, scale)
+    if _bi is not None:
+        # data is an Image; blit with a larger destination rect scales it
+        _bi.screen.blit(data, _bi.rect(0, 0, n, n), _bi.rect(ox, oy, n * scale, n * scale))
+        return
+    _ink(BLACK)
+    for i in range(0, len(data), 3):
+        _fill(ox + data[i] * scale, oy + data[i + 1] * scale, data[i + 2] * scale, scale)
 
 
 def header(title, subtitle="", battery=None, charging=False):

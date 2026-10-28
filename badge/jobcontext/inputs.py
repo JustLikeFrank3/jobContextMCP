@@ -107,14 +107,13 @@ class TextInput:
 
 
 class ButtonInput(TextInput):
-    """Five buttons, one on-screen keyboard.
+    """Hardware buttons driving an on-screen keyboard carousel.
 
-    Mapping (no left/right button exists, which is why entry is a carousel
-    rather than a grid):
+    Two layouts. The original badge has no left/right buttons:
         UP / DOWN — move through the character strip, accelerating when held
-        A         — type the highlighted character
-        B         — backspace
-        C         — search now
+        A — type the highlighted character; B — backspace; C — search
+    The BadgeOS badge's bottom row is <, >, Enter, so movement goes there:
+        < / > — move the strip; Enter — type; UP — backspace; DOWN — search
     """
 
     name = "buttons"
@@ -122,7 +121,14 @@ class ButtonInput(TextInput):
 
     def __init__(self):
         self.kb = OnScreenKeyboard()
-        self._edges = _Edges(("UP", "DOWN", "A", "B", "C", "HOME"), repeat=("UP", "DOWN"))
+        if ui.badgeos():
+            # A/B are the physical </> here — they move, so they repeat.
+            self._edges = _Edges(("UP", "DOWN", "A", "B", "C", "HOME"), repeat=("A", "B"))
+            self._actions = {"A": -1, "B": 1, "C": "char", "UP": "back", "DOWN": "submit"}
+            self.hint = "</> pick  ENT type  U del  D search"
+        else:
+            self._edges = _Edges(("UP", "DOWN", "A", "B", "C", "HOME"), repeat=("UP", "DOWN"))
+            self._actions = {"UP": -1, "DOWN": 1, "A": "char", "B": "back", "C": "submit"}
 
     def available(self):
         return True
@@ -130,15 +136,14 @@ class ButtonInput(TextInput):
     def poll(self):
         events = []
         for button in self._edges.poll():
-            if button == "UP":
-                self.kb.move(-1)
-            elif button == "DOWN":
-                self.kb.move(1)
-            elif button == "A":
+            action = self._actions.get(button)
+            if isinstance(action, int):
+                self.kb.move(action)
+            elif action == "char":
                 events.append(("char", self.kb.current()))
-            elif button == "B":
+            elif action == "back":
                 events.append(("back",))
-            elif button == "C":
+            elif action == "submit":
                 events.append(("submit",))
         return events
 

@@ -30,6 +30,15 @@ APP_ORDER = ("badge", "contacts", "settings")
 apps = shared_apps("/system/apps")
 '''
 
+DYNAMIC_MENU_APP = '''from icons import ICONS
+
+APP_ORDER = (
+    "badge",
+    "contacts",
+    "settings",
+)
+'''
+
 
 @pytest.fixture()
 def installer(tmp_path, monkeypatch):
@@ -61,6 +70,7 @@ def dynamic_volume(tmp_path):
     vol = tmp_path / "BADGER"
     (vol / "apps/menu").mkdir(parents=True)
     (vol / "apps/menu/__init__.py").write_text(DYNAMIC_MENU)
+    (vol / "apps/menu/app.py").write_text(DYNAMIC_MENU_APP)
     (vol / "apps/badge").mkdir()
     (vol / "apps/badge/__init__.py").write_text("# stock app")
     return vol
@@ -117,6 +127,26 @@ def test_dynamic_launcher_installs_without_editing_menu_or_removing_stock_apps(
     assert (dynamic_volume / "apps/badge/__init__.py").read_text() == "# stock app"
     assert (dynamic_volume / "apps/jobcontext/app.mpy").is_file()
     assert not (dynamic_volume / "apps/gallery").exists()
+
+
+def test_dynamic_launcher_gets_tile_icon_and_first_slot(installer, dynamic_volume):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+
+    menu_app = (dynamic_volume / "apps/menu/app.py").read_text()
+    assert 'APP_ORDER = (\n    "jobcontext",' in menu_app
+    assert 'ICONS["jobcontext"] = ' in menu_app
+    # idempotent on reinstall
+    assert installer.patch_badgeos_menu(menu_app) == menu_app
+
+
+def test_dynamic_menu_patch_restores_from_backup(installer, dynamic_volume):
+    installer.install(dynamic_volume, "gallery", dry_run=False)
+    saved = next(iter(installer.BACKUP_ROOT.iterdir()))
+    assert (saved / "apps/menu/app.py").read_text() == DYNAMIC_MENU_APP
+
+    installer.restore(dynamic_volume, saved, dry_run=False)
+    assert (dynamic_volume / "apps/menu/app.py").read_text() == DYNAMIC_MENU_APP
+    assert not (dynamic_volume / "apps/jobcontext").exists()
 
 
 def test_dynamic_launcher_reinstall_can_restore_existing_jobcontext(

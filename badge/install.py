@@ -110,6 +110,16 @@ OPTIONAL_FILES = ("secrets.py", "contact.py")
 DEFAULT_VOLUME = Path("/Volumes/BADGER")
 BACKUP_ROOT = Path.home() / "badge-backups"
 _MENU = Path("apps/menu/__init__.py")
+_MENU_APP = Path("apps/menu/app.py")
+
+# The jC mark as menu-tile contours (see badge/make_menu_icon.py).
+_BADGEOS_ICON = (
+    (0.494, 0.0, 0.488, 0.077, 0.47, 0.153, 0.44, 0.224, 0.399, 0.29, 0.349, 0.349, 0.29, 0.399, 0.224, 0.44, 0.153, 0.47, 0.077, 0.488, 0.0, 0.494, -0.077, 0.488, -0.153, 0.47, -0.224, 0.44, -0.29, 0.399, -0.349, 0.349, -0.399, 0.29, -0.44, 0.224, -0.47, 0.153, -0.488, 0.077, -0.494, 0.0, -0.488, -0.077, -0.47, -0.153, -0.44, -0.224, -0.399, -0.29, -0.349, -0.349, -0.29, -0.399, -0.224, -0.44, -0.153, -0.47, -0.077, -0.488, -0.0, -0.494, 0.077, -0.488, 0.153, -0.47, 0.224, -0.44, 0.29, -0.399, 0.349, -0.349, 0.399, -0.29, 0.44, -0.224, 0.47, -0.153, 0.488, -0.077, 0.494, 0.0, 0.463, 0.0, 0.457, -0.072, 0.44, -0.143, 0.412, -0.21, 0.374, -0.272, 0.327, -0.327, 0.272, -0.374, 0.21, -0.412, 0.143, -0.44, 0.072, -0.457, -0.0, -0.463, -0.072, -0.457, -0.143, -0.44, -0.21, -0.412, -0.272, -0.374, -0.327, -0.327, -0.374, -0.272, -0.412, -0.21, -0.44, -0.143, -0.457, -0.072, -0.463, 0.0, -0.457, 0.072, -0.44, 0.143, -0.412, 0.21, -0.374, 0.272, -0.327, 0.327, -0.272, 0.374, -0.21, 0.412, -0.143, 0.44, -0.072, 0.457, 0.0, 0.463, 0.072, 0.457, 0.143, 0.44, 0.21, 0.412, 0.272, 0.374, 0.327, 0.327, 0.374, 0.272, 0.412, 0.21, 0.44, 0.143, 0.457, 0.072, 0.463, 0.0),
+    (0.227, -0.169, 0.204, -0.186, 0.179, -0.201, 0.153, -0.212, 0.126, -0.22, 0.097, -0.224, 0.069, -0.225, 0.04, -0.222, 0.012, -0.215, -0.015, -0.205, -0.04, -0.192, -0.063, -0.175, -0.084, -0.156, -0.103, -0.134, -0.118, -0.11, -0.131, -0.084, -0.14, -0.057, -0.145, -0.029, -0.147, 0.0, -0.145, 0.029, -0.14, 0.057, -0.131, 0.084, -0.118, 0.11, -0.103, 0.134, -0.084, 0.156, -0.063, 0.175, -0.04, 0.192, -0.015, 0.205, 0.012, 0.215, 0.04, 0.222, 0.069, 0.225, 0.097, 0.224, 0.126, 0.22, 0.153, 0.212, 0.179, 0.201, 0.204, 0.186, 0.227, 0.169, 0.239, 0.153, 0.244, 0.134, 0.241, 0.115, 0.231, 0.098, 0.216, 0.086, 0.197, 0.081, 0.178, 0.084, 0.161, 0.094, 0.148, 0.103, 0.134, 0.112, 0.12, 0.118, 0.104, 0.122, 0.089, 0.125, 0.073, 0.125, 0.057, 0.123, 0.041, 0.12, 0.027, 0.114, 0.013, 0.106, -0.0, 0.097, -0.012, 0.087, -0.022, 0.074, -0.031, 0.061, -0.038, 0.047, -0.043, 0.032, -0.046, 0.016, -0.047, 0.0, -0.046, -0.016, -0.043, -0.032, -0.038, -0.047, -0.031, -0.061, -0.022, -0.074, -0.012, -0.087, -0.0, -0.097, 0.013, -0.106, 0.027, -0.114, 0.041, -0.12, 0.057, -0.123, 0.073, -0.125, 0.089, -0.125, 0.104, -0.122, 0.12, -0.118, 0.134, -0.112, 0.148, -0.103, 0.161, -0.094, 0.239, -0.153, 0.244, -0.134, 0.241, -0.115, 0.231, -0.098, 0.216, -0.086, 0.197, -0.081, 0.178, -0.084),
+    (-0.166, -0.15, -0.168, -0.135, -0.174, -0.12, -0.183, -0.108, -0.195, -0.099, -0.21, -0.093, -0.225, -0.091, -0.24, -0.093, -0.255, -0.099, -0.267, -0.108, -0.276, -0.12, -0.282, -0.135, -0.284, -0.15, -0.282, -0.165, -0.276, -0.18, -0.267, -0.192, -0.255, -0.201, -0.24, -0.207, -0.225, -0.209, -0.21, -0.207, -0.195, -0.201, -0.183, -0.192, -0.174, -0.18, -0.168, -0.165),
+    (-0.272, -0.056, -0.272, 0.14, -0.272, 0.149, -0.273, 0.155, -0.274, 0.159, -0.275, 0.162, -0.277, 0.164, -0.278, 0.166, -0.279, 0.167, -0.281, 0.168, -0.285, 0.169, -0.29, 0.171, -0.297, 0.172, -0.308, 0.172, -0.29, 0.175, -0.275, 0.184, -0.264, 0.199, -0.259, 0.217, -0.262, 0.235, -0.272, 0.25, -0.287, 0.261, -0.304, 0.266, -0.289, 0.265, -0.272, 0.263, -0.256, 0.258, -0.241, 0.252, -0.226, 0.244, -0.213, 0.233, -0.202, 0.22, -0.193, 0.206, -0.186, 0.19, -0.181, 0.174, -0.179, 0.158, -0.178, 0.142, -0.178, -0.056, -0.182, -0.038, -0.192, -0.023, -0.207, -0.013, -0.225, -0.009, -0.243, -0.013, -0.258, -0.023, -0.268, -0.038),
+)
+
 
 
 class InstallError(Exception):
@@ -149,6 +159,19 @@ def uses_dynamic_app_discovery(source: str) -> bool:
     return re.search(r"shared_apps\(\s*['\"]?/system/apps['\"]?\s*\)", source) is not None
 
 
+def patch_badgeos_menu(source: str, app: str = APP) -> str:
+    """Give *app* a real tile on the BadgeOS launcher: first in APP_ORDER and
+    the jC mark in ICONS (unknown slugs otherwise sort last with the default
+    tile). Idempotent; missing anchors leave the source unchanged."""
+    if f'"{app}",' not in source and "APP_ORDER = (" in source:
+        source = source.replace("APP_ORDER = (", f'APP_ORDER = (\n    "{app}",', 1)
+    anchor = "from icons import ICONS"
+    if f'ICONS["{app}"]' not in source and anchor in source:
+        inject = f'{anchor}\n\nICONS["{app}"] = {_BADGEOS_ICON!r}  # badge/install.py'
+        source = source.replace(anchor, inject, 1)
+    return source
+
+
 # ── filesystem steps ───────────────────────────────────────────────────────────
 
 def wait_for_volume(volume: Path, timeout: int) -> Path:
@@ -167,9 +190,16 @@ def wait_for_volume(volume: Path, timeout: int) -> Path:
 
 
 def backup(volume: Path, remove: str | None, replace_app: str | None = None) -> Path:
-    dest = BACKUP_ROOT / _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = BACKUP_ROOT / stamp
+    n = 1
+    while dest.exists():  # two installs in one second (reinstalls, tests)
+        n += 1
+        dest = BACKUP_ROOT / f"{stamp}-{n}"
     (dest / "apps/menu").mkdir(parents=True)
     shutil.copy2(volume / _MENU, dest / _MENU)
+    if (volume / _MENU_APP).is_file():
+        shutil.copy2(volume / _MENU_APP, dest / _MENU_APP)
     if remove and (volume / "apps" / remove).is_dir():
         shutil.copytree(volume / "apps" / remove, dest / "apps" / remove)
     if replace_app and (volume / "apps" / replace_app).is_dir():
@@ -227,11 +257,17 @@ def install(
 
     original = menu_path.read_text()
     dynamic_menu = uses_dynamic_app_discovery(original)
+    menu_app_original = menu_app_patched = None
     if dynamic_menu:
         # Current Badgeware scans /system/apps and creates an app tile for
         # every package directory; it has no fixed slot to patch or evict.
+        # The tile itself (icon + ordering) lives in menu/app.py instead.
         patched = original
         remove_app = None
+        menu_app_path = volume / _MENU_APP
+        if menu_app_path.is_file():
+            menu_app_original = menu_app_path.read_text()
+            menu_app_patched = patch_badgeos_menu(menu_app_original)
     else:
         patched = patch_menu(original, remove)
         remove_app = remove
@@ -243,6 +279,10 @@ def install(
 
     if dynamic_menu:
         print("launcher:  dynamically discovers app folders; no menu edit or stock-app removal")
+        if menu_app_patched is not None and menu_app_patched != menu_app_original:
+            print("menu tile: jobcontext pinned first in APP_ORDER with the jC mark")
+        elif menu_app_original is not None:
+            print("menu tile: already patched")
     else:
         print(f"menu now:  {', '.join(listed_apps(original))}")
         print(f"menu after: {', '.join(listed_apps(patched))}")
@@ -271,8 +311,10 @@ def install(
 
     target = volume / "apps" / APP
     target_exists = target.is_dir()
+    menu_app_changed = menu_app_patched is not None and menu_app_patched != menu_app_original
     needs_backup = (
         patched != original
+        or menu_app_changed
         or (remove_app and (volume / "apps" / remove_app).is_dir())
         or (dynamic_menu and target_exists)
     )
@@ -320,6 +362,8 @@ def install(
         junk.unlink(missing_ok=True)
     if patched != original:
         menu_path.write_text(patched)
+    if menu_app_changed:
+        (volume / _MENU_APP).write_text(menu_app_patched)
     if remove_app and (volume / "apps" / remove_app).is_dir():
         shutil.rmtree(volume / "apps" / remove_app)
     print("installed.")
@@ -327,17 +371,29 @@ def install(
 
 def restore(volume: Path, saved: Path, dry_run: bool) -> None:
     replaced_marker = saved / "REPLACED_APP"
-    if replaced_marker.is_file():
-        replaced = replaced_marker.read_text().strip()
-        print(f"restore:   apps/{replaced}/ from {saved}; keep dynamic launcher menu")
+    removed = (saved / "REMOVED_APP").read_text().strip() if (saved / "REMOVED_APP").is_file() else ""
+    if replaced_marker.is_file() or not removed:
+        # Dynamic-launcher backup: menu/__init__.py was never touched, but
+        # menu/app.py may carry the tile patch and the app folder may have
+        # been replaced or freshly added.
+        replaced = replaced_marker.read_text().strip() if replaced_marker.is_file() else None
+        menu_app_saved = saved / _MENU_APP
+        what = f"apps/{replaced}/" if replaced else f"delete apps/{APP}/"
+        extra = " + menu app.py" if menu_app_saved.is_file() else ""
+        print(f"restore:   {what}{extra} from {saved}; keep dynamic launcher menu")
         if dry_run:
             print("dry run — nothing written.")
             return
-        shutil.rmtree(volume / "apps" / replaced, ignore_errors=True)
-        shutil.copytree(saved / "apps" / replaced, volume / "apps" / replaced)
+        if menu_app_saved.is_file():
+            shutil.copyfile(menu_app_saved, volume / _MENU_APP)
+        shutil.rmtree(volume / "apps" / APP, ignore_errors=True)
+        if replaced and replaced != APP:
+            shutil.rmtree(volume / "apps" / replaced, ignore_errors=True)
+        if replaced:
+            shutil.copytree(saved / "apps" / replaced, volume / "apps" / replaced)
+        print("restored.")
         return
 
-    removed = (saved / "REMOVED_APP").read_text().strip()
     print(f"restore:   menu + apps/{removed}/ from {saved}; delete apps/{APP}/")
     if dry_run:
         print("dry run — nothing written.")
