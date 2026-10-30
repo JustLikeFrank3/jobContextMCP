@@ -900,6 +900,20 @@ class TestSkillClaims:
         )
         assert check_skill_claims(draft, self.MASTER) == ["MLflow"]
 
+    def test_parenthetical_headline_skills_are_checked_individually(self):
+        from lib.provenance import check_skill_claims, extract_skill_claims
+
+        draft = "SOFTWARE ENGINEER | Azure (AKS, Entra) • Python\n"
+        assert extract_skill_claims(draft) == ["Azure", "AKS", "Entra", "Python"]
+        assert check_skill_claims(draft, ["Azure Python AKS Entra"]) == []
+
+    def test_skill_normalization_preserves_language_punctuation(self):
+        from lib.provenance import check_skill_claims, extract_skill_claims
+
+        draft = "CORE TECHNICAL SKILLS\nLanguages: C#, C++\n"
+        assert extract_skill_claims(draft) == ["C#", "C++"]
+        assert check_skill_claims(draft, ["C#"]) == ["C++"]
+
     def test_violation_surfaces_with_feedback_rule(self):
         from lib.provenance import check_claims, format_violation_feedback
 

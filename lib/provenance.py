@@ -322,6 +322,10 @@ _SKILLS_HEADER_RE = re.compile(r"^\s*(?:CORE\s+)?(?:TECHNICAL\s+)?SKILLS\b[A-Z &
 _SKILL_LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .&'/-]{1,60}:\s+(\S.*)$")
 
 
+def _normalize_skill(text: str) -> str:
+    return re.sub(r"[^a-z0-9#+]+", " ", (text or "").lower()).strip()
+
+
 def extract_skill_claims(draft: str) -> list[str]:
     """Tool/technology names the draft lists as skills: `Label: a, b, c` lines
     inside the skills section and the •-separated stack of a headline tagline.
@@ -333,7 +337,7 @@ def extract_skill_claims(draft: str) -> list[str]:
         flat = re.sub(r"[()]", ",", raw)
         for term in re.split(seps, flat):
             term = term.strip(" .;")
-            key = _normalize_title(term)
+            key = _normalize_skill(term)
             if key and key not in seen:
                 seen[key] = term
 
@@ -351,7 +355,7 @@ def extract_skill_claims(draft: str) -> list[str]:
             continue
         parts = [p.strip() for p in line.split("|")]
         if len(parts) >= 2 and "•" in parts[-1]:
-            _add_list(parts[-1], r"•")
+            _add_list(parts[-1], r"[•,]")
     return list(seen.values())
 
 
@@ -360,10 +364,10 @@ def check_skill_claims(draft: str, master_sources: list[str]) -> list[str]:
     containment on normalized forms). The JD is never a source — echoing its
     tool list as the candidate's skills (MLflow, 2026-10-30 eval GD-06) is the
     failure being caught."""
-    corpus = " " + _normalize_title("\n".join(s for s in master_sources if s)) + " "
+    corpus = " " + _normalize_skill("\n".join(s for s in master_sources if s)) + " "
     return [
         t for t in extract_skill_claims(draft)
-        if _normalize_title(t) and f" {_normalize_title(t)} " not in corpus
+        if _normalize_skill(t) and f" {_normalize_skill(t)} " not in corpus
     ]
 
 
