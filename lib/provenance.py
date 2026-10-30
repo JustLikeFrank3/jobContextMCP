@@ -318,6 +318,59 @@ def check_title_claims(draft: str, master_sources: list[str]) -> list[str]:
     ]
 
 
+_SKILLS_HEADER_RE = re.compile(r"^\s*(?:CORE\s+)?(?:TECHNICAL\s+)?SKILLS\b[A-Z &]*\s*$")
+_SKILL_LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .&'/-]{1,60}:\s+(\S.*)$")
+
+
+def _normalize_skill(text: str) -> str:
+    return re.sub(r"[^a-z0-9#+]+", " ", (text or "").lower()).strip()
+
+
+def extract_skill_claims(draft: str) -> list[str]:
+    """Tool/technology names the draft lists as skills: `Label: a, b, c` lines
+    inside the skills section and the •-separated stack of a headline tagline.
+    Parenthetical groups are flattened ("Azure (AKS, Entra)" -> 3 terms).
+    Deduped on normalized form, original spelling kept."""
+    seen: dict[str, str] = {}
+
+    def _add_list(raw: str, seps: str) -> None:
+        flat = re.sub(r"[()]", ",", raw)
+        for term in re.split(seps, flat):
+            term = term.strip(" .;")
+            key = _normalize_skill(term)
+            if key and key not in seen:
+                seen[key] = term
+
+    in_skills = False
+    for line in (draft or "").splitlines():
+        if _SKILLS_HEADER_RE.match(line):
+            in_skills = True
+            continue
+        if in_skills and _ALLCAPS_SECTION_RE.match(line):
+            in_skills = False
+        if in_skills:
+            m = _SKILL_LABEL_RE.match(line.strip())
+            if m:
+                _add_list(m.group(1), r"[,;]")
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 2 and "•" in parts[-1]:
+            _add_list(parts[-1], r"[•,]")
+    return list(seen.values())
+
+
+def check_skill_claims(draft: str, master_sources: list[str]) -> list[str]:
+    """Skill terms in *draft* absent from master-side text (word-boundary
+    containment on normalized forms). The JD is never a source — echoing its
+    tool list as the candidate's skills (MLflow, 2026-10-30 eval GD-06) is the
+    failure being caught."""
+    corpus = " " + _normalize_skill("\n".join(s for s in master_sources if s)) + " "
+    return [
+        t for t in extract_skill_claims(draft)
+        if _normalize_skill(t) and f" {_normalize_skill(t)} " not in corpus
+    ]
+
+
 def check_claims(
     draft: str,
     sources: list[str],
@@ -347,6 +400,9 @@ def check_claims(
         # string itself.
         violations.extend(
             f"unheld title: {t}" for t in check_title_claims(draft, master_sources)
+        )
+        violations.extend(
+            f"unsourced skill: {t}" for t in check_skill_claims(draft, master_sources)
         )
     return violations
 
@@ -425,6 +481,14 @@ def format_violation_feedback(violations: list[str]) -> str:
             "that role and period (or the master's own headline); express "
             "target-role fit in the summary or bullets instead. Do not delete "
             "the role entry."
+        )
+    if any(v.startswith("unsourced skill: ") for v in violations):
+        text += (
+            "\nSKILL-GROUNDING RULE: the skills block and headline stack may "
+            "list only tools and technologies the master resume names. A tool "
+            "from the job description that the master never mentions is not a "
+            "skill of the candidate — remove it; do not substitute a synonym "
+            "or restate it elsewhere."
         )
     return text
 

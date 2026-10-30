@@ -882,3 +882,41 @@ class TestGateTighteningRound4b:
                  "PROJECTS\n"
                  "Deploy notes: rollout was staged\n")
         assert extract_title_claims(draft) == ["Speaker"]
+
+
+class TestSkillClaims:
+    MASTER = ["Azure Kubernetes FastAPI Python Prometheus Application Insights"]
+
+    def test_unsourced_skill_in_block_and_tagline_flagged(self):
+        from lib.provenance import check_skill_claims
+
+        draft = (
+            "SOFTWARE ENGINEER | Azure • Python • MLflow\n"
+            "CORE TECHNICAL SKILLS\n"
+            "AI & MLOps: MLflow, Prometheus\n"
+            "Cloud: Azure (Kubernetes, FastAPI)\n"
+            "PROFESSIONAL EXPERIENCE\n"
+            "Note: Terraform used\n"
+        )
+        assert check_skill_claims(draft, self.MASTER) == ["MLflow"]
+
+    def test_parenthetical_headline_skills_are_checked_individually(self):
+        from lib.provenance import check_skill_claims, extract_skill_claims
+
+        draft = "SOFTWARE ENGINEER | Azure (AKS, Entra) • Python\n"
+        assert extract_skill_claims(draft) == ["Azure", "AKS", "Entra", "Python"]
+        assert check_skill_claims(draft, ["Azure Python AKS Entra"]) == []
+
+    def test_skill_normalization_preserves_language_punctuation(self):
+        from lib.provenance import check_skill_claims, extract_skill_claims
+
+        draft = "CORE TECHNICAL SKILLS\nLanguages: C#, C++\n"
+        assert extract_skill_claims(draft) == ["C#", "C++"]
+        assert check_skill_claims(draft, ["C#"]) == ["C++"]
+
+    def test_violation_surfaces_with_feedback_rule(self):
+        from lib.provenance import check_claims, format_violation_feedback
+
+        v = check_claims("CORE TECHNICAL SKILLS\nOps: MLflow\n", [], master_sources=self.MASTER)
+        assert v == ["unsourced skill: MLflow"]
+        assert "SKILL-GROUNDING RULE" in format_violation_feedback(v)
