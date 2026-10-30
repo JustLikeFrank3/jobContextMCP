@@ -1,4 +1,4 @@
-"""Consolidated MCP tool surface — 11 domain tools over the full function registry.
+"""Consolidated MCP tool surface — 12 domain tools over the full function registry.
 
 Why: MCP clients budget tools (VS Code caps 128 across every server), and 85
 near-duplicate names both hog that budget and give the model look-alike

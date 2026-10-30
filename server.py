@@ -192,7 +192,7 @@ mcp = FastMCP(
 )
 
 
-# Default surface: 11 consolidated domain tools (action-dispatch facades over
+# Default surface: 12 consolidated domain tools (action-dispatch facades over
 # the same functions) — MCP clients budget tools, and VS Code caps 128 across
 # every server. JOBCONTEXT_LEGACY_TOOLS=1 restores the historical per-function
 # surface (85 tools) for anything that hardcoded the old names.

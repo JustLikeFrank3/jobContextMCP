@@ -212,7 +212,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
     <a class="choice" href="#cloud">
       <span class="k">Fastest</span>
       <strong>Cloud + your AI</strong>
-      <span>Sign in, add a connector. About a minute.</span>
+      <span>Invite-only beta. Sign in, then add a connector.</span>
     </a>
     <a class="choice" href="#desktop">
       <span class="k">Most private</span>
@@ -228,7 +228,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
 
   <!-- ============ CLOUD ============ -->
   <div class="path" id="cloud">
-    <h2>Cloud: connect your AI in about a minute</h2>
+    <h2>Cloud: connect your AI with an invitation</h2>
     <p class="path-sub">The hosted workspace at jobcontext.ai. No installs, no config files, no infrastructure.</p>
     <div class="steps">
 
@@ -236,7 +236,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem; }
         <div class="step-num">1</div>
         <div class="step-body">
           <h3>Sign in with Microsoft</h3>
-          <p><a href="/login">Sign in</a> with any Microsoft account. Your private, isolated workspace is created on first login; nobody else's data touches yours.</p>
+          <p><a href="/login">Sign in</a> with your invited Microsoft account. The cloud is an invite-only beta; request access on the sign-in page. Your private, isolated workspace is created on first login; nobody else's data touches yours.</p>
         </div>
       </div>
 
