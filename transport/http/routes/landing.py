@@ -454,7 +454,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <a class="lnk" href="/architecture">Architecture</a>
       <a class="lnk" href="https://github.com/JustLikeFrank3/jobContextMCP">GitHub</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
-      <a class="btn btn-primary" href="/login">Get started</a>
+      <a class="btn btn-primary" href="/setup">Get started</a>
     </div>
   </div>
 </nav>
@@ -469,21 +469,21 @@ LANDING_HTML: str = r'''<!doctype html>
       <h1 class="hl">The memory layer for your <span class="c">career.</span></h1>
       <p class="lede">jobContext remembers your resumes, pipeline, contacts, posts, interviews, and your whole professional story, then feeds it to any AI assistant. Your career has context. Your AI should too.</p>
       <div class="cta-row">
-        <a class="btn btn-ghost btn-lg" href="/why">Why should I use this?</a>
-        <a class="btn btn-primary btn-lg" href="/login">Get started, it's free</a>
+        <a class="btn btn-ghost btn-lg" href="#how">See how memory works</a>
+        <a class="btn btn-primary btn-lg" href="/setup">Get started, it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
       <div class="micro">
         <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Desktop · Cloud · Mobile</span>
         <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>Works with Claude, Copilot, Cursor + in-browser agents</span>
-        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>12 domain tools · 104 actions</span>
+        <span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>12 domain tools · 113 actions</span>
       </div>
     </div>
 
     <div class="term">
       <div class="term-bar">
         <i class="window-close"></i><i class="window-minimize"></i><i class="window-maximize"></i>
-        <span class="term-title">claude · jobContext MCP</span>
+        <span class="term-title">Illustrative example · jobContext MCP</span>
       </div>
       <div class="term-body">
         <div class="u">&gt; Draft a cover letter for the CVS role.</div>
@@ -575,7 +575,7 @@ LANDING_HTML: str = r'''<!doctype html>
         </div>
         <div class="ministat">
           <div><div class="n">12</div><div class="l">domain tools</div></div>
-          <div><div class="n">104</div><div class="l">actions</div></div>
+          <div><div class="n">113</div><div class="l">actions</div></div>
         </div>
       </div>
       <div class="feat">
@@ -634,7 +634,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="ora-card">
         <div class="ora-head">
           <span class="ora-eyebrow">Oura &middot; Readiness</span>
-          <span class="ora-live"><span class="ora-live-dot"></span>Synced today</span>
+          <span class="ora-live"><span class="ora-live-dot"></span>Sample data</span>
         </div>
         <div class="ora-ring-wrap">
           <svg viewBox="0 0 180 180" width="150" height="150" aria-hidden="true">
@@ -680,7 +680,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="term">
         <div class="term-bar">
           <i class="window-close"></i><i class="window-minimize"></i><i class="window-maximize"></i>
-          <span class="term-title">chatgpt &middot; browsing app.jobcontext.ai</span>
+          <span class="term-title">Illustrative example &middot; browser agent</span>
         </div>
         <div class="term-body">
           <div class="u">&gt; What should I do first today?</div>
@@ -725,7 +725,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <div class="pillar">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a1.5 1.5 0 013 0c0 .4-.2.8-.4 1.1.3.2.7.3 1.1.3h2.3v2.3c0 .4.1.8.3 1.1.3-.2.7-.4 1.1-.4a1.5 1.5 0 010 3c-.4 0-.8-.2-1.1-.4-.2.3-.3.7-.3 1.1V15h-2.3c-.4 0-.8.1-1.1.3.2.3.4.7.4 1.1a1.5 1.5 0 01-3 0c0-.4.2-.8.4-1.1-.3-.2-.7-.3-1.1-.3H5.6v-2.3c0-.4-.1-.8-.3-1.1-.3.2-.7.4-1.1.4a1.5 1.5 0 010-3c.4 0 .8.2 1.1.4.2-.3.3-.7.3-1.1V5.7h2.3c.4 0 .8-.1 1.1-.3-.2-.3-.4-.7-.4-1.1z"/></svg></div>
         <h3>Extensible</h3>
-        <p>12 domain tools, 104 actions, a clean HTTP API, and a CLI. Bend it to your own workflow.</p>
+        <p>12 domain tools, 113 actions, a clean HTTP API, and a CLI. Bend it to your own workflow.</p>
       </div>
     </div>
   </div>
@@ -741,15 +741,15 @@ LANDING_HTML: str = r'''<!doctype html>
     <div class="steps">
       <div class="step">
         <h3>Connect your way</h3>
-        <p>Add the connector in Claude, Copilot, or Cursor. Prefer zero setup? Just download the desktop app.</p>
+        <p>Use an MCP client such as Claude, Copilot, or Cursor. The cloud beta requires an invitation; the desktop app needs no account. This page and the architecture are public walkthroughs; the working dashboard requires sign-in.</p>
       </div>
       <div class="step">
         <h3>Import your career</h3>
-        <p>Drop in your resume and history. jobContext structures it into a queryable memory.</p>
+        <p>Save your resume, application history, and stories through the workspace tools. SQLite and files retain that record for later retrieval.</p>
       </div>
       <div class="step">
         <h3>Let your AI remember</h3>
-        <p>Every session now starts with full context: applications, stories, contacts, and all.</p>
+        <p>In a later session, your assistant retrieves saved context through tools such as insights("session_context"), materials("search"), and stories("star_context"). Memory lives in your workspace, so it persists when the chat ends.</p>
       </div>
     </div>
   </div>
@@ -762,7 +762,7 @@ LANDING_HTML: str = r'''<!doctype html>
       <h2>Give your AI a memory.</h2>
       <p>Open-source, self-hosted, and free. Your career has context. Your AI should too.</p>
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="/login">Get started</a>
+        <a class="btn btn-primary btn-lg" href="/setup">Get started</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">Star on GitHub</a>
       </div>
     </div>

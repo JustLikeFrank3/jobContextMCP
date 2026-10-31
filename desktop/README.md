@@ -86,7 +86,7 @@ flowchart TB
         subgraph sidecar["<b>PyInstaller sidecar</b> (frozen CPython)"]
             direction TB
             api["FastAPI + FastMCP<br/>127.0.0.1:PORT (loopback only)"]
-            tools["11 domain tools · 85 actions<br/>resume · pipeline · interviews · …"]
+            tools["domain tools · action dispatch<br/>resume · pipeline · interviews · …"]
             db[("SQLite<br/>per-OS app-data dir")]
             api --> tools --> db
         end
@@ -100,7 +100,7 @@ flowchart TB
     class shell accent
 ```
 
-**Why a sidecar, not a rewrite:** the backend is 85 tool actions, WeasyPrint PDF
+**Why a sidecar, not a rewrite:** the backend includes the shared tool surface, WeasyPrint PDF
 rendering, LangGraph, and 1,300+ tests of Python. Freezing it with
 PyInstaller and shipping it as a managed subprocess reuses all of it verbatim
 — the desktop app and the cloud app run byte-identical server code.

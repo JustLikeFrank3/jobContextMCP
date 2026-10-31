@@ -52,6 +52,14 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 
 ---
 
+## Explore without an account
+
+The [public overview](https://jobcontext.ai/#how) explains how saved context survives a chat session, and the [architecture](https://jobcontext.ai/architecture) shows the shared capability layer and storage. The conversations and readiness card on the landing page are illustrative examples, not a live workspace or private user data.
+
+For example, an assistant can save a career story with `stories(action="log", ...)`. In a later session it can retrieve relevant stories with `stories(action="star_context", ...)`, read the master resume with `materials(action="read_master_resume")`, and use that saved context to draft a cover letter. Persistence comes from the workspace's SQLite and files; retrieval happens through explicit tool calls, not automatic access to every chat.
+
+The default registered MCP surface has **12 domain tools and 113 actions**. These are source capabilities; installed desktop versions may differ. The cloud dashboard and remote tools require authentication and a beta invitation. [Setup](https://jobcontext.ai/setup) explains the options, including desktop use without an account.
+
 ## Why I Built This
 
 I got laid off and started using AI assistants to manage my job search. Every new session started from zero. I was re-explaining my resume, my pipeline, which companies I'd already talked to, what my STAR stories were, how I was holding up. The context overhead was brutal on top of everything else.
@@ -205,7 +213,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 103 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 113 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|

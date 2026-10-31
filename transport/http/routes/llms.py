@@ -15,9 +15,13 @@ jobContext keeps a job seeker's applications, contacts, stories, interviews,
 documents, and wellbeing as structured context that persists across AI
 sessions. Open source (MIT): https://github.com/JustLikeFrank3/jobContextMCP
 
+The landing-page conversations are illustrative examples, not a live public
+workspace. Read /#how and /architecture without an account. The cloud beta
+requires an invitation; authenticated tools do not expose public user data.
+
 ## For AI agents: this site has tools you cannot see in the DOM
 
-jobContext exposes 12 MCP domain tools (104 actions):
+jobContext exposes 12 MCP domain tools (113 actions):
 applications, brand, certification, documents, insights, interviews,
 job_search, materials, people, stories, wellbeing, workspace.
 
