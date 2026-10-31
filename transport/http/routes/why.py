@@ -439,7 +439,7 @@ WHY_HTML: str = r'''<!doctype html>
       <a class="lnk" href="#best">Best practices</a>
       <a class="lnk" href="#safe">Why it's safe</a>
       <a class="btn btn-ghost" href="/login">Sign in</a>
-      <a class="btn btn-primary" href="/login">Get started</a>
+      <a class="btn btn-primary" href="/setup">Get started</a>
     </div>
   </div>
 </nav>
@@ -453,7 +453,7 @@ WHY_HTML: str = r'''<!doctype html>
     <h1>Stop re-explaining yourself to AI <span class="c">every morning.</span></h1>
     <p class="lede">Your job search is scattered across thirty browser tabs, a spreadsheet, your inbox, and your memory. jobContext gives your AI assistant a memory of all of it, so every conversation picks up where you left off instead of starting from zero.</p>
     <div class="cta-row">
-      <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
+      <a class="btn btn-primary btn-lg" href="/setup">Get started - it's free</a>
       <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
     </div>
   </div>
@@ -519,12 +519,12 @@ WHY_HTML: str = r'''<!doctype html>
   <div class="wrap">
     <div class="sec-head">
       <div class="sec-eyebrow">How it works</div>
-      <h2>Connected in about a minute</h2>
-      <p>The hosted version needs no setup files and no infrastructure. Add the connector, sign in, and start talking. Prefer everything local? The desktop app runs it all on your machine, no account needed.</p>
+      <h2>Choose cloud or desktop</h2>
+      <p>The hosted version needs no setup files and no infrastructure. Request a cloud beta invitation, then add the connector and sign in. Prefer everything local? The desktop app runs it all on your machine, no account needed.</p>
     </div>
     <div class="steps">
       <div class="step"><h3>Add the connector</h3><p>In Claude, Copilot, Cursor, or Windsurf, add jobContext as a connector. One click. No config files to edit, nothing to install.</p></div>
-      <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
+      <div class="step"><h3>Sign in with Microsoft</h3><p>Authenticate with your invited Microsoft account. Your private, isolated workspace is created for you in the cloud.</p></div>
       <div class="step"><h3>Just start talking</h3><p>Ask it to log a contact, assess a job, draft a cover letter, or plan your day. It does the rest, and remembers all of it next time.</p></div>
     </div>
     <p class="webmcp-note">New: in ChatGPT desktop's built-in browser you can skip the connector entirely. Sign in to the dashboard and the in-page agent discovers every jobContext tool on its own, over WebMCP; Chrome's origin trial and Edge's preview pick up the same tools as their support rolls out.</p>
@@ -591,9 +591,9 @@ WHY_HTML: str = r'''<!doctype html>
   <div class="wrap">
     <div class="cta-band">
       <h2>Give your AI a memory of your career.</h2>
-      <p>Free to start. Connect in a minute. Your search, finally in one place.</p>
+      <p>Free to start. Cloud access requires a beta invitation; desktop needs no account. Your search, finally in one place.</p>
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="/login">Get started - it's free</a>
+        <a class="btn btn-primary btn-lg" href="/setup">Get started - it's free</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/JustLikeFrank3/jobContextMCP">View on GitHub</a>
       </div>
     </div>

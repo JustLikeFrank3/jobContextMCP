@@ -25,7 +25,7 @@ digraph capability_layer {
   subgraph cluster_core {
     label="jobContext capability layer"; labelloc=b; color="#23324D"; style="rounded,filled"; fillcolor="#111A2B";
     FAC [color="#00B5C8", penwidth=1.5,
-         label=<<B>12 consolidated domain tools · 104 actions</B><BR/>applications · job_search · documents · materials · people · interviews<BR/>stories · brand · insights · wellbeing · certification · workspace>];
+         label=<<B>12 consolidated domain tools · 113 actions</B><BR/>applications · job_search · documents · materials · people · interviews<BR/>stories · brand · insights · wellbeing · certification · workspace>];
     SVC [label=<shared service layer: one implementation of every capability,<BR/>no logic duplicated per transport>];
     DB [shape=cylinder, label="SQLite + JSON audit trail\nper-tenant partitions · files"];
     FAC -> SVC;

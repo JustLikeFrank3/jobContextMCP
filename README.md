@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version 1.4.0"/>
-  <img src="https://img.shields.io/badge/tests-2954%20passing-brightgreen" alt="2954 tests passing"/>
+  <img src="https://img.shields.io/badge/tests-2965%20passing-brightgreen" alt="2965 tests passing"/>
   <a href="https://sonarcloud.io/component_measures?id=JustLikeFrank3_jobContextMCP&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=JustLikeFrank3_jobContextMCP&metric=coverage" alt="Coverage"/></a>
   <img src="https://img.shields.io/badge/tools-12%20domains%20%C2%B7%20113%20actions-informational" alt="12 domain tools, 113 actions"/>
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License"/>
@@ -39,7 +39,7 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 | | |
 |---|---|
 | 12 MCP tools | 113 domain actions behind them |
-| 2954 passing tests | Resume + cover letter generation with a deterministic truth gate |
+| 2965 passing tests | Resume + cover letter generation with a deterministic truth gate |
 | SQLite persistence + JSON audit trail | Job fitment analysis with persona lenses |
 | Local RAG semantic search | Interview prep + debrief logging |
 | Desktop app (macOS · Windows · Linux) | Outreach + relationship tracking |
@@ -51,6 +51,14 @@ jobContext keeps your job-search context structured and persistent, and exposes 
 **Jump to:** [Desktop](#jobcontext-desktop) · [Mobile](#jobcontext-mobile--ios-beta-testflight) · [Conference badge](#jobcontext-conference-badge) · [Dashboard & output](#output) · [Tool surface](#the-tool-surface) · [Truth & evals](#truth-evals--observability) · [Setup](#setup) · [Configuration](#configuration) · [Docs](#documentation) · [Releases](#recent-releases)
 
 ---
+
+## Explore without an account
+
+The [public overview](https://jobcontext.ai/#how) explains how saved context survives a chat session, and the [architecture](https://jobcontext.ai/architecture) shows the shared capability layer and storage. The conversations and readiness card on the landing page are illustrative examples, not a live workspace or private user data.
+
+For example, an assistant can save a career story with `stories(action="log", ...)`. In a later session it can retrieve relevant stories with `stories(action="star_context", ...)`, read the master resume with `materials(action="read_master_resume")`, and use that saved context to draft a cover letter. Persistence comes from the workspace's SQLite and files; retrieval happens through explicit tool calls, not automatic access to every chat.
+
+The default registered MCP surface has **12 domain tools and 113 actions**. These are source capabilities; installed desktop versions may differ. The cloud dashboard and remote tools require authentication and a beta invitation. [Setup](https://jobcontext.ai/setup) explains the options, including desktop use without an account.
 
 ## Why I Built This
 
@@ -205,7 +213,7 @@ Themes: **Navy** (default) · **Slate** · **Forest** · **Warm** · **Classic**
 
 ## The Tool Surface
 
-12 consolidated domain tools, 103 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
+12 consolidated domain tools, 113 actions. Each tool takes an `action` parameter; its docstring documents every action's required and optional parameters. Full reference with per-action tables: **[docs/tools.md](docs/tools.md)**.
 
 | Tool | Actions | Covers |
 |---|---|---|
