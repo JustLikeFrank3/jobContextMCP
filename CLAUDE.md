@@ -15,7 +15,7 @@ unless he delegates it in the moment.
 
 CI triggers: Desktop CI (build matrix) runs on push to `feat/*` and `fix/*` —
 **a renamed branch fires no push event** (use `gh workflow run` to dispatch).
-`deploy.yml` runs on qa/main pushes (tests + Sonar + AKS deploy);
+`deploy.yml` runs on qa/main pushes (tests + AKS deploy; Sonar deploy gate only on main);
 paths-ignore includes `**.md` and `mobile/**`. Desktop releases: tag
 `desktop-v*` **on the exact tested main SHA** (badge-bot pushes `[skip ci]`
 commits — never tag those) → desktop-release workflow → rolling
@@ -38,9 +38,7 @@ commits — never tag those) → desktop-release workflow → rolling
   deletes via `file_tombstones` rows (docs/persistence.md).
 - **Telemetry**: `lib/metrics.py` (no deps) → `GET /metrics` (Prometheus);
   in-cluster Prometheus+Grafana under `k8s/monitoring/` (dashboards as code).
-- **LLM calls** all funnel through `lib/openai_calls.create_chat_completion`
-  (rate-spacing, 429/400 retries, thinking-budget empty-at-cap retry).
-  Provider resolution: `lib/config.get_llm_client()`; status surfaces use
+- Provider resolution: `lib/config.get_llm_client()`; status surfaces use
   `llm_generation_status()` — keep them in lockstep.
 - **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
