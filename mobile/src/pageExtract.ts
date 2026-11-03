@@ -7,7 +7,7 @@
 
 const STRIP = (html: string) =>
   html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script\b[^>]*>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
@@ -63,11 +63,11 @@ export async function extractJobPage(url: string): Promise<string> {
 
     // Prefer JSON-LD JobPosting — richest and unambiguous.
     const ldBlocks = html.match(
-      /<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi,
+      /<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi,
     )
     for (const block of ldBlocks || []) {
       try {
-        const raw = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '')
+        const raw = block.replace(/^<script[^>]*>/i, '').replace(/<\/script\b[^>]*>$/i, '')
         const ld = JSON.parse(raw)
         const nodes = Array.isArray(ld) ? ld : ld['@graph'] ? ld['@graph'] : [ld]
         for (const node of nodes) {
