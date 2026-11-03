@@ -354,8 +354,9 @@ def extract_skill_claims(draft: str) -> list[str]:
                 _add_list(m.group(1), r"[,;]")
             continue
         parts = [p.strip() for p in line.split("|")]
-        if len(parts) >= 2 and "•" in parts[-1]:
-            _add_list(parts[-1], r"[•,]")
+        for part in parts[1:]:
+            if "•" in part:
+                _add_list(part, r"[•,]")
     return list(seen.values())
 
 
