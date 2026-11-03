@@ -681,15 +681,16 @@ def delete_synced_file(con, root: Path, target: Path) -> dict:
     """
     resolved_root = Path(root).resolve()
     target = Path(target)
-    resolved_target = target.resolve()
+    resolved_target = target.resolve(strict=False)
     try:
         rel_path = resolved_target.relative_to(resolved_root)
     except ValueError:
         return {"deleted": False, "rel": None}
 
-    if resolved_target.is_symlink():
-        resolved_target.unlink()
-        return {"deleted": True, "rel": None}
+    # Defensive sink-side guard: never process symlink paths for tombstoned
+    # deletes from potentially untrusted callers.
+    if target.is_symlink() or resolved_target.is_symlink():
+        return {"deleted": False, "rel": None}
 
     rel = None
     if _file_synced(rel_path):
