@@ -79,7 +79,8 @@ def _strip_html(raw: str) -> str:
 
 def _is_linkedin_url(url: str) -> bool:
     """Return True if *url* is a LinkedIn URL."""
-    return "linkedin.com" in (urlparse(url).hostname or "").lower()
+    hostname = (urlparse(url).hostname or "").lower()
+    return hostname == "linkedin.com" or hostname.endswith(".linkedin.com")
 
 
 def _valid_board_slug(slug: str) -> bool:
