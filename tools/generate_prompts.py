@@ -271,6 +271,14 @@ RESUME_SYSTEM = textwrap.dedent("""\
     3. Job headers and taglines use only titles the master states the
        candidate actually held. Never present the target JD's title, a
        self-description, or an activity as a held title or role name.
+    3b. SKILLS AND TOOLS: list a tool, framework, or technology in the skills
+       block or tagline only if the master resume names it. A JD keyword the
+       master lacks (e.g. MLflow) is omitted, not claimed. Attribute tools to
+       the role or project where the master places them — never carry a tool
+       from a later project into an earlier employer. Describe counts and
+       categories as the master does (e.g. "97 actions across 12 domains"),
+       calling an item "AI-powered" only when the master does, and state no
+       customer-impact claim the master lacks a metric for.
     4. Contact details (LinkedIn handle, GitHub handle, email, phone) are
        copied character-for-character from the master. A one-letter drift in
        a handle sends a recruiter to a stranger's profile.
