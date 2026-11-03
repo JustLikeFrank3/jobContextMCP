@@ -17,7 +17,7 @@ Model used: config.json `openai_model` key (default: gpt-4o-mini).
 import re
 
 from lib import config
-from lib.io import _load_master_context
+from lib.io import _load_json, _load_master_context
 from lib.template_loader import template_style_error as _template_style_error
 from lib.openai_calls import create_chat_completion, estimate_cost_usd
 from lib.story_retrieval import (
@@ -1363,12 +1363,10 @@ def _untracked_note(company: str, role: str, filename: str = "") -> str:
     if (filename or "").startswith("EVAL"):
         return ""
     try:
-        import json as _json  # noqa: PLC0415 — local: helper must never add import risk
-
         if not config.STATUS_FILE.exists():
             tracked: list[str] = []
         else:
-            data = _json.loads(config.STATUS_FILE.read_text(encoding="utf-8"))
+            data = _load_json(config.STATUS_FILE, {})
             tracked = [str(a.get("company", "")).strip()
                        for a in data.get("applications", []) if a.get("company")]
         c = (company or "").strip().lower()

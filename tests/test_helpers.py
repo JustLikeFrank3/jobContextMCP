@@ -69,6 +69,30 @@ class TestLoadSaveJson:
         loaded = srv._load_json(path, {})
         assert loaded["note"] == "café ✓"
 
+    def test_encrypted_when_app_key_is_configured(self, tmp_path, monkeypatch):
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+        path = tmp_path / "private.json"
+        original = {"notes": "private job-search details"}
+
+        srv._save_json(path, original)
+
+        raw = path.read_text(encoding="utf-8")
+        assert raw.startswith("enc:v1:")
+        assert "private job-search details" not in raw
+        assert srv._load_json(path, {}) == original
+
+    def test_loads_legacy_plaintext_with_app_key(self, tmp_path, monkeypatch):
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+        path = tmp_path / "legacy.json"
+        original = {"notes": "legacy data"}
+        path.write_text(json.dumps(original), encoding="utf-8")
+
+        assert srv._load_json(path, {}) == original
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # _now

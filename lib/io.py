@@ -57,9 +57,17 @@ def _load_json(path: Path, default):
         # Unmapped file — fall through to JSON below
 
     try:
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
+        if not path.exists():
+            return default
+        serialized = path.read_text(encoding="utf-8")
     except Exception:
+        return default
+
+    from lib.crypto import decrypt_secret
+
+    try:
+        return json.loads(decrypt_secret(serialized))
+    except (TypeError, ValueError):
         pass
     return default
 
@@ -76,7 +84,9 @@ def _save_json(path: Path, data) -> None:
     is_mapped = path.name in _SAVE_HANDLERS
     if not (_USE_SQLITE and _SQLITE_ONLY and is_mapped):
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
+        from lib.crypto import encrypt_secret
+        serialized = json.dumps(data, indent=2, ensure_ascii=False)
+        path.write_text(encrypt_secret(serialized), encoding="utf-8")
 
 
 def _now() -> str:
