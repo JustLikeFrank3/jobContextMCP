@@ -319,7 +319,7 @@ def check_title_claims(draft: str, master_sources: list[str]) -> list[str]:
 
 
 _SKILLS_HEADER_RE = re.compile(r"^\s*(?:CORE\s+)?(?:TECHNICAL\s+)?SKILLS\b[A-Z &]*\s*$")
-_SKILL_LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .&'/-]{1,60}:\s+(\S.*)$")
+_SKILL_LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .&'()/_-]{1,60}:\s+(\S.*)$")
 
 
 def _normalize_skill(text: str) -> str:
