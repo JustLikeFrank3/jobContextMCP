@@ -140,12 +140,23 @@ def _is_sync_excluded(rel: str) -> bool:
 
 def _resolve_rel(rel: str) -> Path:
     """Resolve a sync-relative path inside the user root (traversal-proof)."""
-    from transport.http.desktop import _validated_member_path
+    import posixpath
 
     if _is_sync_excluded(rel):
         raise HTTPException(status_code=422, detail=f"Path not syncable: {rel!r}")
+
+    normalized = posixpath.normpath(rel.replace("\\", "/"))
+    parts = normalized.split("/")
+    if (
+        not normalized
+        or normalized == "."
+        or rel.startswith(("/", "\\"))
+        or any(part in ("", ".", "..") for part in parts)
+    ):
+        raise HTTPException(status_code=422, detail=f"Unsafe sync path: {rel!r}")
+
     root = _user_root().resolve()
-    target = _validated_member_path(root, rel).resolve()
+    target = root.joinpath(*parts).resolve()
     if target != root and root not in target.parents:
         raise HTTPException(status_code=422, detail=f"Unsafe sync path: {rel!r}")
     return target
