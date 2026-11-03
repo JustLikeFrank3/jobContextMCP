@@ -19,6 +19,8 @@ Covers:
 
 import json
 
+import pytest
+
 from lib import config
 from lib.io import _load_json
 from lib.user_context import reset_data_folder, set_data_folder
@@ -282,6 +284,47 @@ class TestResumeEditDialog:
 
 
 class TestCoverLetterEditDialog:
+    def test_edit_cover_letter_rejects_draft_symlink_outside_directory(
+        self, http_client_noauth, monkeypatch, tmp_path
+    ):
+        cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
+        cl_dir.mkdir(parents=True, exist_ok=True)
+        (cl_dir / "base.txt").write_text("original", encoding="utf-8")
+        _seed_jobs([_job(id=14, company="Stripe", role="Staff Engineer")])
+        outside = tmp_path / "outside.txt"
+        outside.write_text("keep", encoding="utf-8")
+        draft_link = cl_dir / "escape.tmp"
+        try:
+            draft_link.symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+
+        class FakeMessage:
+            content = "edited"
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = None
+
+        monkeypatch.setattr(pl.config, "get_llm_client", lambda: (object(), "gpt-test"))
+        monkeypatch.setattr(pl, "create_chat_completion", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(pl, "_next_cover_letter_draft_path", lambda name: draft_link)
+
+        response = http_client_noauth.post(
+            "/dashboard/pipeline/edit-cover-letter",
+            json={
+                "job_id": 14,
+                "cover_letter_name": "base.txt",
+                "instructions": "Edit the letter.",
+            },
+        )
+
+        assert response.status_code == 400
+        assert outside.read_text(encoding="utf-8") == "keep"
+
     def test_read_cover_letter_returns_cover_letter_text(self, http_client_noauth):
         cl_dir = config.RESUME_FOLDER / config._cfg.get("cover_letters_dir", "02-Cover-Letters")
         cl_dir.mkdir(parents=True, exist_ok=True)

@@ -675,18 +675,27 @@ def delete_synced_file(con, root: Path, target: Path) -> dict:
     Records the tombstone BEFORE unlinking: if the unlink fails, the next
     reconcile finishes the job, whereas the reverse order can lose the
     tombstone and resurrect the file everywhere. A file outside the sync root
-    (or one file sync excludes) is just unlinked — it never synced.
+    is rejected: this helper is a filesystem sink and must not act on paths
+    outside the trusted workspace root.
     Returns {"deleted": bool, "rel": tombstoned rel or None}.
     """
-    target = target.resolve()
-    rel = None
+    resolved_root = Path(root).resolve()
+    target = Path(target)
+    resolved_target = target.resolve(strict=False)
     try:
-        rel_path = target.relative_to(root.resolve())
+        rel_path = resolved_target.relative_to(resolved_root)
     except ValueError:
-        rel_path = None
-    if rel_path is not None and _file_synced(rel_path):
+        return {"deleted": False, "rel": None}
+
+    # Defensive sink-side guard: never process symlink paths for tombstoned
+    # deletes from potentially untrusted callers.
+    if target.is_symlink() or resolved_target.is_symlink():
+        return {"deleted": False, "rel": None}
+
+    rel = None
+    if _file_synced(rel_path):
         rel = rel_path.as_posix()
-        sha = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ""
+        sha = hashlib.sha256(resolved_target.read_bytes()).hexdigest() if resolved_target.is_file() else ""
         con.execute(
             "INSERT INTO file_tombstones (rel, sha256, deleted_at) VALUES (?, ?, ?) "
             "ON CONFLICT(rel) DO UPDATE SET sha256 = excluded.sha256, "
@@ -694,9 +703,9 @@ def delete_synced_file(con, root: Path, target: Path) -> dict:
             (rel, sha, _now_ts()),
         )
         con.commit()
-    deleted = target.is_file()
+    deleted = resolved_target.is_file()
     if deleted:
-        target.unlink()
+        resolved_target.unlink()
     return {"deleted": deleted, "rel": rel}
 
 
