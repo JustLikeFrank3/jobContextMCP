@@ -145,7 +145,10 @@ def _resolve_rel(rel: str) -> Path:
     if _is_sync_excluded(rel):
         raise HTTPException(status_code=422, detail=f"Path not syncable: {rel!r}")
     root = _user_root().resolve()
-    return _validated_member_path(root, rel)
+    target = _validated_member_path(root, rel).resolve()
+    if target != root and root not in target.parents:
+        raise HTTPException(status_code=422, detail=f"Unsafe sync path: {rel!r}")
+    return target
 
 
 @router.post("/files/get")

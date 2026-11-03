@@ -76,6 +76,8 @@ def template_style_error(
 
 def _load_theme_css(style: str) -> str:
     """Load and return the CSS custom property overrides for the given style."""
+    if style not in VALID_STYLES:
+        return ""
     theme_path = _THEMES_DIR / f"{style}.css"
     if not theme_path.exists():
         return ""

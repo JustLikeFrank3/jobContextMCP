@@ -678,6 +678,10 @@ def delete_synced_file(con, root: Path, target: Path) -> dict:
     (or one file sync excludes) is just unlinked — it never synced.
     Returns {"deleted": bool, "rel": tombstoned rel or None}.
     """
+    target = Path(target)
+    if target.is_symlink():
+        target.unlink()
+        return {"deleted": True, "rel": None}
     target = target.resolve()
     rel = None
     try:

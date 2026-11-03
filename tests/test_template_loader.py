@@ -219,6 +219,14 @@ class TestThemeInjection:
         css = tl._load_theme_css("__nonexistent__")
         assert css == ""
 
+    def test_load_theme_css_rejects_path_traversal(self, tmp_path, monkeypatch):
+        themes_dir = tmp_path / "themes"
+        themes_dir.mkdir()
+        (tmp_path / "secret.css").write_text("private", encoding="utf-8")
+        monkeypatch.setattr(tl, "_THEMES_DIR", themes_dir)
+
+        assert tl._load_theme_css("../secret") == ""
+
 
 # ── Resume rendering — all templates × all styles ────────────────────────────
 
