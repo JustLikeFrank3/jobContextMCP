@@ -45,7 +45,7 @@ One sentence why you're reaching out. One proof point (specific, not vague). One
 
 ## Logging Rules (mandatory)
 
-- Every post or comment drafted AND confirmed posted → call `log_linkedin_post()` before the next turn
+- Every post or comment drafted AND confirmed posted → call `brand(action="post_log")` (`log_linkedin_post()` on the opt-in legacy surface) before the next turn
 - Every DM or InMail sent → call `log_person()` with `sent_message` and `outreach_status` updated
 - If the person does not exist in people.json → call `log_person()` to create them first, then log the message
 - Do not mark anything as sent until the candidate explicitly confirms it was posted or sent
