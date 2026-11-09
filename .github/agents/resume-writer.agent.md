@@ -47,7 +47,7 @@ Lead with the most relevant cluster for the target role:
 
 ## Honesty Checkpoint
 
-Before saving any resume with `save_resume_txt()`, state:
+Before saving any resume with `documents(action="save_resume")` (`save_resume_txt()` on the opt-in legacy surface), state:
 
 1. The single strongest / most verifiable claim in this version
 2. The claim a skeptical hiring manager is most likely to probe on
