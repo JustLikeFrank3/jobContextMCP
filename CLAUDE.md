@@ -38,10 +38,8 @@ commits — never tag those) → desktop-release workflow → rolling
   deletes via `file_tombstones` rows (docs/persistence.md).
 - **Telemetry**: `lib/metrics.py` (no deps) → `GET /metrics` (Prometheus);
   in-cluster Prometheus+Grafana under `k8s/monitoring/` (dashboards as code).
-- **LLM calls** all funnel through `lib/openai_calls.create_chat_completion`
-  (rate-spacing, 429/400 retries, thinking-budget empty-at-cap retry).
-  Provider resolution: `lib/config.get_llm_client()`; status surfaces use
-  `llm_generation_status()` — keep them in lockstep.
+- Provider resolution: `lib/config.get_llm_client()`; keep
+  `llm_generation_status()` in lockstep.
 - **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
   facade doesn't expose — update the facade signature.
