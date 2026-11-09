@@ -62,4 +62,4 @@ If any claim cannot be verified against the master resume, flag it explicitly an
 - Bullets: past tense, action verb, specific outcome, metric where available
 - Length: 1 page for <5 years experience, up to 2 pages for senior with multiple major projects
 
-After saving, offer to run `export_resume_pdf()` and do a `resume_diff()` against the previous version if one exists.
+After saving, offer to run `documents(action="export_resume_pdf")` (`export_resume_pdf()` on the opt-in legacy surface) and do a `documents(action="diff")` (`resume_diff()` on the opt-in legacy surface) against the previous version if one exists.
