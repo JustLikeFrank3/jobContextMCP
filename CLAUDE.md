@@ -15,7 +15,7 @@ unless he delegates it in the moment.
 
 CI triggers: Desktop CI (build matrix) runs on push to `feat/*` and `fix/*` —
 **a renamed branch fires no push event** (use `gh workflow run` to dispatch).
-`deploy.yml` runs on qa/main pushes (tests + Sonar + AKS deploy);
+`deploy.yml` runs on qa/main pushes (tests + AKS deploy; Sonar on main only);
 paths-ignore includes `**.md` and `mobile/**`. Desktop releases: tag
 `desktop-v*` **on the exact tested main SHA** (badge-bot pushes `[skip ci]`
 commits — never tag those) → desktop-release workflow → rolling
