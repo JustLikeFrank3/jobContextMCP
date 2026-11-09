@@ -15,7 +15,7 @@ unless he delegates it in the moment.
 
 CI triggers: Desktop CI (build matrix) runs on push to `feat/*` and `fix/*` —
 **a renamed branch fires no push event** (use `gh workflow run` to dispatch).
-`deploy.yml` runs on qa/main pushes (tests + Sonar + AKS deploy);
+`deploy.yml` runs on qa/main pushes (tests + AKS deploy; Sonar on main only);
 paths-ignore includes `**.md` and `mobile/**`. Desktop releases: tag
 `desktop-v*` **on the exact tested main SHA** (badge-bot pushes `[skip ci]`
 commits — never tag those) → desktop-release workflow → rolling
@@ -38,10 +38,8 @@ commits — never tag those) → desktop-release workflow → rolling
   deletes via `file_tombstones` rows (docs/persistence.md).
 - **Telemetry**: `lib/metrics.py` (no deps) → `GET /metrics` (Prometheus);
   in-cluster Prometheus+Grafana under `k8s/monitoring/` (dashboards as code).
-- **LLM calls** all funnel through `lib/openai_calls.create_chat_completion`
-  (rate-spacing, 429/400 retries, thinking-budget empty-at-cap retry).
-  Provider resolution: `lib/config.get_llm_client()`; status surfaces use
-  `llm_generation_status()` — keep them in lockstep.
+- Provider resolution: `lib/config.get_llm_client()`; keep
+  `llm_generation_status()` in lockstep.
 - **MCP surface**: 12 consolidated domain tools (`tools/consolidated.py`).
   The facade-coverage test fails if an underlying tool grows a param the
   facade doesn't expose — update the facade signature.
@@ -86,8 +84,7 @@ commits — never tag those) → desktop-release workflow → rolling
 ## Test & CI gotchas
 
 - `tests/conftest.py` autouse fixture stubs `lib.config.get_llm_client` to
-  `(None, None)` — code needing real key-resolution truth in tests must not
-  call it.
+  `(None, None)`.
 - CI's test env sets `LLM_PROVIDER=foundry` — provider-sensitive tests must
   `monkeypatch.delenv("LLM_PROVIDER")`. Run suites both ways when touching
   provider logic.
