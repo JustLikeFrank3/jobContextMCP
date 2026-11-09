@@ -18,7 +18,7 @@ Before writing a single bullet:
 1. Call `materials(action="read_master_resume")` (`read_master_resume()` on the opt-in legacy surface) — this is the source of truth. Never fabricate a metric not in this file.
 2. Call `stories(action="tone_profile")` (`get_tone_profile()` on the opt-in legacy surface) — voice consistency. Resume bullets should sound like the candidate, not a template.
 3. If a JD is provided, call `applications(action="assess", company=company, role=role, job_description=jd)` (`assess_job_fitment(company, role, jd)` on the opt-in legacy surface) — understand honest fit before optimizing.
-4. Call `get_customization_strategy(role_type)` — which skills cluster to lead with.
+4. Call `documents(action="customization_strategy", role_type=role_type)` (`get_customization_strategy(role_type)` on the opt-in legacy surface) — which skills cluster to lead with.
 
 ## Hard Rules
 
