@@ -84,8 +84,7 @@ commits — never tag those) → desktop-release workflow → rolling
 ## Test & CI gotchas
 
 - `tests/conftest.py` autouse fixture stubs `lib.config.get_llm_client` to
-  `(None, None)` — code needing real key-resolution truth in tests must not
-  call it.
+  `(None, None)`.
 - CI's test env sets `LLM_PROVIDER=foundry` — provider-sensitive tests must
   `monkeypatch.delenv("LLM_PROVIDER")`. Run suites both ways when touching
   provider logic.
