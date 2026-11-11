@@ -75,6 +75,28 @@ _SAMPLE_SERPAPI_RESPONSE = {
 }
 
 
+@pytest.mark.parametrize("url", [
+    "https://linkedin.com/jobs/view/123",
+    "https://www.linkedin.com/jobs/view/123",
+    "https://careers.linkedin.com/jobs/view/123",
+])
+def test_is_linkedin_url_accepts_linkedin_domain_and_subdomains(url):
+    from tools import job_scraper as scraper
+
+    assert scraper._is_linkedin_url(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://linkedin.com.attacker.test/jobs/view/123",
+    "https://notlinkedin.com/jobs/view/123",
+    "https://linkedin.com@attacker.test/jobs/view/123",
+])
+def test_is_linkedin_url_rejects_lookalike_hosts(url):
+    from tools import job_scraper as scraper
+
+    assert not scraper._is_linkedin_url(url)
+
+
 # ── scrape_job_url ─────────────────────────────────────────────────────────────
 
 class TestScrapeJobUrl:
