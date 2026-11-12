@@ -269,8 +269,14 @@ class PersonaService:
             bundled_root = PersonaService._bundled_personas_dir().resolve()
             user_root = PersonaService._user_personas_dir().parent.resolve()
             is_trusted_root = root == bundled_root or user_root in root.parents
-            candidate = (root / f"{target_name}.json").resolve()
-            path = candidate if is_trusted_root and candidate.parent == root else None
+            path = None
+            if is_trusted_root:
+                for candidate in root.glob("*.json"):
+                    if candidate.stem == target_name:
+                        resolved = candidate.resolve()
+                        if resolved.parent == root:
+                            path = resolved
+                            break
         if path is not None and path.is_file():
             with path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
