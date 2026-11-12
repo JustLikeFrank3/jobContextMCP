@@ -60,3 +60,20 @@ def test_ordinary_workspace_file_still_syncs(partition):
     out = _put("workspace/01-Current-Optimized/Resume.txt", b"hello")
     assert out["status"] == "stored"
     assert (partition / "workspace" / "01-Current-Optimized" / "Resume.txt").read_bytes() == b"hello"
+
+
+def test_sync_path_cannot_follow_symlink_outside_partition(partition, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("private", encoding="utf-8")
+    workspace = partition / "workspace"
+    workspace.mkdir()
+    link = workspace / "outside.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+
+    with pytest.raises(HTTPException) as exc:
+        sync_routes._resolve_rel("workspace/outside.txt")
+
+    assert exc.value.status_code == 422

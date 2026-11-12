@@ -436,6 +436,9 @@ async def pipeline_edit_cover_letter(req: _CoverLetterEditRequest) -> JSONRespon
         raise HTTPException(status_code=502, detail="Model returned an empty edited cover letter")
 
     draft_path = _next_cover_letter_draft_path(source.name)
+    draft_path = _safe_child_path(
+        draft_path.parent, draft_path.name, detail="Invalid cover-letter draft path"
+    )
     draft_path.write_text(edited, encoding="utf-8")
     save_result = f"✓ Cover letter draft saved: {draft_path}"
     pdf_result = ""

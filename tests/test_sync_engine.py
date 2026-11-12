@@ -1028,6 +1028,43 @@ def test_delete_synced_file_removes_and_journals(replicas):
         assert {"tbl": "file_tombstones", "op": "upsert", "origin": "local"} in log
 
 
+def test_delete_synced_file_unlinks_symlink_without_deleting_target(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep", encoding="utf-8")
+    link = root / "link.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+
+    info = sync.delete_synced_file(None, root, link)
+
+    assert info == {"deleted": True, "rel": None}
+    assert not link.exists()
+    assert outside.read_text(encoding="utf-8") == "keep"
+
+
+def test_delete_synced_file_rejects_parent_symlink_escape(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    protected = outside / "private.txt"
+    protected.write_text("keep", encoding="utf-8")
+    link = root / "outside"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+
+    info = sync.delete_synced_file(None, root, link / "private.txt")
+
+    assert info == {"deleted": False, "rel": None}
+    assert protected.read_text(encoding="utf-8") == "keep"
+
+
 def test_file_delete_roundtrip_converges_on_absence(replicas):
     """Delete on desktop → tombstone row travels → cloud reconcile removes the
     cloud copy and stops advertising it."""
