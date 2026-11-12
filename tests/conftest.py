@@ -17,8 +17,14 @@ import shutil
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 import server as srv
+
+
+@pytest.fixture(autouse=True)
+def app_encryption_key(monkeypatch):
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

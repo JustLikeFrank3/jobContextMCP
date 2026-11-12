@@ -35,7 +35,7 @@ Every knob the code actually reads, derived from source. Two layers: **environme
 | `ENTRA_TENANT_ID` + `ENTRA_CLIENT_ID` | Both set → Entra auth provider (JWT validation, OAuth proxy). Otherwise API-key provider |
 | `ENTRA_CLIENT_SECRET` | Confidential-client secret for the dashboard's browser PKCE code exchange |
 | `ENTRA_OWNER_OID` | Owner's object id: gates owner-only features (LaTeX export), selects the nightly-evals partition. Falls back to config key `entra_owner_oid` |
-| `APP_ENCRYPTION_KEY` | Fernet key for secrets at rest (`enc:v1:` prefix, used for Oura tokens). Unset/malformed → encryption is a no-op (plaintext) |
+| `APP_ENCRYPTION_KEY` | Fernet key for data at rest. Required for JSON persistence; when unset or malformed, JSON writes fail rather than store plaintext. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 
 ### LLM provider
 

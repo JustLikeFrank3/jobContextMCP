@@ -74,17 +74,25 @@ def _load_json(path: Path, default):
 
 def _save_json(path: Path, data) -> None:
     path = _resolve_data_path(path)
+    from lib.crypto import encrypt_secret, encryption_enabled
+
+    from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
+    is_mapped = path.name in _SAVE_HANDLERS
+    writes_json = not (_USE_SQLITE and _SQLITE_ONLY and is_mapped)
+    if writes_json and not encryption_enabled():
+        raise RuntimeError(
+            "APP_ENCRYPTION_KEY must be configured before writing JSON data; "
+            "refusing to store it in plaintext"
+        )
+
     if _USE_SQLITE:
         from lib.io_sqlite import save_to_sqlite
         save_to_sqlite(path, data)  # upsert to SQLite; no-op for unmapped files
     # Dual-write JSON unless SQLITE_ONLY=1.  Always write for unmapped files
     # (contact_crossref, linkedin_connections, rag_index, scan_index, etc.)
     # because those have no SQLite handler regardless of the flag.
-    from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
-    is_mapped = path.name in _SAVE_HANDLERS
-    if not (_USE_SQLITE and _SQLITE_ONLY and is_mapped):
+    if writes_json:
         path.parent.mkdir(parents=True, exist_ok=True)
-        from lib.crypto import encrypt_secret
         serialized = json.dumps(data, indent=2, ensure_ascii=False)
         path.write_text(encrypt_secret(serialized), encoding="utf-8")
 

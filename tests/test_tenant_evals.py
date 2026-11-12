@@ -141,8 +141,8 @@ class TestJudgePrefs:
         assert "sk-secret" not in json.dumps(prefs)
         # re-save without a key keeps the stored one
         tenant.save_judge_prefs("openai", "gpt-4o")
-        raw = json.loads((workspace / "evals" / "judge.json").read_text())
-        assert raw["api_key"] == "sk-secret" and raw["model"] == "gpt-4o"
+        assert tenant.load_judge_prefs()["model"] == "gpt-4o"
+        assert tenant.load_judge_prefs()["has_key"] is True
 
     def test_clearing_provider_clears_everything(self, workspace):
         tenant.save_judge_prefs("openai", "gpt-4o-mini", api_key="sk-secret")

@@ -59,13 +59,14 @@ class TestLoadSaveJson:
         deep = tmp_path / "a" / "b" / "c" / "data.json"
         srv._save_json(deep, {"nested": True})
         assert deep.exists()
-        assert json.loads(deep.read_text())["nested"] is True
+        assert srv._load_json(deep, {})["nested"] is True
 
     def test_unicode_persisted_correctly(self, tmp_path):
         path = tmp_path / "unicode.json"
         srv._save_json(path, {"name": "Frank MacBride", "note": "café ✓"})
         raw = path.read_text(encoding="utf-8")
-        assert "café" in raw   # ensure_ascii=False in _save_json
+        assert raw.startswith("enc:v1:")
+        assert "café" not in raw
         loaded = srv._load_json(path, {})
         assert loaded["note"] == "café ✓"
 
@@ -92,6 +93,17 @@ class TestLoadSaveJson:
         path.write_text(json.dumps(original), encoding="utf-8")
 
         assert srv._load_json(path, {}) == original
+
+    def test_refuses_plaintext_write_without_encryption_key(self, tmp_path, monkeypatch):
+        import lib.crypto as crypto
+
+        monkeypatch.setattr(crypto, "_load_key", lambda: "")
+        path = tmp_path / "private.json"
+
+        with pytest.raises(RuntimeError, match="refusing to store it in plaintext"):
+            srv._save_json(path, {"notes": "private job-search details"})
+
+        assert not path.exists()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
