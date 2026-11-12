@@ -54,6 +54,70 @@ class TestPersonaService:
         assert names == ["custom"]
         assert PersonaService.get("custom").tone_modifiers["register"] == "custom-register"
 
+    def test_get_rejects_traversal_to_another_tenant_persona(self, tmp_path, monkeypatch):
+        users = tmp_path / "users"
+        attacker_personas = users / "attacker" / "personas"
+        victim_personas = users / "victim" / "personas"
+        attacker_personas.mkdir(parents=True)
+        victim_personas.mkdir(parents=True)
+        (attacker_personas / "default.json").write_text("{}", encoding="utf-8")
+        (victim_personas / "private.json").write_text(
+            json.dumps({"description": "victim-only persona"}), encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            PersonaService, "_personas_dir", staticmethod(lambda: attacker_personas)
+        )
+
+        with pytest.raises(UnknownPersonaError):
+            PersonaService.get("../../victim/personas/private")
+
+    def test_get_rejects_persona_symlink_outside_directory(self, tmp_path, monkeypatch):
+        user_personas = tmp_path / "users" / "attacker" / "personas"
+        user_personas.mkdir(parents=True)
+        victim_persona = tmp_path / "users" / "victim" / "private.json"
+        victim_persona.parent.mkdir(parents=True)
+        victim_persona.write_text(
+            json.dumps({"description": "victim-only persona"}), encoding="utf-8"
+        )
+        try:
+            (user_personas / "linked.json").symlink_to(victim_persona)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        monkeypatch.setattr(
+            PersonaService, "_personas_dir", staticmethod(lambda: user_personas)
+        )
+
+        with pytest.raises(UnknownPersonaError):
+            PersonaService.get("linked")
+
+    def test_user_persona_directory_symlink_cannot_cross_tenant(self, tmp_path, monkeypatch):
+        users = tmp_path / "users"
+        attacker_data = users / "attacker"
+        victim_personas = users / "victim" / "personas"
+        attacker_data.mkdir(parents=True)
+        victim_personas.mkdir(parents=True)
+        (victim_personas / "private.json").write_text(
+            json.dumps({"description": "victim-only persona"}), encoding="utf-8"
+        )
+        try:
+            (attacker_data / "personas").symlink_to(victim_personas, target_is_directory=True)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        monkeypatch.setattr(
+            PersonaService,
+            "_user_personas_dir",
+            staticmethod(lambda: attacker_data / "personas"),
+        )
+        monkeypatch.setattr(
+            PersonaService,
+            "_bundled_personas_dir",
+            staticmethod(lambda: tmp_path / "bundled"),
+        )
+        (tmp_path / "bundled").mkdir()
+
+        with pytest.raises(UnknownPersonaError):
+            PersonaService.get("private")
+
     def test_builtin_fallback_when_persona_dirs_empty(self, monkeypatch, tmp_path):
         """If mounted data dirs have no persona JSON files, built-ins still resolve."""
         empty_user = tmp_path / "user-empty"

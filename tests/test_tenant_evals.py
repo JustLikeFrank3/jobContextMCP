@@ -94,6 +94,85 @@ class TestGoldenCrud:
         entries = tenant.load_tenant_golden()
         assert [e.id for e in entries] == ["GD-T01"]
 
+    @pytest.mark.parametrize(
+        "jd_file", ["../../outside.txt", "/etc/passwd", r"..\\outside.txt"]
+    )
+    def test_manifest_jd_paths_must_be_files_in_tenant_golden_folder(self, workspace, jd_file):
+        manifest = workspace / "evals" / "golden_dataset.json"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps({"entries": [{
+            "id": "GD-T01",
+            "company": "Acme",
+            "role": "Engineer",
+            "archetype": "",
+            "eval_signal": "",
+            "reference_file": "",
+            "jd_file": jd_file,
+            "output_kind": "resume",
+        }]}), encoding="utf-8")
+
+        assert tenant.load_tenant_golden() == []
+
+    def test_manifest_jd_symlink_cannot_escape_tenant_golden_folder(self, workspace):
+        jd_dir = workspace / "evals" / "golden"
+        jd_dir.mkdir(parents=True)
+        outside = workspace / "private-jd.txt"
+        outside.write_text("victim private job description", encoding="utf-8")
+        try:
+            (jd_dir / "external-jd.txt").symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        manifest = workspace / "evals" / "golden_dataset.json"
+        manifest.write_text(json.dumps({"entries": [{
+            "id": "GD-T01",
+            "company": "Acme",
+            "role": "Engineer",
+            "archetype": "",
+            "eval_signal": "",
+            "reference_file": "",
+            "jd_file": "external-jd.txt",
+            "output_kind": "resume",
+        }]}), encoding="utf-8")
+
+        assert tenant.load_tenant_golden() == []
+
+    def test_tenant_golden_directory_symlink_cannot_escape_workspace(self, workspace):
+        external_jd_dir = workspace.parent / "other-tenant" / "evals" / "golden"
+        external_jd_dir.mkdir(parents=True)
+        outside_jd = external_jd_dir / "GD-T01-jd.txt"
+        outside_jd.write_text("keep private", encoding="utf-8")
+        evals_dir = workspace / "evals"
+        evals_dir.mkdir()
+        try:
+            (evals_dir / "golden").symlink_to(external_jd_dir, target_is_directory=True)
+        except OSError:
+            pytest.skip("symlink creation is unavailable")
+        manifest = evals_dir / "golden_dataset.json"
+        manifest.write_text(json.dumps({"entries": [{
+            "id": "GD-T01",
+            "company": "Acme",
+            "role": "Engineer",
+            "archetype": "",
+            "eval_signal": "",
+            "reference_file": "",
+            "jd_file": "GD-T01-jd.txt",
+            "output_kind": "resume",
+        }]}), encoding="utf-8")
+
+        assert tenant.load_tenant_golden() == []
+        with pytest.raises(ValueError, match="inside the active workspace"):
+            tenant.upsert_golden_entry("Acme", "Engineer", "overwrite", entry_id="GD-T01")
+        assert outside_jd.read_text(encoding="utf-8") == "keep private"
+
+    def test_loaded_tenant_jd_path_is_resolved_inside_partition(self, workspace):
+        tenant.upsert_golden_entry("Acme", "Engineer", "tenant JD")
+
+        entry = tenant.load_tenant_golden()[0]
+
+        assert entry.jd_file == str(
+            (workspace / "evals" / "golden" / "GD-T01-jd.txt").resolve()
+        )
+
 
 class TestExecutorPrecedence:
     def test_tenant_set_wins_over_committed_manifest(self, workspace, monkeypatch):
