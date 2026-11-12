@@ -11,6 +11,7 @@ PersonaConfig and pass it through to tools or include it in the LLM prompt.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -222,7 +223,13 @@ class PersonaService:
         """
         user = PersonaService._user_personas_dir()
         if user.exists() and any(user.glob("*.json")):
-            return user
+            try:
+                user_root = user.parent.resolve()
+                resolved_user = user.resolve()
+                if user_root in resolved_user.parents:
+                    return user
+            except (OSError, RuntimeError):
+                pass
         return PersonaService._bundled_personas_dir()
 
     @staticmethod
@@ -254,15 +261,30 @@ class PersonaService:
         """
         target = name or DEFAULT_PERSONA
         d = PersonaService._personas_dir()
-        path = d / f"{target}.json"
-        if path.exists():
+        target_name = target if isinstance(target, str) else ""
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", target_name) is None:
+            path = None
+        else:
+            root = d.resolve()
+            bundled_root = PersonaService._bundled_personas_dir().resolve()
+            user_root = PersonaService._user_personas_dir().parent.resolve()
+            is_trusted_root = root == bundled_root or user_root in root.parents
+            path = None
+            if is_trusted_root:
+                for candidate in root.glob("*.json"):
+                    if candidate.stem == target_name:
+                        resolved = candidate.resolve()
+                        if resolved.parent == root:
+                            path = resolved
+                            break
+        if path is not None and path.is_file():
             with path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
-            return PersonaService._from_data(target, data)
+            return PersonaService._from_data(target_name, data)
 
-        builtin = _BUILTIN_PERSONAS.get(target)
+        builtin = _BUILTIN_PERSONAS.get(target_name)
         if builtin is not None:
-            return PersonaService._from_data(target, builtin)
+            return PersonaService._from_data(target_name, builtin)
 
         available = ", ".join(PersonaService.list_personas()) or "(none)"
         raise UnknownPersonaError(

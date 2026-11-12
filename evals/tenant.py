@@ -98,6 +98,16 @@ def _jd_dir() -> Path:
     return _evals_dir() / "golden"
 
 
+def _tenant_jd_root() -> Path:
+    from lib import config  # noqa: PLC0415 — workspace resolves per partition
+
+    workspace = Path(config.get_active_workspace_folder()).resolve()
+    root = _jd_dir().resolve()
+    if workspace not in root.parents:
+        raise ValueError("tenant JD folder must resolve inside the active workspace")
+    return root
+
+
 def _judge_prefs_path() -> Path:
     return _evals_dir() / "judge.json"
 
@@ -125,10 +135,24 @@ def _entry_jd_path(entry_id: str) -> Path:
     """A golden entry always names one file inside this tenant's JD folder."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", entry_id):
         raise ValueError("entry_id must contain only letters, numbers, hyphens or underscores")
-    root = _jd_dir().resolve()
+    root = _tenant_jd_root()
     path = (root / f"{entry_id}-jd.txt").resolve()
     if path.parent != root:
         raise ValueError("entry_id must resolve inside the golden folder")
+    return path
+
+
+def _tenant_jd_file_path(filename: str) -> Path | None:
+    """Resolve a manifest JD filename strictly inside this tenant's JD folder."""
+    if not isinstance(filename, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}", filename) is None:
+        return None
+    try:
+        root = _tenant_jd_root()
+        path = (root / filename).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if path.parent != root:
+        return None
     return path
 
 
@@ -145,8 +169,14 @@ def load_tenant_golden() -> "list[GoldenEntry] | None":
         return None
     entries = []
     for e in data.get("entries") or []:
+        if not isinstance(e, dict):
+            continue
+        jd_path = _tenant_jd_file_path(e.get("jd_file"))
+        if jd_path is None:
+            continue
+        entry_data = {**e, "jd_file": str(jd_path)}
         try:
-            entries.append(GoldenEntry(**e))
+            entries.append(GoldenEntry(**entry_data))
         except TypeError:
             continue  # unknown/missing keys: skip the row, keep the set usable
     return entries
