@@ -41,6 +41,12 @@ def _write_json(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def _load_persisted_json(path: Path) -> dict:
+    from lib.crypto import decrypt_secret
+
+    return json.loads(decrypt_secret(path.read_text(encoding="utf-8")))
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Core fixture
 # ──────────────────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from tests.conftest import _write, _write_json
+from tests.conftest import _load_persisted_json, _write, _write_json
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ def _load_index(data_dir: Path) -> dict:
     idx_path = data_dir / "scan_index.json"
     if not idx_path.exists():
         return {"scanned": {}}
-    return json.loads(idx_path.read_text())
+    return _load_persisted_json(idx_path)
 
 
 # ─── Basic functionality ───────────────────────────────────────────────────────

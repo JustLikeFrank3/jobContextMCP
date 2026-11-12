@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 import server as srv
+from tests.conftest import _load_persisted_json
 from tools.job_hunt import _extract_followup_date, _check_overdue_followups
 
 
@@ -35,7 +36,7 @@ class TestJobHuntStatus:
         srv.update_application("Ford", "Software Engineer", "applied", notes="v1")
         srv.update_application("Ford", "Software Engineer", "waiting", notes="v2")
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         apps = data["applications"]
         assert len(apps) == 1
         assert apps[0]["status"] == "waiting"
@@ -48,7 +49,7 @@ class TestJobHuntStatus:
         srv.update_application("Ford", "Software Engineer", "applied", notes="important context")
         srv.update_application("Ford", "Software Engineer", "waiting")  # notes="" default
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         apps = data["applications"]
         assert apps[0]["notes"] == "important context"
 
@@ -56,7 +57,7 @@ class TestJobHuntStatus:
         srv.update_application("Airbnb", "SE I", "applied")
         srv.update_application("Airbnb", "SE II", "technical_screen")
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         apps = data["applications"]
         assert len(apps) == 1  # company fallback path
         assert apps[0]["role"] == "SE II"
@@ -64,7 +65,7 @@ class TestJobHuntStatus:
 
     def test_status_file_last_updated_written(self, isolated_server):
         srv.update_application("Microsoft", "Software Engineer", "applied")
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert "last_updated" in data
         assert isinstance(data["last_updated"], str)
 

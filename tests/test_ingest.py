@@ -1,7 +1,7 @@
 """Tests for tools/ingest.py — ingest_anecdote bundler."""
 import json
 import pytest
-from tests.conftest import isolated_server  # noqa: F401
+from tests.conftest import _load_persisted_json, isolated_server  # noqa: F401
 
 
 def test_ingest_anecdote_logs_to_personal_context(isolated_server):
@@ -13,7 +13,7 @@ def test_ingest_anecdote_logs_to_personal_context(isolated_server):
     )
     assert "personal context" in result
     import lib.config as config
-    data = json.loads(config.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(config.PERSONAL_CONTEXT_FILE)
     assert any("modernization" in s.get("title", "").lower() or
                "modernization" in s.get("tags", [])
                for s in data["stories"])
@@ -26,7 +26,7 @@ def test_ingest_anecdote_logs_tone_sample_when_long_enough(isolated_server):
     assert "tone profile" in result
     assert "skipped" not in result
     import lib.config as config
-    tone_data = json.loads(config.TONE_FILE.read_text())
+    tone_data = _load_persisted_json(config.TONE_FILE)
     assert len(tone_data["samples"]) > 0
 
 
@@ -43,7 +43,7 @@ def test_ingest_anecdote_skips_tone_sample_when_disabled(isolated_server):
     result = ingest_anecdote(story=long_story, tags=["modernization"], tone_sample=False)
     # tone_sample=False: tone file should either not exist or have no samples
     if config.TONE_FILE.exists():
-        tone_data = json.loads(config.TONE_FILE.read_text())
+        tone_data = _load_persisted_json(config.TONE_FILE)
         assert len(tone_data.get("samples", [])) == 0
     else:
         pass  # never written — correct
@@ -77,7 +77,7 @@ def test_ingest_anecdote_with_people(isolated_server):
         title="Azure SWAT Team",
         people=["Patrick McDevitt", "Andrea Samo"],
     )
-    data = json.loads(config.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(config.PERSONAL_CONTEXT_FILE)
     stories_with_pat = [s for s in data["stories"] if "Patrick McDevitt" in s.get("people", [])]
     assert len(stories_with_pat) > 0
 

@@ -1366,7 +1366,9 @@ def _untracked_note(company: str, role: str, filename: str = "") -> str:
         if not config.STATUS_FILE.exists():
             tracked: list[str] = []
         else:
-            data = _load_json(config.STATUS_FILE, {})
+            data = _load_json(config.STATUS_FILE, None)
+            if not isinstance(data, dict):
+                return ""
             tracked = [str(a.get("company", "")).strip()
                        for a in data.get("applications", []) if a.get("company")]
         c = (company or "").strip().lower()

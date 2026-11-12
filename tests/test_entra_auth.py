@@ -36,6 +36,7 @@ from jwt import PyJWKClient
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from starlette.testclient import TestClient
+from tests.conftest import _load_persisted_json
 
 # ---------------------------------------------------------------------------
 # Shared RSA key pair for tests — generated once per session
@@ -984,8 +985,8 @@ class TestUserDataContextMiddleware:
                     "/dashboard/pipeline/remove", json={"job_id": 5001}
                 )
                 assert denied_remove.status_code == 404
-                u1_jobs = json.loads(
-                    (Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name).read_text()
+                u1_jobs = _load_persisted_json(
+                    Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name
                 )["jobs"]
                 assert [job["id"] for job in u1_jobs] == [5001]
 
@@ -994,11 +995,11 @@ class TestUserDataContextMiddleware:
                     "/dashboard/pipeline/remove", json={"job_id": 5001}
                 )
                 assert owner_remove.status_code == 200
-                u1_jobs = json.loads(
-                    (Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name).read_text()
+                u1_jobs = _load_persisted_json(
+                    Path(config.DATA_FOLDER) / "users" / "u1" / config.JOB_QUEUE_FILE.name
                 )["jobs"]
-                u2_jobs = json.loads(
-                    (Path(config.DATA_FOLDER) / "users" / "u2" / config.JOB_QUEUE_FILE.name).read_text()
+                u2_jobs = _load_persisted_json(
+                    Path(config.DATA_FOLDER) / "users" / "u2" / config.JOB_QUEUE_FILE.name
                 )["jobs"]
                 assert u1_jobs == []
                 assert [job["id"] for job in u2_jobs] == [5002]
@@ -1108,11 +1109,11 @@ class TestUserDataContextMiddleware:
             assert "error" not in body2, body2
 
         status_path = Path(config.STATUS_FILE.name)
-        u1_status = json.loads(
-            (Path(config.DATA_FOLDER) / "users" / "u1" / status_path).read_text()
+        u1_status = _load_persisted_json(
+            Path(config.DATA_FOLDER) / "users" / "u1" / status_path
         )
-        u2_status = json.loads(
-            (Path(config.DATA_FOLDER) / "users" / "u2" / status_path).read_text()
+        u2_status = _load_persisted_json(
+            Path(config.DATA_FOLDER) / "users" / "u2" / status_path
         )
         assert u1_status["applications"][0]["status"] == "applied"
         assert u1_status["applications"][0]["notes"] == "write by u1"

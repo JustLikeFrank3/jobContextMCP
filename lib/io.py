@@ -74,7 +74,9 @@ def _load_json(path: Path, default):
 
 def _save_json(path: Path, data) -> None:
     path = _resolve_data_path(path)
-    from lib.crypto import encrypt_secret, encryption_enabled
+    from cryptography.fernet import Fernet
+
+    from lib.crypto import _PREFIX, _load_key, encryption_enabled
 
     from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
     is_mapped = path.name in _SAVE_HANDLERS
@@ -94,7 +96,9 @@ def _save_json(path: Path, data) -> None:
     if writes_json:
         path.parent.mkdir(parents=True, exist_ok=True)
         serialized = json.dumps(data, indent=2, ensure_ascii=False)
-        path.write_text(encrypt_secret(serialized), encoding="utf-8")
+        key = _load_key()
+        ciphertext = Fernet(key.encode("ascii")).encrypt(serialized.encode("utf-8"))
+        path.write_text(_PREFIX + ciphertext.decode("ascii"), encoding="utf-8")
 
 
 def _now() -> str:

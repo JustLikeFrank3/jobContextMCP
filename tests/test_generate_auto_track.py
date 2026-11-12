@@ -16,6 +16,7 @@ import pytest
 
 import lib.config as cfg
 from lib import user_context
+from tests.conftest import _load_persisted_json
 from tools.generate import _untracked_note
 
 
@@ -35,7 +36,7 @@ def partition(tmp_path, monkeypatch):
 def _apps(status_file):
     if not status_file.exists():
         return []
-    return json.loads(status_file.read_text(encoding="utf-8")).get("applications", [])
+    return _load_persisted_json(status_file).get("applications", [])
 
 
 class TestAutoTrack:
