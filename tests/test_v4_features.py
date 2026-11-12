@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 # ── log_rejection / get_rejections ───────────────────────────────────────────
@@ -23,7 +24,7 @@ class TestRejections:
         assert "FanDuel" in result
         assert "phone screen" in result
 
-        data = json.loads(srv.REJECTIONS_FILE.read_text())
+        data = _load_persisted_json(srv.REJECTIONS_FILE)
         assert len(data["rejections"]) == 1
         entry = data["rejections"][0]
         assert entry["company"] == "FanDuel"
@@ -37,7 +38,7 @@ class TestRejections:
             reason="not enough distributed systems experience",
             notes="They liked the culture fit but needed deeper infra knowledge"
         )
-        data = json.loads(srv.REJECTIONS_FILE.read_text())
+        data = _load_persisted_json(srv.REJECTIONS_FILE)
         entry = data["rejections"][0]
         assert entry["reason"] == "not enough distributed systems experience"
         assert "infra" in entry["notes"]
@@ -46,7 +47,7 @@ class TestRejections:
         srv.log_rejection("A", "Role", "applied")
         srv.log_rejection("B", "Role", "phone screen")
         srv.log_rejection("C", "Role", "onsite")
-        data = json.loads(srv.REJECTIONS_FILE.read_text())
+        data = _load_persisted_json(srv.REJECTIONS_FILE)
         ids = [r["id"] for r in data["rejections"]]
         assert ids == [1, 2, 3]
 
@@ -98,7 +99,7 @@ class TestApplicationEvent:
         assert "FanDuel" in result
         assert "phone_screen" in result
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         app = data["applications"][0]
         assert len(app["events"]) == 1
         assert app["events"][0]["type"] == "phone_screen"
@@ -110,7 +111,7 @@ class TestApplicationEvent:
         srv.log_application_event("Reddit", "Backend", "phone_screen", "Recruiter called")
         srv.log_application_event("Reddit", "Backend", "technical_screen", "Coding challenge sent")
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         events = data["applications"][0]["events"]
         assert len(events) == 3
         types = [e["type"] for e in events]
@@ -122,7 +123,7 @@ class TestApplicationEvent:
 
     def test_new_app_has_empty_events_list(self, isolated_server):
         srv.update_application("Google", "SWE", "applied")
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"] == []
 
 
@@ -141,7 +142,7 @@ class TestApplicationEventDate:
         )
         assert past in result
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         events = data["applications"][0]["events"]
         assert len(events) == 1
         assert events[0]["date"] == past          # verbatim, no time appended
@@ -152,7 +153,7 @@ class TestApplicationEventDate:
         srv.update_application("StampCo", "SWE", "applied")
         srv.log_application_event("StampCo", "SWE", "phone_screen", date=stamp)
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"][0]["date"] == stamp
 
     def test_today_is_accepted(self, isolated_server):
@@ -160,7 +161,7 @@ class TestApplicationEventDate:
         srv.update_application("TodayCo", "SWE", "applied")
         srv.log_application_event("TodayCo", "SWE", "applied", date=today)
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"][0]["date"] == today
 
     def test_future_date_rejected_and_nothing_logged(self, isolated_server):
@@ -171,7 +172,7 @@ class TestApplicationEventDate:
         )
         assert "✗" in result and "future" in result
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"] == []
 
     def test_malformed_date_rejected_and_nothing_logged(self, isolated_server):
@@ -181,14 +182,14 @@ class TestApplicationEventDate:
         )
         assert "✗" in result and "YYYY-MM-DD" in result
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"] == []
 
     def test_omitted_date_defaults_to_now(self, isolated_server):
         srv.update_application("NowCo", "SWE", "applied")
         srv.log_application_event("NowCo", "SWE", "phone_screen", "recruiter called")
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         stored = data["applications"][0]["events"][0]["date"]
         assert stored.startswith(date.today().isoformat())
         assert len(stored) == len("YYYY-MM-DD HH:MM")   # _now() shape, not a bare day
@@ -198,7 +199,7 @@ class TestApplicationEventDate:
         srv.update_application("BlankCo", "SWE", "applied")
         srv.log_application_event("BlankCo", "SWE", "note", date="")
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         assert data["applications"][0]["events"][0]["date"].startswith(
             date.today().isoformat()
         )
@@ -212,7 +213,7 @@ class TestApplicationEventDate:
         srv.log_application_event("OrderCo", "SWE", "phone_screen", "logged live")
         srv.log_application_event("OrderCo", "SWE", "follow_up", "late entry", date=older)
 
-        data = json.loads(srv.STATUS_FILE.read_text())
+        data = _load_persisted_json(srv.STATUS_FILE)
         events = data["applications"][0]["events"]
         assert [e["type"] for e in events] == ["phone_screen", "follow_up"]
         assert events[1]["date"] == older

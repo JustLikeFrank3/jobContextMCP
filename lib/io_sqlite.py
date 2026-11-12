@@ -8,8 +8,8 @@ Each save handler accepts the same dict _save_json() would write to disk and
 upserts it into the appropriate SQLite table(s).
 
 Write strategy: DUAL-WRITE — _save_json() updates SQLite AND the JSON file.
-This keeps the JSON files as a human-readable audit trail and ensures unmapped
-files (scan_index.json, github_metrics.json, etc.) are never silently lost.
+This keeps JSON copies available for compatibility and ensures unmapped files
+(scan_index.json, github_metrics.json, etc.) are never silently lost.
 
 Every field of a MAPPED file must have a SQLite home, because SQLITE_ONLY=1
 (desktop, and the cloud from PR #188) skips the JSON leg entirely: a field

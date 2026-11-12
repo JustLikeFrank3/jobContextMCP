@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ class TestLogPersonalStory:
             tags=["ford", "quality", "grandfather"],
             title="Ford fire truck threads",
         )
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         assert len(data["stories"]) == 1
         assert data["stories"][0]["title"] == "Ford fire truck threads"
 
@@ -41,20 +42,20 @@ class TestLogPersonalStory:
         srv.log_personal_story(story="Story A", tags=["a"])
         srv.log_personal_story(story="Story B", tags=["b"])
         srv.log_personal_story(story="Story C", tags=["c"])
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         ids = [s["id"] for s in data["stories"]]
         assert ids == [1, 2, 3]
 
     def test_tags_normalised_to_lowercase(self, isolated_server):
         srv.log_personal_story(story="Story.", tags=["Ford", "QUALITY", "Testing"])
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         tags = data["stories"][0]["tags"]
         assert tags == ["ford", "quality", "testing"]
 
     def test_auto_title_truncated_to_60_chars(self, isolated_server):
         long_story = "x" * 120
         srv.log_personal_story(story=long_story, tags=["generic"])
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         title = data["stories"][0]["title"]
         assert title.endswith("...")
         assert len(title) <= 63  # 60 chars + "..."
@@ -65,13 +66,13 @@ class TestLogPersonalStory:
             tags=["music", "friendship"],
             people=["Sean Evans"],
         )
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         assert "Sean Evans" in data["stories"][0]["people"]
 
     def test_appends_without_overwriting(self, isolated_server):
         for i in range(5):
             srv.log_personal_story(story=f"Story {i}", tags=["generic"])
-        data = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())
+        data = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)
         assert len(data["stories"]) == 5
 
 

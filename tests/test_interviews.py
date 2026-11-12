@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 def _interviews_path(isolated_root: Path) -> Path:
@@ -21,7 +22,7 @@ def _read_interviews(isolated_root: Path) -> list[dict]:
     p = _interviews_path(isolated_root)
     if not p.exists():
         return []
-    return json.loads(p.read_text(encoding="utf-8")).get("interviews", [])
+    return _load_persisted_json(p).get("interviews", [])
 
 
 def _seed_interview(**overrides) -> str:

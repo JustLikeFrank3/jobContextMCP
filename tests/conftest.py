@@ -17,8 +17,14 @@ import shutil
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 import server as srv
+
+
+@pytest.fixture(autouse=True)
+def app_encryption_key(monkeypatch):
+    monkeypatch.setenv("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -33,6 +39,12 @@ def _write(path: Path, content: str) -> None:
 def _write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _load_persisted_json(path: Path) -> dict:
+    from lib.crypto import decrypt_secret
+
+    return json.loads(decrypt_secret(path.read_text(encoding="utf-8")))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

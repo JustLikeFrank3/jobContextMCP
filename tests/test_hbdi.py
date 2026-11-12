@@ -1,7 +1,7 @@
 """Tests for tools/hbdi.py — HBDI cognitive style profiler."""
 import json
 import pytest
-from tests.conftest import isolated_server  # noqa: F401
+from tests.conftest import _load_persisted_json, isolated_server  # noqa: F401
 
 # ── Shared test data ──────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ def test_run_hbdi_saves_to_personal_context(isolated_server):
         q4_senior_disagreement=_Q4,
         **_SCORES_FRANK,
     )
-    data = json.loads(cfg.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(cfg.PERSONAL_CONTEXT_FILE)
     assert "hbdi_profile" in data
     profile = data["hbdi_profile"]
     assert profile["primary"] == "D"
@@ -56,7 +56,7 @@ def test_run_hbdi_saves_responses(isolated_server):
         q4_senior_disagreement=_Q4,
         **_SCORES_FRANK,
     )
-    data = json.loads(cfg.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(cfg.PERSONAL_CONTEXT_FILE)
     responses = data["hbdi_profile"]["responses"]
     assert responses["q1_no_spec_project"] == _Q1
     assert responses["q4_senior_disagreement"] == _Q4
@@ -76,7 +76,7 @@ def test_run_hbdi_preserves_existing_stories(isolated_server):
         q4_senior_disagreement=_Q4,
         **_SCORES_FRANK,
     )
-    data = json.loads(cfg.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(cfg.PERSONAL_CONTEXT_FILE)
     assert len(data["stories"]) == 1
     assert data["stories"][0]["title"] == "Existing story"
     assert "hbdi_profile" in data
@@ -99,7 +99,7 @@ def test_run_hbdi_overwrites_previous_profile(isolated_server):
         q4_senior_disagreement=_Q4,
         **_SCORES_FRANK,
     )
-    data = json.loads(cfg.PERSONAL_CONTEXT_FILE.read_text())
+    data = _load_persisted_json(cfg.PERSONAL_CONTEXT_FILE)
     assert data["hbdi_profile"]["responses"]["q1_no_spec_project"] == "Updated answer."
 
 

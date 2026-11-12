@@ -57,26 +57,48 @@ def _load_json(path: Path, default):
         # Unmapped file — fall through to JSON below
 
     try:
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
+        if not path.exists():
+            return default
+        serialized = path.read_text(encoding="utf-8")
     except Exception:
+        return default
+
+    from lib.crypto import decrypt_secret
+
+    try:
+        return json.loads(decrypt_secret(serialized))
+    except (TypeError, ValueError):
         pass
     return default
 
 
 def _save_json(path: Path, data) -> None:
     path = _resolve_data_path(path)
+    from cryptography.fernet import Fernet
+
+    from lib.crypto import _PREFIX, _load_key, encryption_enabled
+
+    from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
+    is_mapped = path.name in _SAVE_HANDLERS
+    writes_json = not (_USE_SQLITE and _SQLITE_ONLY and is_mapped)
+    if writes_json and not encryption_enabled():
+        raise RuntimeError(
+            "APP_ENCRYPTION_KEY must be configured before writing JSON data; "
+            "refusing to store it in plaintext"
+        )
+
     if _USE_SQLITE:
         from lib.io_sqlite import save_to_sqlite
         save_to_sqlite(path, data)  # upsert to SQLite; no-op for unmapped files
     # Dual-write JSON unless SQLITE_ONLY=1.  Always write for unmapped files
     # (contact_crossref, linkedin_connections, rag_index, scan_index, etc.)
     # because those have no SQLite handler regardless of the flag.
-    from lib.io_sqlite import _SAVE_HANDLERS  # type: ignore[attr-defined]
-    is_mapped = path.name in _SAVE_HANDLERS
-    if not (_USE_SQLITE and _SQLITE_ONLY and is_mapped):
+    if writes_json:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR
+        serialized = json.dumps(data, indent=2, ensure_ascii=False)
+        key = _load_key()
+        ciphertext = Fernet(key.encode("ascii")).encrypt(serialized.encode("utf-8"))
+        path.write_text(_PREFIX + ciphertext.decode("ascii"), encoding="utf-8")
 
 
 def _now() -> str:

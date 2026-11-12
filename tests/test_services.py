@@ -13,6 +13,7 @@ functions which read/write JSON files under config paths.
 """
 
 import pytest
+from tests.conftest import _load_persisted_json
 
 from services import (
     JobAnalysisService,
@@ -207,7 +208,7 @@ class TestJobAnalysisService:
         import json
         srv.queue_job("Stripe", "Staff Engineer", "JD")
         # Force-decide the entry
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         data["jobs"][0]["status"] = "added"
         srv.JOB_QUEUE_FILE.write_text(json.dumps(data))
 

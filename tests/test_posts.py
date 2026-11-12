@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ def _posts(isolated_server) -> list[dict]:
     """Read posts directly from the JSON store."""
     if not srv.LINKEDIN_POSTS_FILE.exists():
         return []
-    return json.loads(srv.LINKEDIN_POSTS_FILE.read_text()).get("posts", [])
+    return _load_persisted_json(srv.LINKEDIN_POSTS_FILE).get("posts", [])
 
 
 def _seed(source="test_post", title="", text="Test post text.", **kwargs):
@@ -140,14 +141,14 @@ class TestLogLinkedInPost:
 
     def test_auto_log_tone_false_skips_tone_sample(self, isolated_server):
         _seed(source="no_tone", text="Don't capture me.")
-        tone_data = json.loads(srv.TONE_FILE.read_text()) if srv.TONE_FILE.exists() else {"samples": []}
+        tone_data = _load_persisted_json(srv.TONE_FILE) if srv.TONE_FILE.exists() else {"samples": []}
         sources = [s.get("source", "") for s in tone_data.get("samples", [])]
         assert "no_tone" not in sources
 
     def test_auto_log_tone_true_ingests_sample(self, isolated_server):
         srv.log_linkedin_post(text="Capture this voice.", source="yes_tone", auto_log_tone=True)
         assert srv.TONE_FILE.exists()
-        tone_data = json.loads(srv.TONE_FILE.read_text())
+        tone_data = _load_persisted_json(srv.TONE_FILE)
         sources = [s.get("source", "") for s in tone_data.get("samples", [])]
         assert "yes_tone" in sources
 

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,13 +113,13 @@ class TestScrapeJobUrl:
         assert "Scraped:" in result
         assert "auto_queue=True" in result or "queue_job" in result
         # Should NOT have auto-queued
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text()) if srv.JOB_QUEUE_FILE.exists() else {"jobs": []}
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE) if srv.JOB_QUEUE_FILE.exists() else {"jobs": []}
         assert data.get("jobs", []) == []
 
     def test_auto_queue_true_adds_to_pipeline(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _mock_response(_SAMPLE_MARKDOWN))
         srv.scrape_job_url("https://stripe.com/jobs/123", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert len(data["jobs"]) == 1
         assert data["jobs"][0]["source"] == "https://stripe.com/jobs/123"
 
@@ -160,7 +161,7 @@ class TestScrapeJobUrl:
 
         assert "does not look like a job posting" in result
         assert "queue_job" in result
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text()) if srv.JOB_QUEUE_FILE.exists() else {"jobs": []}
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE) if srv.JOB_QUEUE_FILE.exists() else {"jobs": []}
         assert data.get("jobs", []) == [], "non-job page must not enter the pipeline"
 
     def test_thin_page_is_rejected(self, isolated_server, monkeypatch):
@@ -211,7 +212,7 @@ class TestScrapeJobUrl:
             page_text=_SAMPLE_MARKDOWN,
         )
         assert "Scraped" in result
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"][0]["company"] == "Stripe"
 
     def test_linkedin_guest_fallback_rescues_blocked_direct(self, isolated_server, monkeypatch):
@@ -239,7 +240,7 @@ class TestScrapeJobUrl:
         result = scraper.scrape_job_url(
             "https://www.linkedin.com/jobs/view/4242", auto_queue=True)
         assert "Scraped" in result
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"][0]["company"] == "Cox Automotive"
 
     def test_linkedin_guest_rejects_authwall_boilerplate(self, isolated_server, monkeypatch):
@@ -433,7 +434,7 @@ class TestSearchJobs:
         monkeypatch.setattr("httpx.get", lambda *a, **kw: mock)
 
         srv.search_jobs("Engineer", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         companies = [j["company"] for j in data["jobs"]]
         assert "Stripe" in companies
         assert "Plaid" in companies
@@ -614,7 +615,7 @@ class TestSearchGreenhouseJobs:
     def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_GREENHOUSE_RESPONSE))
         srv.search_greenhouse_jobs("stripe", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         titles = [j["role"] for j in data["jobs"]]
         assert "Senior Software Engineer" in titles
         assert "Product Manager, Billing" in titles
@@ -622,14 +623,14 @@ class TestSearchGreenhouseJobs:
     def test_auto_queue_source_is_greenhouse_url(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_GREENHOUSE_RESPONSE))
         srv.search_greenhouse_jobs("stripe", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         sources = [j["source"] for j in data["jobs"]]
         assert any("greenhouse.io" in s for s in sources)
 
     def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_GREENHOUSE_RESPONSE))
         srv.search_greenhouse_jobs("stripe", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jd = data["jobs"][0]["jd"]
         assert "<p>" not in jd
         assert "<strong>" not in jd
@@ -685,7 +686,7 @@ class TestSearchLeverJobs:
     def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_LEVER_RESPONSE))
         srv.search_lever_jobs("plaid", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         titles = [j["role"] for j in data["jobs"]]
         assert "Staff Backend Engineer" in titles
         assert "Data Engineer" in titles
@@ -693,14 +694,14 @@ class TestSearchLeverJobs:
     def test_auto_queue_source_is_lever_url(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_LEVER_RESPONSE))
         srv.search_lever_jobs("plaid", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         sources = [j["source"] for j in data["jobs"]]
         assert any("lever.co" in s for s in sources)
 
     def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_LEVER_RESPONSE))
         srv.search_lever_jobs("plaid", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jd = data["jobs"][0]["jd"]
         assert "<p>" not in jd
 
@@ -783,7 +784,7 @@ class TestSearchAshbyJobs:
     def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
         srv.search_ashby_jobs("ramp", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         titles = [j["role"] for j in data["jobs"]]
         assert "Senior Software Engineer" in titles
         assert "Product Designer" in titles
@@ -791,14 +792,14 @@ class TestSearchAshbyJobs:
     def test_auto_queue_source_is_ashby_url(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
         srv.search_ashby_jobs("ramp", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         sources = [j["source"] for j in data["jobs"]]
         assert any("ashbyhq.com" in s for s in sources)
 
     def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_ASHBY_RESPONSE))
         srv.search_ashby_jobs("ramp", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jd = data["jobs"][0]["jd"]
         assert "<p>" not in jd
         assert "<strong>" not in jd
@@ -898,7 +899,7 @@ class TestSearchRecruiteeJobs:
     def test_auto_queue_adds_to_pipeline(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
         srv.search_recruitee_jobs("acme", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         titles = [j["role"] for j in data["jobs"]]
         assert "Backend Engineer" in titles
         assert "Marketing Lead" in titles
@@ -906,14 +907,14 @@ class TestSearchRecruiteeJobs:
     def test_auto_queue_source_is_recruitee_url(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
         srv.search_recruitee_jobs("acme", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         sources = [j["source"] for j in data["jobs"]]
         assert any("recruitee.com" in s for s in sources)
 
     def test_html_stripped_from_jd(self, isolated_server, monkeypatch):
         monkeypatch.setattr("httpx.get", lambda *a, **kw: _json_mock(_RECRUITEE_RESPONSE))
         srv.search_recruitee_jobs("acme", auto_queue=True)
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text())
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jd = data["jobs"][0]["jd"]
         assert "<p>" not in jd
         assert "<strong>" not in jd

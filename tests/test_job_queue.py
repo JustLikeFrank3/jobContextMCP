@@ -17,6 +17,7 @@ import sqlite3
 import pytest
 
 import server as srv
+from tests.conftest import _load_persisted_json
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ class TestQueueJob:
         assert "Queued" in result
         assert "Stripe" in result
 
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jobs = data["jobs"]
         assert len(jobs) == 1
         assert jobs[0]["company"] == "Stripe"
@@ -48,7 +49,7 @@ class TestQueueJob:
 
     def test_optional_source_stored(self, isolated_server):
         srv.queue_job("Stripe", "Staff Engineer", "JD text", source="LinkedIn")
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"][0]["source"] == "LinkedIn"
 
     def test_duplicate_returns_already_queued_message(self, isolated_server):
@@ -59,7 +60,7 @@ class TestQueueJob:
     def test_ids_auto_increment(self, isolated_server):
         srv.queue_job("Stripe", "Staff Engineer", "JD A")
         srv.queue_job("Acme", "Backend Engineer", "JD B")
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         ids = [j["id"] for j in data["jobs"]]
         assert ids == [1, 2]
 
@@ -79,7 +80,7 @@ class TestGetJobQueue:
         srv.queue_job("Stripe", "Staff Engineer", "JD A")
         srv.queue_job("Acme", "Backend Engineer", "JD B")
         # Manually promote one to evaluated
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         data["jobs"][1]["status"] = "evaluated"
         srv.JOB_QUEUE_FILE.write_text(json.dumps(data))
 
@@ -98,7 +99,7 @@ class TestEvaluateQueuedJob:
         srv.queue_job("Stripe", "Staff Engineer", "Engineer at Stripe.")
         srv.evaluate_queued_job("Stripe", "Staff Engineer")
 
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"][0]["status"] == "evaluated"
 
     def test_returns_fitment_context(self, isolated_server):
@@ -113,7 +114,7 @@ class TestEvaluateQueuedJob:
 
     def test_already_decided_returns_message(self, isolated_server):
         srv.queue_job("Stripe", "Staff Engineer", "JD text")
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         data["jobs"][0]["status"] = "added"
         srv.JOB_QUEUE_FILE.write_text(json.dumps(data))
 
@@ -131,7 +132,7 @@ class TestDecideJob:
         result = srv.decide_job("Stripe", "Staff Engineer", "add")
         assert "interested" in result.lower()
 
-        pipeline = json.loads(srv.STATUS_FILE.read_text())
+        pipeline = _load_persisted_json(srv.STATUS_FILE)
         apps = pipeline["applications"]
         assert any(
             a["company"] == "Stripe" and a["status"] == "interested"
@@ -142,21 +143,21 @@ class TestDecideJob:
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "add")
 
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"] == []
 
     def test_dismiss_removes_job_from_queue(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "dismiss", notes="Comp too low")
 
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"] == []
 
     def test_dismiss_does_not_touch_status_file(self, isolated_server):
         self._make_evaluated_job()
         srv.decide_job("Stripe", "Staff Engineer", "dismiss")
 
-        pipeline = json.loads(srv.STATUS_FILE.read_text())
+        pipeline = _load_persisted_json(srv.STATUS_FILE)
         assert pipeline["applications"] == []
 
     def test_gate_blocks_pending_job(self, isolated_server):
@@ -165,7 +166,7 @@ class TestDecideJob:
         assert "not been evaluated" in result
 
         # Confirm no application was created
-        pipeline = json.loads(srv.STATUS_FILE.read_text())
+        pipeline = _load_persisted_json(srv.STATUS_FILE)
         assert pipeline["applications"] == []
 
     def test_invalid_decision_returns_error(self, isolated_server):
@@ -178,7 +179,7 @@ class TestDecideJob:
         srv.decide_job("Stripe", "Staff Engineer", "add", fitment_score="8/10")
 
         # Job is removed from queue; score should be on the pipeline app
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         assert data["jobs"] == []
 
     def test_double_add_returns_not_found(self, isolated_server):
@@ -235,7 +236,7 @@ class TestJobQueueSQLite:
         """queue_job atomically updates the JSON replica alongside the DB write."""
         srv.queue_job("Acme", "ML Engineer", "JD text")
 
-        data = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8"))
+        data = _load_persisted_json(srv.JOB_QUEUE_FILE)
         jobs = data.get("jobs", [])
         assert len(jobs) == 1
         assert jobs[0]["company"] == "Acme"
@@ -248,7 +249,7 @@ class TestJobQueueSQLite:
         srv.queue_job("Beta",  "SWE II", "JD B")
 
         db_jobs   = load_from_sqlite(srv.JOB_QUEUE_FILE, {}).get("jobs", [])
-        json_jobs = json.loads(srv.JOB_QUEUE_FILE.read_text(encoding="utf-8")).get("jobs", [])
+        json_jobs = _load_persisted_json(srv.JOB_QUEUE_FILE).get("jobs", [])
 
         db_ids   = {j["id"] for j in db_jobs}
         json_ids = {j["id"] for j in json_jobs}
@@ -389,7 +390,7 @@ class TestJobQueueTenantIsolation:
         assert tenant_replica.exists(), "JSON replica must exist in the tenant's data folder"
         assert not global_replica.exists(), "JSON replica must NOT be written to the global path"
 
-        data = json.loads(tenant_replica.read_text())
+        data = _load_persisted_json(tenant_replica)
         assert data["jobs"][0]["company"] == "TenantCo"
 
     def test_global_path_unaffected_by_tenant_save(self, tenant_env, tmp_path):
@@ -409,7 +410,7 @@ class TestJobQueueTenantIsolation:
         })
 
         # Global file must be unchanged
-        global_content = json.loads((global_data / "job_queue.json").read_text())
+        global_content = _load_persisted_json(global_data / "job_queue.json")
         assert global_content["jobs"][0]["company"] == "OwnerCo", (
             "Tenant save must not overwrite the global job_queue.json"
         )

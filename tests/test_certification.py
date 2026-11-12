@@ -8,6 +8,7 @@ import pytest
 
 import server as srv
 from tests.facade_driver import call_facade
+from tests.conftest import _load_persisted_json
 from tools import certification as cert
 
 
@@ -253,7 +254,7 @@ class TestReports:
         listing = cert.list_certification_reports()
         assert "week ending 2026-07-25 v1" in listing
         # Audit trail dual-write landed beside the SQLite row.
-        audit = json.loads(srv.CERTIFICATION_AUDIT_FILE.read_text(encoding="utf-8"))
+        audit = _load_persisted_json(srv.CERTIFICATION_AUDIT_FILE)
         assert audit["reports"][0]["week_ending"] == _iso(WEEK_END)
 
     def test_under_target_is_loud_and_never_padded(self, workspace, monkeypatch):
@@ -270,7 +271,7 @@ class TestReports:
             "state": "GA", "zip": "30303",
         })
         self._seed_two_weeks_of_activity()
-        _write_status(json.loads(srv.STATUS_FILE.read_text(encoding="utf-8"))["applications"] + [
+        _write_status(_load_persisted_json(srv.STATUS_FILE)["applications"] + [
             _app("Delta", events=[{"type": "applied", "date": _iso(IN_WEEK), "notes": ""}]),
         ])
         cert.weekly_certification_report(week_ending=_iso(WEEK_END))

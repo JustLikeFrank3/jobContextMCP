@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
-
+from tests.conftest import _load_persisted_json
 from tools.crossref import (
     _normalize,
     _first_last,
@@ -290,7 +290,7 @@ def test_run_crossref_fb_friend_matched_on_linkedin(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    li_data = json.loads(config.LINKEDIN_CONNECTIONS_FILE.read_text())
+    li_data = _load_persisted_json(config.LINKEDIN_CONNECTIONS_FILE)
     conn = li_data["connections"][0]
     assert conn["facebook_match"]["matched"] is True
     assert conn["facebook_match"]["relationship"] == "friend"
@@ -304,7 +304,7 @@ def test_run_crossref_fb_friend_not_on_linkedin(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     insight = data["insights"]["fb_friend_only"]
     names = [c["name"] for c in insight["contacts"]]
     assert "Bob Jones" in names
@@ -319,7 +319,7 @@ def test_run_crossref_all_three_platforms(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     contacts = data["insights"]["all_three_platforms"]["contacts"]
     assert len(contacts) == 1
     assert contacts[0]["name"] == "Marc Lande"
@@ -333,7 +333,7 @@ def test_run_crossref_pending_sent_on_linkedin(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     contacts = data["insights"]["fb_pending_sent_on_linkedin"]["contacts"]
     assert any(c["name"] == "Casey Brown" for c in contacts)
 
@@ -346,7 +346,7 @@ def test_run_crossref_removed_still_on_linkedin(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     contacts = data["insights"]["fb_removed_still_on_linkedin"]["contacts"]
     assert any(c["name"] == "Old Friend" for c in contacts)
 
@@ -360,7 +360,7 @@ def test_run_crossref_middle_name_variance(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    li_data = json.loads(config.LINKEDIN_CONNECTIONS_FILE.read_text())
+    li_data = _load_persisted_json(config.LINKEDIN_CONNECTIONS_FILE)
     assert li_data["connections"][0]["facebook_match"]["matched"] is True
 
 
@@ -371,7 +371,7 @@ def test_run_crossref_internal_only_contact(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     contacts = data["insights"]["internal_only"]["contacts"]
     assert any(c["name"] == "Recruiter Person" for c in contacts)
 
@@ -381,7 +381,7 @@ def test_run_crossref_saves_metadata(crossref_env):
     fb_folder = crossref_env(friends=["A Person"], li_connections=[_li_conn("B Person")])
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    data = json.loads(config.CONTACT_CROSSREF_FILE.read_text())
+    data = _load_persisted_json(config.CONTACT_CROSSREF_FILE)
     assert "generated" in data["metadata"]
     assert data["metadata"]["sources"]["facebook_friends"] == 1
     assert data["metadata"]["sources"]["linkedin_connections"] == 1
@@ -395,7 +395,7 @@ def test_run_crossref_updates_linkedin_file_metadata(crossref_env):
     )
     run_contact_crossref(fb_folder=str(fb_folder))
 
-    li_data = json.loads(config.LINKEDIN_CONNECTIONS_FILE.read_text())
+    li_data = _load_persisted_json(config.LINKEDIN_CONNECTIONS_FILE)
     assert li_data["metadata"].get("facebook_crossref_done") is True
     assert li_data["metadata"]["facebook_matches"] == 1
 

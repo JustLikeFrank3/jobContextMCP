@@ -16,8 +16,8 @@ from tools import consolidated
 import functools
 
 from tools.consolidated import DOMAINS, FACADES as _ASYNC_FACADES, _actions_doc, _run
-
 from tests.facade_driver import call_facade
+from tests.conftest import _load_persisted_json
 
 
 class _SyncFacades:
@@ -207,7 +207,7 @@ def test_log_event_back_dated_through_facade(isolated_server):
     )
     assert "2026-07-29" in out
 
-    events = json.loads(srv.STATUS_FILE.read_text())["applications"][0]["events"]
+    events = _load_persisted_json(srv.STATUS_FILE)["applications"][0]["events"]
     assert events[0]["date"] == "2026-07-29"
 
 
@@ -222,7 +222,7 @@ def test_log_event_future_date_through_facade_is_a_friendly_error(isolated_serve
         date=(date.today() + timedelta(days=2)).isoformat(),
     )
     assert "✗" in out and "future" in out
-    assert json.loads(srv.STATUS_FILE.read_text())["applications"][0]["events"] == []
+    assert _load_persisted_json(srv.STATUS_FILE)["applications"][0]["events"] == []
 
 
 def test_end_to_end_workspace_check(tmp_path, monkeypatch):
@@ -343,7 +343,7 @@ class TestPostLogIdentityRegression:
         import server as srv
         import json
 
-        posts = json.loads(srv.LINKEDIN_POSTS_FILE.read_text())["posts"]
+        posts = _load_persisted_json(srv.LINKEDIN_POSTS_FILE)["posts"]
         assert [p["text"] for p in posts] == ["First.", "Second, corrected."]
 
     def test_post_metrics_by_hash_prefixed_id(self, isolated_server):
@@ -365,7 +365,7 @@ class TestPeopleTagsRegression:
         import server as srv
         import json
 
-        people = json.loads(srv.PEOPLE_FILE.read_text())["people"]
+        people = _load_persisted_json(srv.PEOPLE_FILE)["people"]
         assert people[0]["tags"] == ["java", "spring", "sql", "python"]
 
 
@@ -379,7 +379,7 @@ class TestStoriesUpdateDelete:
         import server as srv
         import json
 
-        stories = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())["stories"]
+        stories = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)["stories"]
         assert len(stories) == 1
         assert stories[0]["story"] == "Corrected fact."
 
@@ -389,7 +389,7 @@ class TestStoriesUpdateDelete:
         import server as srv
         import json
 
-        stories = json.loads(srv.PERSONAL_CONTEXT_FILE.read_text())["stories"]
+        stories = _load_persisted_json(srv.PERSONAL_CONTEXT_FILE)["stories"]
         assert stories == []
 
     def test_update_unknown_id_returns_clean_error(self, isolated_server):

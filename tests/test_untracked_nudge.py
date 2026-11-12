@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from lib import config
+from tests.conftest import _load_persisted_json
 from tools.generate import _untracked_note
 
 
@@ -31,7 +32,7 @@ class TestUntrackedNote:
         _track("Acme")
         note = _untracked_note("Travelers", "AI Engineer")
         assert "auto-logged" in note and "materials drafted" in note
-        apps = json.loads(config.STATUS_FILE.read_text(encoding="utf-8"))["applications"]
+        apps = _load_persisted_json(config.STATUS_FILE)["applications"]
         added = [a for a in apps if a["company"] == "Travelers"]
         assert added and added[0]["status"] == "materials drafted"
 
