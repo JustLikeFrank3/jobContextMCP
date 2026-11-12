@@ -674,27 +674,38 @@ def delete_synced_file(con, root: Path, target: Path) -> dict:
 
     Records the tombstone BEFORE unlinking: if the unlink fails, the next
     reconcile finishes the job, whereas the reverse order can lose the
-    tombstone and resurrect the file everywhere. A file outside the sync root
-    is rejected: this helper is a filesystem sink and must not act on paths
-    outside the trusted workspace root.
+    tombstone and resurrect the file everywhere. Paths outside the trusted
+    workspace root and parent symlinks that escape it are rejected.
     Returns {"deleted": bool, "rel": tombstoned rel or None}.
     """
     resolved_root = Path(root).resolve()
     target = Path(target)
-    resolved_target = target.resolve(strict=False)
     try:
-        rel_path = resolved_target.relative_to(resolved_root)
+        rel_path = target.relative_to(resolved_root)
     except ValueError:
         return {"deleted": False, "rel": None}
 
-    # Defensive sink-side guard: never process symlink paths for tombstoned
-    # deletes from potentially untrusted callers.
-    if target.is_symlink() or resolved_target.is_symlink():
+    parts = rel_path.parts
+    if not parts or any(part in ("", ".", "..") or "\\" in part for part in parts):
         return {"deleted": False, "rel": None}
 
-    rel = None
+    safe_target = resolved_root.joinpath(*parts)
+    resolved_parent = safe_target.parent.resolve()
+    if resolved_parent != resolved_root and resolved_root not in resolved_parent.parents:
+        return {"deleted": False, "rel": None}
+
+    # Unlink a symlink leaf itself; resolving it first could delete its target.
+    if safe_target.is_symlink():
+        safe_target.unlink()
+        return {"deleted": True, "rel": None}
+
+    rel = Path(*parts).as_posix()
+    resolved_target = _tombstone_target(resolved_root, rel)
+    if resolved_target is None:
+        return {"deleted": False, "rel": None}
+    rel = resolved_target.relative_to(resolved_root).as_posix()
+    rel_path = Path(rel)
     if _file_synced(rel_path):
-        rel = rel_path.as_posix()
         sha = hashlib.sha256(resolved_target.read_bytes()).hexdigest() if resolved_target.is_file() else ""
         con.execute(
             "INSERT INTO file_tombstones (rel, sha256, deleted_at) VALUES (?, ?, ?) "
