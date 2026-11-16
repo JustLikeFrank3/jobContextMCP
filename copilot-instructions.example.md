@@ -93,4 +93,4 @@ If context is lost mid-session:
 
 If tools are missing or workspace is broken:
 1. Call `workspace(action="check")` — diagnoses what's missing
-2. Call `workspace(action="setup")` — rebuilds missing files (safe to re-run, skips existing)
+2. Call `workspace(action="setup")` — rebuilds missing files (skips existing content files; desktop/tenant config updates contact and workspace-resolution keys)

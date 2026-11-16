@@ -95,7 +95,7 @@ USE_SQLITE=1     # reads from SQLite, dual-writes both stores
 
 ### Test-suite gotchas
 
-- `tests/conftest.py` has an autouse fixture that stubs `lib.config.get_llm_client` to `(None, None)` — code needing real key-resolution truth in tests must not call it.
+- `tests/conftest.py` has an autouse fixture that stubs `lib.config.get_llm_client` to `(None, None)`.
 - CI's test env sets `LLM_PROVIDER=foundry` — provider-sensitive tests must `monkeypatch.delenv("LLM_PROVIDER")`. Run suites both ways when touching provider logic.
 - The `isolated_server` fixture is the canonical isolation mechanism; static module-level path constants are computed at import time — repoint them, don't re-derive.
 - Sonar quality gate requires ≥80% coverage on new code.
